@@ -1,2 +1,3 @@
-# SimpleKiteControllers.jl
-Controllers for parking and flying figures of eight for airborne wind energy systems.
+# SimpleKiteControllers
+
+[![Build Status](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml?query=branch%3Amain)
