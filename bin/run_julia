@@ -1,0 +1,40 @@
+#!/bin/bash
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+export MPLBACKEND=qt5agg
+
+if command -v nproc &> /dev/null; then
+    FAST_CORES=$(($(nproc) / 2 - 1))
+else
+    FAST_CORES=3 # default value
+fi
+
+GCT="--gcthreads=4,1"
+export JULIA_PKG_SERVER_REGISTRY_PREFERANCE=eager
+
+julia_version=$(julia --version | awk '{print($3)}')
+julia_major=${julia_version:0:3} 
+if [[ $julia_major == "1.1" ]]; then
+    julia_major=${julia_version:0:4}
+else
+    GCT=""
+fi
+if [[ $HOSTNAME == "ufryzen" || $HOSTNAME == "framework" ]]; then
+    export NO_MTK=true
+fi
+if [ -d ".git" ]; then
+    branch=$(git rev-parse --abbrev-ref HEAD)
+else
+    branch=""
+fi
+
+if test -f "bin/kps-image-${julia_major}-${branch}.so"; then
+    echo "Found system image!"
+    PLOT=1 julia -J  bin/kps-image-${julia_major}-${branch}.so  $GCT --project
+else
+    PLOT=1 julia --project  $GCT 
+    # julia --project
+fi
