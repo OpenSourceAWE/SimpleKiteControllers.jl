@@ -1,9 +1,9 @@
 module SimpleKiteControllers
 
-using DiscretePIDs, Parameters
+using DiscretePIDs, Parameters, KiteUtils
 
 export ParkingController, ParkingControllerSettings
-export linearize
+export linearize, calc_steering, navigate
 
 @with_kw mutable struct ParkingControllerSettings @deftype Float64
     dt
