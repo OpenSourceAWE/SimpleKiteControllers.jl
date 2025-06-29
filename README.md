@@ -5,7 +5,7 @@
 ## Introduction
 This package shall (in the beginning) provide two controllers:
 - a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as their is sufficient wind
-- a figure of eight controller for pulling ships
+- a path following figure of eight controller for pulling ships
 
 All controllers shall come with an auto-tuning script for tuning the controller parameters for new kites. It might be necessary to run this script for different wind speeds and to create a lookup table that adapts the controller parameters to the wind speed.
 
