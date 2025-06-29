@@ -2,6 +2,9 @@ module SimpleKiteControllers
 
 using DiscretePIDs, Parameters
 
+export ParkingController, ParkingControllerSettings
+export linearize
+
 @with_kw mutable struct ParkingControllerSettings @deftype Float64
     dt
     # turn rate controller settings
