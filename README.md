@@ -15,6 +15,36 @@ The auto-tuning script shall optimize the controller performance in the time dom
 - the types `ParkingController` and `ParkingControllerSettings`
 - the functions `linearize`, `calc_steering`, `navigate`
 
+## Installation
+<details>
+  <summary>Installation of Julia</summary>
+
+If you do not have Julia installed yet, please read [Installation](https://github.com/aenarete/KiteSimulators.jl/blob/main/docs/Installation.md).
+
+</details>
+
+<details>
+  <summary>Installation as package</summary>
+
+### Installation of SimpleKiteControllers as package
+
+It is suggested to use a local Julia environment. You can create it with:
+```bash
+mkdir myproject
+cd myproject
+julia --project=.
+```
+(don't forget typing the dot at the end), and then, on the Julia prompt enter:
+```julia
+using Pkg
+pkg"add https://github.com/OpenSourceAWE/SimpleKiteControllers.jl"
+```
+You can run the tests with:
+```julia
+using Pkg
+pkg"test SimpleKiteControllers"
+```
+
 ## TODO
 - add examples for using the parking controller
 - implement a new path following controller for flying figures of eight, see [Fernandes_2022](https://www.mdpi.com/1996-1073/15/4/1390)
