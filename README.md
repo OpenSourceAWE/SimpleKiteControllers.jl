@@ -44,7 +44,11 @@ You can run the tests with:
 using Pkg
 pkg"test SimpleKiteControllers"
 ```
+</details>
 
 ## TODO
 - add examples for using the parking controller
 - implement a new path following controller for flying figures of eight, see [Fernandes_2022](https://www.mdpi.com/1996-1073/15/4/1390)
+
+## Related
+A fully working set of flight path controllers and planners can be found here: [KiteControllers.jl](https://github.com/aenarete/KiteControllers.jl)
