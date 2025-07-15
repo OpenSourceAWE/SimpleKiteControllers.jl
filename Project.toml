@@ -11,7 +11,7 @@ Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 
 [compat]
 DiscretePIDs = "0.1.6"
-KiteModels = "0.8.1"
+KiteModels = "0.8.1, 0.9"
 KiteUtils = "0.10.13"
 Parameters = "0.12.3"
 julia = "1.6.7"
