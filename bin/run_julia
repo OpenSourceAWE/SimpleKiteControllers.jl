@@ -33,8 +33,8 @@ fi
 
 if test -f "bin/kps-image-${julia_major}-${branch}.so"; then
     echo "Found system image!"
-    PLOT=1 julia -J  bin/kps-image-${julia_major}-${branch}.so  $GCT --project
+    PLOT=1 julia -J  bin/kps-image-${julia_major}-${branch}.so  $GCT --project "$@"
 else
-    PLOT=1 julia --project  $GCT 
+    PLOT=1 julia --project  $GCT "$@"
     # julia --project
 fi
