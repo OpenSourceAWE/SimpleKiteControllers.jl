@@ -1,0 +1,43 @@
+# Shared environment for the example scripts. It is NOT the package's own
+# environment: the plotting and simulation stacks (GLMakie, V3Kite and its
+# solver chain) are far heavier than anything SimpleKiteControllers itself needs,
+# and keeping them here leaves the package light.
+#
+# Activate it with `julia --project=examples`, or just run a script — each one
+# activates this directory itself.
+[deps]
+DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MakieControlPlots = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+SimpleKiteControllers = "6b1669b4-da33-4b52-bbac-669bd9da52ef"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
+V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
+
+[compat]
+# 0.1.9's legend-height probe throws `only(owned)` (ArgumentError: Collection
+# has multiple elements) when displaying a plotx figure with a legend on more
+# than one row — which is every *_plots.jl script here. Fixed in 0.1.12.
+MakieControlPlots = "0.1.12"
+
+[sources]
+SimpleKiteControllers = {path = ".."}
+# V3Kite is not registered. Every name `simple_fig8.jl` takes from it is exported
+# from V3Kite's MAIN branch, and everything main does not have lives in this
+# repository instead (src/ for the guidance, examples/v3kite_support.jl for the
+# V3KITE glue) — so check out main in the sibling clone below.
+#
+# A local PATH checkout, not a url/rev entry, and not by preference: V3Kite's
+# `settle_wing` caches the settled wing geometry into V3Kite's own data/
+# directory and `init` gives no way to redirect it, so V3Kite has to be
+# WRITABLE. Pkg makes url-installed packages read-only, which turns the first
+# run into a permission error. Clone it next to this repository:
+#     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
+V3Kite = {path = "../../V3Kite.jl"}
+
+[extras]
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

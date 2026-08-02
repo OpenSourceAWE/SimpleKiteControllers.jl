@@ -1,0 +1,113 @@
+# Settings of the figure-of-eight flight controller flown by
+# examples/simple_fig8.jl. Loaded into an `FC_Settings` struct via
+# `FC_Settings("fc_settings.yaml")`; every key below is a field of that struct
+# (src/fc_settings.jl), where the full rationale for each value is documented.
+# A missing key falls back to the struct default, an unknown key is an error.
+#
+# The POSITION-mode winch gains are NOT here — they live in the kite model's own
+# wc_settings.yaml (V3Kite's data/) and are read straight from there. The
+# FORCE-mode winch parameters ARE here, because the force-mode controller is part
+# of the run (examples/v3kite_support.jl), not of the model; `compliance` below
+# scales them. The dated record of how these values were arrived at is in
+# V3Kite.jl's docs/fig8_tuning_log.md.
+fc_settings:
+  # --- simulation conditions ------------------------------------------------
+  project:            system_reelout.yaml  # System project, see data/system_*.yaml
+  sim_time:           150.0    # Total simulation time [s]
+                               # ~43 s per lap plus the descent; the metrics window
+                               # opens at park_time + entry_time, so short runs
+                               # cannot be judged on `laps`
+  dt:                 0.008333333333333333  # Simulation timestep = 0.05/6 [s]
+                               # NOT a tuning knob: 0.05/3 was numerically unstable
+                               # (frozen-aero coupling)
+  vsm_interval:       1        # Steps between VSM aero updates [-]
+                               # 1 is the tightest coupling available, so this can
+                               # only be raised
+  v_wind:             5.0      # Ground wind speed at reference height [m/s]
+  compliance:         0.5      # Winch softness                                     [-]
+                               # divides winch_len_kp and winch_damp; exactly 0
+                               # switches to POSITION mode
+  tether_length:      200.0    # Initial tether length                              [m]
+                               # tested 150 … 300; longer = tighter angular turns
+  depower_setpoint:   0.26     # Depower held on the pattern                        [-]
+  elevation:          73.0     # Settling elevation                               [deg]
+                               # currently has no effect: settle_wing's cache key
+                               # omits it
+  park_time:          2.0      # Park: zero steering while the transients decay     [s]
+  warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
+
+  # --- force-mode winch (compliance > 0 only) -------------------------------
+  # Base values; winch_len_kp and winch_damp are divided by `compliance` before
+  # the controller is built. At compliance == 0 none of these are read.
+  winch_force_tau:    10.0     # Reference-force low-pass time constant             [s]
+                               # the winch's compliance timescale; NOT scaled by
+                               # compliance
+  winch_len_kp:       100.0    # Length trim, length error -> reference force     [N/m]
+  winch_damp:         500.0    # Viscous drum damping, reel-out speed -> force  [N·s/m]
+                               # not optional: without it the drum free-wheels and
+                               # the run was lost at t = 19.8 s
+  winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
+
+  # --- entry state machine: park -> dive -> hold -> fig8 --------------------
+  chi_dive:           -85.0    # Course commanded during the dive                 [deg]
+                               # |chi| > 90 descends, < 90 climbs, 90 is horizontal
+  chi_hold:           -90.0    # Course commanded during the hold                 [deg]
+  dive_el_margin:     7.0      # Margin above el_center where the dive ends       [deg]
+  hold_time:          0.8      # Duration of the hold                               [s]
+
+  # --- plant ----------------------------------------------------------------
+  body_damping:       [0.0, 0.0, 40.0]  # In-plane body damping, per axis [N·s/m]
+                               # sets c1 and hence the achievable turn radius;
+                               # [0, 0, 40] is the most agile
+
+  # --- pattern geometry -----------------------------------------------------
+  # A SMALLER lemniscate is a TIGHTER one; check the feasibility margin printed
+  # at startup before changing these.
+  f8_a:               30.0     # Width of the eight, azimuth spans ±A             [deg]
+  f8_b:               12.0     # Height of the eight, elevation spans ±B/2        [deg]
+  f8_c:               0.0      # Size of the right part                           [deg]
+  f8_d:               0.0      # Asymmetry factor                                   [-]
+  el_center:          26.0     # Pattern-centre elevation                         [deg]
+                               # lower improves the curvature margin but costs
+                               # energy margin
+  attractor_dist:     10.0     # Arc distance Q -> attractor                      [deg]
+  up_loops:           false    # Fly up-loops instead of down-loops
+                               # down-loops are the only configuration that crosses
+                               # the centre instead of circling one lobe
+
+  # --- heading/course PID ---------------------------------------------------
+  heading_p:          0.1941   # Gain at v_app == v_app_ref                         [-]
+                               # only the product heading_p * v_app_ref is physical
+  heading_i:          false    # Integral time [s], or false for no integral action
+  heading_d:          0.12     # Derivative time [s]
+  heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
+  v_app_ref:          27.0     # Apparent wind speed flown in phase 3 [m/s]
+                               # anchors the 1/v_app gain schedule and the attractor
+                               # kinematics
+  v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
+  entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
+  entry_depower:      0.34     # Depower during the entry phases                    [-]
+
+  # --- feedback signal: heading at low kite speed, course at high -----------
+  v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]
+  v_kite_course:      10.0     # At/above: pure course feedback                   [m/s]
+  fig8_pure_course:   false    # Feed back course alone in phase 3
+                               # ignores the speed schedule, which then governs the
+                               # entry only
+  max_steering:       0.32     # Steering command limit                             [-]
+                               # raising it is CLOSED: the plant itself diverges
+                               # at 0.375
+
+  # --- entry descent limiter ------------------------------------------------
+  entry_chi_max:      95.0     # Steepest commanded course while off-path         [deg]
+                               # 180 disables the limiter
+  entry_d_gate:       12.0     # Cross-track error below which it is bypassed     [deg]
+  entry_d_blend:      4.0      # Blend band above the gate, 0 = hard switch       [deg]
+  entry_cut_margin:   30.0     # Distance from ±180° at which the sign of chi_set
+                               # is treated as degenerate                         [deg]
+
+  # --- guards and metrics ---------------------------------------------------
+  v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
+  entry_time:         52.0     # Settle time after park_time before the metrics     [s]
+  min_elevation:      10.0     # Floor criterion over the WHOLE run               [deg]
+  min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]

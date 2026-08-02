@@ -58,4 +58,7 @@ using Test
         @test chi_set ≈ -deg2rad(34.019878734151234)
     end
 
+    # Figure-of-eight guidance, metrics and turn-rate table. Pure geometry:
+    # no simulation and no kite model, so this runs in well under a second.
+    include("test_fig8_controller.jl")
 end
