@@ -1,0 +1,55 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+
+# Creates a PackageCompiler system image with V3Kite and MakieControlPlots
+# precompiled for the example scripts; bin/run_julia picks it up
+# automatically. SimpleKiteControllers itself is deliberately left OUT so
+# Revise still applies to src/ when developing against the image.
+#
+# PackageCompiler is not a dependency of examples/ or the root project: it is
+# installed into a throwaway environment that is stacked onto examples/'s via
+# JULIA_LOAD_PATH for the duration of this script and removed afterwards.
+
+set -eu
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+julia_version=$(julia --version | awk '{print($3)}')
+julia_major=${julia_version:0:3}
+if [[ $julia_major == "1.1" ]]; then
+    julia_major=${julia_version:0:4}
+fi
+
+# Compilation is memory-hungry; leave it single-threaded on small machines.
+totalmem=$(grep MemTotal /proc/meminfo | awk '{printf "%i", $2 / 1024}')
+if [[ $totalmem -lt 27000 ]]; then
+    echo "Warning: Less than 27GB of memory detected. Using only one thread for sysimage compilation."
+    export JULIA_IMAGE_THREADS=1
+fi
+
+TMPENV=$(mktemp -d)
+trap 'rm -rf "$TMPENV"' EXIT
+
+echo "--- Installing PackageCompiler into a temporary environment ---"
+julia --startup-file=no --project="$TMPENV" -e 'using Pkg; Pkg.add("PackageCompiler")'
+
+echo "--- Instantiating the workspace and examples/ ---"
+julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
+julia --startup-file=no --project=examples -e 'using Pkg; Pkg.instantiate()'
+
+echo "--- Creating system image ---"
+JULIA_LOAD_PATH="@:${TMPENV}:@stdlib" julia --startup-file=no --project=examples \
+    examples/create_sys_image.jl
+
+SOFILE="bin/kps-image-${julia_major}.so"
+rm -f "$SOFILE"
+mv -f kps-image_tmp.so "$SOFILE"
+echo "System image created at $SOFILE"
+
+echo "--- Precompiling examples/ with the new system image ---"
+julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots'
+
+echo "Done."

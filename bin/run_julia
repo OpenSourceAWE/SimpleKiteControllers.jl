@@ -27,15 +27,10 @@ fi
 if [[ $HOSTNAME == "ufryzen" || $HOSTNAME == "framework" ]]; then
     export NO_MTK=true
 fi
-if [ -d ".git" ]; then
-    branch=$(git rev-parse --abbrev-ref HEAD)
-else
-    branch=""
-fi
 
-if test -f "bin/kps-image-${julia_major}-${branch}.so"; then
+if test -f "bin/kps-image-${julia_major}.so"; then
     echo "Found system image!"
-    PLOT=1 julia -J  bin/kps-image-${julia_major}-${branch}.so  $GCT --project "$@"
+    PLOT=1 julia -J  bin/kps-image-${julia_major}.so  $GCT --project "$@"
 else
     PLOT=1 julia --project  $GCT "$@"
     # julia --project
