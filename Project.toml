@@ -7,17 +7,34 @@ version = "1.0.0-DEV"
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 KiteModels = "b94af626-7959-4878-9336-2adc27959007"
 KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 DiscretePIDs = "0.1.6"
-KiteModels = "0.8.1"
-KiteUtils = "0.10.13"
+# 0.11, not 0.8.1: that pins KitePodModels 0.3.8 while V3Kite needs 0.4.
+KiteModels = "0.11"
+# 0.11, not 0.10.13: KitePodModels 0.4 requires it, so examples/ needs it too.
+KiteUtils = "0.11"
+LinearAlgebra = "1"
 Parameters = "0.12.3"
-julia = "1.6.7"
+Printf = "1"
+StaticArrays = "1.9.18"
+Statistics = "1"
+YAML = "0.4.16"
+# 1.10, not 1.6.7: KiteUtils declares "1.10, 1.11, 1.12" itself.
+julia = "1.12"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+
+# examples/ resolves against the Manifest.toml here; see examples/Project.toml.
+[workspace]
+projects = ["examples"]

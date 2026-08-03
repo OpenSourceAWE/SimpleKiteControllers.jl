@@ -1,0 +1,11 @@
+# System project of the figure-of-eight run, resolved by `project_file` to THIS
+# package's data/ instead of the kite model's, so the run's conditions (wind,
+# tether, winch, KCU, solver) can be varied here without editing V3Kite.
+# `sim_settings` resolves relative to this file; `wc_settings` is a bare name
+# resolved under the active data path, which the example points here too.
+# `fc_settings` is read the same way, by this package's own `fc_settings`
+# function (analogous to `KiteUtils.wc_settings`).
+system:
+    sim_settings: "settings_fig8_200m.yaml"
+    wc_settings: "wc_settings.yaml"
+    fc_settings: "fc_settings.yaml"

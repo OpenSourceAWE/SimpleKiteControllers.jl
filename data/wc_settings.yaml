@@ -1,0 +1,25 @@
+# Winch length-controller settings of the figure-of-eight run, named by
+# system_fig8_200m.yaml next to it and loaded into V3Kite's `WC_Settings`. Values
+# copied from the INSTALLED V3Kite's data/wc_settings.yaml — the one examples/
+# resolves through its branch pin, which is not the same file as a local V3Kite
+# working checkout (they differ in winch_ff_scale and winch_speed_ti). The dated
+# record of how they were arrived at stays in V3Kite; new findings belong in
+# docs/fig8_tuning_log.md.
+#
+# Only the POSITION-mode block below reaches this run. At `compliance > 0` the
+# example flies force mode and builds the winch controller from fc_settings.yaml
+# through `winch_force_gains`, so the four force-mode keys here are read into the
+# struct and then never used. They are kept so the file stays a complete
+# WC_Settings and position mode (`compliance: 0`) needs no second file.
+wc_settings:
+  winch_pos_kp:       0.5    # Outer loop: length error [m] -> reel-out speed setpoint [1/s]
+  winch_speed_k:      30.0   # Inner speed loop: speed error [m/s] -> torque [N*m*s/m]
+  winch_speed_ti:     2.0    # Inner speed-loop integral time [s]; larger = weaker
+  winch_torque_limit: 500.0  # Saturation of the inner loop's torque correction [N*m]
+  winch_ff_scale:     1.0    # Force feed-forward [-]; 1.0 is a perfectly stiff drum
+
+  # --- force mode; unused here, fc_settings.yaml supplies these instead ------
+  winch_force_tau:  10.0     # Reference-force low-pass time constant [s]
+  winch_len_kp:     100.0    # Length trim, length error [m] -> reference force [N/m]
+  winch_damp:       500.0    # Viscous damping, reel-out speed -> force [N*s/m]
+  winch_force_min:  100.0    # Floor on the reference force [N]
