@@ -20,7 +20,7 @@ export min_turn_radius, path_min_radius, path_radius_profile, check_pattern_feas
 
 # Turn-rate-law lookup table
 export V3_TURN_RATE_COEFFS, turn_rate_coeffs, V3_TURN_RATE_C1, V3_TURN_RATE_C2
-export reload_turn_rate_table!, set_turn_rate_conditions!
+export reload_turn_rate_table!
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics

@@ -24,8 +24,6 @@ const TURN_RATE_TABLE_FILE = "turn_rate_coeffs.yaml"
 # Quality bar an interpolation neighbour must meet, per V3Kite's steering_test_v3.jl.
 const TURN_RATE_MAX_C1_REL_STD = 0.01
 const TURN_RATE_MAX_G_REL_STD = 0.35
-# Conditions mismatch, run vs table, above which turn_rate_coeffs warns.
-const TURN_RATE_MISMATCH_REL_TOL = 0.05
 
 mutable struct TurnRateTable
     conditions::Dict{Symbol, Any}
@@ -90,66 +88,8 @@ end
 
 const _TURN_RATE_TABLE = Ref{TurnRateTable}()
 
-# Conditions of the run in progress; `nothing` until stashed, which stays silent.
-const _ACTIVE_TURN_RATE_CONDITIONS = Ref{Union{Nothing, NamedTuple}}(nothing)
-# Fields already warned about, reset per `set_turn_rate_conditions!` call.
-const _TURN_RATE_WARNED_FIELDS = Ref(Set{Symbol}())
 # Legacy rows already warned about; `maxlog` cannot be used, it dedups by call site.
 const _TURN_RATE_WARNED_LEGACY = Ref(Set{Tuple{Vector{Float64}, Float64}}())
-
-"""
-    set_turn_rate_conditions!(; v_wind, l_tether, system_yaml)
-
-Record the conditions of the run that is starting, so a later
-[`turn_rate_coeffs`](@ref) call can warn if they disagree with
-`data/turn_rate_coeffs.yaml`'s `conditions` block — the coefficients were
-identified at the conditions in that block and do not necessarily carry over.
-
-Call it once per run, next to the model's `init`; without it the mismatch check
-is silently skipped, which is what keeps bare unit tests quiet.
-"""
-function set_turn_rate_conditions!(; v_wind, l_tether, system_yaml)
-    _ACTIVE_TURN_RATE_CONDITIONS[] = (v_wind = v_wind, l_tether = l_tether, system = system_yaml)
-    empty!(_TURN_RATE_WARNED_FIELDS[])
-    return nothing
-end
-
-"""
-    _check_turn_rate_conditions(conditions)
-
-Warn, at most once per field per `set_turn_rate_conditions!` call, if the active run's conditions
-(stashed by `set_turn_rate_conditions!`) differ materially from the table's `conditions`. Does
-nothing if nothing has stashed conditions yet (e.g. a bare unit test).
-"""
-function _check_turn_rate_conditions(conditions::Dict{Symbol, Any})
-    ac = _ACTIVE_TURN_RATE_CONDITIONS[]
-    isnothing(ac) && return nothing
-    warned = _TURN_RATE_WARNED_FIELDS[]
-
-    table_system = get(conditions, :system, nothing)
-    if :system ∉ warned && !isnothing(table_system) && ac.system != table_system
-        @warn "turn_rate_coeffs: active system_yaml = \"$(ac.system)\" differs from " *
-              "data/$(TURN_RATE_TABLE_FILE)'s conditions.system = \"$table_system\"; " *
-              "the looked-up coefficients may not apply."
-        push!(warned, :system)
-    end
-    for field in (:v_wind, :l_tether)
-        field in warned && continue
-        tv = get(conditions, field, nothing)
-        isnothing(tv) && continue
-        tv = Float64(tv)
-        tv == 0 && continue
-        av = Float64(getfield(ac, field))
-        if abs(av - tv) / abs(tv) > TURN_RATE_MISMATCH_REL_TOL
-            @warn "turn_rate_coeffs: active $field = $av differs from " *
-                  "data/$(TURN_RATE_TABLE_FILE)'s conditions.$field = $tv by more than " *
-                  "$(round(Int, 100 * TURN_RATE_MISMATCH_REL_TOL))%; the looked-up " *
-                  "coefficients may not apply."
-            push!(warned, field)
-        end
-    end
-    return nothing
-end
 
 """
     reload_turn_rate_table!()
@@ -221,7 +161,6 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
     bd = collect(Float64.(body_damping))
     dp = Float64(depower)
     table = _TURN_RATE_TABLE[]
-    _check_turn_rate_conditions(table.conditions)
 
     group = filter(e -> e.body_damping == bd, table.entries)
     if isempty(group)

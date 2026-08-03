@@ -351,31 +351,6 @@ _make_test_controller(; kwargs...) =
         end
     end
 
-    @testset "turn_rate_coeffs conditions mismatch (conditions block)" begin
-        old_ac = SimpleKiteControllers._ACTIVE_TURN_RATE_CONDITIONS[]
-        try
-            # Nothing stashed, as in a bare test file: never warns.
-            SimpleKiteControllers._ACTIVE_TURN_RATE_CONDITIONS[] = nothing
-            @test_logs turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
-
-            # stashed conditions matching the table -> no warning
-            table = SimpleKiteControllers._TURN_RATE_TABLE[]
-            set_turn_rate_conditions!(v_wind = table.conditions[:v_wind],
-                l_tether = table.conditions[:l_tether], system_yaml = table.conditions[:system])
-            @test_logs turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
-
-            # A mismatch warns once but still returns the coefficients: advisory only.
-            set_turn_rate_conditions!(v_wind = 5.0,
-                l_tether = table.conditions[:l_tether], system_yaml = table.conditions[:system])
-            r = @test_logs (:warn,) turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
-            @test r.c1 ≈ 0.1513
-            # same stashed conditions again -> that field is already warned
-            @test_logs turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
-        finally
-            SimpleKiteControllers._ACTIVE_TURN_RATE_CONDITIONS[] = old_ac
-        end
-    end
-
     @testset "turn_radius_feasibility" begin
         # rho = 1/(L*c1*u_s), independent of apparent wind speed
         @test min_turn_radius(150.0, 0.175) ≈

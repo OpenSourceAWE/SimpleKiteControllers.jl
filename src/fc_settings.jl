@@ -98,6 +98,12 @@ Add new findings there, not here.
     dive_el_margin = 7.0
     "Duration of the hold [s]"
     hold_time = 0.8
+    """
+    Cross-track error [deg] below which phase 3 (fig8) advances to phase 4
+    (settled), the first time it is crossed. A milestone in the log only —
+    it does not change how the kite is flown.
+    """
+    settled_d_gate = 5.0
 
     """
     In-plane body damping. A FLIGHT parameter, not just a solver setting: it

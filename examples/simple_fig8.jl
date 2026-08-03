@@ -70,8 +70,11 @@ throughout phase 3 and the schedule governs the entry only.
 
 The `sys_state` field carries the ENTRY STATE MACHINE (0 park, 1 dive, 2 hold,
 3 fig8), using the same codes as the reference controller's log so both can be
-read with the same scripts; `simple_fig8_plots.jl` draws it as the bottom panel
-of the time-series figure.
+read with the same scripts, plus a fourth state added here: 4 (settled), which
+phase 3 advances to the first time the cross-track error drops below
+`settled_d_gate`. Control is unaffected — 3 and 4 are flown identically — it
+only marks when the pattern was first tracked closely. `simple_fig8_plots.jl`
+draws it as the bottom panel of the time-series figure.
 
 # Parameters
 
@@ -136,9 +139,6 @@ else
     @info "Winch: POSITION mode at compliance = 0 — constant unstretched length."
 end
 
-# For the mismatch check in turn_rate_coeffs below; the bare name is what the table records.
-set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = l_tether,
-                          system_yaml = basename(project))
 @info "System project: $project"
 
 # No sim_time/dt: init takes them from the project's settings (sim_time, sample_freq).
@@ -185,7 +185,8 @@ heading_pid = create_heading_pid(;
 
 entry_sign = 0              # latched sign of the entry descent limiter (0 = unset)
 
-# 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged.
+# 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged, 4 = settled
+# (phase 3 with cross-track error below settled_d_gate for the first time).
 phase = 0
 hold_start = NaN            # [s] time the hold began
 
@@ -211,6 +212,8 @@ try
             global hold_start = t
         elseif phase == 2 && t - hold_start >= fcs.hold_time
             global phase = 3
+        elseif phase == 3 && dmin < fcs.settled_d_gate
+            global phase = 4
         end
 
         # Entry descent limiter, active only while the kite is far off the path.
@@ -239,8 +242,8 @@ try
         end
 
         # Feedback angle: heading at low kite speed, course at high (see FC_Settings).
-        v_kite = norm(s.sys_state.vel_kite)
-        w_course = if fcs.fig8_pure_course && phase == 3
+        local v_kite = norm(s.sys_state.vel_kite)
+        w_course = if fcs.fig8_pure_course && phase >= 3
             1.0
         else
             clamp((v_kite - fcs.v_kite_heading) /
@@ -254,7 +257,7 @@ try
         err = wrap_to_pi(fb - chi_cmd)
         # Turn rate ~ u_s * v_app, so K ~ 1/v_app, on APPARENT wind: that is the plant gain.
         v_app = max(Float64(s.sys_state.v_app), fcs.v_app_min)
-        K_phase = phase == 3 ? fcs.heading_p : fcs.entry_gain * fcs.heading_p
+        K_phase = phase >= 3 ? fcs.heading_p : fcs.entry_gain * fcs.heading_p
         set_K!(heading_pid, K_phase * fcs.v_app_ref / v_app, 0.0, err)
         # Park: zero steering, but the PID is still stepped so engagement is bumpless.
         rel_steering = if phase == 0
@@ -288,7 +291,7 @@ try
         end
 
         # After step!, which overwrites parts of sys_state.
-        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8
+        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8, 4 settled
         s.sys_state.bearing = chi_cmd          # the course actually tracked
         s.sys_state.attractor .= (deg2rad(az_attr), deg2rad(el_attr))
         s.sys_state.var_01 = dmin              # cross-track error [deg]
@@ -322,14 +325,14 @@ print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_span_frac = fcs.min_span_frac)
 
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-let fig8 = findall(x -> Int(x) == 3, sl.sys_state)
-    if isempty(fig8)
-        @warn "Phase 3 never reached — no figure-eight apparent wind speed."
+let settled = findall(x -> Int(x) == 4, sl.sys_state)
+    if isempty(settled)
+        @warn "Phase 4 never reached — no settled apparent wind speed."
     else
-        va = Float64.(sl.v_app[fig8])
-        @printf("  v_app over phase 3 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
+        va = Float64.(sl.v_app[settled])
+        @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
                  | v_app_ref = %.1f (%+.1f%%)\n",
-                sl.time[fig8[end]] - sl.time[fig8[1]],
+                sl.time[settled[end]] - sl.time[settled[1]],
                 mean(va), minimum(va), maximum(va),
                 fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
     end

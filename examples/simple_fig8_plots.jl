@@ -13,9 +13,9 @@ Loads the "fig8_run" log saved by simple_fig8.jl and produces three figures:
    heading and course vs the commanded course, the course-tracking error,
    steering command vs the KCU's tape-lagged value, tether force, and tether
    length against its setpoint. The bottom panel is the entry state machine
-   (`sys_state`: 0 park, 1 dive, 2 hold, 3 fig8), which dates every feature
-   above it — an anomaly in phase 1-2 is the open-loop entry, one in phase 3 is
-   the path controller, and they are not diagnosed the same way;
+   (`sys_state`: 0 park, 1 dive, 2 hold, 3 fig8, 4 settled), which dates every
+   feature above it — an anomaly in phase 1-2 is the open-loop entry, one in
+   phase 3-4 is the path controller, and they are not diagnosed the same way;
 3. an aerodynamics figure: angle of attack and lift-to-drag ratio, over the
    apparent wind speed and the kite speed `|vel_kite|`.
 
@@ -114,7 +114,7 @@ sleep(0.1)
 # `getindex` because l_tether is one entry per tether and the V3 has one.
 l_tether = getindex.(sl.l_tether[rng], 1)
 l_set = fill(Float64(sl.l_tether[1][1]), length(rng))
-# Entry state machine; the codes stay 0-based, other scripts search for `== 3`.
+# Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
 state = Float64.(sl.sys_state[rng])
 p2 = plotx(
     sl.time[rng],
@@ -150,7 +150,7 @@ p2 = plotx(
         nothing,
         [L"l_{\mathrm{tether}}", L"l_{0}"],
         # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-        L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8}",
+        L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled}",
     ],
     fig = fig_name * " – time series",
 )

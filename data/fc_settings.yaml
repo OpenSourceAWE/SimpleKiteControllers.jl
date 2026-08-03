@@ -37,6 +37,7 @@ fc_settings:
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
   dive_el_margin:     7.0      # Margin above el_center where the dive ends       [deg]
   hold_time:          0.8      # Duration of the hold                               [s]
+  settled_d_gate:     5.0      # Cross-track error below which fig8 -> settled    [deg]
 
   # --- plant ----------------------------------------------------------------
   body_damping:       [0.0, 0.0, 40.0]  # Per axis; sets c1, so also the turn radius

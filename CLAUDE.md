@@ -68,10 +68,9 @@ loadable, the V3Kite branch pin). Read them before touching a version bound.
   `check_pattern_feasible`).
 - `turn_rate_table.jl` — `turn_rate_coeffs(body_damping, depower)`, interpolating `c1`
   (log-linearly), `c2` and the steering `delay` from `data/turn_rate_coeffs.yaml`. Owns
-  mutable state: the loaded table (`reload_turn_rate_table!`) and the active run's
-  conditions (`set_turn_rate_conditions!`). Non-passing and legacy rows are never
-  interpolation neighbours, and a lookup outside the identified range **throws** rather
-  than extrapolating.
+  the loaded table as mutable state (`reload_turn_rate_table!`). Non-passing and legacy
+  rows are never interpolation neighbours, and a lookup outside the identified range
+  **throws** rather than extrapolating.
 - `fc_settings.jl` — `FC_Settings`, every tuning parameter of a figure-eight run, loaded
   from `data/fc_settings.yaml`. Plus `winch_force_gains`, which applies the `compliance`
   scaling and returns plain numbers (the winch object it feeds belongs to the kite model),
@@ -113,7 +112,7 @@ not yet been lifted into a controller type.
   collapsing as the pattern is raised (`cos(elevation)` compresses the azimuth axis). A
   figure-eight near zenith is geometrically impossible at any PID tuning —
   `check_pattern_feasible` prints the margin at startup.
-- **Log slot mapping** (`var_01`…`var_09`, `bearing`, `sys_state` as phase 0–3) is
+- **Log slot mapping** (`var_01`…`var_09`, `bearing`, `sys_state` as phase 0–4) is
   documented in `examples/simple_fig8.jl`'s docstring and relied on by
   `fig8_metrics.jl` and `simple_fig8_plots.jl`. Changing a slot means changing all three.
 
