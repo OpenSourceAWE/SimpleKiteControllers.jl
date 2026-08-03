@@ -44,13 +44,13 @@ show that curve as a flat zero.
 
 The L/D panel likewise shows two: `var_15` is the wing alone and `var_16` the
 effective value with tether, bridle and KCU drag included (both filled by
-`step!`). The second is what actually sets the achievable speed. A SPIKE in
-either curve is usually not a real ratio: drag is a signed projection onto the
-apparent wind, so it passes through zero whenever the wing unloads, and V3Kite's
-`step!` gates the division on a bare `drag > 1e-6` N — an arbitrarily small force
-in the denominator then produces an arbitrarily large L/D. The `warmup_time` in
-`FC_Settings` exists partly to keep the settling-to-dynamics transient, which is
-where this happened most reliably, out of the log altogether.
+`step!`). The second is what actually sets the achievable speed. A GAP in either
+curve is an unloaded wing, not missing data: drag is a signed projection onto
+the apparent wind, so it passes through zero whenever the wing unloads, and
+V3Kite's `step!` logs `NaN` below its `drag_floor` rather than the arbitrarily
+large ratio a vanishing denominator would produce. The `warmup_time` in
+`FC_Settings` keeps the settling-to-dynamics transient, which is where this
+happened most reliably, out of the log altogether.
 
 The guidance commands a COURSE (direction of travel) while the inner loop
 regulates HEADING (where the nose points), so the angle panel shows all three:

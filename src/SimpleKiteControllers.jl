@@ -23,7 +23,7 @@ export reload_turn_rate_table!, set_turn_rate_conditions!
 export fig8_metrics, print_fig8_metrics
 
 # Flight-controller settings
-export FC_Settings
+export FC_Settings, winch_force_gains
 
 # Data
 export skc_data_path

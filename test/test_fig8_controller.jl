@@ -482,4 +482,31 @@ _make_test_controller(; kwargs...) =
         @test f.margin ≈ f.path_radius / f.kite_radius
         @test f.feasible == (f.margin >= 1.0)
     end
+
+    @testset "winch_force_gains" begin
+        fcs = FC_Settings()
+        fcs.compliance = 1.0
+        g = winch_force_gains(fcs)
+        # Keys must match the force-mode winch controller's field names, since
+        # the caller splats this straight into it.
+        @test keys(g) == (:force_tau, :len_kp, :damp, :force_min)
+        @test g.len_kp == fcs.winch_len_kp
+        @test g.damp == fcs.winch_damp
+
+        # Halving the compliance stiffens both gains by the same factor, so the
+        # length loop's own time constant (damp/len_kp) does not move.
+        fcs.compliance = 0.5
+        h = winch_force_gains(fcs)
+        @test h.len_kp == fcs.winch_len_kp / 0.5
+        @test h.damp == fcs.winch_damp / 0.5
+        @test h.damp / h.len_kp ≈ g.damp / g.len_kp
+        # force_tau sets WHICH frequencies the drum yields to, not by how much.
+        @test h.force_tau == fcs.winch_force_tau
+        @test h.force_min == fcs.winch_force_min
+
+        # compliance 0 is position mode; an infinitely stiff spring is not
+        # representable here and must not silently divide by zero.
+        fcs.compliance = 0.0
+        @test_throws ErrorException winch_force_gains(fcs)
+    end
 end

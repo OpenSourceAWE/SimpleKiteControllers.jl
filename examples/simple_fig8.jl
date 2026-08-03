@@ -14,11 +14,10 @@ steering tape.
 # What comes from where
 
 The guidance, its settings, the run metrics and the turn-rate table are this
-package (`src/`). The kite model, the simulation loop and the winch position
-controller are V3Kite, used exactly as released on its main branch. The three
-things this run needs that released V3Kite does not provide — the discarded
-warm-up, the force-mode winch and the span-mean AoA — are in
-`v3kite_support.jl` next to this file, written against V3Kite's public API only.
+package (`src/`). Everything that touches the kite — the model, the simulation
+loop, both winch modes, the discarded warm-up and the span-mean AoA — is
+V3Kite, used through its public API. Nothing here reaches into a `V3KITE`
+itself, which is what keeps this package free of a kite-model dependency.
 
 # Why the pattern is large
 
@@ -112,11 +111,6 @@ using LinearAlgebra: norm
 using Statistics: mean
 using Printf
 
-# `warmup!`, the force-mode winch and `span_mean_aoa`: the parts of this run
-# that reach into a `V3KITE` and therefore cannot live in the (model-agnostic)
-# package. See the file's own docstring.
-include(joinpath(@__DIR__, "v3kite_support.jl"))
-
 @info "simple_fig8.jl: figure-of-eight path following of the V3 kite."
 
 # ==================== USER PARAMETERS ==================== #
@@ -129,10 +123,6 @@ include(joinpath(@__DIR__, "v3kite_support.jl"))
 # reads `skc_data_path()` regardless of it.
 set_data_path(v3_data_path())
 fcs = FC_Settings("fc_settings.yaml")
-
-fcs.vsm_interval == 1 || error("vsm_interval = $(fcs.vsm_interval): V3Kite's \
-    released `step!` hardwires 1 and takes no `vsm_interval` keyword, so this \
-    script cannot honour any other value. See `FC_Settings`.")
 
 # ======================== INIT =========================== #
 
@@ -148,8 +138,9 @@ wc = WC_Settings(wc_settings(fcs.project))
 wfc = nothing
 if fcs.compliance > 0
     # Compliance is 1/winch_len_kp; winch_damp goes with it so the length loop's
-    # time constant (damp/len_kp) does not move.
-    wfc = WinchForceController(fcs)
+    # time constant (damp/len_kp) does not move. `winch_force_gains` applies that
+    # scaling and returns plain numbers; the controller object is V3Kite's.
+    wfc = WinchForceController(; winch_force_gains(fcs)...)
     @info @sprintf("Winch: FORCE mode at compliance = %.2f — len_kp %.0f N/m, \
                     damp %.0f N·s/m, tau %.1f s.",
                    fcs.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
@@ -166,22 +157,20 @@ end
 set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = fcs.tether_length,
                           system_yaml = fcs.project)
 
+# `warmup_time` runs a discarded warm-up inside `init`: it relaxes the settled
+# geometry into an equilibrium of the model actually being integrated, against
+# the winch named by `warmup_wfc`, so that transient is not in the log at all.
+# `init` also hands the drum a holding torque when it releases the brake.
+#
+# The settled geometry is cached under V3Kite's own data/ by default. Add
+# `cache_path = joinpath(@__DIR__, "settled")` to send it somewhere writable
+# instead, which is what a read-only (url-installed) V3Kite needs — at the cost
+# of one re-settle, since the cache is keyed by path.
 s = init(fcs.v_wind, fcs.tether_length; body_damping = fcs.body_damping,
     elevation = fcs.elevation,
     depower_setpoint = fcs.depower_setpoint, sim_time = fcs.sim_time, dt = fcs.dt,
-    system_yaml = fcs.project, wc)
-
-# Hand the drum a holding torque for the load it is already carrying. `init`
-# releases the brake, but the settled state was found with the length
-# KINEMATICALLY FIXED, so the serialized `set_value` is whatever settling left
-# there — without this the first consistent-initial-condition solve sees a free
-# drum holding nothing, which is a torque step at t = 0 even though the winch
-# controller starts from the measured force one step later.
-init_winch_torque!(s.sys)
-
-# Discarded warm-up: relax the settled geometry into an equilibrium of the model
-# actually being integrated, so that transient is not in the log at all.
-warmup!(s, fcs.warmup_time; depower = fcs.depower_setpoint, wfc)
+    system_yaml = fcs.project, wc,
+    warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
 l0 = s.sys_state.l_tether[1]
@@ -232,7 +221,10 @@ lead_time = deg2rad(fcs.attractor_dist) * fcs.tether_length / fcs.v_app_ref
                 vs %.2f s steering dead time (ratio %.1f).",
                fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
 
-heading_pid = create_fig8_pid(;
+# `N` is the derivative filter's maximum gain. At the `DiscretePIDs` default of
+# 10 the broadband noise on the fed-back angles came out as a 7.95 Hz ripple on
+# the command, hence `fcs.heading_d_n = 2`.
+heading_pid = create_heading_pid(;
     K = fcs.heading_p, Ti = fcs.heading_i, Td = fcs.heading_d, N = fcs.heading_d_n,
     dt = s.dt, umin = -fcs.max_steering, umax = fcs.max_steering)
 
@@ -393,10 +385,12 @@ try
         # slowly, at the stiffness `compliance` scaled the gains to;
         # `compliance` = 0 holds the length outright (see `FC_Settings`).
         if isnothing(wfc)
-            step!(s; rel_depower, rel_steering, set_length = l0)
+            step!(s; rel_depower, rel_steering, set_length = l0,
+                  vsm_interval = fcs.vsm_interval)
         else
             step!(s; rel_depower, rel_steering,
-                  set_torque = winch_force_torque!(wfc, s, l0))
+                  set_torque = winch_force_torque!(wfc, s, l0),
+                  vsm_interval = fcs.vsm_interval)
         end
 
         # Overspeed guard: report the cause instead of letting it surface as an

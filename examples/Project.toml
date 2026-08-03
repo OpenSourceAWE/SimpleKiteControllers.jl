@@ -26,16 +26,17 @@ MakieControlPlots = "0.1.12"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-# V3Kite is not registered. Every name `simple_fig8.jl` takes from it is exported
-# from V3Kite's MAIN branch, and everything main does not have lives in this
-# repository instead (src/ for the guidance, examples/v3kite_support.jl for the
-# V3KITE glue) — so check out main in the sibling clone below.
+# V3Kite is not registered, so it needs a source entry either way. Every name
+# `simple_fig8.jl` takes from it is exported from V3Kite's main branch as of the
+# "interface pieces external controllers need" PR; against an older V3Kite the
+# script fails on `vsm_interval`, `warmup!` and the force-mode winch.
 #
-# A local PATH checkout, not a url/rev entry, and not by preference: V3Kite's
-# `settle_wing` caches the settled wing geometry into V3Kite's own data/
-# directory and `init` gives no way to redirect it, so V3Kite has to be
-# WRITABLE. Pkg makes url-installed packages read-only, which turns the first
-# run into a permission error. Clone it next to this repository:
+# A local PATH checkout. It no longer HAS to be one — `init` now takes a
+# `cache_path`, so V3Kite can live in a read-only Pkg-installed copy (see the
+# `cache_path` argument in `simple_fig8.jl`) and this can become a url/rev
+# entry. It stays a path checkout while V3Kite itself is under development, so
+# edits there take effect here without a re-resolve. Clone it next to this
+# repository:
 #     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
 V3Kite = {path = "../../V3Kite.jl"}
 

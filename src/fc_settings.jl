@@ -44,12 +44,7 @@ and the failures behind each closed lever — is in V3Kite.jl's
     between (0 disables the update entirely). 1 is the TIGHTEST coupling
     available, so this can only be raised — trading aero lag for wall time.
     Exposed to sweep the coupling mode described under `dt`, not as a lever that
-    can stabilize it.
-
-    NOTE: V3Kite's released `step!` hardwires 1 and takes no `vsm_interval`
-    keyword, so `examples/simple_fig8.jl` can only honour the default and errors
-    on any other value rather than silently ignoring it. The field is kept
-    because `dt` above is argued against it.
+    can stabilize it. Passed straight to V3Kite's `step!`.
     """
     vsm_interval::Int64 = 1
     "Ground wind speed at reference height [m/s]"
@@ -484,4 +479,36 @@ function FC_Settings(filename::String; path = skc_data_path())
         setfield!(fcs, sym, convert(fieldtype(FC_Settings, sym), value))
     end
     return fcs
+end
+
+"""
+    winch_force_gains(fcs::FC_Settings) -> NamedTuple
+
+Force-mode winch gains with the `compliance` scaling applied, as a NamedTuple
+keyed to match a force-mode winch controller's fields
+(`force_tau`, `len_kp`, `damp`, `force_min`). Splat it into whichever winch the
+kite model provides:
+
+    wfc = WinchForceController(; winch_force_gains(fcs)...)
+
+`winch_len_kp` and `winch_damp` are both divided by `fcs.compliance`, so the
+yield scales linearly with it while their ratio — the length loop's own time
+constant — is unchanged. `winch_force_tau` is passed through untouched: it sets
+WHICH frequencies the drum yields to, not by how much.
+
+Plain numbers on purpose. The scaling is the part worth keeping in this package;
+the controller object it feeds belongs to the kite model, which this package
+does not depend on.
+
+Errors at `compliance == 0`: that is position mode and must not be flown through
+a force-mode winch (an infinitely stiff spring is not representable — see
+[`FC_Settings`](@ref)).
+"""
+function winch_force_gains(fcs::FC_Settings)
+    fcs.compliance > 0 ||
+        error("winch_force_gains needs compliance > 0; at 0 use position mode.")
+    return (force_tau = fcs.winch_force_tau,
+            len_kp = fcs.winch_len_kp / fcs.compliance,
+            damp = fcs.winch_damp / fcs.compliance,
+            force_min = fcs.winch_force_min)
 end
