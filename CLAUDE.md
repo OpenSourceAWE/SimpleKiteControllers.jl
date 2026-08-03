@@ -51,6 +51,10 @@ Both `Project.toml` files carry comment blocks explaining *why* each compat boun
 `[sources]` pin exists (a `RuntimeGeneratedFunctions` exact pin that keeps the model cache
 loadable, the V3Kite branch pin). Read them before touching a version bound.
 
+`LocalPreferences.toml` (root and `examples/`) sets `[Revise] revise_structs = true`, so a
+live REPL session picks up edits to `struct` definitions (`FC_Settings`,
+`FigureEightSettings`, ...) without a restart. Julia 1.12+ only.
+
 ## Architecture
 
 `src/SimpleKiteControllers.jl` sets the include order — `turn_rate_table.jl` **before**
@@ -91,8 +95,9 @@ not yet been lifted into a controller type.
 - **Two data paths.** `skc_data_path()` is this package's `data/`, always;
   `KiteUtils.get_data_path()` is whatever was last set. `examples/simple_fig8.jl`
   points it at this package's `data/` and it STAYS there for the whole run — the
-  settings, `wc_settings.yaml` and `fig8_run.arrow` are all here, and
-  `simple_fig8_plots.jl` loads the log from here too. That needs a V3Kite whose
+  settings and `wc_settings.yaml` are here, while the arrow log goes to `output/`
+  (named after the project's `log_file` setting) and `simple_fig8_plots.jl` loads
+  it from there too. That needs a V3Kite whose
   `init` does not move the global path (branch `init-keeps-data-path`); against an
   older V3Kite the path flips to `v3_data_path()` at `init` and the log lands in
   the model's `data/` instead. The run's **system project** does not depend on
