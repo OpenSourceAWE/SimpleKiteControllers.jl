@@ -49,7 +49,21 @@ Needs Pkg 1.11+; older Pkg silently resolves `examples/` standalone.
 
 Both `Project.toml` files carry comment blocks explaining *why* each compat bound and
 `[sources]` pin exists (a `RuntimeGeneratedFunctions` exact pin that keeps the model cache
-loadable, the V3Kite branch pin). Read them before touching a version bound.
+loadable, the V3Kite source). Read them before touching a version bound.
+
+### Sourcing V3Kite
+
+`examples/Project.toml` sources V3Kite from a **local path**, not `{url = ..., rev =
+"v1.0.1"}`. This is not cosmetic and not committable, and the two are not
+interchangeable: with the same code sourced from a git rev, `init()` costs ~34 s instead
+of ~2 s, because V3Kite's precompiled ODE right-hand side goes unused and is re-JIT'ed in
+every process. Measured both ways, with and without a system image;
+[docs/sysimage_notes.md](docs/sysimage_notes.md) has the table and the five dead ends that
+preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s either way).
+
+Consequences: the absolute path in `[sources]` is machine-specific, so restore the
+`url`/`rev` line and re-run `Pkg.resolve()` before pushing; and after switching the source
+either way, `Pkg.resolve()` + `Pkg.instantiate()` triggers a ~3 min V3Kite precompile.
 
 `LocalPreferences.toml` (root and `examples/`) sets `[Revise] revise_structs = true`, so a
 live REPL session picks up edits to `struct` definitions (`FC_Settings`,
@@ -98,7 +112,7 @@ not yet been lifted into a controller type.
   settings and `wc_settings.yaml` are here, while the arrow log goes to `output/`
   (named after the project's `log_file` setting) and `simple_fig8_plots.jl` loads
   it from there too. That needs a V3Kite whose
-  `init` does not move the global path (branch `init-keeps-data-path`); against an
+  `init` does not move the global path (merged for `v1.0.1`); against an
   older V3Kite the path flips to `v3_data_path()` at `init` and the log lands in
   the model's `data/` instead. The run's **system project** does not depend on
   either: `project_file()` returns
