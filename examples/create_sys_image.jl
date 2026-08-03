@@ -2,19 +2,27 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Builds a PackageCompiler system image with V3Kite and MakieControlPlots
-precompiled for the example scripts. SimpleKiteControllers itself is
-deliberately left OUT of the image, so Revise keeps applying to `src/` when
-developing against it.
+Builds a PackageCompiler system image with MakieControlPlots precompiled for
+the example scripts. Neither V3Kite nor SimpleKiteControllers goes into the
+image: SimpleKiteControllers stays out so Revise keeps applying to `src/`, and
+V3Kite stays out because baking it into a sysimage defeats its own
+`PrecompileTools` workload — V3Kite's model is built from
+`RuntimeGeneratedFunctions`-wrapped ModelingToolkit code, whose JIT-compiled
+form lives in V3Kite's OWN pkgimage cache; once V3Kite's code is linked into a
+custom sysimage instead, that cache no longer applies and `init`/`step!` pay
+the full JIT cost on every run regardless of how many times the sysimage is
+rebuilt. So V3Kite is left to Pkg's ordinary precompilation, where its
+`@compile_workload` (see its `src/precompile.jl`) already covers this.
 
 Run via `bin/create_sys_image`, which stacks a throwaway environment holding
 PackageCompiler onto `examples/`'s (PackageCompiler is not a dependency of
 either) and moves the resulting image into `bin/`.
 
-The workload that gets traced into the image is `init`/`step!` on the V3
-model, run in an isolated process by `PackageCompiler.create_sysimage`'s
-`precompile_execution_file` so the traced precompile statements land in the
-image rather than just the packages' own precompile workloads.
+The workload traced into the image (via `precompile_execution_file`, in an
+isolated process) still runs `init`/`step!` on the V3 model, so the example
+scripts' full call path is exercised and MakieControlPlots' own precompile
+statements get recorded — V3Kite just doesn't end up linked into the image
+itself.
 """
 
 using Pkg
@@ -39,7 +47,7 @@ write(workload, """
 @info "Creating sysimage..."
 try
     PackageCompiler.create_sysimage(
-        [:V3Kite, :MakieControlPlots];
+        [:MakieControlPlots];
         sysimage_path = "kps-image_tmp.so",
         include_transitive_dependencies = true,
         precompile_execution_file = workload,
