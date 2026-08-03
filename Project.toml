@@ -5,7 +5,6 @@ version = "1.0.0-DEV"
 
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
-KiteModels = "b94af626-7959-4878-9336-2adc27959007"
 KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
@@ -15,9 +14,8 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
-DiscretePIDs = "0.1.6"
-# 0.11, not 0.8.1: that pins KitePodModels 0.3.8 while V3Kite needs 0.4.
-KiteModels = "0.11"
+# 1 as well as 0.1: bin/kps-image-1.12.so bakes in DiscretePIDs 1.0.0.
+DiscretePIDs = "0.1.6, 1"
 # 0.11, not 0.10.13: KitePodModels 0.4 requires it, so examples/ needs it too.
 KiteUtils = "0.11"
 LinearAlgebra = "1"
