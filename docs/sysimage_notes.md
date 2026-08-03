@@ -9,7 +9,7 @@ approaches below; each one was tried and measured, not just proposed.
 
 `include("examples/simple_fig8.jl")` logs:
 
-```
+```text
 [ Info: Loading settled geometry
 [ Info: Initializing v3 model...
 [ Info: Model bin name: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
@@ -60,26 +60,48 @@ segments). It happens on every fresh Julia process, independent of
    MakieControlPlots` under the new image so `V3Kite` precompiles — with its
    `@compile_workload` — against it. **Still did not help.**
 
+## Reference measurement
+
+Running `examples/simple_parking.jl` **from within `V3Kite.jl`'s own checkout**
+(plain `julia --project`, no custom sysimage):
+
+```text
+[ Info: Model bin name: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+[ Info: v3 model initialized in 2.020781677 seconds.
+```
+
+Same model bin name (same 44pt/95seg structure) as this repo's ~27 s runs — so
+it is not the model, confirming (3). This is the ground truth the fix needs to
+reproduce.
+
 ## Where this stands
 
-Not resolved. The reported difference — fast when V3Kite is used directly
-(from within its own checkout/environment), slow when loaded as a dependency
-of `examples/` — was not reproduced by (4), so removing V3Kite from the
-sysimage was necessary but not sufficient. Ruled out so far as the
-differentiator: `RuntimeGeneratedFunctions` version (identical
-`git-tree-sha1` in both environments' manifests), stale `.bin` caches,
-V3Kite's own precompile workload not running.
+Not resolved. Removing V3Kite from the sysimage (4) did not reproduce the 2 s
+figure, so a sysimage-vs-pkgimage conflict was not the (or not the whole)
+story. Ruled out so far as the differentiator: `RuntimeGeneratedFunctions`
+version (identical `git-tree-sha1` in both environments' manifests), stale
+`.bin` caches, V3Kite's own precompile workload not running, GLMakie/
+MakieControlPlots being absent from V3Kite's own environment (they are also
+in its `examples/Project.toml`).
 
-Not yet checked: whether some other package present in `examples/Project.toml`
-(`GLMakie`, `DiscretePIDs`, `RuntimeGeneratedFunctions`'s exact `=0.5.22` pin,
-or `SimpleKiteControllers` itself) invalidates part of V3Kite's or
-`SymbolicAWEModels`'s pkgimage cache for the RGF-wrapped model code when
-loaded alongside it — Julia's precompile invalidation is transitive and can be
-triggered by an unrelated sibling dependency. That would explain "works alone,
-breaks as a dependency" independently of the sysimage question, and would need
-investigating in `V3Kite.jl`/`SymbolicAWEModels.jl` directly (`Base.watch_...`/
-`SnoopCompile`-style invalidation tracing, not something fixable from this
-repo's `src/` or `bin/`).
+**Leading lead, not yet tested:** how V3Kite is *sourced* differs between the
+two environments. `V3Kite.jl/examples/Project.toml` has
+`[sources] V3Kite = {path = ".."}` — a dev'd, path-sourced package. This
+repo's `examples/Project.toml` has `V3Kite = {url = "...", rev = "v1.0.1"}`,
+which resolves into `~/.julia/packages/V3Kite/mnfec/` — a registry-style,
+git-pinned copy. Worth testing directly: point this repo's
+`examples/Project.toml` at a local V3Kite checkout via `path = ...` instead of
+`url`/`rev`, reinstantiate, and re-measure `init()` — if that alone drops it to
+~2 s, the fix is about how a git-rev-pinned dependency's pkgimage cache
+(in)validates versus a dev'd one, which would need investigating/reporting
+upstream in `V3Kite.jl` or the Pkg precompilation machinery itself, not
+something to work around from this repo's `src/` or `bin/`.
+
+Also not yet checked: whether some other package present in
+`examples/Project.toml` but not in V3Kite's own (`DiscretePIDs`, the exact
+`RuntimeGeneratedFunctions = "=0.5.22"` pin, or `SimpleKiteControllers`
+itself) invalidates part of V3Kite's/`SymbolicAWEModels`'s pkgimage cache for
+the RGF-wrapped model code when loaded alongside it.
 
 `bin/create_sys_image` is still worth keeping for `MakieControlPlots`/`GLMakie`
 load time — that part works. It just does not address the `init()` cost this
