@@ -111,9 +111,9 @@ using Printf
 
 # ==================== USER PARAMETERS ==================== #
 
-# This package's data/ is the default for KiteUtils lookups; the model's is asked for by name.
+# This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-PROJECT = "system_fig8_150m.yaml"
+PROJECT = "system_fig8_200m.yaml" # defined for 150m, 200m and 300m
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 l_tether = Settings(project).l_tether
