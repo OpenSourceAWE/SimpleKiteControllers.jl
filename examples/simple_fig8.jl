@@ -24,8 +24,10 @@ this package's `data/system_reelout.yaml`, so the simulation settings it names
 (`data/settings_reelout.yaml`) are the ones flown, not the model's copy. That
 file, not `fc_settings.yaml`, sets how long the run is (`sim_time`) and the
 timestep (`1/sample_freq`); `init` falls back to both and the loop reads
-`s.steps` and `s.dt` from the model. Only the winch-controller settings and the
-geometry stay with the model.
+`s.steps` and `s.dt` from the model. The winch-controller settings come from here
+too (`data/wc_settings.yaml`, found because the data path points at this
+package's `data/` until `init` moves it back). Only the geometry, the polars and
+the VSM settings stay with the model.
 
 # Why the pattern is large
 
@@ -109,8 +111,8 @@ using Printf
 
 # ==================== USER PARAMETERS ==================== #
 
-# set_data_path points KiteUtils at the MODEL's data; FC_Settings reads skc_data_path().
-set_data_path(v3_data_path())
+# This package's data/ is the default for KiteUtils lookups; the model's is asked for by name.
+set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 fcs = FC_Settings("fc_settings.yaml")
 # Absolute, so the run's own data/settings_reelout.yaml is used, not the model's.
 project = project_file()

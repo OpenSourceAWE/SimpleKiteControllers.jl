@@ -56,7 +56,8 @@ using V3Kite                  # the log, its data path, wrap_to_pi
 using SimpleKiteControllers   # FC_Settings, figure_eight_path
 
 @info "Loading simulation results..."
-set_data_path(v3_data_path())
+# Where simple_fig8.jl saved the log; `init` no longer moves the data path.
+set_data_path(skc_data_path())
 
 # Reuses the run's own `fcs` when included from it, so the overlay cannot drift.
 @isdefined(fcs) || (fcs = FC_Settings("fc_settings.yaml"))

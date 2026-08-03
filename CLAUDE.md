@@ -89,16 +89,20 @@ not yet been lifted into a controller type.
 
 ### Things that will bite
 
-- **Two data paths.** `skc_data_path()` is this package's `data/`; `KiteUtils.get_data_path()`
-  points at the *kite model's* data directory during a run (`set_data_path(v3_data_path())`).
-  `FC_Settings` and the turn-rate table always read the former. So does the run's
-  **system project**: `project_file()` returns `data/system_reelout.yaml` as an
-  ABSOLUTE path, which is what makes KiteUtils resolve `sim_settings` next to it —
-  `data/settings_reelout.yaml` here, not the identically named file in the model's
-  data. `wc_settings` stays a bare name and therefore still resolves to the model's.
-  A project this package does not carry is passed through unchanged. The geometry,
-  polars and VSM settings never go through the project file at all; V3Kite loads
-  them from `v3_data_path()` directly.
+- **Two data paths.** `skc_data_path()` is this package's `data/`, always;
+  `KiteUtils.get_data_path()` is whatever was last set. `examples/simple_fig8.jl`
+  points it at this package's `data/` and it STAYS there for the whole run — the
+  settings, `wc_settings.yaml` and `fig8_run.arrow` are all here, and
+  `simple_fig8_plots.jl` loads the log from here too. That needs a V3Kite whose
+  `init` does not move the global path (branch `init-keeps-data-path`); against an
+  older V3Kite the path flips to `v3_data_path()` at `init` and the log lands in
+  the model's `data/` instead. The run's **system project** does not depend on
+  either: `project_file()` returns
+  `data/system_reelout.yaml` as an ABSOLUTE path, which makes KiteUtils resolve
+  `sim_settings` next to it — `data/settings_reelout.yaml` here, not the identically
+  named file in the model's data. A project this package does not carry is passed
+  through unchanged. The geometry, polars and VSM settings never go through the
+  project file at all; V3Kite loads them from `v3_data_path()` directly.
 - **Bearing convention:** `0` = towards zenith, positive towards larger azimuth. `chi_set`
   is directly comparable to `SysState.heading`. `SysState.course` is **not** — it needs
   `wrap_to_pi(course + pi)`; feeding it raw is positive feedback and diverges the run.

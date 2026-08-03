@@ -58,7 +58,9 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "fix_missing"}
+# LOCAL OVERRIDE, do not commit: the checkout's `init-keeps-data-path` branch.
+# Restore the url/rev line above the `[deps]` block before pushing.
+V3Kite = {path = "../../V3Kite.jl"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

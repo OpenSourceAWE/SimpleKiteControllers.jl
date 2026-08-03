@@ -3,12 +3,11 @@
 # than the kite model's. It exists so the simulation conditions of a run (wind,
 # tether, winch, KCU, solver) can be varied here without editing V3Kite.
 #
-# KiteUtils resolves `sim_settings` relative to the directory of this file, so
-# settings_reelout.yaml is the copy next to it; `wc_settings` is a bare name and
-# stays a lookup under the ACTIVE data path, i.e. the kite model's own
-# wc_settings.yaml, which is where the POSITION-mode winch gains belong. The
-# geometry, polars and VSM settings never pass through here — V3Kite loads them
-# from v3_data_path() directly.
+# KiteUtils resolves `sim_settings` relative to the directory of this file;
+# `wc_settings` is a bare name, resolved under the ACTIVE data path, which the
+# example points at this directory. Both files are therefore the copies next to
+# this one. The geometry, polars and VSM settings never pass through here —
+# V3Kite loads them from v3_data_path() directly.
 system:
     sim_settings: "settings_reelout.yaml"
     wc_settings: "wc_settings.yaml"

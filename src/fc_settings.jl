@@ -12,8 +12,8 @@ Everything here is a TUNING parameter of one run. The PLANT the run is flown
 against — including the length of the run (`sim_time`) and the timestep it is
 integrated with (`sample_freq`) — is the system project resolved by
 [`project_file`](@ref), i.e. `data/settings_reelout.yaml`. The POSITION-mode
-winch gains live in the kite model's own winch settings (V3Kite's `WC_Settings`,
-loaded from its `data/wc_settings.yaml`) and the geometry in its own data; the
+winch gains are `data/wc_settings.yaml` (V3Kite's `WC_Settings` struct, this
+package's file) and the geometry is the model's own; the
 FORCE-mode winch parameters are here (`winch_*` below), because how compliant the
 winch is during a figure-eight is a choice of the run rather than a property of
 the model. [`winch_force_gains`](@ref) applies the `compliance` scaling to them;
@@ -284,12 +284,11 @@ end
 
 Path of the system project to hand to the kite model, absolute when this package
 carries it in [`skc_data_path`](@ref) and unchanged otherwise, which leaves it a
-lookup under the model's data.
+lookup under the active data path.
 
-The absolute form is what selects this package's settings: KiteUtils resolves the
-project's `sim_settings` relative to the project file, so `settings_reelout.yaml`
-is read from here, while bare names like `wc_settings` still resolve under the
-model's active data path.
+The absolute form is what makes `sim_settings` this package's file: KiteUtils
+resolves it relative to the project. Bare names like `wc_settings` instead follow
+the active data path, which `examples/simple_fig8.jl` also points here.
 
 Not a field of [`FC_Settings`](@ref): which plant a run is flown against is not a
 tuning parameter of the controller.

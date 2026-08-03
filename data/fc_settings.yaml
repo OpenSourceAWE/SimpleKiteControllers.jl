@@ -9,8 +9,8 @@
 # sample_freq whose inverse is the timestep — describe what is being flown, not
 # how it is controlled.
 #
-# The POSITION-mode winch gains are NOT here — they live in the kite model's own
-# wc_settings.yaml (V3Kite's data/) and are read straight from there. The
+# The POSITION-mode winch gains are NOT here — they live in wc_settings.yaml
+# next to this file and are read straight from there. The
 # FORCE-mode winch parameters ARE here, because how compliant the winch is during
 # a figure-eight is a choice of the run, not a property of the model; `compliance`
 # below scales them, and the controller they feed is V3Kite's

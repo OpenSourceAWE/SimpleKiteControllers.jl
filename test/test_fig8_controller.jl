@@ -442,8 +442,11 @@ _make_test_controller(; kwargs...) =
         @test dirname(p) == skc_data_path()
         @test isfile(p)
         # KiteUtils resolves the sim settings relative to the project, so they must sit here.
-        settings = joinpath(skc_data_path(), YAML.load_file(p)["system"]["sim_settings"])
+        system = YAML.load_file(p)["system"]
+        settings = joinpath(skc_data_path(), system["sim_settings"])
         @test isfile(settings)
+        # wc_settings is a bare name; the example points the data path here before init.
+        @test isfile(joinpath(skc_data_path(), system["wc_settings"]))
         # The run length and timestep come from there, not from FC_Settings.
         sys = YAML.load_file(settings)["system"]
         @test sys["sim_time"] > 0
@@ -451,7 +454,7 @@ _make_test_controller(; kwargs...) =
         @test !hasfield(FC_Settings, :sim_time)
         @test !hasfield(FC_Settings, :dt)
         @test !hasfield(FC_Settings, :project)
-        # A project this package does not carry stays a lookup under the model's data.
+        # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
     end
 end

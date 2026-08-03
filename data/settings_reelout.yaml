@@ -11,7 +11,7 @@
 # develops a growing 2*dt oscillation at maximum dynamic pressure.
 #
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
-# POSITION-mode winch gains are the model's wc_settings.yaml, and the geometry,
+# POSITION-mode winch gains are wc_settings.yaml, and the geometry,
 # polars and VSM settings are loaded by V3Kite from its own data directory and
 # never pass through this file. `v_wind` and the initial tether length appear in
 # both files; there the fc_settings value wins, because it is passed to `init`
