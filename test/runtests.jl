@@ -1,38 +1,30 @@
+# Copyright (c) 2025, 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
 using SimpleKiteControllers
 using Test
 
 @testset verbose=true "SimpleKiteControllers.jl" begin
     @testset "test_linearize" begin
-        # set the parameters of the parking controller
         pcs = ParkingControllerSettings(dt=0.05)
         pcs.kp_tr=1.05
         pcs.ki_tr=0.012
-        # create the parking controller
         pc = ParkingController(pcs)
-        # set the desired turn rate
         psi_dot = 0.1
-        # set the heading
         psi = 0.0
-        # set the elevation angle
         elevation = 0.0
-        # set the apparent wind speed
         v_app = 10.0
-        # set the depower setting
         ud_prime = 0.5
-        # linearize the NDI block
         u_s, ndi_gain = linearize(pc, psi_dot, psi, elevation, v_app; ud_prime)
         @test u_s ≈ 0.41666666666666674
         @test ndi_gain ≈ 4.166666666666667
     end
     
     @testset "test_calc_steering" begin
-        # set the parameters of the parking controller
         pcs = ParkingControllerSettings(dt=0.05)
         pcs.kp_tr=1.05
         pcs.ki_tr=0.012
-        # create the parking controller
         pc = ParkingController(pcs)
-        # set the heading
         heading = deg2rad(1.0)
         elevation = deg2rad(70.0)
         chi_set = deg2rad(34.0)
@@ -44,22 +36,17 @@ using Test
     end
 
     @testset "test_navigate" begin
-        # set the parameters of the parking controller
         pcs = ParkingControllerSettings(dt=0.05)
         pcs.kp=1.05
         pcs.ki=0.012
-        # create the parking controller
         pc = ParkingController(pcs)
-        # set the azimuth
         azimuth = deg2rad(90.0)
-        # set the elevation
         elevation = deg2rad(70.0)
         chi_set = navigate(pc, azimuth, elevation)
         @test chi_set ≈ -deg2rad(34.019878734151234)
     end
 
-    # Figure-of-eight guidance, metrics and turn-rate table. Pure geometry:
-    # no simulation and no kite model, so this runs in well under a second.
+    # Pure geometry: no simulation and no kite model, so this runs in under a second.
     include("test_fig8_controller.jl")
 end
 nothing

@@ -3,35 +3,28 @@
 
 """
 Interpolated lookup for the V3 turn-rate-law coefficients `c1`, `c2` and
-steering `delay`, backed by `data/turn_rate_coeffs.yaml` rather than a
-hand-maintained `Dict`. Kept in its own file, included before
-`figure_eight_controller.jl`, because it owns state — the loaded table and the
-active-run conditions stash — that the guidance code does not need to know
-about.
+steering `delay`, backed by `data/turn_rate_coeffs.yaml`. Kept in its own file,
+included before `figure_eight_controller.jl`, because it owns state — the loaded
+table and the active-run conditions stash — that the guidance does not need to
+know about.
 
-The table is read once, at package load (`__init__`), not on every
-`turn_rate_coeffs` call: [`reload_turn_rate_table!`](@ref) re-reads it, for use
-after a table-building script appends rows in the same session
-(`V3Kite.jl/examples/build_turn_rate_table.jl` identifies the V3's rows).
+The table is read once, at package load (`__init__`);
+[`reload_turn_rate_table!`](@ref) re-reads it after a table-building script
+appends rows in the same session (V3Kite.jl's
+`examples/build_turn_rate_table.jl` identifies the V3's rows).
 
 The rows are identified from simulated steering sweeps of a specific kite at
-specific conditions, so the table is data ABOUT a plant, not about this
-controller — it lives here only because the guidance's feasibility check is the
-only consumer. Adding a second kite means a second file, not a second column.
+specific conditions, so this is data ABOUT a plant, not about this controller —
+it lives here only because the guidance's feasibility check is the only
+consumer. A second kite means a second file, not a second column.
 """
 
 const TURN_RATE_TABLE_FILE = "turn_rate_coeffs.yaml"
 
-# Interpolation neighbours must meet the same quality bar
-# V3Kite.jl's `examples/steering_test_v3.jl` reports: a tight c1 fit and G-gain scatter below the
-# script's own pass/fail threshold. Legacy rows (identified at conditions that
-# no longer match `conditions:` in the YAML, e.g. a different l_tether) are
-# never used as a neighbour regardless of their quality — see "Conditions:
-# the whole table is built at 200 m tether" in V3Kite.jl's PlanC1C2.md.
+# Quality bar an interpolation neighbour must meet, per V3Kite's steering_test_v3.jl.
 const TURN_RATE_MAX_C1_REL_STD = 0.01
 const TURN_RATE_MAX_G_REL_STD = 0.35
-# Relative mismatch between the active run's conditions and the table's before
-# turn_rate_coeffs warns (see "Conditions mismatch" in V3Kite.jl's PlanC1C2.md).
+# Conditions mismatch, run vs table, above which turn_rate_coeffs warns.
 const TURN_RATE_MISMATCH_REL_TOL = 0.05
 
 mutable struct TurnRateTable
@@ -97,20 +90,11 @@ end
 
 const _TURN_RATE_TABLE = Ref{TurnRateTable}()
 
-# The conditions (wind, tether, system) of the run currently in progress —
-# stashed by `set_turn_rate_conditions!`, `nothing` until the first call in a
-# session (e.g. in a bare unit test), which is deliberately silent.
+# Conditions of the run in progress; `nothing` until stashed, which stays silent.
 const _ACTIVE_TURN_RATE_CONDITIONS = Ref{Union{Nothing, NamedTuple}}(nothing)
-# Fields already warned about for the *current* active conditions. Reset every
-# time `set_turn_rate_conditions!` stashes new conditions, so each run gets its own one-time warning
-# per field rather than the first run in a session silencing every later one.
+# Fields already warned about, reset per `set_turn_rate_conditions!` call.
 const _TURN_RATE_WARNED_FIELDS = Ref(Set{Symbol}())
-
-# Legacy (body_damping, depower) rows already warned about, so a distinct
-# legacy row is not silenced by an earlier one hitting the same `@warn` call
-# site (Base's own `maxlog` dedups by call site, not by message content, which
-# would wrongly suppress the second of two *different* legacy rows). Reset by
-# `reload_turn_rate_table!`.
+# Legacy rows already warned about; `maxlog` cannot be used, it dedups by call site.
 const _TURN_RATE_WARNED_LEGACY = Ref(Set{Tuple{Vector{Float64}, Float64}}())
 
 """
@@ -172,23 +156,15 @@ end
 
 Re-read `data/turn_rate_coeffs.yaml` and refresh [`turn_rate_coeffs`](@ref),
 [`V3_TURN_RATE_COEFFS`](@ref), [`V3_TURN_RATE_C1`](@ref) and
-[`V3_TURN_RATE_C2`](@ref) from it. The table is otherwise only read once, when
-SimpleKiteControllers is loaded — call this after `V3Kite.jl/examples/build_turn_rate_table.jl` appends
-rows in the same Julia session, instead of restarting.
+[`V3_TURN_RATE_C2`](@ref) from it. The table is otherwise read only at package
+load — call this after V3Kite.jl's `examples/build_turn_rate_table.jl` appends
+rows in the same session, instead of restarting.
 
-`V3_TURN_RATE_C1`/`V3_TURN_RATE_C2` are looked up for V3Kite `init`'s default
-`body_damping = [0.0, 0.0, 40.0]` at depower 0.25, which — being an ordinary row
-in the same file — is not immune to a bad re-identification (this happened once
-in practice: a re-run replaced a working legacy row with a solver-divergence
-`outcome = "error"` row for exactly this combination, and the naive version of
-this function let that exception propagate out of `__init__`, which would have
-made every future `using SimpleKiteControllers` fail outright). If that lookup throws, this
-function only warns and leaves `V3_TURN_RATE_C1`/`C2` at their previous value
-(or `NaN` before the first successful load) rather than taking the whole
-package down with it — a data-quality problem in one grid cell must never
-become a load-time failure. `turn_rate_coeffs` itself still throws normally for
-any *other* caller asking for that same combination, since it has no equally
-safe fallback value to return.
+If the `[0,0,40]`/0.25 lookup behind `V3_TURN_RATE_C1`/`C2` throws, this function
+warns and leaves them at their previous value (`NaN` before the first successful
+load): a data-quality problem in one grid cell must never become a load-time
+failure, since this runs from `__init__`. `turn_rate_coeffs` still throws
+normally for any other caller asking for that combination.
 """
 function reload_turn_rate_table!()
     table = _load_turn_rate_table()
@@ -236,12 +212,10 @@ Look up the V3 turn-rate-law coefficients for a given `body_damping` and
   and add the row.
 
 **Both arguments matter.** Depowering 0.25 → 0.55 costs a factor 2.95 of
-steering authority *and* raises the steering dead time from 0.03 s to 0.55 s —
-comparable in size to the damping effect, and easy to forget because depower is
-normally thought of as a trim setting rather than a control-authority one. Body
-damping is not interpolated across (see V3Kite.jl's PlanC1C2.md Correction 1): it is a
-3-vector with a violently nonlinear effect on `c1`, so a `body_damping` with no
-identified rows throws rather than guessing from a nearby one.
+steering authority *and* raises the steering dead time from 0.03 s to 0.55 s.
+Body damping is never interpolated across: it is a 3-vector with a violently
+nonlinear effect on `c1`, so a `body_damping` with no identified rows throws
+rather than guessing from a nearby one.
 """
 function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
     bd = collect(Float64.(body_damping))

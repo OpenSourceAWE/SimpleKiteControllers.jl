@@ -1,3 +1,6 @@
+# Copyright (c) 2025, 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
 module SimpleKiteControllers
 
 using DiscretePIDs, Parameters, KiteUtils, YAML
@@ -35,18 +38,13 @@ Absolute path of this package's bundled `data/` directory, holding
 `fc_settings.yaml` ([`FC_Settings`](@ref)) and `turn_rate_coeffs.yaml`
 ([`turn_rate_coeffs`](@ref)).
 
-Deliberately NOT `KiteUtils.get_data_path()`: a run drives a *kite model*
-package (e.g. V3Kite) whose own `set_data_path` points the global data path at
-that model's geometry, settings and settled-state cache. The controller's own
-settings live here rather than being copied into every model package that uses
-it, so they are looked up under this path instead of the global one.
+Not `KiteUtils.get_data_path()`: that points at the *kite model's* data
+directory during a run, while these settings belong to the controller.
 """
 skc_data_path() = joinpath(dirname(@__DIR__), "data")
 
 include("parking_controller.jl")
-# `turn_rate_table.jl` before `figure_eight_controller.jl`: the guidance's
-# feasibility helpers default their `c1` to `V3_TURN_RATE_C1`, which is defined
-# there.
+# Before figure_eight_controller.jl: its feasibility helpers default c1 to V3_TURN_RATE_C1.
 include("turn_rate_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")

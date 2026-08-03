@@ -8,52 +8,35 @@ Implements the attractor-point ("L0") guidance of Fernandes et al., Energies
 2022 (doi:10.3390/en15041390): the closest point Q on the reference path to the
 kite defines the cross-track error d; the attractor point R lies a fixed arc
 distance (`attractor_distance`, in degrees) ahead of Q along the path. The outer
-steers towards R by great-circle navigation (course `chi_set`), which a heading
-PID then tracks. Unlike L1 logic, the L0 attractor is well defined at any
+loop steers towards R by great-circle navigation (course `chi_set`), which a
+heading PID then tracks. Unlike L1 logic, the L0 attractor is well defined at any
 distance from the path, so no controller switching or approach logic is needed.
 
 The reference path is a lemniscate in (azimuth, elevation), both in degrees.
 
-# Sign and frame conventions (measured, see V3Kite.jl's PlanFig8.md STEP 0)
-
-Verified against V3Kite.jl's `data/tmp_steering.arrow` and `data/tmp_sinus.arrow`
-(`system_reelout.yaml`, v_wind 9.51 m/s):
-
-- **Positive `rel_steering` produces a positive heading rate** (correlation
-  +0.998 between tape position `sl.steering` and the frame-transport-corrected
-  turn rate). The heading PID output is therefore fed to `rel_steering`
-  *unnegated*, as in V3Kite.jl's `examples/simple_auto_parking.jl`. (The branch for the
-  other kite negates; that does not transfer.)
-- **The course computed from the (azimuth, elevation) trace in this module's
-  convention matches `SysState.heading`**: same zero, same sign, circular-mean
-  offset +13.3° with a 7.6° spread over the samples where the kite actually
-  flies (>2°/s). No `neg_azimuth`, no π correction is needed anywhere in this
-  file. The +13° is the kite's real course-minus-heading drift angle — the
-  guidance commands a *course* while the inner loop regulates *heading*, so a
-  small steady-state cross-track bias is expected and is what the heading PID's
-  integral term absorbs.
+# Sign and frame conventions
 
 Bearing convention throughout: `0` = towards zenith, positive towards larger
-azimuth.
+azimuth. In it, `chi_set` is directly comparable to `SysState.heading` — same
+zero, same sign, no `neg_azimuth` and no π correction anywhere in this file. The
+two differ only by the kite's ~13° course-minus-heading drift angle, which the
+guidance absorbs as a small steady-state cross-track bias.
+
+Positive `rel_steering` produces a positive heading rate on the V3, so the
+heading PID output is fed to `rel_steering` unnegated. Both facts were measured;
+the evidence is in `docs/fig8_tuning_log.md`.
 
 # Turn-rate feasibility
 
-The identified turn-rate law of the V3 (V3Kite.jl's `identify_turn_rate_law` on
-`tmp_steering`) is `ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β)`; `c1` depends on both
-`body_damping` and `depower` — see [`V3_TURN_RATE_COEFFS`](@ref) and always look
-it up with [`turn_rate_coeffs`](@ref) for the settings actually flown. The
-minimum angular turn radius the kite can fly on the sphere follows from `ρ = (v/L)/(c1·v·u_s) = 1/(L·c1·u_s)` — note the
+The V3's identified turn-rate law is `ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β)`,
+with `c1` depending on both `body_damping` and `depower` — always look it up
+with [`turn_rate_coeffs`](@ref) for the settings actually flown. The minimum
+angular turn radius on the sphere is `ρ = (v/L)/(c1·v·u_s) = 1/(L·c1·u_s)`: the
 apparent wind speed cancels, so it depends only on tether length and steering
-authority. Use [`min_turn_radius`](@ref) and [`path_min_radius`](@ref) to check
-a candidate pattern against it *before* running a simulation; a pattern whose
-tightest curvature is smaller than `ρ` cannot be flown however the PID is tuned.
+authority. Check a candidate pattern with [`min_turn_radius`](@ref) and
+[`path_min_radius`](@ref) *before* simulating — a pattern tighter than `ρ`
+cannot be flown however the PID is tuned.
 """
-
-# `V3_TURN_RATE_COEFFS`, `turn_rate_coeffs`, `V3_TURN_RATE_C1` and
-# `V3_TURN_RATE_C2` used to live here as a hand-maintained `Dict` (one row per
-# identified `(body_damping, depower)`). They now live in `turn_rate_table.jl`
-# (included before this file), backed by `data/turn_rate_coeffs.yaml` and
-# interpolated in depower.
 
 """
     figure_eight_path(A, B, C, D, x0, y0, theta, num_points)
@@ -68,11 +51,9 @@ function figure_eight_path(A, B, C, D, x0, y0, theta, num_points)
     t = range(0, 2π, length=num_points)
     x = A * sin.(t)
     y = B * sin.(t) .* cos.(t) .+ C .* cos.(t) .+ D .* cos.(2t)
-    # Apply rotation
     x_rot = x .* cos(theta) .- y .* sin(theta)
     y_rot = x .* sin(theta) .+ y .* cos(theta)
     y_rot = y_rot / (maximum(y_rot)/(B/2))
-    # Apply translation
     x_final = x_rot .+ x0
     y_final = y_rot .+ y0
     return x_final, y_final
@@ -82,38 +63,33 @@ end
     FigureEightSettings
 
 Settings of the figure-of-eight guidance. All angles in degrees unless noted.
+
+`search_window` and `reacquire_dist` keep the closest point Q continuous: Q is
+searched only within `search_window` of arc around its previous position, so it
+cannot jump to the far branch at the self-intersection, where the tangent is
+~180° opposed. `0` disables the restriction. Above `reacquire_dist` of
+cross-track error the search goes global again, so a kite genuinely off-path is
+not trapped. `branch_tol` and `min_speed` govern the second, weaker guard —
+disambiguating near-equal candidates by the current flight direction. See
+[`calc_attractor`](@ref).
 """
 @with_kw mutable struct FigureEightSettings @deftype Float64
     dt
-    # path shape [deg]
-    A = 30.0            # width of the figure-eight
-    B = 12.0            # height of the figure-eight
-    C = 0.0             # size of the right part
-    D = 0.0             # asymmetry factor
+    A = 30.0            # width of the figure-eight [deg]
+    B = 12.0            # height of the figure-eight [deg]
+    C = 0.0             # size of the right part [deg]
+    D = 0.0             # asymmetry factor [-]
     az_center = 0.0     # azimuth of the path center [deg]
     el_center = 60.0    # elevation of the path center [deg]
     theta = 0.0         # rotation angle [rad]
     num_points::Int = 361
-    # guidance
-    attractor_distance = 7.0   # [deg] arc distance from Q to the attractor
+    attractor_distance = 7.0   # arc distance from Q to the attractor [deg]
     up_loops::Bool = true      # fly upwards during the turns at large |azimuth|
-    branch_tol = 3.0           # [deg] closest-point candidates within
-                               # dmin + branch_tol are disambiguated by the
-                               # current flight direction
-    min_speed = 1.0            # [deg/s] minimum angular speed to trust the
-                               # course estimate for disambiguation
-    course_tau = 0.5           # [s] low-pass on the course estimate
-    # Continuity of the closest point Q. The kite moves along the path
-    # continuously, so Q must advance smoothly — it must not jump to the far
-    # branch at the self-intersection, where the tangent is ~180° opposed.
-    # Restrict the search to +-search_window degrees of arc around the previous
-    # Q; 0 disables the restriction (pure global search, the original
-    # behaviour). Re-acquisition is automatic: if the windowed search leaves the
-    # kite further than reacquire_dist from the path, the next call searches
-    # globally again, so a kite that is genuinely off-path is not trapped.
-    search_window = 45.0       # [deg] arc half-width of the local search
-    reacquire_dist = 25.0      # [deg] cross-track error above which the search
-                               # falls back to global
+    branch_tol = 3.0           # candidates within dmin + branch_tol are disambiguated [deg]
+    min_speed = 1.0            # minimum angular speed to trust the course estimate [deg/s]
+    course_tau = 0.5           # low-pass on the course estimate [s]
+    search_window = 45.0       # arc half-width of the local Q search [deg]
+    reacquire_dist = 25.0      # cross-track error above which the search goes global [deg]
 end
 
 """
@@ -139,6 +115,14 @@ mutable struct FigureEightController
     has_prev::Bool
 end
 
+"""
+    _build_path(fes::FigureEightSettings, az_center, el_center)
+
+Discretize the reference lemniscate about `(az_center, el_center)` and return
+`(az, el, seg_len, tangent)`: the cyclic path points [deg], the arc length of
+each segment [deg] and the path direction at each point [rad]. The traversal
+direction is reversed if it does not match `fes.up_loops`.
+"""
 function _build_path(fes::FigureEightSettings, az_center, el_center)
     az, el = figure_eight_path(fes.A, fes.B, fes.C, fes.D,
                                az_center, el_center, fes.theta,
@@ -149,9 +133,7 @@ function _build_path(fes::FigureEightSettings, az_center, el_center)
         pop!(az); pop!(el)
     end
     n = length(az)
-    # Traversal direction: the forward direction at the right lobe (max
-    # azimuth) decides up- vs down-loops — during a turn the kite passes
-    # the azimuth extreme moving either up (up-loop) or down (down-loop).
+    # Up- vs down-loops is decided by the forward direction at the right lobe.
     imax = argmax(az)
     going_up = el[mod1(imax + 1, n)] - el[imax] > 0
     if going_up != fes.up_loops
@@ -178,11 +160,10 @@ end
 """
     set_path_center!(fec::FigureEightController, az_center, el_center)
 
-Move the reference path to a new center [deg] and rebuild it in place. Used to
-walk the pattern center gradually from the capture elevation down to the
-force-optimal one: a large instantaneous step demands a
-heading change big enough to fight the airframe's own dynamics instead of being
-smoothly captured by the guidance.
+Move the reference path to a new center [deg] and rebuild it in place. Intended
+for walking the center gradually from the capture elevation down to the
+force-optimal one — a large step demands a heading change the guidance cannot
+capture smoothly.
 """
 function set_path_center!(fec::FigureEightController, az_center, el_center)
     fec.fes.az_center = az_center
@@ -195,15 +176,23 @@ function set_path_center!(fec::FigureEightController, az_center, el_center)
     nothing
 end
 
-# Small-area spherical distance [deg] in the (azimuth, elevation) plane;
-# azimuth differences are compressed by cos(elevation).
+"""
+    _dist(az1, el1, az2, el2)
+
+Small-area spherical distance [deg] in the (azimuth, elevation) plane; azimuth
+differences are compressed by `cos(elevation)`.
+"""
 @inline function _dist(az1, el1, az2, el2)
     hypot(el2 - el1, (az2 - az1) * cosd(0.5 * (el1 + el2)))
 end
 
-# Update the course estimate (bearing convention: 0 = towards zenith,
-# positive towards larger azimuth) from the position increment. The
-# direction components are low-passed to avoid wrap problems.
+"""
+    _update_course!(fec::FigureEightController, az_deg, el_deg)
+
+Update the filtered course and angular speed estimates from the position
+increment since the last call. The direction components are low-passed
+separately, which avoids wrap problems at ±180°.
+"""
 function _update_course!(fec::FigureEightController, az_deg, el_deg)
     fes = fec.fes
     if fec.has_prev
@@ -238,12 +227,10 @@ equally close. Two mechanisms keep Q on the right one:
 
 1. **Continuity** (`search_window`): Q is searched only within a window of arc
    around the previous Q, so it advances along the path instead of teleporting
-   to the far branch. This is the primary guard — without it the commanded
-   course flips by ~180° each time the kite crosses the self-intersection, which
-   slams the steering across and, on the V3, broke the model outright (a run
-   diverged at t=13.3 s with `chi_set` jumping 90.6° -> -97.5°). The window is
-   dropped whenever the kite is further than `reacquire_dist` from the path, so
-   a genuinely off-path kite re-acquires globally.
+   to the far branch. This is the primary guard; without it the commanded course
+   flips by ~180° at every crossing of the self-intersection. The window is
+   dropped beyond `reacquire_dist` from the path, so a genuinely off-path kite
+   re-acquires globally.
 2. **Flight direction** (`branch_tol`): among the remaining near-equal
    candidates, the branch whose tangent needs the smaller heading change wins.
 """
@@ -255,8 +242,7 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
     n = length(az)
     dists = [_dist(azimuth, elevation, az[i], el[i]) for i in 1:n]
 
-    # Candidate index set: local window around the previous Q for continuity,
-    # or the whole path when off-path / not yet initialized.
+    # Local window around the previous Q, or the whole path when off-path.
     total_len = sum(fec.seg_len)
     use_window = fec.has_prev && fes.search_window > 0 && total_len > 0 &&
                  dists[fec.last_idx] <= fes.reacquire_dist
@@ -278,8 +264,7 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
     end
     iq = imin
     if fec.has_prev && fec.speed >= fes.min_speed
-        # among the local distance minima within branch_tol of the minimum,
-        # pick the one that requires the smaller steering effort
+        # Of the local minima within branch_tol, take the smallest steering effort.
         best = Inf
         for j in idxs
             i = mod1(j, n)
@@ -337,13 +322,12 @@ Direction [rad] in which the reference path is traversed at the closest point Q
 found by the last [`calc_attractor`](@ref)/[`navigate_fig8`](@ref) call, in the
 same bearing convention as `chi_set`.
 
-Useful as an entry reference when the kite is far from the path. The great-circle
-course to the attractor becomes degenerate when the kite sits almost directly
-above the pattern — every attractor point is then ~"straight down", so `chi_set`
-collapses onto the ±180° branch cut and its *sign* is numerical noise. The
-tangent at Q has no such degeneracy (it is ~±108° from a 73° park above a
-pattern centred at 30°) and additionally encodes which way round the path is
-traversed, so an entry flown along it arrives moving in the right direction.
+Useful as an entry reference when the kite is far from the path: the great-circle
+course to the attractor is degenerate when the kite sits almost directly above
+the pattern, where every attractor point is ~"straight down" and the sign of
+`chi_set` is numerical noise on the ±180° branch cut. The tangent at Q has no
+such degeneracy and encodes which way round the path is traversed, so an entry
+flown along it arrives moving in the right direction.
 """
 path_tangent(fec::FigureEightController) = fec.tangent[fec.last_idx]
 

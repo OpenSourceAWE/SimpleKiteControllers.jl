@@ -9,6 +9,35 @@
 #
 # Activate it with `julia --project=examples`, or just run a script — each one
 # activates this directory itself.
+#
+# The two pins below are both workarounds and both temporary:
+#
+# MakieControlPlots 0.1.12 — 0.1.9's legend-height probe throws `only(owned)`
+# when displaying a plotx figure with a legend on more than one row, which is
+# every *_plots.jl script here.
+#
+# RuntimeGeneratedFunctions =0.5.22 — an exact pin on a package no script here
+# calls. 0.5.23 deleted RGF's custom `Serialization.serialize`, which used to
+# write the function body from the cache even for a function `drop_expr` had
+# emptied. ModelingToolkitBase runs every generated function through
+# `drop_expr`, so under 0.5.23 the model binary SymbolicAWEModels writes
+# serializes those bodies as `nothing` and `deserialize` throws "cannot
+# deserialize a dropped RuntimeGeneratedFunction". The cache then never loads
+# and V3Kite's `init` recompiles the model (minutes, 20 MB) on every run.
+# Already fixed on RGF master by SciML/RuntimeGeneratedFunctions.jl#138, but
+# merged without a version bump (see issue #140), so 0.5.23 is still what the
+# registry serves. Drop the pin once 0.5.24 is registered.
+#
+# V3Kite is not registered, so it needs a `[sources]` entry either way, and the
+# branch pin is there because `simple_fig8.jl` needs `vsm_interval`, `warmup!`,
+# the force-mode winch, `span_mean_aoa` and `init`'s `data_path`/`cache_path`,
+# none of which are on main yet. Switch `rev` to "main" once
+# https://github.com/OpenSourceAWE/V3Kite.jl/pull/41 is merged. Pkg installs it
+# read-only and a fresh install ships no `.bin` files, which is why
+# `simple_fig8.jl` passes `cache_path` to `init`. A local checkout is the
+# alternative:
+#     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
+#     V3Kite = {path = "../../V3Kite.jl"}
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
@@ -24,39 +53,11 @@ Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [compat]
-# 0.1.9's legend-height probe throws `only(owned)` (ArgumentError: Collection
-# has multiple elements) when displaying a plotx figure with a legend on more
-# than one row — which is every *_plots.jl script here. Fixed in 0.1.12.
 MakieControlPlots = "0.1.12"
-# Exact pin, and not a dependency any script here calls: 0.5.23 deleted RGF's
-# custom `Serialization.serialize`, which used to write the function body from
-# the cache even for a function `drop_expr` had emptied. ModelingToolkitBase
-# runs every generated function through `drop_expr`, so under 0.5.23 the model
-# binary SymbolicAWEModels writes serializes those bodies as `nothing` and
-# `deserialize` throws "cannot deserialize a dropped RuntimeGeneratedFunction".
-# The cache then never loads: V3Kite's `init` recompiles the model (minutes) and
-# rewrites 20 MB on every run. Already fixed on RGF master by
-# https://github.com/SciML/RuntimeGeneratedFunctions.jl/pull/138, but merged
-# without a version bump, so 0.5.23 is still what the registry serves — see
-# https://github.com/SciML/RuntimeGeneratedFunctions.jl/issues/140. Drop this
-# pin once 0.5.24 is registered.
 RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-# V3Kite is not registered, so it needs a source entry either way. `simple_fig8.jl`
-# needs `vsm_interval`, `warmup!`, the force-mode winch, `span_mean_aoa` and
-# `init`'s `data_path`/`cache_path` — none of which are on V3Kite's main branch
-# yet, hence the branch pin. Switch `rev` to "main" once
-# https://github.com/OpenSourceAWE/V3Kite.jl/pull/41 is merged.
-#
-# NOTE: Pkg installs this read-only, and a fresh install ships no `.bin` files,
-# so the first run has to write both a compiled model and a settled geometry.
-# `simple_fig8.jl` therefore passes `cache_path` to `init` — that covers
-# everything V3Kite generates, and the bundled geometry is still read from the
-# installed copy. A local path source is the alternative:
-#     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
-#     V3Kite = {path = "../../V3Kite.jl"}
 V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "fix_missing"}
 
 [extras]

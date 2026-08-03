@@ -37,15 +37,7 @@ entries:
     c1_rel_std: 0.0006
     date: 2026-07-26
     l_tether: 150.0
-  # Re-run 2026-07-27 at 200 m with MIN_ELEVATION relaxed to 40 deg for THIS
-  # run only (same fix as [10,10,40]/0.55 -- the previous 200 m attempt dove at
-  # u_s_max=0.05, the first amplitude step, so a lower max_steering_cap could
-  # not have helped). PASS on identification, completion (sweep_done, reached
-  # the full 0.175 cap) and elevation (min 46.83 deg >= 40 deg, though below
-  # the grid's usual 50 deg floor -- same caveat as [10,10,40]/0.55). c1
-  # (0.1073) lands almost exactly on the legacy 150 m value (0.1071)
-  # and delay matches it exactly (0.55) -- a clean, low tether-length
-  # sensitivity result, unlike depower 0.25's delay discrepancy.
+  # Re-run at 200 m with the elevation floor relaxed; see docs/fig8_tuning_log.md.
   - c2: 0.5925
     c1: 0.1073
     depower: 0.55
@@ -71,11 +63,7 @@ entries:
     c1_rel_std: 0.0006
     outcome: "sweep_done"
     date: 2026-07-26
-  # Re-run 2026-07-27 at max_steering (0.175, matching the legacy cap -- the
-  # earlier low_elevation attempt above had climbed to u_s_max=0.325 before
-  # hitting the floor): PASS on identification (G scatter 7.96%), elevation and
-  # completion, confirmed by the user. Same cap-matching fix that resolved
-  # [0,0,40]/0.25's divergence.
+  # Re-run at the legacy 0.175 cap; see docs/fig8_tuning_log.md.
   - c2: 0.4103
     c1: 0.1919
     depower: 0.35
@@ -127,16 +115,7 @@ entries:
     u_s_max: 0.27499999999999997
     g_rel_std: 0.12257900086353399
     min_elevation: 53.47966003417969
-  # Re-run 2026-07-27 with MIN_ELEVATION relaxed to 40 deg for THIS run only (not
-  # the grid's usual 50 deg): the settled/parked trim at this damping/depower
-  # sits close enough to 50 deg that the sweep tripped the floor at its very
-  # first amplitude step (u_s_max was 0.05, not a "climbed too far" case like
-  # [0,0,40]/0.25 and /0.35 -- lowering max_steering_cap could not have helped
-  # here, since the dive happens before the cap is ever reached). At 40 deg the
-  # full sweep completes, min elevation 44.01 deg -- comfortably above 40, but
-  # below the grid's normal 50 deg floor, so this row's `outcome: time_limit`
-  # is not on quite the same footing as the rest of the grid. c1/G-scatter are
-  # otherwise solid (0.10%, 15.4%).
+  # Re-run with the elevation floor relaxed; see docs/fig8_tuning_log.md.
   - c2: -0.0742
     c1: 0.0417
     depower: 0.55

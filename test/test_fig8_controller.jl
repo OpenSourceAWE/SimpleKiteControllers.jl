@@ -1,10 +1,10 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-# Unit tests for src/figure_eight_controller.jl. Ported from the in-module tests that
-# shipped with the original guidance code, plus tests for the V3-specific
-# turn-radius feasibility helpers. Everything here is pure geometry — no
-# simulation, no model — so the whole file runs in well under a second.
+"""
+Unit tests for the guidance, the metrics and the turn-rate table. Pure geometry:
+no simulation and no kite model, so the whole file runs in well under a second.
+"""
 
 using Test
 using SimpleKiteControllers
@@ -20,8 +20,7 @@ _make_test_controller(; kwargs...) =
 @testset verbose = true "fig8_controller" begin
 
     @testset "path_direction" begin
-        # up_loops decides whether the kite passes the azimuth extreme of the
-        # right lobe moving up or down
+        # up_loops decides whether the right lobe's azimuth extreme is passed going up.
         for up in (false, true)
             fec = _make_test_controller(up_loops = up)
             n = length(fec.az_path)
@@ -53,22 +52,17 @@ _make_test_controller(; kwargs...) =
 
     @testset "branch_disambiguation" begin
         fec = _make_test_controller()
-        # the self-intersection of the eight: azimuth = az_center, below the
-        # center (D = -1); both branches pass through it
+        # The self-intersection: both branches pass through it (D = -1 puts it low).
         n = length(fec.az_path)
         crossings = [i for i in 1:n if abs(fec.az_path[i] - fec.fes.az_center) < 0.2]
         @test length(crossings) >= 2
         az0 = fec.fes.az_center
         el0 = sum(fec.el_path[i] for i in crossings) / length(crossings)
-        # one candidate per branch: the crossing indices cluster around the
-        # cyclic seam (t ≈ 0/2π, same branch) and around t ≈ π (the other one)
+        # One candidate per branch: the indices cluster at the seam and at t ≈ π.
         i_b = crossings[argmin(abs.(crossings .- n ÷ 2))]
         picked = Int[]
         for i in (crossings[1], i_b)
-            # pretend we fly along branch i: fresh controller, course = path
-            # tangent there, and a previous position one small step behind
-            # along that course (so _update_course! keeps speed and course
-            # consistent with the pretended motion)
+            # Pretend we fly along branch i, one small step behind along its tangent.
             f = _make_test_controller()
             chi = f.tangent[i]
             step = 0.05  # [deg]
@@ -114,13 +108,10 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "search_window_continuity" begin
-        # Q must advance along the path, not jump to the far branch at the
-        # self-intersection — that flip is what reversed the commanded course by
-        # ~180° and broke a run at t=13.3 s.
+        # Q must advance along the path, never jump to the far branch.
         fec = _make_test_controller()
         n = length(fec.az_path)
-        # walk the kite along the path for a few hundred steps and check that Q
-        # never makes a large index jump
+        # Walk along the path and check Q never makes a large index jump.
         max_jump = 0
         prev = nothing
         for i in 1:2:(2n)
@@ -133,19 +124,16 @@ _make_test_controller(; kwargs...) =
             end
             prev = fec.last_idx
         end
-        # steps of 2 path points; allow slack, but nothing like the n/2 jump a
-        # branch switch would produce
+        # Slack allowed, but nothing like the n/2 jump a branch switch produces.
         @test max_jump < n ÷ 8
 
-        # with the window disabled the search is global again (original
-        # behaviour), so a point equidistant from both branches may pick either
+        # With the window disabled the search is global again.
         fec2 = _make_test_controller(search_window = 0.0)
         @test fec2.fes.search_window == 0.0
         _, _, d2 = calc_attractor(fec2, fec2.az_path[30], fec2.el_path[30])
         @test d2 < 1e-9
 
-        # a kite far off the path re-acquires globally rather than being trapped
-        # in a stale window
+        # A kite far off the path re-acquires globally, not trapped in a stale window.
         fec3 = _make_test_controller()
         calc_attractor(fec3, fec3.az_path[10], fec3.el_path[10])
         stale = fec3.last_idx
@@ -158,19 +146,11 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "metrics_lap_counting" begin
-        # Regression tests for three successive lap-counting bugs, each of which
-        # reported laps that were never flown:
-        #   1. bare azimuth sign changes -> 42.5 laps for a kite in a limit cycle
-        #   2. counting against the FLOWN MEAN -> 14 laps for a circle off to one
-        #      side that never crossed the pattern centre
-        #   3. print_fig8_metrics accepted az_center but did not FORWARD it, so
-        #      passing it from the example silently did nothing -> 18 phantom laps
+        # Regression tests for three lap-counting bugs; see docs/fig8_tuning_log.md.
         dt = 0.05
         tt = collect(0.0:dt:60.0)
         n = length(tt)
-        # `steering` is the TAPE position and `set_steering` the command; the
-        # metrics read both (the tape rate limit is scored against `steering`),
-        # so a fixture missing either does not exercise the function at all.
+        # Both tape (`steering`) and command (`set_steering`) are read by the metrics.
         mk(azf, elf = t -> deg2rad(45.0)) =
                   (; time = tt,
                    azimuth = Float32.(azf.(tt)),
@@ -188,8 +168,7 @@ _make_test_controller(; kwargs...) =
         m_print = print_fig8_metrics(off; settle_time = 0.0, az_center = 0.0)
         @test m_print.laps == 0.0
 
-        # a genuine lemniscate sweeping +-40° about the centre: 6 crossings of
-        # the centre in 60 s at a 10 s period -> 6 laps by the /2 convention
+        # 6 centre crossings in 60 s at a 10 s period -> 6 laps by the /2 convention.
         real8 = mk(t -> deg2rad(40.0 * sin(2pi * t / 10)))
         laps = fig8_metrics(real8; settle_time = 0.0, az_center = 0.0).laps
         @test laps >= 5.0
@@ -197,12 +176,7 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "metrics_pattern_extent" begin
-        # The tracking criteria are all measured to the CLOSEST POINT of the
-        # path, so they say nothing about how much of the pattern was flown: a
-        # kite tracing a small eight, or one lobe's worth of it in half the wind
-        # window, sits on the path at every instant and scores RMS d = 0. These
-        # fixtures are exactly that — perfect tracking, wrong flight — and must
-        # fail on extent alone.
+        # Perfect tracking, wrong flight: these must fail on extent alone.
         A, B, el_c, T = 40.0, 15.0, 26.0, 10.0
         dt = 0.05
         tt = collect(0.0:dt:60.0)
@@ -244,8 +218,7 @@ _make_test_controller(; kwargs...) =
         # and the failure names the side, so a log line is enough to diagnose it
         @test any(f -> occursin("azimuth reach -", f), half.criteria_failed)
 
-        # without the geometry the extent is reported but not scored — the old
-        # four criteria, so an existing caller keeps its meaning
+        # Without the geometry the extent is reported but not scored.
         bare = print_fig8_metrics(mk(t -> deg2rad(0.15A * sin(2pi * t / T)), el8(0.15));
                                   settle_time = 0.0, az_center = 0.0)
         @test bare.criteria == 4
@@ -253,48 +226,26 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "turn_rate_coeffs" begin
-        # the in-plane body damping changes the steering response by 5.6x, so
-        # the lookup must be keyed on it and must refuse to guess
-        #
-        # re-identified at 200 m capped at the SAME u_s_max = 0.175 as the
-        # original 150 m sweep (2026-07-27), for a clean apples-to-apples
-        # tether-length comparison: c1 0.3159 -> 0.3104, i.e. -1.7%, comfortably
-        # under the <10% "Conditions" (PlanC1C2.md) assumed. That resolves the
-        # +22.5% seen on [10,10,40]/0.25 below as a confound, not a real
-        # tether-length effect: THAT re-run reached u_s_max = 0.40, well past
-        # the 0.175 the legacy value was identified over, so it mixes a
-        # tether-length change with an amplitude-range change. This clean
-        # comparison is the one "Conditions" actually needs and it passes.
+        # Body damping changes the steering response by 5.6x: keyed on it, never guessed.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31038589289512725
-        # confounded by amplitude range (u_s_max 0.175 -> 0.40), see above --
-        # not re-run at a matched cap because [10,10,40]/0.25 passed on its
-        # first (uncapped) attempt and there was no reason to redo it
+        # Confounded by amplitude range (u_s_max 0.175 -> 0.40), not re-run.
         @test turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 ≈ 0.12028768896596123
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 ≈ 0.0567
         # more damping -> less agile
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        # DEPOWER costs authority too: 0.25 -> 0.55 is a factor ~2.95 of c1,
-        # and 16x the steering dead time. Getting this wrong is what made a run
-        # fly a circle instead of the pattern (margin 1.41 assumed vs 0.48 real).
-        #
-        # re-identified at 200 m (2026-07-27, MIN_ELEVATION relaxed to 40 deg
-        # for this run -- see PlanC1C2.md): c1 0.1071 -> 0.1073 (+0.2%) and
-        # delay unchanged at 0.55 -- as clean a confirmation of low
-        # tether-length sensitivity as depower 0.25's -1.7% was
+        # DEPOWER costs authority too: 0.25 -> 0.55 is ~2.95x of c1 and 16x the dead time.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 ≈ 0.1073
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 <
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).delay >
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).delay
-        # integer input is accepted (converted); unidentified combinations throw
-        # rather than silently returning a wrong c1
+        # Integer input is converted; unidentified combinations throw.
         @test turn_rate_coeffs([0, 0, 40], 0.25).c1 ≈ V3_TURN_RATE_C1
         @test_throws ArgumentError turn_rate_coeffs([5.0, 5.0, 40.0], 0.25)
         @test_throws ArgumentError turn_rate_coeffs([0.0, 0.0, 40.0], 0.70)
-        # depower 0.40 (identified 2026-07-26 at 200 m tether) sits between the
-        # 0.25 and 0.55 rows, as the monotonic trend requires
+        # depower 0.40 sits between the 0.25 and 0.55 rows, as monotonicity requires.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).c1 ≈ 0.1513
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 <
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).c1 <
@@ -302,18 +253,13 @@ _make_test_controller(; kwargs...) =
         # the exported defaults track init's default damping at depower 0.25
         @test V3_TURN_RATE_C1 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         @test V3_TURN_RATE_C2 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c2
-        # exact grid hits are never interpolated -- neither a current-conditions
-        # row nor a legacy one (e.g. [20,20,40]/0.25, still at 150 m)
+        # Exact grid hits are never interpolated, legacy rows included.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).interpolated == false
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).interpolated == false
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin
-        # Exercise the interpolation math directly against a synthetic table,
-        # independent of how many real depower values examples/
-        # build_turn_rate_table.jl has identified so far -- right after STEP 1
-        # the real [0,0,40] group has only one non-legacy (200 m) row, too few
-        # to interpolate at all.
+        # Synthetic table, so this does not depend on how many real rows exist yet.
         bd = [0.0, 0.0, 40.0]
         entries = [
             (body_damping = bd, depower = 0.30, c1 = 0.20, c2 = -0.10, delay = 0.05,
@@ -322,8 +268,7 @@ _make_test_controller(; kwargs...) =
             (body_damping = bd, depower = 0.50, c1 = 0.05, c2 = 0.20, delay = 0.50,
              c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done,
              legacy = false, overrides = Dict{Symbol, Any}()),
-            # a failed sweep at the same damping: kept, but never used, either
-            # as a neighbour or (despite the exact depower hit) directly
+            # A failed sweep: kept in the table, but never used, not even on an exact hit.
             (body_damping = bd, depower = 0.60, c1 = 999.0, c2 = 0.0, delay = 0.0,
              c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :low_elevation,
              legacy = false, overrides = Dict{Symbol, Any}()),
@@ -341,8 +286,7 @@ _make_test_controller(; kwargs...) =
             r50 = turn_rate_coeffs(bd, 0.50)
             @test r50.c1 == 0.05 && r50.interpolated == false
 
-            # midpoint: c1 is log-linear (geometric mean at t=0.5), c2/delay
-            # linear, delay rounded UP to a dt multiple (never optimistic)
+            # c1 is log-linear, c2/delay linear, delay rounded UP to a dt multiple.
             r = turn_rate_coeffs(bd, 0.40)
             @test r.interpolated == true
             @test r.c1 ≈ sqrt(0.20 * 0.05)
@@ -355,13 +299,11 @@ _make_test_controller(; kwargs...) =
             # c1 decreases monotonically between the two grid points
             @test turn_rate_coeffs(bd, 0.35).c1 > turn_rate_coeffs(bd, 0.45).c1
 
-            # no extrapolation, ever -- even up to the failed row's own depower,
-            # which does not extend the interpolatable range
+            # No extrapolation, ever; a failed row does not extend the range.
             @test_throws ArgumentError turn_rate_coeffs(bd, 0.20)
             @test_throws ArgumentError turn_rate_coeffs(bd, 0.55)
             @test_throws ArgumentError turn_rate_coeffs(bd, 0.58)
-            # an exact hit on the failed row itself throws rather than
-            # returning a divergent-run c1 = 999.0
+            # An exact hit on the failed row throws rather than returning c1 = 999.0.
             @test_throws ArgumentError turn_rate_coeffs(bd, 0.60)
 
             # interpolate=false refuses to interpolate even inside the range
@@ -375,22 +317,13 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "turn_rate_coeffs legacy-row warning (conditions block)" begin
-        # [20,20,40]/0.25 is deliberately never re-identified at 200 m (see
-        # PlanC1C2.md) -- the one legacy (150 m) row left in the real table,
-        # now that [0,0,40] and [10,10,40] are fully promoted across all five
-        # depowers (2026-07-27). Confirms the real table still warns on an
-        # exact hit and excludes it from interpolation.
+        # [20,20,40]/0.25 is the one legacy (150 m) row left in the real table.
         empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
         @test_logs (:warn,) turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)
         @test_logs turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)  # same row again: silent
         empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
 
-        # A distinct legacy row must not be silenced by an earlier one having
-        # already warned (a plain `@warn ... maxlog=1` would dedup by call
-        # site, not by which row, and wrongly suppress the second). Exercised
-        # against a synthetic table rather than real data, which now has only
-        # one legacy row to spare -- this property should hold regardless of
-        # how many legacy rows the real table happens to have left.
+        # A distinct legacy row must not be silenced by an earlier one having warned.
         bd = [0.0, 0.0, 40.0]
         legacy_entries = [
             (body_damping = bd, depower = 0.20, c1 = 0.5, c2 = 0.0, delay = 0.03,
@@ -419,8 +352,7 @@ _make_test_controller(; kwargs...) =
     @testset "turn_rate_coeffs conditions mismatch (conditions block)" begin
         old_ac = SimpleKiteControllers._ACTIVE_TURN_RATE_CONDITIONS[]
         try
-            # nothing stashed (as in this bare test file, with no `init` call)
-            # -> never warns
+            # Nothing stashed, as in a bare test file: never warns.
             SimpleKiteControllers._ACTIVE_TURN_RATE_CONDITIONS[] = nothing
             @test_logs turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
 
@@ -430,8 +362,7 @@ _make_test_controller(; kwargs...) =
                 l_tether = table.conditions[:l_tether], system_yaml = table.conditions[:system])
             @test_logs turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
 
-            # a mismatched wind speed warns once, but still returns the real
-            # coefficients -- the warning is advisory, not a refusal
+            # A mismatch warns once but still returns the coefficients: advisory only.
             set_turn_rate_conditions!(v_wind = 5.0,
                 l_tether = table.conditions[:l_tether], system_yaml = table.conditions[:system])
             r = @test_logs (:warn,) turn_rate_coeffs([0.0, 0.0, 40.0], 0.40)
@@ -456,9 +387,7 @@ _make_test_controller(; kwargs...) =
         @test min_turn_radius(150.0, 0.35) < min_turn_radius(150.0, 0.175)
         @test min_turn_radius(300.0, 0.175) < min_turn_radius(150.0, 0.175)
 
-        # a circle of known angular radius is recovered by path_min_radius:
-        # build one by using the lemniscate machinery with A = B (theta=0,
-        # C=D=0 gives a figure-eight, so test the monotonicity instead)
+        # A = B still gives a figure-eight, so test the monotonicity instead.
         small = FigureEightController(FigureEightSettings(; dt = 0.02, A = 10.0,
                                                           B = 5.0, el_center = 45.0))
         big = FigureEightController(FigureEightSettings(; dt = 0.02, A = 40.0,
@@ -468,9 +397,7 @@ _make_test_controller(; kwargs...) =
         @test path_min_radius(small) > 0
         @test path_min_radius(big) == minimum(path_radius_profile(big))
 
-        # raising the pattern makes it TIGHTER (the azimuth axis is compressed
-        # by cos(elevation)) — this is why a figure-eight near zenith is
-        # geometrically impossible for this kite, see simple_fig8.jl
+        # Raising the pattern makes it TIGHTER: cos(elevation) compresses azimuth.
         low  = FigureEightController(FigureEightSettings(; dt = 0.02, A = 45.0,
                                                          B = 20.0, el_center = 35.0))
         high = FigureEightController(FigureEightSettings(; dt = 0.02, A = 45.0,
@@ -487,14 +414,12 @@ _make_test_controller(; kwargs...) =
         fcs = FC_Settings()
         fcs.compliance = 1.0
         g = winch_force_gains(fcs)
-        # Keys must match the force-mode winch controller's field names, since
-        # the caller splats this straight into it.
+        # Keys must match the winch controller's field names; the caller splats them.
         @test keys(g) == (:force_tau, :len_kp, :damp, :force_min)
         @test g.len_kp == fcs.winch_len_kp
         @test g.damp == fcs.winch_damp
 
-        # Halving the compliance stiffens both gains by the same factor, so the
-        # length loop's own time constant (damp/len_kp) does not move.
+        # Both gains scale together, so the length loop's time constant does not move.
         fcs.compliance = 0.5
         h = winch_force_gains(fcs)
         @test h.len_kp == fcs.winch_len_kp / 0.5
@@ -504,8 +429,7 @@ _make_test_controller(; kwargs...) =
         @test h.force_tau == fcs.winch_force_tau
         @test h.force_min == fcs.winch_force_min
 
-        # compliance 0 is position mode; an infinitely stiff spring is not
-        # representable here and must not silently divide by zero.
+        # compliance 0 is position mode and must not silently divide by zero.
         fcs.compliance = 0.0
         @test_throws ErrorException winch_force_gains(fcs)
     end

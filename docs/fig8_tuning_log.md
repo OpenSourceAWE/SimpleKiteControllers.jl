@@ -706,3 +706,229 @@ Forcing `remake = true` would overwrite a cache file shared with
 `simple_sinus.jl` / `simple_parking.jl` with geometry they do not expect. Fixing
 it properly means adding the elevation to the cache key in `stabilization.jl` —
 see `PlanFig8.md`, Findings 4.
+
+## Sign and frame conventions — the measurements behind the code
+
+Moved out of `src/figure_eight_controller.jl` and `examples/simple_fig8.jl` on
+2026-08-03, when the comment rules were applied. These are the measurements the
+sign choices in those files rest on; originally established in V3Kite.jl's
+`PlanFig8.md` STEP 0 against `data/tmp_steering.arrow` and `data/tmp_sinus.arrow`
+(`system_reelout.yaml`, v_wind 9.51 m/s).
+
+**`rel_steering` is fed unnegated.** Positive `rel_steering` produces a positive
+heading rate: correlation **+0.998** between tape position `sl.steering` and the
+frame-transport-corrected turn rate. This matches V3Kite's
+`examples/simple_auto_parking.jl`. The branch for the other kite negates; that
+does not transfer.
+
+**The guidance course matches `SysState.heading`** — same zero, same sign,
+circular-mean offset **+13.3°** with a 7.6° spread over the samples where the
+kite actually flies (>2°/s). No `neg_azimuth` and no π correction is needed
+anywhere in `figure_eight_controller.jl`. The +13° is the kite's real
+course-minus-heading drift angle: the guidance commands a *course* while the
+inner loop regulates *heading*, so a small steady-state cross-track bias is
+expected, and the heading PID's integral term absorbs it.
+
+**`SysState.course` DOES need +π**, unlike the heading. It is
+SymbolicAWEModels' raw tangent-frame course, whose zero points away from zenith,
+while `SysState.heading` and the guidance both use 0 = towards zenith. The flip
+is not symmetric between the two fields — the V3's body x-axis is reversed
+w.r.t. the sensor convention, which cancels the frame flip for the heading but
+cannot for a velocity direction. Measured over the flying samples (>2°/s): with
+the correction, `course - heading` is the +13..15° drift angle above; without
+it, **-165°**. Feeding the raw field back is positive feedback and diverged the
+run at t = 19.7 s.
+
+## `fig8_metrics` — why the lap counter and the extent checks look like this
+
+Moved out of `src/fig8_metrics.jl` on 2026-08-03. Each guard below exists
+because a degenerate run scored well without it.
+
+**Laps need an excursion band, not bare sign changes.** A lemniscate crosses its
+centre azimuth twice per lap, but a kite stuck in a limit cycle jitters across
+the centre and reports dozens of phantom laps — a run that never reached the
+pattern at all scored **42.5**. The azimuth must reach `lap_frac` of the
+pattern's half-width on alternating sides before a crossing counts.
+
+**The band needs an absolute floor as well as a relative one.** Scaling it by
+the kite's own azimuth range normalises away exactly the thing being tested: a
+±1.4° limit cycle still crossed a purely relative band and scored 42.5 laps.
+Hence `min_excursion`. When the COMMANDED half-width is known it is used instead
+of the flown range, so the band is a property of the pattern asked for and a
+kite flying an eight far smaller than commanded fails to cross it.
+
+**Crossings are counted against the PATTERN's centre azimuth**, not the flown
+mean. Using the mean lets a kite orbiting a circle off to one side score laps it
+never flew: a run that circled at azimuth 29-45°, never crossing the pattern
+centre at 0°, reported **14 laps**.
+
+**Reach is recorded per excursion.** `maximum(az)` alone is satisfied by ONE
+good lobe at the start of an otherwise degenerate run. Only completed
+excursions are kept — the last one is cut off by the end of the window and would
+drag the mean down for no flight reason.
+
+**Both azimuth sides are checked separately**, because a single "span" check
+passes on a kite that reaches +2A on one lobe and never crosses to the other.
+
+**`tape_rate_frac` is the honest companion to `steering_sat_frac`.** The command
+and what the KCU tape reached are nothing like each other on the V3. Measured on
+the 2026-08-02 run: the command sat on its ±0.300 clamp **88 %** of the time
+while the tape reached it in **0 %** of samples — it was slewing at its rate
+limit for **67 %** of them instead. Reading `sat_frac` alone says "out of
+steering authority" when the truth is "out of steering RATE", and the two call
+for opposite fixes: more amplitude makes a rate-limited actuator worse, because
+a larger command means longer slewing and more phase lag (measured 62.7° at the
+loop's own 0.181 Hz, against 24.7° for the identified small-signal dead time).
+
+## Settings whose rationale lived only in `FC_Settings`
+
+Moved out of `src/fc_settings.jl` on 2026-08-03 when the comment rules were
+applied. Everything here was previously a field docstring; the sections above
+already cover `sim_time`, `dt`, `depower_setpoint`, `tether_length`,
+`warmup_time`, the entry state machine, the pattern size, `el_center`,
+`attractor_dist`, `up_loops`, `heading_p`, `heading_d_n`, the `v_kite_*` band,
+`max_steering`, `entry_chi_max`, `entry_d_blend` and `elevation`.
+
+### COMPLIANCE and the force-mode winch
+
+In force mode the drum holds a low-passed reference force, and a load above that
+reference stretches the length trim like a spring: the steady-state yield is
+`dF / winch_len_kp`, so the compliance IS `1/winch_len_kp` [m/N]. `compliance`
+divides both `winch_len_kp` and `winch_damp` by itself, so the yield scales
+linearly while their ratio — the length loop's own time constant — is left
+alone. The result is a softer or stiffer winch of the SAME character, not a
+different one. `winch_force_tau` is untouched: it sets WHICH frequencies the drum
+yields to, not by how much, and should sit above the lap rate so the kite can
+trade line length for speed within a lap.
+
+**At exactly 0 the controller changes**, because an infinitely stiff spring is
+not representable: the run switches to POSITION mode (`set_length = l0`) and
+hands the winch to V3Kite's `winch_position_torque!`, whose force feed-forward
+cancels the measured load exactly — the drum sees nothing to accelerate it and
+travels 0.009 m over a 30 s run. The limit is continuous in BEHAVIOUR
+(`compliance` 0.01 already means `winch_len_kp` = 10 kN/m) but not in code path,
+so a sweep should not expect the two sides to agree to the millimetre.
+
+**`winch_damp` is not optional.** Without it force mode has no velocity feedback
+at all — the drum is a free mass on the `winch_len_kp` spring and its speed runs
+away: measured 3.5 m/s of payout, `v_app` 49.6 m/s, run lost at t = 19.8 s. It
+is what makes the winch compliant rather than free-wheeling. That runaway also
+bounds the useful range of `compliance` above 1.0 (2.0 = twice as soft).
+
+### PARK_TIME
+
+Hold zero steering so the transients left by init/settling decay before the
+controller starts demanding maneuvers. Without it the guidance engaged at t = 0
+and drove the steering straight to its clamp while the model was still relaxing.
+The guidance still runs during the park — its course estimate is low-passed and
+needs warming up — but its output is not applied.
+
+### ENTRY_GAIN and ENTRY_DEPOWER
+
+The entry is turn-rate limited: the steering command sits on its clamp for the
+whole dive. Detuning the loop there therefore costs nothing in tracking and takes
+the command off the clamp, which is the only way to shape the descent from the
+loop side. `entry_depower` is the second lever: a higher depower than the
+pattern's lowers `c1` (less turn authority, which a clamp-limited entry does not
+need) and unloads the wing, bleeding some of the energy the dive from the 73°
+park converts out of height. The park is excluded on purpose — `init` settles at
+`depower_setpoint`, and changing the tape during the park would inject exactly
+the transient the park exists to let decay. Both transitions are rate limited by
+the KCU tape speed inside `step!`, so each change is a ramp, not a step.
+
+### FIG8_PURE_COURSE — schedule on kite speed, or gate on phase
+
+The feedback blend is scheduled on `|vel_kite|`, NOT on `v_app`. A parked V3
+already sees `v_app` ≈ the ambient wind, so apparent wind speed cannot tell
+"flying" from "hanging still":
+
+| signal | park | flying (t >= 15 s) |
+|:---|:---|:---|
+| `v_app` | 9.1 m/s | 21.1 m/s, never below 10 |
+| `\|vel_kite\|` | 4.2 m/s | 15.5 m/s (8.3 .. 22.3) |
+
+A 10 m/s threshold on `v_app` puts the PARK at blend weight 0.82 — nearly full
+course feedback on a kite that is barely moving, the one case the rule exists to
+prevent. On `|vel_kite|` the park is unambiguously heading, and the weight
+modulates in flight when the kite slows through a turn, which is when the course
+estimate is worst.
+
+`fig8_pure_course` then bypasses that schedule in phase 3 (SmallPlan.md's "gate
+on phase instead of speed"). Path following is a course problem, and on the
+pattern the kite is fast enough that the schedule asks for course anyway — it
+only dips into the band during the slow part of a turn, swapping the feedback
+signal mid-manoeuvre for no benefit (`|v_kite|` crossed the 10 m/s edge twice in
+the 15-27 s window of the 2026-08-02 run, 9.8 % of it inside the band). The
+entry phases keep the schedule: during park and dive the kite really can be too
+slow for a meaningful course.
+
+### V_APP_REF — an anchor, not a gain
+
+Only the product `heading_p * v_app_ref` is physical. `v_app_ref` serves two
+roles, and they agree only because it is the speed really flown: it anchors the
+1/v_app gain schedule (so `heading_p` reads as the gain the kite actually flies
+at) and it sets the kinematics for the attractor lead. The 30 -> 27 correction
+was paired with the inverse scaling of `heading_p`: same flight, the anchor is
+now the measured phase-3 average. Before that it was 13.1, a parking speed
+carried over from `simple_auto_parking.jl` that the kite never flies here; that
+anchor also overstated the attractor lead.
+
+### V_APP_ABORT
+
+Stop the run above this apparent wind speed. The first run's failure showed up as
+an opaque solver `dt_epsilon` abort; catching the overspeed that causes it
+reports the actual problem instead.
+
+### MIN_SPAN_FRAC — the pattern-SIZE criterion
+
+Every other criterion is measured against the CLOSEST POINT of the path, so all
+of them pass on a kite flying a small eight, or one lobe in half the wind
+window — it is on the path, it just is not going anywhere on it. Sized against
+the flown spans on record: the reference run holds azimuth -43.5..+42.2° against
+A = 40 (fill 1.06/1.09) and an elevation span of 19.9° against B = 15 (1.33), so
+0.7 has real margin against a good run while a degenerate one lands far below it.
+
+### BODY_DAMPING
+
+A FLIGHT parameter, not just a solver setting: it sets `c1` and hence the
+achievable turn radius. `init`'s default `[0, 0, 40]` is the most agile and the
+only one that flies this pattern inside the identified steering range. Raising it
+costs turn authority; it buys a smaller parked AoA ripple and ~3.4x fewer solver
+steps.
+
+### VSM_INTERVAL
+
+Steps between VSM aero updates; the load is held frozen inside the DAE in
+between. `1` is the TIGHTEST coupling available, so this can only be raised —
+trading aero lag for wall time. Exposed to sweep the coupling mode described
+under DT, not as a lever that can stabilize it.
+
+## Turn-rate table — per-row identification notes
+
+Moved out of `data/turn_rate_coeffs.yaml` on 2026-08-03 when the comment rules
+were applied; each row there now carries a one-line pointer here. All three are
+2026-07-27 re-runs at 200 m tether. The grid's usual elevation floor is 50°.
+
+**`[0,0,40]` / depower 0.55.** Re-run at 200 m with `MIN_ELEVATION` relaxed to
+40° for THIS run only (same fix as `[10,10,40]`/0.55 — the previous 200 m
+attempt dove at `u_s_max` = 0.05, the first amplitude step, so a lower
+`max_steering_cap` could not have helped). PASS on identification, completion
+(`sweep_done`, reached the full 0.175 cap) and elevation (min 46.83° >= 40°,
+though below the usual 50° floor). `c1` = 0.1073 lands almost exactly on the
+legacy 150 m value (0.1071) and `delay` matches it exactly at 0.55 — a clean,
+low tether-length-sensitivity result, unlike depower 0.25's delay discrepancy.
+
+**`[10,10,40]` / depower 0.25.** Re-run at `max_steering` 0.175, matching the
+legacy cap; the earlier low-elevation attempt had climbed to `u_s_max` = 0.325
+before hitting the floor. PASS on identification (G scatter 7.96 %), elevation
+and completion. Same cap-matching fix that resolved `[0,0,40]`/0.25's
+divergence.
+
+**`[10,10,40]` / depower 0.55.** Re-run with `MIN_ELEVATION` relaxed to 40°: the
+settled trim at this damping/depower sits close enough to 50° that the sweep
+tripped the floor at its very first amplitude step (`u_s_max` was 0.05 — not a
+"climbed too far" case, so lowering `max_steering_cap` could not have helped,
+since the dive happens before the cap is ever reached). At 40° the full sweep
+completes, min elevation 44.01° — above 40 but below the grid's normal floor, so
+this row's `outcome: time_limit` is not on quite the same footing as the rest of
+the grid. `c1` and G-scatter are otherwise solid (0.10 %, 15.4 %).

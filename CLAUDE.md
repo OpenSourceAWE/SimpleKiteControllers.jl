@@ -106,10 +106,11 @@ not yet been lifted into a controller type.
 
 - SPDX `MPL-2.0` header on new source files (the two older parking-controller files
   predate this).
-- **Docstrings carry the reasoning, not inline comments.** Every non-obvious value in
-  `FC_Settings` documents what was measured, what was tried and which levers are closed —
-  that is the house style here, and it is why the file is long. Preserve it when editing;
-  do not compress a docstring that records a failure into a one-liner.
+- **Three places for three kinds of writing**, and they must not swap roles: a docstring
+  says what a thing is and how it works; an inline comment states a single non-obvious
+  fact; `docs/fig8_tuning_log.md` carries the story — what was measured, what was tried,
+  which levers are closed. A measurement or a failed experiment in a docstring belongs in
+  the log instead. See "Coding conventions" below for the hard rules.
 - Tunables go into a YAML file loaded through a `@with_kw` struct (`FC_Settings`,
   `FigureEightSettings`), never hardcoded in a script. Unknown YAML keys are an error;
   missing ones fall back to the struct default. The YAML header comment block acts as the
@@ -118,9 +119,10 @@ not yet been lifted into a controller type.
   Both arguments move them a lot.
 - The **dated tuning history** (sweeps, reverted attempts, why each lever is closed) lives
   in [docs/fig8_tuning_log.md](docs/fig8_tuning_log.md). Add findings there, not in the
-  settings docstrings. Its entries predate the migration: ALL-CAPS names are today's
-  `FC_Settings` fields, and the plans and `data/` files it cites are V3Kite's (its own
-  header block maps this out).
+  settings docstrings. Its older entries predate the migration: ALL-CAPS names are today's
+  `FC_Settings` fields, and the plans and `data/` files they cite are V3Kite's (its own
+  header block maps this out). The sections at the end were moved out of source comments
+  on 2026-08-03 and are pointed at from the code they came from.
 
 ## Current state
 
@@ -142,4 +144,5 @@ not yet been lifted into a controller type.
 - Remove or make inline comments 1 line where you see them.
 - In YAML files, consider the comments at the top of the file as docstring where you can add multiline comments.
 - Everything with a docstring should be added to the docs, otherwise you get an
-  error when building the docs.
+  error when building the docs. (This repository has no Documenter setup yet — no
+  `docs/make.jl`, no `docs/Project.toml` — so nothing enforces this today.)

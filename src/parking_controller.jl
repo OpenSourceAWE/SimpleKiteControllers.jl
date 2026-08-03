@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
 @with_kw mutable struct ParkingControllerSettings @deftype Float64
     dt
     # turn rate controller settings

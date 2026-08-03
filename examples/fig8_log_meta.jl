@@ -4,24 +4,17 @@
 """
     fig8_log_meta.jl — store the figure-eight geometry in the log file.
 
-The syslog records the FLOWN trajectory, but not the REFERENCE path it was
-flown against: F8_A/B/C/D, the pattern-center elevation and the statistics
-settle time only exist as globals of test_figure_eight.jl. A fresh session
-that just loads "fig8_reference" (fig_eight_plots.jl's standalone path) therefore
-had to fall back to hardcoded defaults and silently drew the wrong "desired"
-path whenever the run used different values.
-
-`fig8_colmeta` stashes those parameters as Arrow column metadata on `var_01`
-(a column both wing branches always write) when the log is saved;
-`read_fig8_meta` reads them back. KiteUtils' `load_log` only restores the
-"name" key of each var column's metadata, so the extra keys are read straight
+The syslog records the FLOWN trajectory but not the REFERENCE path it was flown
+against, so a session that only loads the log cannot redraw the desired path.
+`fig8_colmeta` stashes the geometry as Arrow column metadata on `var_01` when
+the log is saved and `read_fig8_meta` reads it back. KiteUtils' `load_log` only
+restores the "name" key of each var column, so the extra keys are read straight
 from the .arrow file.
 """
 
 using KiteUtils
 
-# Column the parameters are attached to, and the metadata key belonging to
-# each of plot_fig_eight_results' geometry keywords.
+# Metadata key for each of plot_fig_eight_results' geometry keywords.
 const FIG8_META_COLUMN = :var_01
 const FIG8_META_KEYS = (
     "F8_A" => :f8_a,
@@ -64,9 +57,7 @@ log `name` in `path`. Returns a NamedTuple with the keyword names of
 before this metadata was added.
 """
 function read_fig8_meta(name = "fig8_reference"; path = get_data_path())
-    # Arrow arrives via KiteUtils instead of being a direct dependency of
-    # examples/Project.toml; getfield avoids the "not public in KiteUtils"
-    # warning of KiteUtils.Arrow.
+    # getfield avoids the "not public in KiteUtils" warning of KiteUtils.Arrow.
     Arrow = getfield(KiteUtils, :Arrow)
     file = isfile(name) ? name : joinpath(path, basename(name) * ".arrow")
     isfile(file) || return nothing
