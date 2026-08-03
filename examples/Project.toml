@@ -3,6 +3,10 @@
 # solver chain) are far heavier than anything SimpleKiteControllers itself needs,
 # and keeping them here leaves the package light.
 #
+# It IS a workspace member of the root project (`[workspace]` in ../Project.toml),
+# so the two resolve together into one Manifest.toml at the repository root —
+# a dependency shared by both is the same version here as in the package.
+#
 # Activate it with `julia --project=examples`, or just run a script — each one
 # activates this directory itself.
 [deps]
@@ -26,19 +30,20 @@ MakieControlPlots = "0.1.12"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-# V3Kite is not registered, so it needs a source entry either way. Every name
-# `simple_fig8.jl` takes from it is exported from V3Kite's main branch as of the
-# "interface pieces external controllers need" PR; against an older V3Kite the
-# script fails on `vsm_interval`, `warmup!` and the force-mode winch.
+# V3Kite is not registered, so it needs a source entry either way. `simple_fig8.jl`
+# needs `vsm_interval`, `warmup!`, the force-mode winch, `span_mean_aoa` and
+# `init`'s `data_path`/`cache_path` — none of which are on V3Kite's main branch
+# yet, hence the branch pin. Switch `rev` to "main" once
+# https://github.com/OpenSourceAWE/V3Kite.jl/pull/41 is merged.
 #
-# A local PATH checkout. It no longer HAS to be one — `init` now takes a
-# `cache_path`, so V3Kite can live in a read-only Pkg-installed copy (see the
-# `cache_path` argument in `simple_fig8.jl`) and this can become a url/rev
-# entry. It stays a path checkout while V3Kite itself is under development, so
-# edits there take effect here without a re-resolve. Clone it next to this
-# repository:
+# NOTE: Pkg installs this read-only, and a fresh install ships no `.bin` files,
+# so the first run has to write both a compiled model and a settled geometry.
+# `simple_fig8.jl` therefore passes `cache_path` to `init` — that covers
+# everything V3Kite generates, and the bundled geometry is still read from the
+# installed copy. A local path source is the alternative:
 #     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
-V3Kite = {path = "../../V3Kite.jl"}
+#     V3Kite = {path = "../../V3Kite.jl"}
+V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "fix_missing"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

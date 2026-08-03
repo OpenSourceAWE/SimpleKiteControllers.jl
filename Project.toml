@@ -16,8 +16,13 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 DiscretePIDs = "0.1.6"
-KiteModels = "0.8.1"
-KiteUtils = "0.10.13"
+# 0.11 rather than 0.8.1: 0.8.1 pins KitePodModels 0.3.8 while V3Kite needs 0.4,
+# which made the workspace below unsatisfiable. The separate example environment
+# hid the clash — it never had to reconcile the two.
+KiteModels = "0.11"
+# 0.11 rather than 0.10.13: V3Kite pulls KitePodModels 0.4, which requires
+# KiteUtils 0.11, so `examples/` could not resolve at all on the old bound.
+KiteUtils = "0.11"
 LinearAlgebra = "1"
 Parameters = "0.12.3"
 Printf = "1"
@@ -33,3 +38,15 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+
+# `examples/` is a sub-project of this one: it keeps its own Project.toml (the
+# plotting and simulation stacks it needs are far heavier than anything this
+# package does, and they must not become deps of the library), but resolves
+# against ONE shared Manifest.toml here at the root rather than its own. So a
+# dependency shared by both — KiteUtils, DiscretePIDs — is guaranteed to be the
+# same version in a script as in the package it is exercising.
+#
+# Needs Pkg 1.11+. Older versions ignore this table and resolve `examples/`
+# standalone against its own Manifest, which still works.
+[workspace]
+projects = ["examples"]

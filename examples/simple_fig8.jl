@@ -162,14 +162,17 @@ set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = fcs.tether_length,
 # the winch named by `warmup_wfc`, so that transient is not in the log at all.
 # `init` also hands the drum a holding torque when it releases the brake.
 #
-# The settled geometry is cached under V3Kite's own data/ by default. Add
-# `cache_path = joinpath(@__DIR__, "settled")` to send it somewhere writable
-# instead, which is what a read-only (url-installed) V3Kite needs — at the cost
-# of one re-settle, since the cache is keyed by path.
+# `cache_path` is where everything V3Kite GENERATES goes — the compiled model,
+# the settled geometry and the settling log — while the bundled geometry is
+# still read from V3Kite's own data/. Without it all of that is written back
+# into V3Kite's directory, which Pkg makes read-only for the url source this
+# example uses (see examples/Project.toml), and a fresh install ships none of
+# those files. The first run therefore builds the model here (a few minutes,
+# ~23 MB); later runs reuse it. Delete the directory to force a rebuild.
 s = init(fcs.v_wind, fcs.tether_length; body_damping = fcs.body_damping,
     elevation = fcs.elevation,
     depower_setpoint = fcs.depower_setpoint, sim_time = fcs.sim_time, dt = fcs.dt,
-    system_yaml = fcs.project, wc,
+    system_yaml = fcs.project, wc, cache_path = joinpath(@__DIR__, "cache"),
     warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
