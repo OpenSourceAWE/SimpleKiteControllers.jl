@@ -13,12 +13,17 @@ winch is logged in `winch_force[1]`; `var_01` carries the cross-track error
 """
 
 """
-    fig8_metrics(sl; t_start=0.0, settle_time=10.0, hf_window=0.5)
+    fig8_metrics(sl; t_start=0.0, settle_time=10.0, settle_d_threshold=5.0, hf_window=0.5)
 
 Compute figure-of-eight quality metrics of syslog `sl` over the settled window
-(`t_start + settle_time` to the end). `hf_window` [s] is the moving-average
-width subtracted out to isolate high-frequency content. Returns `nothing` if the
-window is empty.
+(`stats_start` to the end). `settle_time` [s] is a fallback upper bound on how
+long the entry transient is assumed to take; the actual `stats_start` is
+`t_start` plus however long it takes the cross-track error (`var_01` [deg]) to
+first drop below `settle_d_threshold` degrees, capped at `t_start + settle_time`
+so a run that never converges still gets scored from a bounded window rather
+than an empty one; the elapsed value is returned as `settle_time_used`.
+`hf_window` [s] is the moving-average width subtracted out to isolate
+high-frequency content. Returns `nothing` if the window is empty.
 
 The elevation floor is reported both over the settled window and over the
 **whole run** (`min_elevation_all`) — the latter is the success criterion,
@@ -44,16 +49,23 @@ differently configured KCU can still be scored.
 
 Why each guard is shaped the way it is: `docs/fig8_tuning_log.md`.
 """
-function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, hf_window = 0.5,
+function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold = 5.0,
+                      hf_window = 0.5,
                       lap_frac = 0.5, min_excursion = deg2rad(5.0),
                       az_center = nothing, az_amplitude = nothing,
                       el_height = nothing, v_steering = 0.2)
-    stats_start = t_start + settle_time
-    settled = findall(>=(stats_start), sl.time)
+    t_all = Float64.(sl.time)
+    # Shrink the settle window to the first convergence below settle_d_threshold,
+    # rather than always waiting out the (generously guessed) fixed settle_time.
+    converge_idx = findfirst(i -> t_all[i] >= t_start &&
+                                  abs(sl.var_01[i]) < settle_d_threshold,
+                            eachindex(t_all))
+    stats_start = converge_idx === nothing ? t_start + settle_time :
+                  min(t_start + settle_time, t_all[converge_idx])
+    settled = findall(>=(stats_start), t_all)
     isempty(settled) && return nothing
 
     d = Float64.(sl.var_01[settled])
-    t_all = Float64.(sl.time)
     dt = length(t_all) > 1 ? mean(diff(t_all)) : 0.01
 
     fp = Float64.(getindex.(sl.winch_force[settled], 1))
@@ -145,6 +157,7 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, hf_window = 0.5,
 
     return (;
         stats_start,
+        settle_time_used = stats_start - t_start,
         laps,
         az_reach_pos,
         az_reach_neg,
@@ -180,7 +193,7 @@ end
     print_fig8_metrics(sl; kwargs...)
 
 [`fig8_metrics`](@ref) plus a human-readable summary and a pass/fail line
-against V3Kite.jl's PlanFig8.md success criteria. Returns the metrics NamedTuple with
+against V3Kite.jl's success criteria. Returns the metrics NamedTuple with
 the verdict merged in (`criteria`, the number checked, and `criteria_failed`,
 the names of those that failed), or `nothing`, with a `@warn`, if unavailable.
 
@@ -193,20 +206,22 @@ elevation span, to be at least `min_span_frac` of what was commanded. They are
 skipped (and the pass count drops accordingly) when the geometry is not given.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
+                            settle_d_threshold = 5.0,
                             hf_window = 0.5, min_elevation = 10.0,
                             max_rms_d = 3.0, max_d_limit = 8.0, min_laps = 3.0,
                             lap_frac = 0.5, min_excursion = deg2rad(5.0),
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
                             v_steering = 0.2)
-    m = fig8_metrics(sl; t_start, settle_time, hf_window, lap_frac, min_excursion,
+    m = fig8_metrics(sl; t_start, settle_time, settle_d_threshold, hf_window,
+                     lap_frac, min_excursion,
                      az_center, az_amplitude, el_height, v_steering)
     if m === nothing
         @warn "No settled samples — no figure-eight metrics."
         return nothing
     end
-    @printf("Fig8 (settled from t=%.1fs): laps=%.1f | RMS d=%.2f° mean=%.2f° max=%.2f°\n",
-            m.stats_start, m.laps, m.rms_d, m.mean_d, m.max_d)
+    @printf("Fig8 (settled from t=%.1fs, settle_time=%.1fs): laps=%.1f | RMS d=%.2f° mean=%.2f° max=%.2f°\n",
+            m.stats_start, m.settle_time_used, m.laps, m.rms_d, m.mean_d, m.max_d)
     @printf("  elevation: min settled=%.1f° min WHOLE RUN=%.1f° | peak ψ̇=%.0f°/s\n",
             m.min_elevation_settled, m.min_elevation_all, m.max_turn_rate)
     # Separate from the tracking line: low RMS d says ON the path, this says how much of it.

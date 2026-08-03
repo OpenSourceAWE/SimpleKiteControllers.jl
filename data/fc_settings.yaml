@@ -74,6 +74,6 @@ fc_settings:
 
   # --- guards and metrics ---------------------------------------------------
   v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
-  entry_time:         52.0     # Settle time after park_time before the metrics     [s]
+  entry_time:         62.0     # Settle time after park_time before the metrics     [s]
   min_elevation:      10.0     # Floor criterion over the WHOLE run               [deg]
   min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]
