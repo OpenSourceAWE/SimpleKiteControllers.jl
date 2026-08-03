@@ -18,9 +18,7 @@
 # initial tether length (`l_tethers` below) is read from HERE alone —
 # fc_settings.yaml has no tether_length field.
 system:
-  log_file:
-    'data/base' # filename without extension  [replay only]
-    #   use / as path delimiter, even on Windows
+  log_file: 'fig8_200m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
   sim_time: 150.0 # simulation time; ~43 s per lap plus the descent  [sim only]
   sample_freq: 100 # sample frequency in Hz; its inverse is the run's timestep
