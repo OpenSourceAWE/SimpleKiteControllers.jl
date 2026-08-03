@@ -1,0 +1,57 @@
+#!/bin/bash
+# Copyright (c) 2025, 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+
+# Set up the Julia environment of this workspace:
+#   - verify that Julia 1.12 is the active version
+#   - restore the default manifest (Manifest-v1.12.toml)
+#   - remove stale per-project Manifest.toml files
+#   - instantiate the workspace and precompile the examples project
+
+set -eu
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+# --- check Julia 1.12 ---------------------------------------------------------
+if ! command -v julia >/dev/null 2>&1; then
+    echo "ERROR: julia not found in PATH." >&2
+    echo "Install Julia 1.12, e.g. with juliaup:  juliaup add 1.12 && juliaup default 1.12" >&2
+    exit 1
+fi
+
+julia_version=$(julia --version | grep -o '[0-9][0-9.]*')
+if [[ $julia_version != 1.12.* ]]; then
+    echo "ERROR: Julia 1.12 is required, but the active version is $julia_version." >&2
+    echo "Switch versions, e.g. with juliaup:  juliaup add 1.12 && juliaup default 1.12" >&2
+    exit 1
+fi
+echo "Using Julia $julia_version"
+
+# --- restore the default manifest ---------------------------------------------
+if [[ ! -f Manifest-v1.12.toml.default ]]; then
+    echo "ERROR: Manifest-v1.12.toml.default not found in $(pwd)." >&2
+    exit 1
+fi
+cp Manifest-v1.12.toml.default Manifest-v1.12.toml
+echo "Copied Manifest-v1.12.toml.default -> Manifest-v1.12.toml"
+
+# --- drop stale manifests -----------------------------------------------------
+# A Manifest.toml in a workspace sub-project shadows the shared, version-specific
+# manifest of the root project and breaks the workspace resolution.
+for manifest in Manifest.toml examples/Manifest.toml; do
+    if [[ -f $manifest ]]; then
+        rm -f "$manifest"
+        echo "Removed $manifest"
+    fi
+done
+
+# --- instantiate and precompile -----------------------------------------------
+echo "Instantiating the workspace ..."
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+echo "Precompiling the examples project ..."
+julia --project=examples -e 'using Pkg; Pkg.precompile()'
+
+echo "Done. Start a REPL with bin/run_julia"
