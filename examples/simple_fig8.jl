@@ -113,12 +113,9 @@ using Printf
 
 # This package's data/ is the default for KiteUtils lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-# Absolute, so the run's own data/settings_fig8_200m.yaml is used, not the model's.
-PROJECT = "system_fig8_200m.yaml"
+PROJECT = "system_fig8_150m.yaml"
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
-# Initial tether length is a PLANT condition, not a controller tuning: read from
-# the project's sim_settings (`l_tethers`), not from `fcs`.
 l_tether = Settings(project).l_tether
 
 # ======================== INIT =========================== #
