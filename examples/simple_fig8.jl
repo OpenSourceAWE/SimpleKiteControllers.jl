@@ -41,9 +41,11 @@ error is curvature-limited, so enlarge the pattern, lower its centre, lower the
 damping, or raise `max_steering`. The measured margins behind the values used
 here are in `docs/fig8_tuning_log.md`.
 
-Logs the run to "fig8_run" and `include`s `simple_fig8_plots.jl` at the end, so
-the figures come up without a second call. Even a 30 s simulation is several
-thousand `step!` calls and takes minutes of wall time.
+Logs the run to `output/<log_file>.arrow`, where `log_file` is the project's
+`system.log_file` setting (e.g. `fig8_200m`), and `include`s
+`simple_fig8_plots.jl` at the end, so the figures come up without a second
+call. Even a 30 s simulation is several thousand `step!` calls and takes
+minutes of wall time.
 
 Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 
@@ -119,7 +121,13 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 PROJECT = "system_fig8_200m.yaml" # defined for 150m, 200m and 300m
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
-l_tether = Settings(project).l_tether
+project_set = Settings(project)
+l_tether = project_set.l_tether
+
+# Log files are arrow files, named after the project's `log_file`, kept out of git.
+output_path = normpath(joinpath(@__DIR__, "..", "output"))
+mkpath(output_path)
+log_name = basename(project_set.log_file)
 
 # ======================== INIT =========================== #
 
@@ -312,11 +320,11 @@ catch exc
 end
 
 @info "Save the log"
-save_log(s.logger, "fig8_run"; colmeta = timestamp_colmeta())
+save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
 
 # ==================== RESULTS ==================== #
 
-syslog = load_log("fig8_run")
+syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,

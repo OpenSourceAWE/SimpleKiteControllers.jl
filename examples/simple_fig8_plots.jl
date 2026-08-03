@@ -4,7 +4,8 @@
 """
 Plotting for simple_fig8.jl results.
 
-Loads the "fig8_run" log saved by simple_fig8.jl and produces three figures:
+Loads the `output/<log_file>.arrow` log saved by simple_fig8.jl and produces
+three figures:
 
 1. the flown pattern in the (azimuth, elevation) plane against the reference
    lemniscate. The attractor track is deliberately not drawn — it hugs the
@@ -38,7 +39,7 @@ Judge path following by `chi - chi_set`. The third curve in the error panel is
 the error the PID actually regulated (`var_06`), which rides on `psi - chi_set`
 at low kite speed and on `chi - chi_set` at high.
 
-Run from the REPL after (or instead of, if "fig8_run" already exists) running
+Run from the REPL after (or instead of, if the log already exists) running
 simple_fig8.jl:
 
     include("simple_fig8_plots.jl")
@@ -59,12 +60,14 @@ using SimpleKiteControllers   # FC_Settings, figure_eight_path
 # Where simple_fig8.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
-# Reuses the run's own `fcs` when included from it, so the overlay cannot drift.
+# Reuses the run's own globals when included from it, so the overlay cannot drift.
 @isdefined(fcs) || (fcs = FC_Settings("fc_settings.yaml"))
-syslog = load_log("fig8_run")
+@isdefined(output_path) || (output_path = normpath(joinpath(@__DIR__, "..", "output")))
+@isdefined(log_name) || (log_name = basename(Settings(project_file()).log_file))
+syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
-created_at = log_created_at("fig8_run")
+created_at = log_created_at(log_name; path = output_path)
 fig_name = "V3 Kite Figure-of-Eight"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
