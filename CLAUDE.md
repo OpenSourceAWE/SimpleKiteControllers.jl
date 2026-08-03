@@ -61,9 +61,11 @@ every process. Measured both ways, with and without a system image;
 [docs/sysimage_notes.md](docs/sysimage_notes.md) has the table and the five dead ends that
 preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s either way).
 
-Consequences: the absolute path in `[sources]` is machine-specific, so restore the
-`url`/`rev` line and re-run `Pkg.resolve()` before pushing; and after switching the source
-either way, `Pkg.resolve()` + `Pkg.instantiate()` triggers a ~3 min V3Kite precompile.
+Switch it with `bin/dev` (local checkout, default `../V3Kite`) and `bin/free` (back to
+`url`/`rev`) — each rewrites the one `[sources]` line and re-resolves; never edit it by
+hand. A `path` entry is machine-specific, so run `bin/free` before pushing. Either
+direction ends in `Pkg.resolve()` + `Pkg.instantiate()`, which triggers a ~3 min V3Kite
+precompile.
 
 `LocalPreferences.toml` (root and `examples/`) sets `[Revise] revise_structs = true`, so a
 live REPL session picks up edits to `struct` definitions (`FC_Settings`,

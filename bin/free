@@ -1,0 +1,27 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# Put examples/Project.toml back on the public V3Kite (default rev: v1.0.1)
+# and re-resolve. This is the committable state; the price is a ~34 s init(),
+# see docs/sysimage_notes.md. Undo with bin/dev.
+#
+# Usage: bin/free [rev]
+set -e
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+URL="https://github.com/OpenSourceAWE/V3Kite.jl"
+REV=${1:-v1.0.1}
+
+if ! grep -q "^V3Kite = {" examples/Project.toml; then
+    echo "No V3Kite entry in [sources] of examples/Project.toml" >&2
+    exit 1
+fi
+
+sed -i -E "s|^V3Kite = \{.*\}|V3Kite = {url = \"$URL\", rev = \"$REV\"}|" examples/Project.toml
+echo "V3Kite -> $URL @ $REV"
+
+julia --project=examples -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
