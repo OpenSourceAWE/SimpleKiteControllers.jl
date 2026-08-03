@@ -9,7 +9,8 @@ no simulation and no kite model, so the whole file runs in well under a second.
 using Test
 using SimpleKiteControllers
 import KiteUtils: wrap2pi
-import YAML
+# Via the package: environments this runs from, like examples/, lack a direct YAML dep.
+import SimpleKiteControllers: YAML
 
 _make_test_controller(; kwargs...) =
     FigureEightController(FigureEightSettings(; dt = 0.02, A = 10.0, B = 5.0,
@@ -436,15 +437,20 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "project_file" begin
-        fcs = FC_Settings()
-        p = project_file(fcs)
+        p = project_file()
         @test isabspath(p)
         @test dirname(p) == skc_data_path()
         @test isfile(p)
-        # The sim settings must sit next to the project: KiteUtils resolves them
-        # relative to it, so this is what keeps them out of the kite model's data.
-        @test isfile(joinpath(skc_data_path(),
-                              YAML.load_file(p)["system"]["sim_settings"]))
+        # KiteUtils resolves the sim settings relative to the project, so they must sit here.
+        settings = joinpath(skc_data_path(), YAML.load_file(p)["system"]["sim_settings"])
+        @test isfile(settings)
+        # The run length and timestep come from there, not from FC_Settings.
+        sys = YAML.load_file(settings)["system"]
+        @test sys["sim_time"] > 0
+        @test sys["sample_freq"] >= 60
+        @test !hasfield(FC_Settings, :sim_time)
+        @test !hasfield(FC_Settings, :dt)
+        @test !hasfield(FC_Settings, :project)
         # A project this package does not carry stays a lookup under the model's data.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
     end

@@ -4,19 +4,25 @@
 # plant a run is flown against — wind, tether, KCU, winch, solver — can be varied
 # without editing the model.
 #
+# The length of a run and its timestep live HERE: `sim_time` and `sample_freq`
+# below are what `init` falls back to, and the loop then takes both from the
+# model. `sample_freq` is not a tuning knob — `step!` holds the VSM aero load
+# frozen inside the DAE between updates, and below ~60 Hz that explicit coupling
+# develops a growing 2*dt oscillation at maximum dynamic pressure.
+#
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
 # POSITION-mode winch gains are the model's wc_settings.yaml, and the geometry,
 # polars and VSM settings are loaded by V3Kite from its own data directory and
-# never pass through this file. Where these values overlap with fc_settings.yaml
-# (v_wind, the initial tether length, sim_time, dt) the run uses the fc_settings
-# value, which is passed to `init` explicitly.
+# never pass through this file. `v_wind` and the initial tether length appear in
+# both files; there the fc_settings value wins, because it is passed to `init`
+# explicitly.
 system:
   log_file:
     'data/base' # filename without extension  [replay only]
     #   use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
-  sim_time: 100.0 # simulation time             [sim only]
-  sample_freq: 20 # sample frequency in Hz
+  sim_time: 150.0 # simulation time; ~43 s per lap plus the descent  [sim only]
+  sample_freq: 100 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81
 

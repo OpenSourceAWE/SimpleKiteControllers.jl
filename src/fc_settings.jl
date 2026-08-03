@@ -8,9 +8,12 @@ entry state machine, the heading/course PID and the metrics window. Loaded from
 a YAML file (`fc_settings.yaml`) rather than hard-coded in the example, so a
 sweep can vary them without editing the script.
 
-Everything here is a TUNING parameter of one run. The POSITION-mode winch gains
-live in the kite model's own winch settings (V3Kite's `WC_Settings`, loaded from
-its `data/wc_settings.yaml`) and the model/geometry in its `settings.yaml`; the
+Everything here is a TUNING parameter of one run. The PLANT the run is flown
+against — including the length of the run (`sim_time`) and the timestep it is
+integrated with (`sample_freq`) — is the system project resolved by
+[`project_file`](@ref), i.e. `data/settings_reelout.yaml`. The POSITION-mode
+winch gains live in the kite model's own winch settings (V3Kite's `WC_Settings`,
+loaded from its `data/wc_settings.yaml`) and the geometry in its own data; the
 FORCE-mode winch parameters are here (`winch_*` below), because how compliant the
 winch is during a figure-eight is a choice of the run rather than a property of
 the model. [`winch_force_gains`](@ref) applies the `compliance` scaling to them;
@@ -21,26 +24,6 @@ and the failures behind each closed lever — is in `docs/fig8_tuning_log.md`.
 Add new findings there, not here.
 """
 @with_kw mutable struct FC_Settings @deftype Float64
-    """
-    System project file, see `data/system_*.yaml`. Resolved by
-    [`project_file`](@ref) against this package's `data/` first, so the
-    simulation conditions of a run are the ones bundled here; a name only the
-    kite model knows falls back to the model's data directory.
-    """
-    project::String = "system_reelout.yaml"
-    """
-    Total simulation time [s]; ~43 s per lap at v_app 13 m/s, plus the descent
-    from the park. The metrics window opens at `park_time + entry_time`, so a
-    short run cannot be judged on `laps`.
-    """
-    sim_time = 150.0
-    """
-    Simulation timestep [s]. NOT a tuning parameter: 0.05/3 was numerically
-    unstable, because `step!` holds the VSM aero load frozen inside the DAE
-    between updates and that explicit coupling develops a growing 2*dt
-    oscillation at maximum dynamic pressure.
-    """
-    dt = 0.05/6
     """
     Steps between VSM aero updates, held frozen in between (0 disables them).
     1 is the tightest coupling available, so this can only be raised, trading
@@ -297,24 +280,21 @@ function FC_Settings(filename::String; path = skc_data_path())
 end
 
 """
-    project_file(fcs::FC_Settings) -> String
-    project_file(project::String) -> String
+    project_file(project = "system_reelout.yaml") -> String
 
-Path of the system project to hand to the kite model, preferring this package's
-own [`skc_data_path`](@ref) over the model's data directory: the conditions a
-figure-eight is flown under — wind, tether, winch, KCU, solver — are a choice of
-the RUN, so `data/system_reelout.yaml` and the `data/settings_reelout.yaml` it
-names live here and can be varied without editing the kite model.
+Path of the system project to hand to the kite model, absolute when this package
+carries it in [`skc_data_path`](@ref) and unchanged otherwise, which leaves it a
+lookup under the model's data.
 
-Returns an absolute path when the project is bundled with this package. KiteUtils
-resolves the `sim_settings` file relative to the project file's own directory, so
-that settings file is taken from here too, while a bare name such as
-`wc_settings` stays a lookup under the model's active data path. A project this
-package does not carry is returned unchanged, which resolves it against the
-model's data as before.
+The absolute form is what selects this package's settings: KiteUtils resolves the
+project's `sim_settings` relative to the project file, so `settings_reelout.yaml`
+is read from here, while bare names like `wc_settings` still resolve under the
+model's active data path.
+
+Not a field of [`FC_Settings`](@ref): which plant a run is flown against is not a
+tuning parameter of the controller.
 """
-project_file(fcs::FC_Settings) = project_file(fcs.project)
-function project_file(project::String)
+function project_file(project::String = "system_reelout.yaml")
     path = joinpath(skc_data_path(), project)
     return isfile(path) ? path : project
 end

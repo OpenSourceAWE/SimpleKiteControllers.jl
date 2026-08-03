@@ -75,7 +75,10 @@ loadable, the V3Kite branch pin). Read them before touching a version bound.
 - `fc_settings.jl` — `FC_Settings`, every tuning parameter of a figure-eight run, loaded
   from `data/fc_settings.yaml`. Plus `winch_force_gains`, which applies the `compliance`
   scaling and returns plain numbers (the winch object it feeds belongs to the kite model),
-  and `project_file`, which resolves `fcs.project` against this package's `data/`.
+  and `project_file`, which resolves the system project against this package's `data/`.
+  `FC_Settings` holds the controller's tuning ONLY: the plant, the run length
+  (`sim_time`) and the timestep (`1/sample_freq`) are in `data/settings_reelout.yaml`,
+  and the example takes `s.steps`/`s.dt` back from the model after `init`.
 - `fig8_metrics.jl` — `fig8_metrics`/`print_fig8_metrics`, headless scoring of a flown
   log. No plotting dependency, so sweeps can run headless.
 
@@ -89,7 +92,7 @@ not yet been lifted into a controller type.
 - **Two data paths.** `skc_data_path()` is this package's `data/`; `KiteUtils.get_data_path()`
   points at the *kite model's* data directory during a run (`set_data_path(v3_data_path())`).
   `FC_Settings` and the turn-rate table always read the former. So does the run's
-  **system project**: `project_file(fcs)` returns `data/system_reelout.yaml` as an
+  **system project**: `project_file()` returns `data/system_reelout.yaml` as an
   ABSOLUTE path, which is what makes KiteUtils resolve `sim_settings` next to it —
   `data/settings_reelout.yaml` here, not the identically named file in the model's
   data. `wc_settings` stays a bare name and therefore still resolves to the model's.

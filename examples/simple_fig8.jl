@@ -19,11 +19,13 @@ loop, both winch modes, the discarded warm-up and the span-mean AoA — is V3Kit
 used through its public API. Nothing here reaches into a `V3KITE` itself, which
 is what keeps this package free of a kite-model dependency.
 
-The CONDITIONS the model is run under come from here too: `project_file` resolves
-`fcs.project` to this package's `data/system_reelout.yaml`, so the simulation
-settings it names (`data/settings_reelout.yaml`) are the ones flown, not the
-model's copy. Only the winch-controller settings and the geometry stay with the
-model.
+The CONDITIONS the model is run under come from here too: `project_file` returns
+this package's `data/system_reelout.yaml`, so the simulation settings it names
+(`data/settings_reelout.yaml`) are the ones flown, not the model's copy. That
+file, not `fc_settings.yaml`, sets how long the run is (`sim_time`) and the
+timestep (`1/sample_freq`); `init` falls back to both and the loop reads
+`s.steps` and `s.dt` from the model. Only the winch-controller settings and the
+geometry stay with the model.
 
 # Why the pattern is large
 
@@ -77,9 +79,12 @@ the global `fcs`; each field is documented there. A run with different values
 needs no edit of this script — define `fcs` first and it is used as-is:
 
     fcs = FC_Settings("fc_settings.yaml")
-    fcs.sim_time = 30.0
     fcs.el_center = 30.0
+    fcs.attractor_dist = 12.0
     include("examples/simple_fig8.jl")
+
+Shortening a run is not among them: `sim_time` and `sample_freq` are in
+`data/settings_reelout.yaml`, so a 30 s run means editing that file.
 
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
@@ -108,7 +113,7 @@ using Printf
 set_data_path(v3_data_path())
 fcs = FC_Settings("fc_settings.yaml")
 # Absolute, so the run's own data/settings_reelout.yaml is used, not the model's.
-project = project_file(fcs)
+project = project_file()
 
 # ======================== INIT =========================== #
 
@@ -130,15 +135,16 @@ end
 
 # For the mismatch check in turn_rate_coeffs below; the bare name is what the table records.
 set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = fcs.tether_length,
-                          system_yaml = fcs.project)
+                          system_yaml = basename(project))
 @info "System project: $project"
 
+# No sim_time/dt: init takes them from the project's settings (sim_time, sample_freq).
 # cache_path takes everything V3Kite GENERATES; delete it to force a rebuild.
 s = init(fcs.v_wind, fcs.tether_length; body_damping = fcs.body_damping,
-    elevation = fcs.elevation,
-    depower_setpoint = fcs.depower_setpoint, sim_time = fcs.sim_time, dt = fcs.dt,
+    elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, wc, cache_path = joinpath(@__DIR__, "cache"),
     warmup_time = fcs.warmup_time, warmup_wfc = wfc)
+@info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
 l0 = s.sys_state.l_tether[1]
