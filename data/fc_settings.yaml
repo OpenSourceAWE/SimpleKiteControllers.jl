@@ -6,10 +6,11 @@
 #
 # The POSITION-mode winch gains are NOT here — they live in the kite model's own
 # wc_settings.yaml (V3Kite's data/) and are read straight from there. The
-# FORCE-mode winch parameters ARE here, because the force-mode controller is part
-# of the run (examples/v3kite_support.jl), not of the model; `compliance` below
-# scales them. The dated record of how these values were arrived at is in
-# V3Kite.jl's docs/fig8_tuning_log.md.
+# FORCE-mode winch parameters ARE here, because how compliant the winch is during
+# a figure-eight is a choice of the run, not a property of the model; `compliance`
+# below scales them, and the controller they feed is V3Kite's
+# WinchForceController. The dated record of how these values were arrived at is in
+# docs/fig8_tuning_log.md.
 fc_settings:
   # --- simulation conditions ------------------------------------------------
   project:            system_reelout.yaml  # System project, see data/system_*.yaml

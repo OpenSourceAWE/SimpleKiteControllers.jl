@@ -93,7 +93,7 @@ needs no edit of this script — define `fcs` first and it is used as-is:
     include("examples/simple_fig8.jl")
 
 The dated record of how these parameters were arrived at — sweeps, reverted
-attempts and the failures behind each closed lever — is in V3Kite.jl's
+attempts and the failures behind each closed lever — is in
 `docs/fig8_tuning_log.md`. Add new findings there, not here.
 """
 

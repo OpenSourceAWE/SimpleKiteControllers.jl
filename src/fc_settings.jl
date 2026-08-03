@@ -11,13 +11,14 @@ sweep can vary them without editing the script.
 Everything here is a TUNING parameter of one run. The POSITION-mode winch gains
 live in the kite model's own winch settings (V3Kite's `WC_Settings`, loaded from
 its `data/wc_settings.yaml`) and the model/geometry in its `settings.yaml`; the
-FORCE-mode winch parameters are here (`winch_*` below), because the force-mode
-controller itself is part of the run rather than of the model — see
-`examples/v3kite_support.jl`.
+FORCE-mode winch parameters are here (`winch_*` below), because how compliant the
+winch is during a figure-eight is a choice of the run rather than a property of
+the model. [`winch_force_gains`](@ref) applies the `compliance` scaling to them;
+the controller they feed is V3Kite's `WinchForceController`.
 
 The dated record of how these values were arrived at — sweeps, reverted attempts
-and the failures behind each closed lever — is in V3Kite.jl's
-`docs/fig8_tuning_log.md`. Add new findings there, not here.
+and the failures behind each closed lever — is in `docs/fig8_tuning_log.md`.
+Add new findings there, not here.
 """
 @with_kw mutable struct FC_Settings @deftype Float64
     "System project file, see `data/system_*.yaml`"
@@ -110,8 +111,8 @@ and the failures behind each closed lever — is in V3Kite.jl's
     """
     park_time = 2.0
     """
-    Warm-up [s], run right after `init` and discarded (see `warmup!` in
-    `examples/v3kite_support.jl`). The park above lets the settling transients
+    Warm-up [s], run inside `init` and discarded (V3Kite's `warmup!`, which
+    `init` calls when `warmup_time > 0`). The park above lets the settling transients
     decay; this lets them decay BEFORE t = 0, so they are not in the log at all.
     They are not the run's data: `settle_wing` returns an equilibrium of the
     settling model (dt = 0.001, damped, winch braked) and the first second of the
@@ -125,7 +126,7 @@ and the failures behind each closed lever — is in V3Kite.jl's
     """
     warmup_time = 2.0
 
-    # ---- Force-mode winch (see `examples/v3kite_support.jl`) ---------------- #
+    # ---- Force-mode winch (V3Kite's `WinchForceController`) ---------------- #
     # Only used when `compliance > 0`; at 0 the run hands the winch to the kite
     # model's own POSITION controller and none of these are read. They are
     # BASE values: `winch_len_kp` and `winch_damp` are divided by `compliance`
