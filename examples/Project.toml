@@ -7,6 +7,13 @@
 # so the two resolve together into one Manifest.toml at the repository root —
 # a dependency shared by both is the same version here as in the package.
 #
+# NOT COMMITTABLE AS-IS: the V3Kite source below is an absolute local path.
+# It is a `path` and not `{url = ..., rev = "v1.0.1"}` (identical code) because
+# a git-rev-sourced V3Kite makes `init()` cost ~34 s instead of ~2 s — its
+# precompiled ODE right-hand side goes unused and is re-JIT'ed every process.
+# Measurements and dead ends in docs/sysimage_notes.md. Restore the url/rev
+# line before pushing, and re-run `Pkg.resolve()`.
+#
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
@@ -27,7 +34,7 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.1"}
+V3Kite = {path = "/home/ufechner/repos/V3Kite.jl"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

@@ -1,9 +1,14 @@
 # System image notes (`bin/create_sys_image`)
 
 Record of what was tried to speed up `examples/` startup with a PackageCompiler
-system image, and — the actual finding worth keeping — why it does not touch
-the ~27 s cost inside `init()`. Read this before re-attempting any of the
-approaches below; each one was tried and measured, not just proposed.
+system image, and why none of it touches the ~30 s cost inside `init()`. Read
+this before re-attempting any of the approaches below; each one was tried and
+measured, not just proposed.
+
+**Resolved:** the `init()` cost is not a system image problem at all — it is
+how V3Kite is sourced into `examples/Project.toml`. See
+[The cause](#the-cause-how-v3kite-is-sourced-2026-08-03); (1)–(5) below are the
+dead ends that led there.
 
 ## The symptom
 
@@ -60,6 +65,15 @@ segments). It happens on every fresh Julia process, independent of
    MakieControlPlots` under the new image so `V3Kite` precompiles — with its
    `@compile_workload` — against it. **Still did not help.**
 
+5. **Made this repo's system image and model `.bin` byte-identical to the ones
+   `V3Kite.jl` on `main` uses locally.** Same `bin/kps-image-1.12.so`, same
+   `model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin`
+   in `examples/cache/`. **The ~27 s `init()` persists.** This eliminates the
+   sysimage and the compiled-model cache — the two artifacts that differ most
+   visibly between the repos — as the differentiator, and with them the whole
+   line of attack in (1)–(4). Whatever costs the 25 s is in the *environment*
+   the model is loaded into, not in the image or the cache it is loaded from.
+
 ## Reference measurement
 
 Running `examples/simple_parking.jl` **from within `V3Kite.jl`'s own checkout**,
@@ -81,37 +95,52 @@ Same checkout, plain `julia --project` (no system image):
 Same model bin name (same 44pt/95seg structure) as this repo's ~27 s runs — so
 it is not the model, confirming (3). Both the 2 s and the ~1.25 s figures come
 from `V3Kite.jl`'s own checkout, with and without a system image respectively —
-so sysimage presence/absence is not the differentiator, in either repo. This is
-the ground truth the fix needs to reproduce.
+so sysimage presence/absence is not the differentiator, in either repo. These
+are the figures a `path` source reproduces in this repo.
 
-## Where this stands
+## The cause: how V3Kite is sourced (2026-08-03)
 
-Not resolved. Removing V3Kite from the sysimage (4) did not reproduce the 2 s
-figure, so a sysimage-vs-pkgimage conflict was not the (or not the whole)
-story. Ruled out so far as the differentiator: `RuntimeGeneratedFunctions`
-version (identical `git-tree-sha1` in both environments' manifests), stale
-`.bin` caches, V3Kite's own precompile workload not running, GLMakie/
-MakieControlPlots being absent from V3Kite's own environment (they are also
-in its `examples/Project.toml`).
+**It is the `[sources]` entry in `examples/Project.toml`, and nothing else.**
+`{url = ..., rev = "v1.0.1"}` costs ~34 s in `init()`; `{path = ...}` pointing
+at a local checkout of the *same commit* costs ~2 s.
 
-**Leading lead, not yet tested:** how V3Kite is *sourced* differs between the
-two environments. `V3Kite.jl/examples/Project.toml` has
-`[sources] V3Kite = {path = ".."}` — a dev'd, path-sourced package. This
-repo's `examples/Project.toml` has `V3Kite = {url = "...", rev = "v1.0.1"}`,
-which resolves into `~/.julia/packages/V3Kite/mnfec/` — a registry-style,
-git-pinned copy. Worth testing directly: point this repo's
-`examples/Project.toml` at a local V3Kite checkout via `path = ...` instead of
-`url`/`rev`, reinstantiate, and re-measure `init()` — if that alone drops it to
-~2 s, the fix is about how a git-rev-pinned dependency's pkgimage cache
-(in)validates versus a dev'd one, which would need investigating/reporting
-upstream in `V3Kite.jl` or the Pkg precompilation machinery itself, not
-something to work around from this repo's `src/` or `bin/`.
+Measured with one script that does only `init()`, run in fresh processes
+against the same `examples/cache/*.bin`, the local V3Kite checkout clean at the
+`v1.0.1` tag (`git describe` → `v1.0.1`), so both sources carry identical code:
 
-Also not yet checked: whether some other package present in
-`examples/Project.toml` but not in V3Kite's own (`DiscretePIDs`, the exact
-`RuntimeGeneratedFunctions = "=0.5.22"` pin, or `SimpleKiteControllers`
-itself) invalidates part of V3Kite's/`SymbolicAWEModels`'s pkgimage cache for
-the RGF-wrapped model code when loaded alongside it.
+| `[sources] V3Kite` | with `bin/kps-image-1.12.so` | plain `julia --project` |
+| ------------------ | ---------------------------- | ----------------------- |
+| `url` + `rev`      | 33.6 s                       | 38.2 s                  |
+| `path`             | 2.25 s                       | 1.77 s                  |
+
+The `path` figures reproduce `V3Kite.jl`'s own 2.02 s / 1.25 s ground truth
+below. The system image is worth about 4 s either way — irrelevant next to the
+32 s.
+
+What this is *not*: the workload does run under both sources. Under `url`/`rev`
+a forced `Pkg.precompile()` logs V3Kite's `@compile_workload` executing its own
+`init` (38.2 s, writing to
+`~/.julia/scratchspaces/<V3Kite-uuid>/v3kite_cache/`) and leaves a ~141 MB
+pkgimage — same size class as the `path` build. So the workload runs, compiles,
+and is cached to disk; its native code for the RGF-wrapped ODE right-hand side
+is simply not *used* at runtime when the package came from a git rev. It is
+re-JIT'ed on every process.
+
+(Pkgimage size splits by build config, not by source: ~141 MB when precompiled
+under plain `julia`, ~37 MB under `-J bin/kps-image-1.12.so`, since the sysimage
+already carries much of the code. The two configs use separate cache slots, so
+switching between `bin/run_julia` and plain `julia` never invalidates the other.)
+
+Ruled out along the way: the system image (1, 4, 5), the compiled-model `.bin`
+(2, 5), `RuntimeGeneratedFunctions` version (identical `git-tree-sha1` in both
+environments' manifests), V3Kite's precompile workload not running (3, and
+again above), GLMakie/MakieControlPlots being absent from V3Kite's own
+environment (they are also in its `examples/Project.toml`).
+
+Not yet explained: *why* a git-rev-sourced package's precompiled RGF code goes
+unused. That is a Pkg/PrecompileTools question, not something this repo's
+`src/` or `bin/` can work around — the only lever here is the `[sources]` line,
+and a `path` there is machine-specific and cannot be committed.
 
 `bin/create_sys_image` is still worth keeping for `MakieControlPlots`/`GLMakie`
 load time — that part works. It just does not address the `init()` cost this

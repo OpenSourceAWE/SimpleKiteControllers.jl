@@ -145,8 +145,9 @@ not yet been lifted into a controller type.
 
 ## Current state
 
-- Branch `fig8`. `examples/Project.toml` pins V3Kite to its `fix_missing` branch; switch
-  to `main` once [V3Kite PR #41](https://github.com/OpenSourceAWE/V3Kite.jl/pull/41) merges.
+- Branch `main`. V3Kite is at `v1.0.1`, but sourced from a **local checkout** — see
+  "Sourcing V3Kite" above; `examples/Project.toml` must be put back on `url`/`rev`
+  before pushing.
 - **`PlanMigrate.md` is outdated** — it describes the (now completed) move of this
   controller out of V3Kite, and still refers to an `examples/v3kite_support.jl` that no
   longer exists. Do not treat it as a description of the current code: the helpers it
