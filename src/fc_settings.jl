@@ -21,7 +21,12 @@ and the failures behind each closed lever — is in `docs/fig8_tuning_log.md`.
 Add new findings there, not here.
 """
 @with_kw mutable struct FC_Settings @deftype Float64
-    "System project file, see `data/system_*.yaml`"
+    """
+    System project file, see `data/system_*.yaml`. Resolved by
+    [`project_file`](@ref) against this package's `data/` first, so the
+    simulation conditions of a run are the ones bundled here; a name only the
+    kite model knows falls back to the model's data directory.
+    """
     project::String = "system_reelout.yaml"
     """
     Total simulation time [s]; ~43 s per lap at v_app 13 m/s, plus the descent
@@ -289,6 +294,29 @@ function FC_Settings(filename::String; path = skc_data_path())
         setfield!(fcs, sym, convert(fieldtype(FC_Settings, sym), value))
     end
     return fcs
+end
+
+"""
+    project_file(fcs::FC_Settings) -> String
+    project_file(project::String) -> String
+
+Path of the system project to hand to the kite model, preferring this package's
+own [`skc_data_path`](@ref) over the model's data directory: the conditions a
+figure-eight is flown under — wind, tether, winch, KCU, solver — are a choice of
+the RUN, so `data/system_reelout.yaml` and the `data/settings_reelout.yaml` it
+names live here and can be varied without editing the kite model.
+
+Returns an absolute path when the project is bundled with this package. KiteUtils
+resolves the `sim_settings` file relative to the project file's own directory, so
+that settings file is taken from here too, while a bare name such as
+`wc_settings` stays a lookup under the model's active data path. A project this
+package does not carry is returned unchanged, which resolves it against the
+model's data as before.
+"""
+project_file(fcs::FC_Settings) = project_file(fcs.project)
+function project_file(project::String)
+    path = joinpath(skc_data_path(), project)
+    return isfile(path) ? path : project
 end
 
 """

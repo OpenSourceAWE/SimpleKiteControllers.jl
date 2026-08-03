@@ -26,7 +26,7 @@ export reload_turn_rate_table!, set_turn_rate_conditions!
 export fig8_metrics, print_fig8_metrics
 
 # Flight-controller settings
-export FC_Settings, winch_force_gains
+export FC_Settings, winch_force_gains, project_file
 
 # Data
 export skc_data_path
@@ -35,8 +35,9 @@ export skc_data_path
     skc_data_path() -> String
 
 Absolute path of this package's bundled `data/` directory, holding
-`fc_settings.yaml` ([`FC_Settings`](@ref)) and `turn_rate_coeffs.yaml`
-([`turn_rate_coeffs`](@ref)).
+`fc_settings.yaml` ([`FC_Settings`](@ref)), `turn_rate_coeffs.yaml`
+([`turn_rate_coeffs`](@ref)) and the system project of a run
+([`project_file`](@ref)).
 
 Not `KiteUtils.get_data_path()`: that points at the *kite model's* data
 directory during a run, while these settings belong to the controller.

@@ -74,7 +74,8 @@ loadable, the V3Kite branch pin). Read them before touching a version bound.
   than extrapolating.
 - `fc_settings.jl` — `FC_Settings`, every tuning parameter of a figure-eight run, loaded
   from `data/fc_settings.yaml`. Plus `winch_force_gains`, which applies the `compliance`
-  scaling and returns plain numbers (the winch object it feeds belongs to the kite model).
+  scaling and returns plain numbers (the winch object it feeds belongs to the kite model),
+  and `project_file`, which resolves `fcs.project` against this package's `data/`.
 - `fig8_metrics.jl` — `fig8_metrics`/`print_fig8_metrics`, headless scoring of a flown
   log. No plotting dependency, so sweeps can run headless.
 
@@ -87,7 +88,14 @@ not yet been lifted into a controller type.
 
 - **Two data paths.** `skc_data_path()` is this package's `data/`; `KiteUtils.get_data_path()`
   points at the *kite model's* data directory during a run (`set_data_path(v3_data_path())`).
-  `FC_Settings` and the turn-rate table always read the former.
+  `FC_Settings` and the turn-rate table always read the former. So does the run's
+  **system project**: `project_file(fcs)` returns `data/system_reelout.yaml` as an
+  ABSOLUTE path, which is what makes KiteUtils resolve `sim_settings` next to it —
+  `data/settings_reelout.yaml` here, not the identically named file in the model's
+  data. `wc_settings` stays a bare name and therefore still resolves to the model's.
+  A project this package does not carry is passed through unchanged. The geometry,
+  polars and VSM settings never go through the project file at all; V3Kite loads
+  them from `v3_data_path()` directly.
 - **Bearing convention:** `0` = towards zenith, positive towards larger azimuth. `chi_set`
   is directly comparable to `SysState.heading`. `SysState.course` is **not** — it needs
   `wrap_to_pi(course + pi)`; feeding it raw is positive feedback and diverges the run.
