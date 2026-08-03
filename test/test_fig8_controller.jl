@@ -448,12 +448,16 @@ _make_test_controller(; kwargs...) =
         # wc_settings is a bare name; the example points the data path here before init.
         @test isfile(joinpath(skc_data_path(), system["wc_settings"]))
         # The run length and timestep come from there, not from FC_Settings.
-        sys = YAML.load_file(settings)["system"]
+        settings_dict = YAML.load_file(settings)
+        sys = settings_dict["system"]
         @test sys["sim_time"] > 0
         @test sys["sample_freq"] >= 60
         @test !hasfield(FC_Settings, :sim_time)
         @test !hasfield(FC_Settings, :dt)
         @test !hasfield(FC_Settings, :project)
+        # The initial tether length is a plant condition (sim_settings' l_tethers), not FC_Settings.
+        @test !hasfield(FC_Settings, :tether_length)
+        @test haskey(settings_dict["initial"], "l_tethers")
         # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
     end

@@ -20,8 +20,8 @@ used through its public API. Nothing here reaches into a `V3KITE` itself, which
 is what keeps this package free of a kite-model dependency.
 
 The CONDITIONS the model is run under come from here too: `project_file` returns
-this package's `data/system_reelout.yaml`, so the simulation settings it names
-(`data/settings_reelout.yaml`) are the ones flown, not the model's copy. That
+this package's `data/system_fig8_200m.yaml`, so the simulation settings it names
+(`data/settings_fig8_200m.yaml`) are the ones flown, not the model's copy. That
 file, not `fc_settings.yaml`, sets how long the run is (`sim_time`) and the
 timestep (`1/sample_freq`); `init` falls back to both and the loop reads
 `s.steps` and `s.dt` from the model. The winch-controller settings come from here
@@ -80,13 +80,13 @@ Every tuning parameter of the run is a field of `FC_Settings`
 the global `fcs`; each field is documented there. A run with different values
 needs no edit of this script — define `fcs` first and it is used as-is:
 
-    fcs = FC_Settings("fc_settings.yaml")
+    fcs = FC_Settings(fc_settings(project_file()))
     fcs.el_center = 30.0
     fcs.attractor_dist = 12.0
     include("examples/simple_fig8.jl")
 
 Shortening a run is not among them: `sim_time` and `sample_freq` are in
-`data/settings_reelout.yaml`, so a 30 s run means editing that file.
+`data/settings_fig8_200m.yaml`, so a 30 s run means editing that file.
 
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
@@ -113,9 +113,13 @@ using Printf
 
 # This package's data/ is the default for KiteUtils lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-fcs = FC_Settings("fc_settings.yaml")
-# Absolute, so the run's own data/settings_reelout.yaml is used, not the model's.
-project = project_file()
+# Absolute, so the run's own data/settings_fig8_200m.yaml is used, not the model's.
+PROJECT = "system_fig8_200m.yaml"
+project = project_file(PROJECT)
+fcs = FC_Settings(fc_settings(project))
+# Initial tether length is a PLANT condition, not a controller tuning: read from
+# the project's sim_settings (`l_tethers`), not from `fcs`.
+l_tether = Settings(project).l_tether
 
 # ======================== INIT =========================== #
 
@@ -136,13 +140,13 @@ else
 end
 
 # For the mismatch check in turn_rate_coeffs below; the bare name is what the table records.
-set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = fcs.tether_length,
+set_turn_rate_conditions!(v_wind = fcs.v_wind, l_tether = l_tether,
                           system_yaml = basename(project))
 @info "System project: $project"
 
 # No sim_time/dt: init takes them from the project's settings (sim_time, sample_freq).
 # cache_path takes everything V3Kite GENERATES; delete it to force a rebuild.
-s = init(fcs.v_wind, fcs.tether_length; body_damping = fcs.body_damping,
+s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, wc, cache_path = joinpath(@__DIR__, "cache"),
     warmup_time = fcs.warmup_time, warmup_wfc = wfc)
@@ -166,13 +170,13 @@ c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
                c1, c2, delay)
 
 # c1 must match the body damping in use; that is what makes this check meaningful.
-feas = check_pattern_feasible(fec, fcs.tether_length, fcs.max_steering; c1)
+feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
 feas.feasible ||
     @warn "Pattern is tighter than the kite's minimum turn radius — expect \
            curvature-limited tracking, not a tuning problem."
 
 # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-lead_time = deg2rad(fcs.attractor_dist) * fcs.tether_length / fcs.v_app_ref
+lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
 @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
                 vs %.2f s steering dead time (ratio %.1f).",
                fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)

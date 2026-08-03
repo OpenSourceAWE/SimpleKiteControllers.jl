@@ -11,7 +11,7 @@ sweep can vary them without editing the script.
 Everything here is a TUNING parameter of one run. The PLANT the run is flown
 against — including the length of the run (`sim_time`) and the timestep it is
 integrated with (`sample_freq`) — is the system project resolved by
-[`project_file`](@ref), i.e. `data/settings_reelout.yaml`. The POSITION-mode
+[`project_file`](@ref), i.e. `data/settings_fig8_200m.yaml`. The POSITION-mode
 winch gains are `data/wc_settings.yaml` (V3Kite's `WC_Settings` struct, this
 package's file) and the geometry is the model's own; the
 FORCE-mode winch parameters are here (`winch_*` below), because how compliant the
@@ -43,13 +43,6 @@ Add new findings there, not here.
     unstretched length. Continuous in behaviour, not in code.
     """
     compliance = 0.5
-    """
-    Initial tether length [m], held more or less constant. Tested from 150 m to
-    300 m. The minimum angular turn radius is `1/(L*c1*u_s)`, so a LONGER tether
-    turns tighter in angular terms — the most effective lever on pattern
-    feasibility after `c1` itself.
-    """
-    tether_length = 200.0
     "Depower held during the run [-]; sets the operating point of the turn-rate law"
     depower_setpoint = 0.26
     """
@@ -280,7 +273,7 @@ function FC_Settings(filename::String; path = skc_data_path())
 end
 
 """
-    project_file(project = "system_reelout.yaml") -> String
+    project_file(project = "system_fig8_200m.yaml") -> String
 
 Path of the system project to hand to the kite model, absolute when this package
 carries it in [`skc_data_path`](@ref) and unchanged otherwise, which leaves it a
@@ -293,9 +286,22 @@ the active data path, which `examples/simple_fig8.jl` also points here.
 Not a field of [`FC_Settings`](@ref): which plant a run is flown against is not a
 tuning parameter of the controller.
 """
-function project_file(project::String = "system_reelout.yaml")
+function project_file(project::String = "system_fig8_200m.yaml")
     path = joinpath(skc_data_path(), project)
     return isfile(path) ? path : project
+end
+
+"""
+    fc_settings(project = project_file()) -> String
+
+Get the flight-controller (FC) settings filename from the system project,
+analogous to `KiteUtils.wc_settings`. Returns the value of the `fc_settings`
+field of the project's `system` section; `project` defaults to this package's
+own [`project_file`](@ref) rather than `KiteUtils.PROJECT`.
+"""
+function fc_settings(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["fc_settings"]
 end
 
 """

@@ -4,10 +4,10 @@
 # (src/fc_settings.jl), where the full rationale for each value is documented.
 # A missing key falls back to the struct default, an unknown key is an error.
 #
-# The PLANT is not here either: the system project (system_reelout.yaml next to
-# this file) and the simulation settings it names — including sim_time and the
-# sample_freq whose inverse is the timestep — describe what is being flown, not
-# how it is controlled.
+# The PLANT is not here either: the system project (system_fig8_200m.yaml next to
+# this file) and the simulation settings it names — including sim_time, the
+# sample_freq whose inverse is the timestep, and the initial tether length
+# (l_tethers) — describe what is being flown, not how it is controlled.
 #
 # The POSITION-mode winch gains are NOT here — they live in wc_settings.yaml
 # next to this file and are read straight from there. The
@@ -21,7 +21,6 @@ fc_settings:
   vsm_interval:       1        # Steps between VSM aero updates, 1 = tightest        [-]
   v_wind:             5.0      # Ground wind speed at reference height [m/s]
   compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
-  tether_length:      200.0    # Initial length; longer = tighter angular turns      [m]
   depower_setpoint:   0.26     # Depower held on the pattern                        [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]

@@ -77,7 +77,7 @@ loadable, the V3Kite branch pin). Read them before touching a version bound.
   scaling and returns plain numbers (the winch object it feeds belongs to the kite model),
   and `project_file`, which resolves the system project against this package's `data/`.
   `FC_Settings` holds the controller's tuning ONLY: the plant, the run length
-  (`sim_time`) and the timestep (`1/sample_freq`) are in `data/settings_reelout.yaml`,
+  (`sim_time`) and the timestep (`1/sample_freq`) are in `data/settings_fig8_200m.yaml`,
   and the example takes `s.steps`/`s.dt` back from the model after `init`.
 - `fig8_metrics.jl` — `fig8_metrics`/`print_fig8_metrics`, headless scoring of a flown
   log. No plotting dependency, so sweeps can run headless.
@@ -98,8 +98,8 @@ not yet been lifted into a controller type.
   older V3Kite the path flips to `v3_data_path()` at `init` and the log lands in
   the model's `data/` instead. The run's **system project** does not depend on
   either: `project_file()` returns
-  `data/system_reelout.yaml` as an ABSOLUTE path, which makes KiteUtils resolve
-  `sim_settings` next to it — `data/settings_reelout.yaml` here, not the identically
+  `data/system_fig8_200m.yaml` as an ABSOLUTE path, which makes KiteUtils resolve
+  `sim_settings` next to it — `data/settings_fig8_200m.yaml` here, not the identically
   named file in the model's data. A project this package does not carry is passed
   through unchanged. The geometry, polars and VSM settings never go through the
   project file at all; V3Kite loads them from `v3_data_path()` directly.

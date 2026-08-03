@@ -1,5 +1,5 @@
 # Winch length-controller settings of the figure-of-eight run, named by
-# system_reelout.yaml next to it and loaded into V3Kite's `WC_Settings`. Values
+# system_fig8_200m.yaml next to it and loaded into V3Kite's `WC_Settings`. Values
 # copied from the INSTALLED V3Kite's data/wc_settings.yaml — the one examples/
 # resolves through its branch pin, which is not the same file as a local V3Kite
 # working checkout (they differ in winch_ff_scale and winch_speed_ti). The dated
