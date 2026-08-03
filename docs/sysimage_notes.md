@@ -62,17 +62,27 @@ segments). It happens on every fresh Julia process, independent of
 
 ## Reference measurement
 
-Running `examples/simple_parking.jl` **from within `V3Kite.jl`'s own checkout**
-(plain `julia --project`, no custom sysimage):
+Running `examples/simple_parking.jl` **from within `V3Kite.jl`'s own checkout**,
+via its own `bin/run_julia` (so with a custom system image, same as this repo's
+27 s runs):
 
 ```text
 [ Info: Model bin name: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
 [ Info: v3 model initialized in 2.020781677 seconds.
 ```
 
+Same checkout, plain `julia --project` (no system image):
+
+```text
+[ Info: Model bin name: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+[ Info: v3 model initialized in 1.246194078 seconds.
+```
+
 Same model bin name (same 44pt/95seg structure) as this repo's ~27 s runs — so
-it is not the model, confirming (3). This is the ground truth the fix needs to
-reproduce.
+it is not the model, confirming (3). Both the 2 s and the ~1.25 s figures come
+from `V3Kite.jl`'s own checkout, with and without a system image respectively —
+so sysimage presence/absence is not the differentiator, in either repo. This is
+the ground truth the fix needs to reproduce.
 
 ## Where this stands
 
