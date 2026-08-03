@@ -62,3 +62,4 @@ using Test
     # no simulation and no kite model, so this runs in well under a second.
     include("test_fig8_controller.jl")
 end
+nothing
