@@ -7,36 +7,6 @@
 # so the two resolve together into one Manifest.toml at the repository root —
 # a dependency shared by both is the same version here as in the package.
 #
-# Activate it with `julia --project=examples`, or just run a script — each one
-# activates this directory itself.
-#
-# The two pins below are both workarounds and both temporary:
-#
-# MakieControlPlots 0.1.12 — 0.1.9's legend-height probe throws `only(owned)`
-# when displaying a plotx figure with a legend on more than one row, which is
-# every *_plots.jl script here.
-#
-# RuntimeGeneratedFunctions =0.5.22 — an exact pin on a package no script here
-# calls. 0.5.23 deleted RGF's custom `Serialization.serialize`, which used to
-# write the function body from the cache even for a function `drop_expr` had
-# emptied. ModelingToolkitBase runs every generated function through
-# `drop_expr`, so under 0.5.23 the model binary SymbolicAWEModels writes
-# serializes those bodies as `nothing` and `deserialize` throws "cannot
-# deserialize a dropped RuntimeGeneratedFunction". The cache then never loads
-# and V3Kite's `init` recompiles the model (minutes, 20 MB) on every run.
-# Already fixed on RGF master by SciML/RuntimeGeneratedFunctions.jl#138, but
-# merged without a version bump (see issue #140), so 0.5.23 is still what the
-# registry serves. Drop the pin once 0.5.24 is registered.
-#
-# V3Kite is not registered, so it needs a `[sources]` entry either way. PR #41 is
-# merged, but the pin cannot be "main" yet: `simple_fig8.jl` keeps the data path
-# on this package's `data/` for the whole run, which needs an `init` that does not
-# call `set_data_path` — branch `init-keeps-data-path`. Switch `rev` to "main" once
-# that branch merges. Pkg installs it read-only and a fresh install ships no `.bin`
-# files, which is why `simple_fig8.jl` passes `cache_path` to `init`. A local
-# checkout is the alternative:
-#     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
-#     V3Kite = {path = "../../V3Kite.jl"}
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
@@ -57,7 +27,7 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "init-keeps-data-path"}
+V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.1"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
