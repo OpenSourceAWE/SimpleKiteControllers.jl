@@ -15,7 +15,7 @@ fc_settings:
   # --- simulation conditions ------------------------------------------------
   project:            system_reelout.yaml  # System project in THIS data/, see system_*.yaml
   sim_time:           150.0    # Total simulation time, ~43 s per lap plus descent   [s]
-  dt:                 0.008333333333333333  # Timestep = 0.05/6, NOT a tuning knob   [s]
+  dt:                 0.01     # Timestep                                            [s]
   vsm_interval:       1        # Steps between VSM aero updates, 1 = tightest        [-]
   v_wind:             5.0      # Ground wind speed at reference height [m/s]
   compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
