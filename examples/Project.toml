@@ -28,14 +28,13 @@
 # merged without a version bump (see issue #140), so 0.5.23 is still what the
 # registry serves. Drop the pin once 0.5.24 is registered.
 #
-# V3Kite is not registered, so it needs a `[sources]` entry either way, and the
-# branch pin is there because `simple_fig8.jl` needs `vsm_interval`, `warmup!`,
-# the force-mode winch, `span_mean_aoa` and `init`'s `data_path`/`cache_path`,
-# none of which are on main yet. Switch `rev` to "main" once
-# https://github.com/OpenSourceAWE/V3Kite.jl/pull/41 is merged. Pkg installs it
-# read-only and a fresh install ships no `.bin` files, which is why
-# `simple_fig8.jl` passes `cache_path` to `init`. A local checkout is the
-# alternative:
+# V3Kite is not registered, so it needs a `[sources]` entry either way. PR #41 is
+# merged, but the pin cannot be "main" yet: `simple_fig8.jl` keeps the data path
+# on this package's `data/` for the whole run, which needs an `init` that does not
+# call `set_data_path` — branch `init-keeps-data-path`. Switch `rev` to "main" once
+# that branch merges. Pkg installs it read-only and a fresh install ships no `.bin`
+# files, which is why `simple_fig8.jl` passes `cache_path` to `init`. A local
+# checkout is the alternative:
 #     git clone https://github.com/OpenSourceAWE/V3Kite.jl ../../V3Kite.jl
 #     V3Kite = {path = "../../V3Kite.jl"}
 [deps]
@@ -58,9 +57,7 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-# LOCAL OVERRIDE, do not commit: the checkout's `init-keeps-data-path` branch.
-# Restore the url/rev line above the `[deps]` block before pushing.
-V3Kite = {path = "../../V3Kite.jl"}
+V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "init-keeps-data-path"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

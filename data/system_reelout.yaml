@@ -5,9 +5,10 @@
 #
 # KiteUtils resolves `sim_settings` relative to the directory of this file;
 # `wc_settings` is a bare name, resolved under the ACTIVE data path, which the
-# example points at this directory. Both files are therefore the copies next to
+# example points at this directory. All three files are therefore the copies next to
 # this one. The geometry, polars and VSM settings never pass through here —
 # V3Kite loads them from v3_data_path() directly.
 system:
     sim_settings: "settings_reelout.yaml"
     wc_settings: "wc_settings.yaml"
+    fc_settings: "fc_setting.yaml"
