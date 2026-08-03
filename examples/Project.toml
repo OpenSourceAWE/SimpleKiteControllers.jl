@@ -17,6 +17,7 @@ LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MakieControlPlots = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 SimpleKiteControllers = "6b1669b4-da33-4b52-bbac-669bd9da52ef"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
@@ -27,6 +28,19 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 # has multiple elements) when displaying a plotx figure with a legend on more
 # than one row — which is every *_plots.jl script here. Fixed in 0.1.12.
 MakieControlPlots = "0.1.12"
+# Exact pin, and not a dependency any script here calls: 0.5.23 deleted RGF's
+# custom `Serialization.serialize`, which used to write the function body from
+# the cache even for a function `drop_expr` had emptied. ModelingToolkitBase
+# runs every generated function through `drop_expr`, so under 0.5.23 the model
+# binary SymbolicAWEModels writes serializes those bodies as `nothing` and
+# `deserialize` throws "cannot deserialize a dropped RuntimeGeneratedFunction".
+# The cache then never loads: V3Kite's `init` recompiles the model (minutes) and
+# rewrites 20 MB on every run. Already fixed on RGF master by
+# https://github.com/SciML/RuntimeGeneratedFunctions.jl/pull/138, but merged
+# without a version bump, so 0.5.23 is still what the registry serves — see
+# https://github.com/SciML/RuntimeGeneratedFunctions.jl/issues/140. Drop this
+# pin once 0.5.24 is registered.
+RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
