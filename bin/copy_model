@@ -7,6 +7,11 @@
 # examples/cache/ and the system image into bin/. Both are copied only if both
 # exist, so a half-populated state cannot be created.
 #
+# The copied image comes from a different project, so afterwards both projects
+# are warmed up against it: the packages that are not baked into the image get
+# precompiled into pkgimage caches keyed to it, which would otherwise happen on
+# the first run of a script.
+#
 # Usage: bin/copy_model [path-to-checkout]
 set -e
 
@@ -39,3 +44,12 @@ cp "$SRC_MODEL" examples/cache/
 echo "examples/cache/$MODEL"
 cp "$SRC_IMAGE" bin/
 echo "bin/$IMAGE"
+
+echo "--- Precompiling the workspace with the new system image ---"
+julia --startup-file=no --project=. -J "bin/$IMAGE" -e 'using SimpleKiteControllers'
+
+echo "--- Precompiling examples/ with the new system image ---"
+julia --startup-file=no --project=examples -J "bin/$IMAGE" -e 'using Pkg; Pkg.precompile()'
+julia --startup-file=no --project=examples -J "bin/$IMAGE" -e 'using MakieControlPlots'
+
+echo "Done."
