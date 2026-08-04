@@ -2,26 +2,60 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
 #
-# Put examples/Project.toml back on the public V3Kite (default rev: v1.0.1)
-# and re-resolve. This is the committable state; the price is a ~34 s init(),
-# see docs/sysimage_notes.md. Undo with bin/dev.
+# Put examples/Project.toml back on the public V3Kite and re-resolve. This is
+# the committable state; the price is a ~34 s init(), see docs/sysimage_notes.md.
+# Undo with bin/dev.
 #
-# Usage: bin/free [rev]
-set -e
+# The url/rev line bin/dev commented out is restored verbatim, so the pinned rev
+# survives the round trip. DEFAULT_REV applies only when that memo is missing —
+# a hand-edited file, or a checkout switched by a bin/dev predating it.
+#
+# Usage: bin/free [rev]           force a rev instead of restoring the memo
+set -euo pipefail
 
-if [[ $(basename $(pwd)) == "bin" ]]; then
+if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
 fi
 
-URL="https://github.com/OpenSourceAWE/V3Kite.jl"
-REV=${1:-v1.0.1}
+PROJECT=examples/Project.toml
+[[ -f $PROJECT ]] || { echo "No $PROJECT" >&2; exit 1; }
 
-if ! grep -q "^V3Kite = {" examples/Project.toml; then
-    echo "No V3Kite entry in [sources] of examples/Project.toml" >&2
+URL="https://github.com/OpenSourceAWE/V3Kite.jl"
+DEFAULT_REV=v1.0.1
+
+memo=$(awk '
+    /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+    in_sources && /^#[[:space:]]*V3Kite[[:space:]]*=/ { sub(/^#[[:space:]]*/, ""); print; exit }
+' "$PROJECT")
+
+active=$(awk '
+    /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+    in_sources && /^V3Kite[[:space:]]*=/ { print; exit }
+' "$PROJECT")
+
+if [[ -z $active ]]; then
+    echo "No V3Kite entry in [sources] of $PROJECT" >&2
     exit 1
 fi
 
-sed -i -E "s|^V3Kite = \{.*\}|V3Kite = {url = \"$URL\", rev = \"$REV\"}|" examples/Project.toml
-echo "V3Kite -> $URL @ $REV"
+if [[ -n ${1:-} ]]; then
+    newline="V3Kite = {url = \"$URL\", rev = \"$1\"}"
+elif [[ -n $memo ]]; then
+    newline=$memo
+else
+    newline="V3Kite = {url = \"$URL\", rev = \"$DEFAULT_REV\"}"
+    echo "No commented-out source to restore, falling back to rev $DEFAULT_REV" >&2
+fi
 
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+awk -v newline="$newline" '
+    /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+    in_sources && /^#[[:space:]]*V3Kite[[:space:]]*=/ { next }
+    in_sources && /^V3Kite[[:space:]]*=/ { print newline; next }
+    { print }
+' "$PROJECT" > "$TMP"
+cp "$TMP" "$PROJECT"
+
+echo "V3Kite -> ${newline#*= }"
 julia --project=examples -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'

@@ -35,6 +35,7 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
+# V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.1"}
 V3Kite = {path = "../../V3Kite"}
 
 [extras]

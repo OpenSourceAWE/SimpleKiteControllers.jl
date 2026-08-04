@@ -7,11 +7,48 @@
 # cost ~34 s instead of ~2 s; see docs/sysimage_notes.md. Undo with bin/free
 # before pushing.
 #
+# The public url/rev line is commented out rather than overwritten, so bin/free
+# restores the pinned rev verbatim instead of reconstructing it from a default.
+#
 # Usage: bin/dev [path-to-checkout]
-set -e
+#        bin/dev --status          report the current source, change nothing
+set -euo pipefail
 
-if [[ $(basename $(pwd)) == "bin" ]]; then
+if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
+fi
+
+PROJECT=examples/Project.toml
+[[ -f $PROJECT ]] || { echo "No $PROJECT" >&2; exit 1; }
+
+# The live [sources] entry, skipping both the commented-out memo and the
+# identically named [deps] line.
+active_source() {
+    awk '
+        /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+        in_sources && /^V3Kite[[:space:]]*=/ { print; exit }
+    ' "$PROJECT"
+}
+
+status() {
+    local line dir
+    line=$(active_source)
+    if [[ -z $line ]]; then
+        echo "V3Kite: no entry in [sources] of $PROJECT"
+    elif [[ $line =~ path[[:space:]]*= ]]; then
+        dir=$(sed -E 's|.*path[[:space:]]*=[[:space:]]*"([^"]*)".*|\1|' <<<"$line")
+        [[ $dir == /* ]] || dir="examples/$dir"
+        echo "V3Kite -> $(realpath -m "$dir")" \
+             "($(git -C "$dir" describe --always --dirty 2>/dev/null || echo 'not a git checkout'))"
+        echo "         local checkout - not committable, run bin/free before pushing"
+    else
+        echo "V3Kite -> ${line#*= }"
+    fi
+}
+
+if [[ ${1:-} == --status ]]; then
+    status
+    exit 0
 fi
 
 CHECKOUT=${1:-../V3Kite}
@@ -24,14 +61,27 @@ if ! grep -q '^name = "V3Kite"' "$CHECKOUT/Project.toml"; then
     echo "$CHECKOUT is not V3Kite" >&2
     exit 1
 fi
-if ! grep -q "^V3Kite = {" examples/Project.toml; then
-    echo "No V3Kite entry in [sources] of examples/Project.toml" >&2
+if [[ -z $(active_source) ]]; then
+    echo "No V3Kite entry in [sources] of $PROJECT" >&2
     exit 1
 fi
 
 # Stored relative to examples/, so the entry survives a move of the repo.
 REL=$(realpath --relative-to=examples "$CHECKOUT")
-sed -i -E "s|^V3Kite = \{.*\}|V3Kite = {path = \"$REL\"}|" examples/Project.toml
-echo "V3Kite -> $(realpath "$CHECKOUT") ($(git -C "$CHECKOUT" describe --always --dirty 2>/dev/null || echo 'not a git checkout'))"
 
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+awk -v newline="V3Kite = {path = \"$REL\"}" '
+    /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+    in_sources && /^#[[:space:]]*V3Kite[[:space:]]*=/ { memo = 1 }
+    in_sources && /^V3Kite[[:space:]]*=/ {
+        if (!memo && $0 !~ /path[[:space:]]*=/) print "# " $0
+        print newline
+        next
+    }
+    { print }
+' "$PROJECT" > "$TMP"
+cp "$TMP" "$PROJECT"
+
+status
 julia --project=examples -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'

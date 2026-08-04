@@ -62,10 +62,12 @@ every process. Measured both ways, with and without a system image;
 preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s either way).
 
 Switch it with `bin/dev` (local checkout, default `../V3Kite`) and `bin/free` (back to
-`url`/`rev`) — each rewrites the one `[sources]` line and re-resolves; never edit it by
-hand. A `path` entry is machine-specific, so run `bin/free` before pushing. Either
-direction ends in `Pkg.resolve()` + `Pkg.instantiate()`, which triggers a ~3 min V3Kite
-precompile.
+`url`/`rev`); never edit it by hand. `bin/dev` comments the `url`/`rev` line out and adds
+a `path` line beside it, so `bin/free` restores the pinned rev verbatim — pass
+`bin/free <rev>` only to deliberately move the pin. `bin/dev --status` reports which
+source is active without changing anything. A `path` entry is machine-specific, so run
+`bin/free` before pushing. Either direction ends in `Pkg.resolve()` + `Pkg.instantiate()`,
+which triggers a ~3 min V3Kite precompile.
 
 `LocalPreferences.toml` (root and `examples/`) sets `[Revise] revise_structs = true`, so a
 live REPL session picks up edits to `struct` definitions (`FC_Settings`,
