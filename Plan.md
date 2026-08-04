@@ -150,5 +150,39 @@ Verified afterwards by a short `simple_fig8.jl` run from a fresh REPL: the model
 deserialized in 2.2 s (V3Kite's own ground truth is 2.02 s) and no `.error.log`
 was written, so `load_serialized_model!` never reached its `catch`.
 
+## Step 10 Why a git-rev V3Kite makes init 15x slower
+
+Independent of step 9, and unchanged by it: `init` costs ~2 s with
+`V3Kite = {path = ...}` and ~35 s with `{url = ..., rev = "v1.0.2"}` — same code,
+same model bin, both sources measured with and without a system image
+(docs/sysimage_notes.md). That document's five dead ends establish what it is NOT
+(system image, model cache, RGF version, workload not running); it closes on
+"not yet explained: *why* a git-rev-sourced package's precompiled code goes
+unused."
+
+Every attempt so far compared artifacts. This one captures what the 33 s is
+actually spent compiling: run an init-only script under `--trace-compile` against
+both sources and diff the two logs. That names the methods and the concrete
+types being re-specialized — whether it is the RGF-wrapped ODE right-hand side,
+and if so for which signature — instead of inferring it from which stale file
+might be to blame.
+
+### Measured (2026-08-04) — table in docs/sysimage_notes.md
+
+45.7 s vs 2.57 s init; 309 methods / 36.5 s compiled vs 74 / 3.4 s. The gap is
+compilation, not I/O or JIT of the right-hand side itself: 245 signatures are
+compiled under `url`/`rev` and not at all under `path`, led by ONE instance of
+`DiffEqBase.promote_f` on the MTK `GeneratedFunctionWrapper` ODEFunction at
+22.5 s, then 23 SymbolicIndexingInterface observed-getter closures at 9.2 s.
+All are methods owned by other packages specialized on types that only exist
+once V3Kite's `@compile_workload` runs `init` — external CodeInstances cached
+into V3Kite's pkgimage, which is what a git-rev source fails to reuse.
+
+Next: those 245 signatures are a list, and PackageCompiler takes one
+(`precompile_statements_file` / `precompile_execution_file`). Dead end (1) in
+docs/sysimage_notes.md passed a package list, which never runs `init` and so
+never sees these types. Baking them in would make the COMMITTABLE `url`/`rev`
+state fast rather than routing around it with `bin/dev`.
+
 Also look at docs/ScratchUsage.md and docs/sysimage_notes.md
 

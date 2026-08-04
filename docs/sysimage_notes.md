@@ -142,6 +142,46 @@ unused. That is a Pkg/PrecompileTools question, not something this repo's
 `src/` or `bin/` can work around — the only lever here is the `[sources]` line,
 and a `path` there is machine-specific and cannot be committed.
 
+## What the 33 s actually compiles (2026-08-04)
+
+Everything above compares *artifacts*. This compares *work*: an init-only
+reduction of `simple_fig8.jl` run under `--trace-compile --trace-compile-timing`
+against both sources, same system image, same `examples/cache`.
+
+| | `url` + `rev` | `path` |
+| --- | --- | --- |
+| `init` | 45.7 s | 2.57 s |
+| methods compiled | 309 | 74 |
+| total traced compile time | 36.5 s | 3.4 s |
+
+So the gap is not I/O, deserialization or JIT of the ODE right-hand side
+itself — it is **type inference and codegen of the SciML machinery wrapped
+around it**, and it accounts for essentially the whole difference. 245
+signatures are compiled under `url`/`rev` and under `path` not at all. Three
+groups carry it:
+
+| Compiled only under `url`/`rev` | Count | Time |
+| --- | --- | --- |
+| `DiffEqBase.promote_f(::ODEFunction{true, AutoSpecialize, ModelingToolkitBase.GeneratedFunctionWrapper{...}}, ...)` | 1 | 22.5 s |
+| `SymbolicIndexingInterface.var"#46#47"{ODEIntegrator{FBDF{...}}}` (observed-variable getters) | 23 | 9.2 s |
+| `Serialization.deserialize` / `RuntimeGeneratedFunctions.drop_expr`, one per distinct RGF type | 100 | 0.5 s |
+
+A single `promote_f` instance is half the run. What all three have in common:
+the *method* belongs to another package (DiffEqBase, SymbolicIndexingInterface,
+Serialization) while the *type* it specializes on only ever comes into
+existence when V3Kite's `@compile_workload` runs `init`. Those are external
+specializations — cached into V3Kite's pkgimage, not into their owners'. It is
+exactly this class of cached code that a git-rev-sourced V3Kite fails to reuse,
+which sharpens the open question from "its precompiled code" to "its externally
+owned CodeInstances".
+
+Untried lever this suggests: the 245 signatures are a concrete list, and a
+PackageCompiler sysimage accepts one (`precompile_statements_file`, or
+`precompile_execution_file` pointing at the init-only script). Dead end (1)
+above passed `create_sysimage` a package *list*, which never runs `init` and so
+never sees these types. Baking the statements in would make the **committable**
+`url`/`rev` state fast, instead of routing around it with `bin/dev`.
+
 `bin/create_sys_image` is still worth keeping for `MakieControlPlots`/`GLMakie`
 load time — that part works. It just does not address the `init()` cost this
 investigation was chasing.
