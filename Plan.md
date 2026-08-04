@@ -1,12 +1,12 @@
 # Plan next steps
 
-## Step 1
+## Step 1 - DONE -
 
 The log files in arrow format must be written into the output folder. Create an output folder relative to the repo root if it does not exist. Add this folder to .gitignore
 
 As file name for the log files the field log_file defined in settings_xxx.yaml shall be used.
 
-## Step 2
+## Step 2 - DONE -
 
 Configure Revise such that it revises structs.
 
@@ -19,10 +19,21 @@ Add the following to the LocalPreferences.toml file in your active project:
 [Revise]
 revise_structs = true
 
-## Step 3
+## Step 3 - DONE -
+
 Write a script bin/copy_model that copies the file model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin  
 from ../V3Kite/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin to 
 examples/cache
 and in addition copies the system image ../V3Kite/bin/kps-image-1.12.so to
 the folder bin of this package.
 Check first if both files exist, and copy them only if both exist.
+
+## Step 4 - DONE -
+
+- Add a script menu.jl to the examples folders that allows to run simple_fig8.jl and 
+simple_fig8_plots.jl
+- Add a function menu() to run_julia
+
+## Step 5 - DONE -
+
+In KiteControllers there is the first menu entry select_project. Can you add this to SimpleKiteControllers? Currently, there are three projects (system.yaml files) in the data folder.

@@ -93,6 +93,10 @@ needs no edit of this script — define `fcs` first and it is used as-is:
 Shortening a run is not among them: `sim_time` and `sample_freq` are in
 `data/settings_fig8_200m.yaml`, so a 30 s run means editing that file.
 
+Which system project is flown (150m/200m/300m pattern) is `PROJECT`, defaulting
+to `system_fig8_200m.yaml`; define it first, e.g. via `select_project()`
+(`examples/select_project.jl`), and it is used as-is.
+
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
 `docs/fig8_tuning_log.md`. Add new findings there, not here.
@@ -118,7 +122,7 @@ using Printf
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-PROJECT = "system_fig8_200m.yaml" # defined for 150m, 200m and 300m
+@isdefined(PROJECT) || (PROJECT = "system_fig8_200m.yaml") # defined for 150m, 200m and 300m
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 project_set = Settings(project)
