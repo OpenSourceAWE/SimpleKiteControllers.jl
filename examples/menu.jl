@@ -5,11 +5,13 @@
 Interactive menu for the example scripts.
 
 The chosen script is `include`d, so it runs exactly as it would by hand: it
-activates `examples/` itself and leaves its globals (`fcs`, `PROJECT`,
-`log_name`, ...) in `Main`, where a following selection picks them up.
-`select_project()` sets `PROJECT` before a run; selecting the figure-eight
-run means minutes of wall time; its plots come up on their own at the end, so
-the plotting entry is for a log that is already on disk.
+activates `examples/` itself. `select_project()` and `select_sim_time()` pick
+which system project (150m/200m/300m) and how long a run lasts (the
+project's own `sim_time`, or a specific value in seconds); both are
+persisted to `data/menu_state.yaml` and read fresh on every run rather than
+cached in a `Main` global. Selecting the figure-eight run means minutes of
+wall time; its plots come up on their own at the end, so the plotting entry
+is for a log that is already on disk.
 
 Started by `menu()` in a REPL from `bin/run_julia`, or by
 
@@ -27,8 +29,9 @@ const EXAMPLES_DIR = @__DIR__
 
 const EXAMPLES = [
     "select_project.jl     - choose which system project (150m/200m/300m) to fly" => "select_project.jl",
+    "select_sim_time.jl    - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
-    "simple_fig8_plots.jl  - plot the last logged run" => "simple_fig8_plots.jl",
+    "simple_fig8_plots.jl  - plot the last logged run of active project" => "simple_fig8_plots.jl",
 ]
 
 """

@@ -37,3 +37,21 @@ simple_fig8_plots.jl
 ## Step 5 - DONE -
 
 In KiteControllers there is the first menu entry select_project. Can you add this to SimpleKiteControllers? Currently, there are three projects (system.yaml files) in the data folder.
+
+## Step 6 Refactoring - DONE -
+
+Never use @isdefined in example scripts for model parameters that are set in the script.
+Reason: If I manually include an example script, it shall always read the latest changes
+from the yaml files.
+
+## Step 7 Add menu entry select_sim_time - DONE -
+
+Add a menu entry select_sim_time. It should allow the options:
+
+- default
+- a specific value in seconds
+
+The specific value should be entered numerically. The option default means to use
+the project specific default time.
+
+Store this value in menu_state.yaml

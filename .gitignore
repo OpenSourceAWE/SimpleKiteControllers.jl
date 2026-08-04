@@ -9,3 +9,5 @@
 /examples/cache/
 # Arrow logs written by simple_fig8.jl, named after the project's log_file setting.
 /output/
+# Session state written by examples/select_project.jl; data/menu_state.yaml.default is the template.
+/data/menu_state.yaml

@@ -3,20 +3,24 @@
 
 """
 Interactive menu to choose which system project (`system_fig8_*.yaml`) the
-next `simple_fig8.jl` run flies.
+example scripts fly.
 
-Sets the global `PROJECT` in `Main`, which `simple_fig8.jl` picks up if
-already defined — same session-global pattern as `fcs` and `SHOW_PLOTS`.
+Writes the choice to `data/menu_state.yaml` via [`set_selected_project`](@ref)
+(`examples/menu_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
+and `simple_fig8_plots.jl` read the current selection straight off disk on
+every `include` instead of relying on a REPL variable.
 """
 
 using REPL.TerminalMenus
 using SimpleKiteControllers: skc_data_path
 
+include(joinpath(@__DIR__, "menu_state.jl"))
+
 """
     select_project()
 
-Ask which `system_fig8_*.yaml` project to fly and set the global `PROJECT`
-to the chosen file name.
+Ask which `system_fig8_*.yaml` project to fly and persist the choice to
+`data/menu_state.yaml`.
 """
 function select_project()
     data_dir = skc_data_path()
@@ -27,15 +31,14 @@ function select_project()
         return nothing
     end
 
-    current = @isdefined(PROJECT) ? PROJECT : ""
-    prompt = isempty(current) ? "\nSelect a project: " : "\nSelect a project (current: $current): "
-
+    current = selected_project()
     options = [projects; "quit"]
-    choice = request(prompt, RadioMenu(options, pagesize=8))
+    choice = request("\nSelect a project (current: $current): ", RadioMenu(options, pagesize=8))
 
     if choice != -1 && choice != length(options)
-        global PROJECT = options[choice]
-        println("Project set to: $PROJECT")
+        selected = options[choice]
+        set_selected_project(selected)
+        println("Project set to: $selected")
     else
         println("Selection cancelled.")
     end

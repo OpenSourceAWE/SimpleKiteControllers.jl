@@ -1,0 +1,7 @@
+# Session state written by `select_project()`/`select_sim_time()`
+# (examples/select_project.jl, examples/select_sim_time.jl), tracking which
+# system project (150m/200m/300m fig8 pattern) and simulation time the
+# example scripts fly. Not a tunable — copied to menu_state.yaml (gitignored)
+# the first time either selector runs.
+project: system_fig8_200m.yaml
+sim_time: default

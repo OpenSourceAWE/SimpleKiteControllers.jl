@@ -60,10 +60,13 @@ using SimpleKiteControllers   # FC_Settings, figure_eight_path
 # Where simple_fig8.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
-# Reuses the run's own globals when included from it, so the overlay cannot drift.
-@isdefined(fcs) || (fcs = FC_Settings("fc_settings.yaml"))
-@isdefined(output_path) || (output_path = normpath(joinpath(@__DIR__, "..", "output")))
-@isdefined(log_name) || (log_name = basename(Settings(project_file()).log_file))
+# Read fresh from data/menu_state.yaml on every include, same as simple_fig8.jl,
+# so a manual re-include never plots against a stale project or fcs.
+include(joinpath(@__DIR__, "menu_state.jl"))
+project = project_file(selected_project())
+fcs = FC_Settings(fc_settings(project))
+output_path = normpath(joinpath(@__DIR__, "..", "output"))
+log_name = basename(Settings(project).log_file)
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 

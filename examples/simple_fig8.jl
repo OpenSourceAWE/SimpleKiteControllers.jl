@@ -90,12 +90,15 @@ needs no edit of this script — define `fcs` first and it is used as-is:
     fcs.attractor_dist = 12.0
     include("examples/simple_fig8.jl")
 
-Shortening a run is not among them: `sim_time` and `sample_freq` are in
-`data/settings_fig8_200m.yaml`, so a 30 s run means editing that file.
+`sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
+changing the timestep means editing that file.
 
-Which system project is flown (150m/200m/300m pattern) is `PROJECT`, defaulting
-to `system_fig8_200m.yaml`; define it first, e.g. via `select_project()`
-(`examples/select_project.jl`), and it is used as-is.
+Which system project is flown (150m/200m/300m pattern) and the run length
+(`sim_time`, `default` for the project's own value or a specific number of
+seconds) are read fresh on every `include` from `data/menu_state.yaml`
+(`examples/menu_state.jl`), not `Main` globals: run `select_project()`
+(`examples/select_project.jl`) and `select_sim_time()`
+(`examples/select_sim_time.jl`) beforehand to change them.
 
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
@@ -122,7 +125,10 @@ using Printf
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-@isdefined(PROJECT) || (PROJECT = "system_fig8_200m.yaml") # defined for 150m, 200m and 300m
+include(joinpath(@__DIR__, "menu_state.jl"))
+PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
+SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
+@info "simple_fig8.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 project_set = Settings(project)
@@ -151,14 +157,13 @@ else
     @info "Winch: POSITION mode at compliance = 0 — constant unstretched length."
 end
 
-@info "System project: $project"
-
-# No sim_time/dt: init takes them from the project's settings (sim_time, sample_freq).
+# No dt: init takes it from the project's settings (sample_freq). sim_time falls
+# back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
 # cache_path takes everything V3Kite GENERATES; delete it to force a rebuild.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, wc, cache_path = joinpath(@__DIR__, "cache"),
-    warmup_time = fcs.warmup_time, warmup_wfc = wfc)
+    sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
