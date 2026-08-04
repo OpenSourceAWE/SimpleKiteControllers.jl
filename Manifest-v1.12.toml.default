@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "0f98f7c671de3f80906be9292b7f58a0031e5e77"
+project_hash = "b73e3b45a095d604006543234598eacc60d934c4"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "ec6be48a85c93d995563b84bff8a86bc98df45ce"
@@ -1443,9 +1443,9 @@ version = "0.4.0"
 
 [[deps.KiteUtils]]
 deps = ["Arrow", "CSV", "DocStringExtensions", "LinearAlgebra", "OrderedCollections", "Parameters", "Parsers", "Pkg", "PrecompileTools", "RecursiveArrayTools", "ReferenceFrameRotations", "Rotations", "StaticArrays", "StructArrays", "StructTypes", "YAML"]
-git-tree-sha1 = "e1bb61216d74a50ec19ce63314e3fe94e2ed98e7"
+git-tree-sha1 = "e2237cc9a3f4dd28445374c9667002f57a46cc0e"
 uuid = "90980105-b163-44e5-ba9f-8b1c83bb0533"
-version = "0.11.9"
+version = "0.11.11"
 
 [[deps.Krylov]]
 deps = ["LinearAlgebra", "Printf", "SparseArrays"]
@@ -3051,9 +3051,9 @@ version = "4.40.2"
 
 [[deps.Symbolics]]
 deps = ["ADTypes", "AbstractPlutoDingetjes", "ArrayInterface", "Bijections", "CommonWorldInvalidations", "ConstructionBase", "DataStructures", "DiffRules", "DocStringExtensions", "DomainSets", "DynamicPolynomials", "IntervalSets", "Libdl", "LinearAlgebra", "LogExpFunctions", "MacroTools", "Markdown", "Moshi", "MultivariatePolynomials", "MutableArithmetics", "NaNMath", "PrecompileTools", "Preferences", "Primes", "RecipesBase", "Reexport", "RuntimeGeneratedFunctions", "SciMLPublic", "Setfield", "SparseArrays", "SpecialFunctions", "StaticArraysCore", "SymbolicIndexingInterface", "SymbolicLimits", "SymbolicUtils", "TermInterface"]
-git-tree-sha1 = "d1630f4d1d9c53f3c56cabb00e2659671fde0dfd"
+git-tree-sha1 = "2a8387ae58e5c1afbd8820b5c3ddb300d15ae27f"
 uuid = "0c5d862f-8b57-4792-8d23-62f2024744c7"
-version = "7.32.1"
+version = "7.35.0"
 
     [deps.Symbolics.extensions]
     SymbolicsD3TreesExt = "D3Trees"
@@ -3230,11 +3230,9 @@ version = "1.28.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "UnPack", "VortexStepMethod", "YAML"]
-git-tree-sha1 = "622f72229993af003a33942cf304556b9a47bec8"
-repo-rev = "v1.0.1"
-repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
+path = "../V3Kite"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
-version = "1.0.1"
+version = "1.0.2"
 weakdeps = ["GLMakie"]
 
     [deps.V3Kite.extensions]
