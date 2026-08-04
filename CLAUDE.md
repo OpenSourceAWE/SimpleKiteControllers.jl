@@ -54,7 +54,7 @@ loadable, the V3Kite source). Read them before touching a version bound.
 ### Sourcing V3Kite
 
 `examples/Project.toml` sources V3Kite from a **local path**, not `{url = ..., rev =
-"v1.0.1"}`. This is not cosmetic and not committable, and the two are not
+"v1.0.2"}`. This is not cosmetic and not committable, and the two are not
 interchangeable: with the same code sourced from a git rev, `init()` costs ~34 s instead
 of ~2 s, because V3Kite's precompiled ODE right-hand side goes unused and is re-JIT'ed in
 every process. Measured both ways, with and without a system image;
@@ -163,7 +163,7 @@ not yet been lifted into a controller type.
 
 ## Current state
 
-- Branch `main`. V3Kite is at `v1.0.1`, but sourced from a **local checkout** — see
+- Branch `main`. V3Kite is at `v1.0.2`, but sourced from a **local checkout** — see
   "Sourcing V3Kite" above; `examples/Project.toml` must be put back on `url`/`rev`
   before pushing.
 - **`PlanMigrate.md` is outdated** — it describes the (now completed) move of this
