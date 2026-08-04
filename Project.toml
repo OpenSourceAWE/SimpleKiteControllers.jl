@@ -16,8 +16,9 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [compat]
 # 1 as well as 0.1: bin/kps-image-1.12.so bakes in DiscretePIDs 1.0.0.
 DiscretePIDs = "0.1.6, 1"
-# 0.11, not 0.10.13: KitePodModels 0.4 requires it, so examples/ needs it too.
-KiteUtils = "0.11"
+# 0.11.11, not 0.10.13: KitePodModels 0.4 requires 0.11, and 0.11.11 is the
+# first release that parses a bare-filename `log_file` such as `fig8_200m`.
+KiteUtils = "0.11.11"
 LinearAlgebra = "1"
 Parameters = "0.12.3"
 Printf = "1"
