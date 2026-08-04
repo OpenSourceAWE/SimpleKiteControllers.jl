@@ -9,7 +9,7 @@
 #
 # The V3Kite source below is switched by two scripts, not by hand: `bin/dev`
 # points it at a local checkout (default ../V3Kite), `bin/free` puts it back on
-# `{url = ..., rev = "v1.0.1"}` — the committable state, so run `bin/free`
+# `{url = ..., rev = "v1.0.2"}` — the committable state, so run `bin/free`
 # before pushing. The code is identical either way, but a git-rev source makes
 # `init()` cost ~34 s instead of ~2 s: its precompiled ODE right-hand side goes
 # unused and is re-JIT'ed every process. Measurements and dead ends in
@@ -35,7 +35,7 @@ RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-# V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.1"}
+# V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.2"}
 V3Kite = {path = "../../V3Kite"}
 
 [extras]
