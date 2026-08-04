@@ -31,7 +31,6 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [compat]
 MakieControlPlots = "0.1.12"
-RuntimeGeneratedFunctions = "=0.5.22"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
