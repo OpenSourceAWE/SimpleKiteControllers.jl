@@ -1,0 +1,41 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# Copy the two large, gitignored build products from a local V3Kite checkout
+# (default: ../V3Kite, a sibling of this repository): the cached model into
+# examples/cache/ and the system image into bin/. Both are copied only if both
+# exist, so a half-populated state cannot be created.
+#
+# Usage: bin/copy_model [path-to-checkout]
+set -e
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+CHECKOUT=${1:-../V3Kite}
+
+MODEL=model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+IMAGE=kps-image-1.12.so
+
+SRC_MODEL="$CHECKOUT/data/$MODEL"
+SRC_IMAGE="$CHECKOUT/bin/$IMAGE"
+
+MISSING=0
+for f in "$SRC_MODEL" "$SRC_IMAGE"; do
+    if [[ ! -f "$f" ]]; then
+        echo "Missing: $f" >&2
+        MISSING=1
+    fi
+done
+if [[ $MISSING == 1 ]]; then
+    echo "Nothing copied." >&2
+    exit 1
+fi
+
+mkdir -p examples/cache
+cp "$SRC_MODEL" examples/cache/
+echo "examples/cache/$MODEL"
+cp "$SRC_IMAGE" bin/
+echo "bin/$IMAGE"

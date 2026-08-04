@@ -18,3 +18,11 @@ Add the following to the LocalPreferences.toml file in your active project:
 
 [Revise]
 revise_structs = true
+
+## Step 3
+Write a script bin/copy_model that copies the file model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin  
+from ../V3Kite/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin to 
+examples/cache
+and in addition copies the system image ../V3Kite/bin/kps-image-1.12.so to
+the folder bin of this package.
+Check first if both files exist, and copy them only if both exist.
