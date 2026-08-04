@@ -67,3 +67,88 @@ Add a menu entry select_plots, that displays a checkbox menu with the following 
 Store these values in menu_state.yaml
 
 simple_fi8_plots.jl shall then show only the selected plots.
+
+## Step 9 Investigate problem with bin files - DONE -
+This file: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+exists at multiple locations:
+/home/ufechner/.julia/scratchspaces/4caac9c8-c726-438f-ab10-3553e918eab1/v3kite_cache/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+/home/ufechner/repos/SimpleKiteControllers.jl/examples/cache/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+/home/ufechner/repos/V3Kite/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+/home/ufechner/repos/V3Kite.jl-bak/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+
+But the copy_model script is copying it only to one location. Perhaps that causes problems?
+
+### Findings (2026-08-04)
+
+The number of copies is not the problem — copying to more locations would not help.
+Only `examples/cache` is ever read by this repo: `simple_fig8.jl` passes
+`cache_path = joinpath(@__DIR__, "cache")` to `init`, so V3Kite reads and writes the
+model there and nowhere else. The other three are other producers' caches:
+`../V3Kite/data` (V3Kite runs from its dev checkout, `default_cache_path` =
+`data_path`), `~/.julia/scratchspaces/<V3Kite-uuid>/v3kite_cache` (a Pkg-INSTALLED
+V3Kite, i.e. the `url`/`rev` source, or its `@compile_workload`), and
+`../V3Kite.jl-bak/data` (dead).
+
+The real cause is a **RuntimeGeneratedFunctions version split between the process
+that writes the `.bin` and the one that reads it**. Both committed error logs show:
+
+```text
+ArgumentError: cannot deserialize a dropped RuntimeGeneratedFunction;
+serialize it before calling drop_expr
+```
+
+- RGF **0.5.22** serializes a dropped-expr RGF keeping its type parameter
+  `B = Nothing`, and every version's `deserialize` throws on that — the file is
+  unloadable by anything, including 0.5.22 itself.
+- RGF **0.5.24** adds a `serialize` method for that case, writing a
+  `_SerializedRuntimeGeneratedFunction` proxy that carries the body. Of the eight
+  RGF versions installed in the depot, only 0.5.24 has it.
+
+The environments disagree: this repo's workspace and `../V3Kite/examples` resolve
+**0.5.24** (loadable), `../V3Kite`'s ROOT project resolves **0.5.22** (unloadable).
+So `../V3Kite/data/model_*.bin` — the file `bin/copy_model` takes — is a coin flip:
+written by a run from V3Kite's *examples* env it is fine, written by its *root* env
+(tests, precompile) it is poison, under the identical filename, since the name
+encodes only version and structure.
+
+Good and bad files are told apart without Julia — a good one contains the literal
+string `_SerializedRuntimeGeneratedFunction`:
+
+```text
+0  ~/.julia/scratchspaces/.../v3kite_cache/model_....bin   <- bad
+1  examples/cache/model_....bin                            <- good
+1  ../V3Kite/data/model_....bin                            <- good, md5-identical
+0  ../V3Kite.jl-bak/data/model_....bin                     <- bad
+```
+
+The bad scratchspace file is exactly the one named in the committed
+`docs/model_..._1wch.bin.error.log`, which confirms the test. The failure is nearly
+silent: `load_serialized_model!` catches it, warns, writes the `.error.log` and
+rebuilds the model from source — the symptom is `init` taking minutes again, not a
+crash. Current state is healthy: `examples/cache` holds a good bin.
+
+### Actions - all done 2026-08-04 -
+
+1. `Pkg.update("RuntimeGeneratedFunctions")` in `../V3Kite`'s root environment:
+   0.5.22 ⇒ 0.5.24, removing the only producer of bad files. Its
+   `Manifest-v1.12.toml` is gitignored there, so the checkout stayed clean. Nothing
+   pins RGF in V3Kite, so this can drift back on a future re-resolve — action 3 is
+   the standing guard.
+2. `RuntimeGeneratedFunctions = "0.5.24"` added to `examples/Project.toml`
+   `[compat]`, the pin CLAUDE.md already claimed existed. `Pkg.resolve()` changes
+   neither project nor manifest — 0.5.24 was already resolved here.
+3. `bin/copy_model` now refuses a source `.bin` lacking the
+   `_SerializedRuntimeGeneratedFunction` marker, before touching the destination,
+   and names the `Pkg.update` that fixes the checkout. It removes a stale
+   `*.bin.error.log` next to the destination when it does copy, so a log cannot
+   outlive the file it accuses. Verified against a fake checkout holding the bad
+   scratchspace bin: refused, `examples/cache` unchanged.
+4. Deleted the two dead bins (scratchspace, `.jl-bak`) and the stale
+   `examples/cache/*.bin.error.log`. The copy kept in `docs/` is the record.
+
+Verified afterwards by a short `simple_fig8.jl` run from a fresh REPL: the model
+deserialized in 2.2 s (V3Kite's own ground truth is 2.02 s) and no `.error.log`
+was written, so `load_serialized_model!` never reached its `catch`.
+
+Also look at docs/ScratchUsage.md and docs/sysimage_notes.md
+

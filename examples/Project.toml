@@ -31,6 +31,10 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [compat]
 MakieControlPlots = "0.1.12"
+# 0.5.24, not 0.5.22: only from 0.5.24 does `serialize` handle a dropped-expr
+# RuntimeGeneratedFunction. Written by anything older, examples/cache's compiled
+# model cannot be deserialized by ANY version — init then silently rebuilds it.
+RuntimeGeneratedFunctions = "0.5.24"
 
 [sources]
 SimpleKiteControllers = {path = ".."}

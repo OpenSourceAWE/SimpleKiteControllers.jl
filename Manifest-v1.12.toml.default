@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "e80f8ef69f9396587f13bd8b26d3babf5526b88f"
+project_hash = "7e8a2c2916b4c906cde69fcbf16fa012fb0c7404"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "0a81a018463de6c3f4f2c9360121c562e5add9e4"
@@ -3227,7 +3227,9 @@ version = "1.28.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "UnPack", "VortexStepMethod", "YAML"]
-path = "../V3Kite"
+git-tree-sha1 = "87d79bf866cb8f157aadaeb9047e7768461dd58d"
+repo-rev = "v1.0.2"
+repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
 version = "1.0.2"
 weakdeps = ["GLMakie"]

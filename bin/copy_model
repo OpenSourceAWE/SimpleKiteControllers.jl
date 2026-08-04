@@ -7,6 +7,12 @@
 # examples/cache/ and the system image into bin/. Both are copied only if both
 # exist, so a half-populated state cannot be created.
 #
+# The model is refused unless it carries the marker of a proxy-serialized
+# RuntimeGeneratedFunction. A checkout resolving RuntimeGeneratedFunctions < 0.5.24
+# writes model caches that NO version can deserialize ("cannot deserialize a dropped
+# RuntimeGeneratedFunction"), under the same file name; init then falls back to a
+# full rebuild. Update that checkout instead of copying such a file.
+#
 # The copied image comes from a different project, so afterwards both projects
 # are warmed up against it: the packages that are not baked into the image get
 # precompiled into pkgimage caches keyed to it, which would otherwise happen on
@@ -39,8 +45,18 @@ if [[ $MISSING == 1 ]]; then
     exit 1
 fi
 
+if ! grep -qa _SerializedRuntimeGeneratedFunction "$SRC_MODEL"; then
+    echo "Refusing $SRC_MODEL: serialized by RuntimeGeneratedFunctions < 0.5.24," >&2
+    echo "so it cannot be deserialized. Update that checkout and regenerate it:" >&2
+    echo "  julia --project=$CHECKOUT -e 'using Pkg; Pkg.update(\"RuntimeGeneratedFunctions\")'" >&2
+    echo "Nothing copied." >&2
+    exit 1
+fi
+
 mkdir -p examples/cache
 cp "$SRC_MODEL" examples/cache/
+# A log from the previous cache entry would outlive the file it accuses.
+rm -f "examples/cache/$MODEL.error.log"
 echo "examples/cache/$MODEL"
 cp "$SRC_IMAGE" bin/
 echo "bin/$IMAGE"
