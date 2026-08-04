@@ -55,3 +55,15 @@ The specific value should be entered numerically. The option default means to us
 the project specific default time.
 
 Store this value in menu_state.yaml
+
+## Step 8 Add menu entry select_plots - DONE -
+
+Add a menu entry select_plots, that displays a checkbox menu with the following check boxes:
+
+- pattern
+- time series
+- aerodynamics
+
+Store these values in menu_state.yaml
+
+simple_fi8_plots.jl shall then show only the selected plots.

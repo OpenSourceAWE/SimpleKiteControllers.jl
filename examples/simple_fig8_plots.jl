@@ -39,6 +39,9 @@ Judge path following by `chi - chi_set`. The third curve in the error panel is
 the error the PID actually regulated (`var_06`), which rides on `psi - chi_set`
 at low kite speed and on `chi - chi_set` at high.
 
+Which of the three figures get shown is controlled by `select_plots()`
+(`examples/select_plots.jl`), persisted to `data/menu_state.yaml`.
+
 Run from the REPL after (or instead of, if the log already exists) running
 simple_fig8.jl:
 
@@ -65,6 +68,7 @@ set_data_path(skc_data_path())
 include(joinpath(@__DIR__, "menu_state.jl"))
 project = project_file(selected_project())
 fcs = FC_Settings(fc_settings(project))
+plots = selected_plots()
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
 log_name = basename(Settings(project).log_file)
 syslog = load_log(log_name; path = output_path)
@@ -104,87 +108,94 @@ chi_u  = unwrap_angle(chi)
 err_course  = rad2deg.(wrap_to_pi.(chi .- chiset))
 err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 
-@info "Plotting the pattern..."
-p1 = plotxy(
-    [az_deg, ref_az],
-    [el_deg, ref_el];
-    xlabel = L"\mathrm{azimuth}~[°]",
-    ylabel = L"\mathrm{elevation}~[°]",
-    legend = [L"\mathrm{flown}", L"\mathrm{reference}"],
-    fig = fig_name * " – pattern",
-)
-display(p1)
-sleep(0.1)
+if "pattern" in plots
+    @info "Plotting the pattern..."
+    project_name = replace(basename(project), ".yaml" => "")
+    p1 = plotxy(
+        [az_deg, ref_az],
+        [el_deg, ref_el];
+        xlabel = L"\mathrm{azimuth}~[°]",
+        ylabel = L"\mathrm{elevation}~[°]",
+        legend = [L"\mathrm{flown}", L"\mathrm{reference}"],
+        fig = replace(fig_name, "Figure-of-Eight" => project_name) * " – pattern",
+    )
+    display(p1)
+    sleep(0.1)
+end
 
-@info "Plotting the time series..."
-# `getindex` because l_tether is one entry per tether and the V3 has one.
-l_tether = getindex.(sl.l_tether[rng], 1)
-l_set = fill(Float64(sl.l_tether[1][1]), length(rng))
-# Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
-state = Float64.(sl.sys_state[rng])
-p2 = plotx(
-    sl.time[rng],
-    sl.var_01[rng],
-    [el_deg, Float64.(sl.var_04[rng])],
-    [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
-     rad2deg.(onto(chi_u, chi, chiset))],
-    [err_course, err_heading, Float64.(sl.var_06[rng])],
-    (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
-    getindex.(sl.winch_force[rng], 1),
-    [l_tether, l_set],
-    state;
-    xlabel = L"\mathrm{time}~[\mathrm{s}]",
-    ysize = 18,
-    legendsize = 16,
-    ylabels = [
-        L"d~[°]",
-        L"\mathrm{elevation}~[°]",
-        L"\psi,~\chi~[°]",
-        L"\Delta\chi~[°]",
-        L"u_{\mathrm{s}}~[\%]",
-        L"F_{\mathrm{tether}}~[\mathrm{N}]",
-        L"l_{\mathrm{tether}}~[\mathrm{m}]",
-        L"\mathrm{state}~[-]",
-    ],
-    labels = [
-        nothing,
-        [L"\mathrm{kite}", L"\mathrm{pattern~centre}"],
-        [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
-        [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
-         L"\mathrm{regulated}"],
-        [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
-        nothing,
-        [L"l_{\mathrm{tether}}", L"l_{0}"],
-        # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-        L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled}",
-    ],
-    fig = fig_name * " – time series",
-)
-display(p2)
-sleep(0.1)
+if "time_series" in plots
+    @info "Plotting the time series..."
+    # `getindex` because l_tether is one entry per tether and the V3 has one.
+    l_tether = getindex.(sl.l_tether[rng], 1)
+    l_set = fill(Float64(sl.l_tether[1][1]), length(rng))
+    # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
+    state = Float64.(sl.sys_state[rng])
+    p2 = plotx(
+        sl.time[rng],
+        sl.var_01[rng],
+        [el_deg, Float64.(sl.var_04[rng])],
+        [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
+         rad2deg.(onto(chi_u, chi, chiset))],
+        [err_course, err_heading, Float64.(sl.var_06[rng])],
+        (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
+        getindex.(sl.winch_force[rng], 1),
+        [l_tether, l_set],
+        state;
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 16,
+        ylabels = [
+            L"d~[°]",
+            L"\mathrm{elevation}~[°]",
+            L"\psi,~\chi~[°]",
+            L"\Delta\chi~[°]",
+            L"u_{\mathrm{s}}~[\%]",
+            L"F_{\mathrm{tether}}~[\mathrm{N}]",
+            L"l_{\mathrm{tether}}~[\mathrm{m}]",
+            L"\mathrm{state}~[-]",
+        ],
+        labels = [
+            nothing,
+            [L"\mathrm{kite}", L"\mathrm{pattern~centre}"],
+            [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
+            [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
+             L"\mathrm{regulated}"],
+            [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
+            nothing,
+            [L"l_{\mathrm{tether}}", L"l_{0}"],
+            # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
+            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled}",
+        ],
+        fig = fig_name * " – time series",
+    )
+    display(p2)
+    sleep(0.1)
+end
 
-@info "Plotting the aerodynamics..."
-p3 = plotx(
-    sl.time[rng],
-    [rad2deg.(Float64.(sl.AoA[rng])), Float64.(sl.var_09[rng])],
-    [Float64.(sl.var_15[rng]), Float64.(sl.var_16[rng])],
-    [Float64.(sl.v_app[rng]), v_kite];
-    xlabel = L"\mathrm{time}~[\mathrm{s}]",
-    ysize = 18,
-    legendsize = 16,
-    ylabels = [
-        L"\alpha~[°]",
-        L"L/D~[-]",
-        L"v~[\mathrm{m/s}]",
-    ],
-    labels = [
-        [L"\alpha_{\mathrm{centre}}", L"\alpha_{\mathrm{span~mean}}"],
-        [L"\mathrm{wing}", L"\mathrm{effective}"],
-        [L"v_{\mathrm{app}}", L"|v_{\mathrm{kite}}|"],
-    ],
-    fig = fig_name * " – aerodynamics",
-)
-display(p3)
-sleep(0.1)
+if "aerodynamics" in plots
+    @info "Plotting the aerodynamics..."
+    p3 = plotx(
+        sl.time[rng],
+        [rad2deg.(Float64.(sl.AoA[rng])), Float64.(sl.var_09[rng])],
+        [Float64.(sl.var_15[rng]), Float64.(sl.var_16[rng])],
+        [Float64.(sl.v_app[rng]), v_kite];
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 16,
+        ylabels = [
+            L"\alpha~[°]",
+            L"L/D~[-]",
+            L"v~[\mathrm{m/s}]",
+        ],
+        labels = [
+            [L"\alpha_{\mathrm{centre}}", L"\alpha_{\mathrm{span~mean}}"],
+            [L"\mathrm{wing}", L"\mathrm{effective}"],
+            [L"v_{\mathrm{app}}", L"|v_{\mathrm{kite}}|"],
+        ],
+        fig = fig_name * " – aerodynamics",
+    )
+    display(p3)
+    sleep(0.1)
+end
 
 nothing

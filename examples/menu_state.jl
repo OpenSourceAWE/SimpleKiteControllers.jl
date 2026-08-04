@@ -3,21 +3,23 @@
 
 """
 Read/write access to `data/menu_state.yaml`, the persisted choice of which
-system project (`system_fig8_*.yaml`) and simulation time the example
-scripts fly.
+system project (`system_fig8_*.yaml`), simulation time and set of plots the
+example scripts fly/show.
 
 Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
-[`selected_project`](@ref)/[`selected_sim_time`](@ref) fresh on every
-`include`, so a manual re-include always reflects the file on disk rather
-than a REPL variable left over from an earlier run. `select_project()`
-(`examples/select_project.jl`) and `select_sim_time()`
-(`examples/select_sim_time.jl`) are the only writers.
+[`selected_project`](@ref)/[`selected_sim_time`](@ref)/[`selected_plots`](@ref)
+fresh on every `include`, so a manual re-include always reflects the file on
+disk rather than a REPL variable left over from an earlier run.
+`select_project()` (`examples/select_project.jl`), `select_sim_time()`
+(`examples/select_sim_time.jl`) and `select_plots()`
+(`examples/select_plots.jl`) are the only writers.
 """
 
 using SimpleKiteControllers: skc_data_path
 
 menu_state_file() = joinpath(skc_data_path(), "menu_state.yaml")
 default_project() = "system_fig8_200m.yaml"
+default_plots() = ["pattern", "time_series", "aerodynamics"]
 
 function ensure_menu_state_file()
     state_file = menu_state_file()
@@ -62,19 +64,36 @@ function selected_sim_time()
 end
 
 """
-    write_menu_state(; project = selected_project(), sim_time = selected_sim_time())
+    selected_plots() -> Vector{String}
 
-Rewrite `menu_state.yaml` with both fields, defaulting each to its current
-value so setting one leaves the other untouched.
+Persisted set of plots `simple_fig8_plots.jl` shows, falling back to
+[`default_plots`](@ref) (all of them) if `menu_state.yaml` has no `plots:`
+entry.
+"""
+function selected_plots()
+    value = read_menu_state_field("plots")
+    isnothing(value) && return default_plots()
+    value == "none" && return String[]
+    return String.(split(value, ','))
+end
+
+"""
+    write_menu_state(; project = selected_project(), sim_time = selected_sim_time(),
+                        plots = selected_plots())
+
+Rewrite `menu_state.yaml` with all fields, defaulting each to its current
+value so setting one leaves the others untouched.
 """
 function write_menu_state(; project::String = selected_project(),
-        sim_time::Union{Real, Nothing} = selected_sim_time())
+        sim_time::Union{Real, Nothing} = selected_sim_time(),
+        plots::Vector{String} = selected_plots())
     open(menu_state_file(), "w") do io
-        println(io, "# Session state written by `select_project()`/`select_sim_time()`")
-        println(io, "# (examples/select_project.jl, examples/select_sim_time.jl).")
-        println(io, "# Not a tunable — see menu_state.yaml.default.")
+        println(io, "# Session state written by `select_project()`/`select_sim_time()`/")
+        println(io, "# `select_plots()` (examples/select_project.jl, examples/select_sim_time.jl,")
+        println(io, "# examples/select_plots.jl). Not a tunable — see menu_state.yaml.default.")
         println(io, "project: ", project)
         println(io, "sim_time: ", isnothing(sim_time) ? "default" : sim_time)
+        println(io, "plots: ", isempty(plots) ? "none" : join(plots, ","))
     end
     return nothing
 end
@@ -82,7 +101,7 @@ end
 """
     set_selected_project(project::String)
 
-Persist `project` as the current selection, keeping `sim_time` unchanged.
+Persist `project` as the current selection, keeping `sim_time`/`plots` unchanged.
 """
 set_selected_project(project::String) = write_menu_state(; project)
 
@@ -90,6 +109,14 @@ set_selected_project(project::String) = write_menu_state(; project)
     set_selected_sim_time(sim_time::Union{Real, Nothing})
 
 Persist `sim_time` (seconds, or `nothing` for `default`) as the current
-selection, keeping `project` unchanged.
+selection, keeping `project`/`plots` unchanged.
 """
 set_selected_sim_time(sim_time::Union{Real, Nothing}) = write_menu_state(; sim_time)
+
+"""
+    set_selected_plots(plots::Vector{String})
+
+Persist `plots` (a subset of [`default_plots`](@ref)) as the current
+selection, keeping `project`/`sim_time` unchanged.
+"""
+set_selected_plots(plots::Vector{String}) = write_menu_state(; plots)
