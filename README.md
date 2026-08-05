@@ -32,24 +32,37 @@ Planned:
 ## Examples
 
 `examples/simple_fig8.jl` flies the figure-of-eight controller on the TU Delft V3 kite,
-using [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) as the plant. V3Kite is not
-registered, so clone it next to this repository before running:
+using [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) as the plant.
+
+For easy use of the examples and scripts it is suggested to install the package using git:
 
 ```bash
-git clone https://github.com/OpenSourceAWE/V3Kite.jl V3Kite
-cd V3Kite/bin
+git clone https://github.com/OpenSourceAWE/SimpleKiteControllers.jl
+cd SimpleKiteControllers.jl/bin
 ./install
 ./create_sys_image
-cd ../../SimpleKiteControllers
-./bin/copy_image
+cd ..
 ./bin/run_julia
 ```
+The step `create_sys_image` is not strictly needed and takes 15-60 min. Skip it if you are short of time. 
 
 Then, from a Julia REPL in this repository:
 
 ```julia
 menu()
 ```
+This function will show the following menu:
+
+```text
+Choose example to run or `q` to quit: 
+ > select_project.jl     - choose which system project (150m/200m/300m) to fly
+   select_sim_time.jl    - choose the simulation time (default or a specific value)
+   select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)
+   simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)
+   simple_fig8_plots.jl  - plot the last logged run of active project
+   quit
+```
+The first three entries allow you to change the simulation settings. The script `simple_fig8.jl` runs the simulation and displays the results. The script `simple_fig8_plots.jl` allows you to analyse the results of simulations you run in the past. 
 
 ## TODO
 - add examples for using the parking controller
