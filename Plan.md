@@ -154,3 +154,45 @@ against a model only that depot will ever load.
 
 Also look at docs/ScratchUsage.md and docs/sysimage_notes.md
 
+## Step 11 Local system image without a V3Kite one - DONE 2026-08-05 -
+
+Goal: bake enough of V3Kite's dependency chain into `examples/create_sys_image.jl`'s
+own image that a copy of V3Kite's (installation-simplifying, but 2.3 GB and too
+large for Windows) system image is no longer needed.
+
+Baseline, `using V3Kite, MakieControlPlots`:
+
+| image | load time | size |
+| --- | --- | --- |
+| none | 15.2 s | — |
+| V3Kite's own (`bin/copy_image`) | 1.8 s | 2.19 GB |
+
+**The suggested 8-package list (StaticArrays, Rotations, NonlinearSolve, the
+three OrdinaryDiffEq\* packages, SteadyStateDiffEq, SymbolicIndexingInterface)
+was not enough on its own:** 12.3 s at 1.57 GB — barely better than no image at
+all. `--trace-compile` showed almost nothing left to JIT, so the remaining cost
+is *loading*, not compiling. Isolated it to two packages neither the solver
+list nor `include_transitive_dependencies` pulls in, because both sit *above*
+the solvers in V3Kite's own dependency tree:
+
+| load (fresh process, solver-only image) | time |
+| --- | --- |
+| `ModelingToolkit` alone | 5.8 s |
+| `SymbolicAWEModels` alone (pulls in ModelingToolkit) | 10.9 s |
+| `V3Kite` (pulls in SymbolicAWEModels) | 13.1 s |
+
+Both cost roughly comparable amounts, and both are also most of what makes
+V3Kite's own image large — there is no package set that is both small and fast.
+`examples/create_sys_image.jl` now bakes in the solver list plus
+`ModelingToolkit` and `SymbolicAWEModels` on every platform except Windows,
+where only `ModelingToolkit` is added (smaller image, part of the speed gap
+closed, exact numbers not measured — no Windows machine available here).
+`examples/Project.toml` carries both as direct deps for the same reason as the
+solver packages: `PackageCompiler.create_sysimage` requires it.
+
+**Rebuilt and confirmed:** the full (non-Windows) image built locally via
+`bin/create_sys_image` is **2.29 GB, 1.58 s** load time — matches V3Kite's own
+image on speed, at essentially the same size, without ever copying a system
+image out of a V3Kite checkout. `bin/copy_image` is no longer needed on this
+platform; it stays for Windows use until that path is measured separately.
+
