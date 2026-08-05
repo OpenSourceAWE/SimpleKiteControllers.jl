@@ -2,12 +2,14 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
 
-# Creates a PackageCompiler system image with MakieControlPlots precompiled
-# for the example scripts; bin/run_julia picks it up automatically. It speeds up
-# plotting-stack load time only, not init() — see docs/sysimage_notes.md.
-# Neither SimpleKiteControllers nor V3Kite goes into the image, so Revise keeps
-# applying to both sources; V3Kite is left to Pkg's ordinary precompilation,
-# which this script warms up below.
+# Creates a PackageCompiler system image with MakieControlPlots and most of
+# V3Kite's own dependency chain precompiled for the example scripts;
+# bin/run_julia picks it up automatically. It speeds up package load time, not
+# init() — see docs/sysimage_notes.md and examples/create_sys_image.jl, which
+# also bakes in ModelingToolkit and SymbolicAWEModels everywhere except
+# Windows, where the full image is too large. Neither SimpleKiteControllers nor
+# V3Kite goes into the image, so Revise keeps applying to both sources; V3Kite
+# is left to Pkg's ordinary precompilation, which this script warms up below.
 #
 # PackageCompiler is not a dependency of examples/ or the root project: it is
 # installed into a throwaway environment that is stacked onto examples/'s via
