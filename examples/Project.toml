@@ -10,11 +10,15 @@
 # The V3Kite source below is switched by two scripts, not by hand: `bin/dev`
 # points it at a local checkout (default ../V3Kite), `bin/free` puts it back on
 # `{url = ..., rev = "v1.0.2"}` — the committable state, so run `bin/free`
-# before pushing. The choice is about Revise on V3Kite's source only; `init()`
-# costs ~2.9 s either way since it stopped passing `cache_path`. It used to cost
-# ~45 s under `url`/`rev`, which was the model binary, not the source —
-# docs/sysimage_notes.md.
+# before pushing. The choice is about Revise on V3Kite's source only.
 #
+# ModelingToolkit, NonlinearSolve, OrdinaryDiffEqBDF, OrdinaryDiffEqCore,
+# OrdinaryDiffEqNonlinearSolve, Rotations, StaticArrays, SteadyStateDiffEq,
+# SymbolicAWEModels and SymbolicIndexingInterface are unused by any script
+# here — they are V3Kite's own solver-stack dependencies, added ONLY because
+# PackageCompiler.create_sysimage requires every baked-in package to be a
+# direct dependency of the active project. 
+
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
@@ -22,18 +26,25 @@ KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MakieControlPlots = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
+ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
+OrdinaryDiffEqBDF = "6ad6398a-0878-4a85-9266-38940aa047c8"
+OrdinaryDiffEqCore = "bbf590c4-e513-4bbe-9b18-05decba2e5d8"
+OrdinaryDiffEqNonlinearSolve = "127b3ac7-2247-4354-8eb6-78cf4e7c58e8"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 SimpleKiteControllers = "6b1669b4-da33-4b52-bbac-669bd9da52ef"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
+SymbolicAWEModels = "9c9a347c-5289-41db-a9b9-25ccc76c3360"
+SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [compat]
 MakieControlPlots = "0.1.12"
-# 0.5.24, not 0.5.22: only from 0.5.24 does `serialize` handle a dropped-expr
-# RuntimeGeneratedFunction. Written by anything older, the cached compiled model
-# cannot be deserialized by ANY version — init then silently rebuilds it.
 RuntimeGeneratedFunctions = "0.5.24"
 
 [sources]
