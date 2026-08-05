@@ -120,6 +120,7 @@ using Statistics: mean
 using Printf
 
 @info "simple_fig8.jl: figure-of-eight path following of the V3 kite."
+toc("Loaded packages in: ")
 
 # ==================== USER PARAMETERS ==================== #
 
@@ -181,7 +182,7 @@ c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
 @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
                 c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
                fcs.body_damping, fcs.depower_setpoint,
-               coeffs.interpolated ? " (INTERPOLATED, not identified)" : "",
+               coeffs.interpolated ? " (INTERPOLATED)" : "",
                c1, c2, delay)
 
 # c1 must match the body damping in use; that is what makes this check meaningful.
