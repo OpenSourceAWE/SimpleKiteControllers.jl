@@ -2,16 +2,14 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
 #
-# Copy the two large, gitignored build products from a local V3Kite checkout
-# (default: ../V3Kite, a sibling of this repository): the cached model into
-# examples/cache/ and the system image into bin/. Both are copied only if both
-# exist, so a half-populated state cannot be created.
+# Copy the system image from a local V3Kite checkout (default: ../V3Kite, a
+# sibling of this repository) into bin/.
 #
-# The model is refused unless it carries the marker of a proxy-serialized
-# RuntimeGeneratedFunction. A checkout resolving RuntimeGeneratedFunctions < 0.5.24
-# writes model caches that NO version can deserialize ("cannot deserialize a dropped
-# RuntimeGeneratedFunction"), under the same file name; init then falls back to a
-# full rebuild. Update that checkout instead of copying such a file.
+# It no longer copies the model cache. `init` is called without `cache_path`, so
+# it reads the model from V3Kite's own cache directory — the one V3Kite's
+# precompile workload compiled against. A copy placed anywhere else is a
+# DIFFERENT binary as far as the cached SciML specializations are concerned, and
+# costs ~40 s of re-JIT per process; see docs/sysimage_notes.md.
 #
 # The copied image comes from a different project, so afterwards both projects
 # are warmed up against it: the packages that are not baked into the image get
@@ -27,37 +25,15 @@ fi
 
 CHECKOUT=${1:-../V3Kite}
 
-MODEL=model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
 IMAGE=kps-image-1.12.so
-
-SRC_MODEL="$CHECKOUT/data/$MODEL"
 SRC_IMAGE="$CHECKOUT/bin/$IMAGE"
 
-MISSING=0
-for f in "$SRC_MODEL" "$SRC_IMAGE"; do
-    if [[ ! -f "$f" ]]; then
-        echo "Missing: $f" >&2
-        MISSING=1
-    fi
-done
-if [[ $MISSING == 1 ]]; then
+if [[ ! -f "$SRC_IMAGE" ]]; then
+    echo "Missing: $SRC_IMAGE" >&2
     echo "Nothing copied." >&2
     exit 1
 fi
 
-if ! grep -qa _SerializedRuntimeGeneratedFunction "$SRC_MODEL"; then
-    echo "Refusing $SRC_MODEL: serialized by RuntimeGeneratedFunctions < 0.5.24," >&2
-    echo "so it cannot be deserialized. Update that checkout and regenerate it:" >&2
-    echo "  julia --project=$CHECKOUT -e 'using Pkg; Pkg.update(\"RuntimeGeneratedFunctions\")'" >&2
-    echo "Nothing copied." >&2
-    exit 1
-fi
-
-mkdir -p examples/cache
-cp "$SRC_MODEL" examples/cache/
-# A log from the previous cache entry would outlive the file it accuses.
-rm -f "examples/cache/$MODEL.error.log"
-echo "examples/cache/$MODEL"
 cp "$SRC_IMAGE" bin/
 echo "bin/$IMAGE"
 

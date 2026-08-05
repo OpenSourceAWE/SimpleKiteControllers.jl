@@ -159,10 +159,11 @@ end
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
 # back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
-# cache_path takes everything V3Kite GENERATES; delete it to force a rebuild.
+# No cache_path either: V3Kite's default is where its own precompile workload
+# compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, wc, cache_path = joinpath(@__DIR__, "cache"),
+    system_yaml = project, wc,
     sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 

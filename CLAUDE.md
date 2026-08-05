@@ -37,7 +37,14 @@ include("examples/simple_fig8.jl")     # 150 s sim time = many minutes of wall t
 Override any parameter by defining `fcs` (and optionally `SHOW_PLOTS = false`) in the
 REPL *before* the `include`; the script only loads `fc_settings.yaml` into `fcs` if
 nothing else has. Keep the same REPL across runs — the first one compiles the V3 model
-into `examples/cache/` (a few minutes, ~23 MB, gitignored).
+(a few minutes, ~23 MB) into V3Kite's own cache directory.
+
+`init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
+where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
+depot scratchspace for an installed copy — and deserializing any *other* model binary
+costs ~40 s of re-JIT per process, because the RuntimeGeneratedFunction id is part of the
+type the cached SciML specializations are keyed to. See
+[docs/sysimage_notes.md](docs/sysimage_notes.md).
 
 ## Environments
 
@@ -53,13 +60,15 @@ loadable, the V3Kite source). Read them before touching a version bound.
 
 ### Sourcing V3Kite
 
-`examples/Project.toml` sources V3Kite from a **local path**, not `{url = ..., rev =
-"v1.0.2"}`. This is not cosmetic and not committable, and the two are not
-interchangeable: with the same code sourced from a git rev, `init()` costs ~34 s instead
-of ~2 s, because V3Kite's precompiled ODE right-hand side goes unused and is re-JIT'ed in
-every process. Measured both ways, with and without a system image;
-[docs/sysimage_notes.md](docs/sysimage_notes.md) has the table and the five dead ends that
-preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s either way).
+`examples/Project.toml` can source V3Kite from a git rev or from a **local path**; a
+`path` entry is machine-specific and not committable. Both give `init()` in ~2.9 s. The
+choice is about Revise on V3Kite's source, not about speed — that was true until
+2026-08-05, when `init` cost ~34 s under `url`/`rev`, and the real cause turned out to be
+that the run deserialized a model binary V3Kite's precompile workload had never compiled
+against. Dropping `cache_path` fixed it for both sources;
+[docs/sysimage_notes.md](docs/sysimage_notes.md) has the crossover table and the six dead
+ends that preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s
+either way).
 
 Switch it with `bin/dev` (local checkout, default `../V3Kite`) and `bin/free` (back to
 `url`/`rev`); never edit it by hand. `bin/dev` comments the `url`/`rev` line out and adds

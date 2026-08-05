@@ -178,11 +178,16 @@ All are methods owned by other packages specialized on types that only exist
 once V3Kite's `@compile_workload` runs `init` — external CodeInstances cached
 into V3Kite's pkgimage, which is what a git-rev source fails to reuse.
 
-Next: those 245 signatures are a list, and PackageCompiler takes one
-(`precompile_statements_file` / `precompile_execution_file`). Dead end (1) in
-docs/sysimage_notes.md passed a package list, which never runs `init` and so
-never sees these types. Baking them in would make the COMMITTABLE `url`/`rev`
-state fast rather than routing around it with `bin/dev`.
+Tried baking them into the system image (`create_sysimage([:MakieControlPlots,
+:V3Kite])` with the init-only fig8 script as `precompile_execution_file`, since
+the existing workload inits a DIFFERENT model and the SciML stack was not in the
+image at all): `init` 45.2 s → 26.7 s on `url`/`rev`, `promote_f` and all 23
+getters gone from the trace. It stops there — underneath sits 36.4 s of
+`RuntimeGeneratedFunctions.generated_callfunc`, the ODE right-hand side itself,
+which does not bake (26 instances still compile at runtime). Not adopted: 40%
+for a fatter image, still 10x slower than `path`, and V3Kite in the image costs
+Revise on V3Kite's source. `bin/dev` remains the lever; details and the next
+thing to check are in docs/sysimage_notes.md.
 
 Also look at docs/ScratchUsage.md and docs/sysimage_notes.md
 
