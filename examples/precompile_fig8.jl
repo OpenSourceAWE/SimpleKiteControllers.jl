@@ -22,7 +22,7 @@ records 30 lines with none of them in it:
 
 Usable either as `precompile_statements_file` (that log) or as
 `precompile_execution_file` when building V3Kite's system image — the one
-`bin/run_julia` uses here, copied over by `bin/copy_model`, NOT this repo's:
+`bin/run_julia` uses here, copied over by `bin/copy_image`, NOT this repo's:
 
     V3KITE_PRECOMPILE_FILE=\$PWD/examples/precompile_fig8.jl ../V3Kite/bin/create_sys_image
 

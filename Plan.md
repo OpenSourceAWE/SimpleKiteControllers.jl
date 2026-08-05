@@ -19,7 +19,7 @@ Add the following to the LocalPreferences.toml file in your active project:
 [Revise]
 revise_structs = true
 
-## Step 3 - DONE -
+## Step 3 - DONE, then partly REVERTED -
 
 Write a script bin/copy_model that copies the file model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin  
 from ../V3Kite/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin to 
@@ -27,6 +27,11 @@ examples/cache
 and in addition copies the system image ../V3Kite/bin/kps-image-1.12.so to
 the folder bin of this package.
 Check first if both files exist, and copy them only if both exist.
+
+Copying the model turned out to be the *cause* of step 10's slow `init`, not a
+speed-up: a copy in `examples/cache` is a different binary from the one V3Kite's
+precompile workload compiled against. The model half is gone and the script,
+copying the system image only, is now `bin/copy_image`.
 
 ## Step 4 - DONE -
 
@@ -68,126 +73,86 @@ Store these values in menu_state.yaml
 
 simple_fi8_plots.jl shall then show only the selected plots.
 
-## Step 9 Investigate problem with bin files - DONE -
-This file: model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
-exists at multiple locations:
-/home/ufechner/.julia/scratchspaces/4caac9c8-c726-438f-ab10-3553e918eab1/v3kite_cache/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
-/home/ufechner/repos/SimpleKiteControllers.jl/examples/cache/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
-/home/ufechner/repos/V3Kite/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
-/home/ufechner/repos/V3Kite.jl-bak/data/model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin
+## Step 9 Investigate problem with bin files - DONE 2026-08-04 -
 
-But the copy_model script is copying it only to one location. Perhaps that causes problems?
+`model_v0.11.1_jl1.12_v3_particle_dir_dynamic_44pnt_95seg_0grp_1wng_1wch.bin`
+existed at four locations at once; the copy script (then `bin/copy_model`, now
+`bin/copy_image`) copied it to one of them.
 
-### Findings (2026-08-04)
+Not a multiplicity problem — the four are four independent producers' caches. The
+real fault was a **RuntimeGeneratedFunctions version split between the process
+writing the `.bin` and the one reading it**: RGF 0.5.22 serializes a dropped-expr
+RGF into a file no version can read back (`ArgumentError: cannot deserialize a
+dropped RuntimeGeneratedFunction`), 0.5.24 writes a
+`_SerializedRuntimeGeneratedFunction` proxy that loads. `../V3Kite`'s root project
+resolved 0.5.22, its `examples/` 0.5.24 — so which of the two wrote
+`../V3Kite/data/model_*.bin` decided whether the file was loadable, under an
+identical filename. The failure is near-silent: `load_serialized_model!` catches
+it, writes a `.bin.error.log` and rebuilds from source, so the symptom is a slow
+`init`, not a crash.
 
-The number of copies is not the problem — copying to more locations would not help.
-Only `examples/cache` is ever read by this repo: `simple_fig8.jl` passes
-`cache_path = joinpath(@__DIR__, "cache")` to `init`, so V3Kite reads and writes the
-model there and nowhere else. The other three are other producers' caches:
-`../V3Kite/data` (V3Kite runs from its dev checkout, `default_cache_path` =
-`data_path`), `~/.julia/scratchspaces/<V3Kite-uuid>/v3kite_cache` (a Pkg-INSTALLED
-V3Kite, i.e. the `url`/`rev` source, or its `@compile_workload`), and
-`../V3Kite.jl-bak/data` (dead).
+Fixed by updating RGF to 0.5.24 in `../V3Kite`'s root env, pinning
+`RuntimeGeneratedFunctions = "0.5.24"` in `examples/Project.toml`, and deleting the
+dead binaries. A good file can be told from a bad one without Julia: it contains
+the literal string `_SerializedRuntimeGeneratedFunction`. The record of the failure
+is `docs/model_..._1wch.bin.error.log`.
 
-The real cause is a **RuntimeGeneratedFunctions version split between the process
-that writes the `.bin` and the one that reads it**. Both committed error logs show:
+Superseded in part by step 10: the script no longer copies a model at all, so the
+marker check it grew here is gone with it.
 
-```text
-ArgumentError: cannot deserialize a dropped RuntimeGeneratedFunction;
-serialize it before calling drop_expr
-```
+## Step 10 Why init was 15x slower from a git-rev V3Kite - DONE 2026-08-05 -
 
-- RGF **0.5.22** serializes a dropped-expr RGF keeping its type parameter
-  `B = Nothing`, and every version's `deserialize` throws on that — the file is
-  unloadable by anything, including 0.5.22 itself.
-- RGF **0.5.24** adds a `serialize` method for that case, writing a
-  `_SerializedRuntimeGeneratedFunction` proxy that carries the body. Of the eight
-  RGF versions installed in the depot, only 0.5.24 has it.
+`init` cost ~2 s with `V3Kite = {path = ...}` and ~45 s with
+`{url = ..., rev = "v1.0.2"}` — same code, same system image.
 
-The environments disagree: this repo's workspace and `../V3Kite/examples` resolve
-**0.5.24** (loadable), `../V3Kite`'s ROOT project resolves **0.5.22** (unloadable).
-So `../V3Kite/data/model_*.bin` — the file `bin/copy_model` takes — is a coin flip:
-written by a run from V3Kite's *examples* env it is fine, written by its *root* env
-(tests, precompile) it is poison, under the identical filename, since the name
-encodes only version and structure.
+**The answer: `[sources]` was never the variable.** It was *which* `model_….bin`
+the run deserializes, and whether V3Kite's `@compile_workload` compiled against
+that same file. The RGF `id` is a hash of the generated body and a *type
+parameter*, so two independently built binaries of the same model produce
+different types — and every specialization the workload cached into V3Kite's
+pkgimage (`DiffEqBase.promote_f` at 22.5 s, 23 `SymbolicIndexingInterface`
+observed-getters at 9.2 s, the `generated_callfunc` instances) is keyed to a type
+that never comes into existence in the other run. All of it re-JITs.
 
-Good and bad files are told apart without Julia — a good one contains the literal
-string `_SerializedRuntimeGeneratedFunction`:
+Swapping only the binary crosses over cleanly:
 
-```text
-0  ~/.julia/scratchspaces/.../v3kite_cache/model_....bin   <- bad
-1  examples/cache/model_....bin                            <- good
-1  ../V3Kite/data/model_....bin                            <- good, md5-identical
-0  ../V3Kite.jl-bak/data/model_....bin                     <- bad
-```
+| `cache_path` holds | `path` source | `url`/`rev` source |
+| --- | --- | --- |
+| the dev checkout's bin | **6.2 s** | 47.1 s |
+| the scratchspace bin | 47.1 s | **5.7 s** |
 
-The bad scratchspace file is exactly the one named in the committed
-`docs/model_..._1wch.bin.error.log`, which confirms the test. The failure is nearly
-silent: `load_serialized_model!` catches it, warns, writes the `.error.log` and
-rebuilds the model from source — the symptom is `init` taking minutes again, not a
-crash. Current state is healthy: `examples/cache` holds a good bin.
+The `path` source only ever looked like a 15x speed-up because under it
+`examples/cache`'s copy and the workload's own file were the same bytes.
 
-### Actions - all done 2026-08-04 -
+**Fix: `init` is called without `cache_path`** (`simple_fig8.jl`,
+`precompile_fig8.jl`), so it defaults to `default_cache_path` — V3Kite's `data/`
+under a `path` source, the depot scratchspace under `url`/`rev`, in both cases the
+directory the workload compiled against. `init` is now 2.9 s on both sources, and
+`bin/dev`/`bin/free` decide only whether Revise sees V3Kite's source.
 
-1. `Pkg.update("RuntimeGeneratedFunctions")` in `../V3Kite`'s root environment:
-   0.5.22 ⇒ 0.5.24, removing the only producer of bad files. Its
-   `Manifest-v1.12.toml` is gitignored there, so the checkout stayed clean. Nothing
-   pins RGF in V3Kite, so this can drift back on a future re-resolve — action 3 is
-   the standing guard.
-2. `RuntimeGeneratedFunctions = "0.5.24"` added to `examples/Project.toml`
-   `[compat]`, the pin CLAUDE.md already claimed existed. `Pkg.resolve()` changes
-   neither project nor manifest — 0.5.24 was already resolved here.
-3. `bin/copy_model` now refuses a source `.bin` lacking the
-   `_SerializedRuntimeGeneratedFunction` marker, before touching the destination,
-   and names the `Pkg.update` that fixes the checkout. It removes a stale
-   `*.bin.error.log` next to the destination when it does copy, so a log cannot
-   outlive the file it accuses. Verified against a fake checkout holding the bad
-   scratchspace bin: refused, `examples/cache` unchanged.
-4. Deleted the two dead bins (scratchspace, `.jl-bak`) and the stale
-   `examples/cache/*.bin.error.log`. The copy kept in `docs/` is the record.
+### Dead ends, all measured and all closed
 
-Verified afterwards by a short `simple_fig8.jl` run from a fresh REPL: the model
-deserialized in 2.2 s (V3Kite's own ground truth is 2.02 s) and no `.error.log`
-was written, so `load_serialized_model!` never reached its `catch`.
+Do not re-attempt these; `docs/sysimage_notes.md` has the numbers.
 
-## Step 10 Why a git-rev V3Kite makes init 15x slower
+1. System image contents — baking `V3Kite` in, leaving it out, making this repo's
+   image byte-identical to V3Kite's. Worth ~4 s either way, never the 40 s.
+2. Stale `.bin` caches regenerated from fresh processes under the sysimage.
+3. V3Kite's `@compile_workload` not running — it runs under both sources.
+4. `create_sysimage([:MakieControlPlots, :V3Kite])` + fig8 workload: 45.2 s →
+   26.7 s, but only by baking what the correct binary gives for free, and it puts
+   V3Kite in the image, which costs Revise on its source.
+5. Feeding a `--pkgimages=no` trace as `precompile_statements_file`: 44.8 s →
+   22.2 s for +1.3 MB, Revise kept. Better than (4) on every axis and still
+   pointless next to using the right binary.
+6. Both Discourse drafts in `docs/` rest on the disproven premise that a git-rev
+   source loses precompiled code. Retracted in place, not posted.
 
-Independent of step 9, and unchanged by it: `init` costs ~2 s with
-`V3Kite = {path = ...}` and ~35 s with `{url = ..., rev = "v1.0.2"}` — same code,
-same model bin, both sources measured with and without a system image
-(docs/sysimage_notes.md). That document's five dead ends establish what it is NOT
-(system image, model cache, RGF version, workload not running); it closes on
-"not yet explained: *why* a git-rev-sourced package's precompiled code goes
-unused."
+### Still open, upstream in V3Kite
 
-Every attempt so far compared artifacts. This one captures what the 33 s is
-actually spent compiling: run an init-only script under `--trace-compile` against
-both sources and diff the two logs. That names the methods and the concrete
-types being re-specialized — whether it is the RGF-wrapped ODE right-hand side,
-and if so for which signature — instead of inferring it from which stale file
-might be to blame.
-
-### Measured (2026-08-04) — table in docs/sysimage_notes.md
-
-45.7 s vs 2.57 s init; 309 methods / 36.5 s compiled vs 74 / 3.4 s. The gap is
-compilation, not I/O or JIT of the right-hand side itself: 245 signatures are
-compiled under `url`/`rev` and not at all under `path`, led by ONE instance of
-`DiffEqBase.promote_f` on the MTK `GeneratedFunctionWrapper` ODEFunction at
-22.5 s, then 23 SymbolicIndexingInterface observed-getter closures at 9.2 s.
-All are methods owned by other packages specialized on types that only exist
-once V3Kite's `@compile_workload` runs `init` — external CodeInstances cached
-into V3Kite's pkgimage, which is what a git-rev source fails to reuse.
-
-Tried baking them into the system image (`create_sysimage([:MakieControlPlots,
-:V3Kite])` with the init-only fig8 script as `precompile_execution_file`, since
-the existing workload inits a DIFFERENT model and the SciML stack was not in the
-image at all): `init` 45.2 s → 26.7 s on `url`/`rev`, `promote_f` and all 23
-getters gone from the trace. It stops there — underneath sits 36.4 s of
-`RuntimeGeneratedFunctions.generated_callfunc`, the ODE right-hand side itself,
-which does not bake (26 instances still compile at runtime). Not adopted: 40%
-for a fatter image, still 10x slower than `path`, and V3Kite in the image costs
-Revise on V3Kite's source. `bin/dev` remains the lever; details and the next
-thing to check are in docs/sysimage_notes.md.
+Ship the model binary (artifact, or `*.bin.xz` in `data/`) so the workload and
+every downstream run share bytes instead of each install minting its own. As it
+stands, `@compile_workload` spends 30–40 s of every V3Kite precompile compiling
+against a model only that depot will ever load.
 
 Also look at docs/ScratchUsage.md and docs/sysimage_notes.md
 

@@ -1,3 +1,10 @@
+> **RETRACTED 2026-08-05 — never posted, kept as a record.** Same flaw as the post
+> it follows up on: the `url`/`rev` and `path` runs did not load the same model
+> binary, so the CodeInstances were not "unused" — they were keyed to RGF types
+> that run never instantiated. The measurements below all reproduce; only the
+> conclusion drawn from them is wrong. See [sysimage_notes.md](sysimage_notes.md),
+> "The actual cause".
+
 Title: Follow-up: a git-rev source seems to disable reuse of *externally owned* precompiled CodeInstances
 
 Follow-up to [the post above](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/discourse_post.md), where the same package at the same commit inited ~20x slower from `Pkg.add(url=..., rev=...)` than from a local `path`. I profiled it instead of comparing artifacts: same script, same system image, both sources, `--trace-compile --trace-compile-timing` (Julia 1.12.6, V3Kite v1.0.2).

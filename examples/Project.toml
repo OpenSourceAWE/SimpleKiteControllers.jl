@@ -10,9 +10,9 @@
 # The V3Kite source below is switched by two scripts, not by hand: `bin/dev`
 # points it at a local checkout (default ../V3Kite), `bin/free` puts it back on
 # `{url = ..., rev = "v1.0.2"}` — the committable state, so run `bin/free`
-# before pushing. The code is identical either way, but a git-rev source makes
-# `init()` cost ~34 s instead of ~2 s: its precompiled ODE right-hand side goes
-# unused and is re-JIT'ed every process. Measurements and dead ends in
+# before pushing. The choice is about Revise on V3Kite's source only; `init()`
+# costs ~2.9 s either way since it stopped passing `cache_path`. It used to cost
+# ~45 s under `url`/`rev`, which was the model binary, not the source —
 # docs/sysimage_notes.md.
 #
 [deps]
@@ -32,8 +32,8 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 [compat]
 MakieControlPlots = "0.1.12"
 # 0.5.24, not 0.5.22: only from 0.5.24 does `serialize` handle a dropped-expr
-# RuntimeGeneratedFunction. Written by anything older, examples/cache's compiled
-# model cannot be deserialized by ANY version — init then silently rebuilds it.
+# RuntimeGeneratedFunction. Written by anything older, the cached compiled model
+# cannot be deserialized by ANY version — init then silently rebuilds it.
 RuntimeGeneratedFunctions = "0.5.24"
 
 [sources]

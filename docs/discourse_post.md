@@ -1,3 +1,10 @@
+> **RETRACTED 2026-08-05 — never posted, kept as a record.** The premise is wrong.
+> The source is not the variable: the two configurations deserialized two
+> *different* model binaries, and the RGF `id` in each is a type parameter, so the
+> precompiled specializations of one are keyed to types the other never creates.
+> Hold the binary fixed and `url`/`rev` and `path` are both 2.9 s. See
+> [sysimage_notes.md](sysimage_notes.md), "The actual cause".
+
 Title: Precompiled native code seems unused when a package is sourced from a git rev instead of a local path
 
 On Julia 1.12.6, the same package at the same commit runs ~20x slower when it comes from `Pkg.add(url=..., rev=...)` than from a local `path`. The hot workload is a ModelingToolkit-generated, `RuntimeGeneratedFunctions`-wrapped ODE right-hand side that the package compiles in a `PrecompileTools.@compile_workload`; with the git-rev source it appears to be re-JIT'ed in every fresh process.

@@ -34,7 +34,7 @@ segments). It happens on every fresh Julia process, independent of
 ## Which system image every number below uses
 
 **V3Kite's, not this repo's.** `bin/kps-image-1.12.so` here is a copy made by
-`bin/copy_model` — `cmp` reports it byte-identical to `../V3Kite/bin/kps-image-1.12.so`
+`bin/copy_image` — `cmp` reports it byte-identical to `../V3Kite/bin/kps-image-1.12.so`
 — and `bin/run_julia` picks that file up. It is built by V3Kite's
 `test/create_sys_image.jl`, which lists 29 packages including the whole SciML
 stack (ModelingToolkit, OrdinaryDiffEq*, NonlinearSolve,
@@ -355,7 +355,7 @@ key), built independently:
 
 | md5 | where | who built it |
 | --- | --- | --- |
-| `54c07adc` | `../V3Kite/data/`, copied to `examples/cache/` by `bin/copy_model` | a dev-checkout run |
+| `54c07adc` | `../V3Kite/data/`, copied to `examples/cache/` by what was then `bin/copy_model` | a dev-checkout run |
 | `ac8cea9a` | `~/.julia/scratchspaces/<V3Kite-uuid>/v3kite_cache/` | the workload, under an installed V3Kite |
 
 Cross them against both sources — same system image, same script
@@ -395,16 +395,14 @@ the other binary. All of it re-JITs.
    to `DEPOT/scratchspaces/<uuid>/v3kite_cache/` and a dev checkout to its own
    `data/` — the package directory is read-only and `Pkg.gc`-able.
 3. So `src/precompile.jl`'s `@compile_workload` builds and compiles against a
-   private scratchspace model, while `examples/cache/` holds whatever
-   `bin/copy_model` took out of the dev checkout. Different bytes, guaranteed.
+   private scratchspace model, while `examples/cache/` held whatever the copy
+   script took out of the dev checkout. Different bytes, guaranteed.
 4. With a `path` source those two are the *same file*, which is the entire
    reason `bin/dev` looks like a 15× speedup.
 
 Confirmed end to end: the `url`/`rev` precompile logs the workload deserializing
 the scratchspace binary (`v3 model initialized in 37.4 s`) and leaves its md5
 unchanged, and a run pointed at that binary then costs 5.7 s.
-
-### What to do about it
 
 ### Done: `cache_path` dropped from `init` (2026-08-05)
 
@@ -422,8 +420,9 @@ The `[sources]` line is no longer a performance decision; `bin/dev` / `bin/free`
 now only decide whether Revise sees V3Kite's source. One-time cost on a machine
 that has not run the configuration before: the `settled_*.bin` is regenerated in
 the new location (both were seeded by copying here, which is equivalent — the
-filename encodes every parameter). `examples/cache/` is now unused; the leftover
-~30 MB there can be deleted.
+filename encodes every parameter). `examples/cache/` is unused and its ~30 MB was
+deleted on 2026-08-05; the `.gitignore` entry stays so a stray copy cannot be
+committed.
 
 Still worth doing upstream in V3Kite: ship the model binary (artifact, or
 `*.bin.xz` in `data/`, which is gitignored today) so the workload and every

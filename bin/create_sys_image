@@ -3,12 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 # Creates a PackageCompiler system image with MakieControlPlots precompiled
-# for the example scripts; bin/run_julia picks it up automatically. Neither
-# SimpleKiteControllers nor V3Kite goes into the image: SimpleKiteControllers
-# stays out so Revise keeps applying to src/, and V3Kite stays out because
-# baking it into a sysimage defeats its own PrecompileTools workload (see
-# examples/create_sys_image.jl for why) — it is left to Pkg's ordinary
-# precompilation instead, which this script still warms up below.
+# for the example scripts; bin/run_julia picks it up automatically. It speeds up
+# plotting-stack load time only, not init() — see docs/sysimage_notes.md.
+# Neither SimpleKiteControllers nor V3Kite goes into the image, so Revise keeps
+# applying to both sources; V3Kite is left to Pkg's ordinary precompilation,
+# which this script warms up below.
 #
 # PackageCompiler is not a dependency of examples/ or the root project: it is
 # installed into a throwaway environment that is stacked onto examples/'s via
@@ -53,8 +52,8 @@ mv -f kps-image_tmp.so "$SOFILE"
 echo "System image created at $SOFILE"
 
 # V3Kite is intentionally NOT in the image (see examples/create_sys_image.jl);
-# this triggers Pkg's ordinary precompilation of it against the new sysimage,
-# so its own PrecompileTools workload lands in a pkgimage cache keyed to it.
+# this triggers Pkg's ordinary precompilation of it against the new sysimage, so
+# its PrecompileTools workload lands in a pkgimage cache keyed to it.
 echo "--- Precompiling examples/ with the new system image ---"
 julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots'
 

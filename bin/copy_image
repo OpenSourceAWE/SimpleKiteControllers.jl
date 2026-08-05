@@ -5,18 +5,18 @@
 # Copy the system image from a local V3Kite checkout (default: ../V3Kite, a
 # sibling of this repository) into bin/.
 #
-# It no longer copies the model cache. `init` is called without `cache_path`, so
-# it reads the model from V3Kite's own cache directory — the one V3Kite's
-# precompile workload compiled against. A copy placed anywhere else is a
-# DIFFERENT binary as far as the cached SciML specializations are concerned, and
-# costs ~40 s of re-JIT per process; see docs/sysimage_notes.md.
+# Was bin/copy_model until it stopped copying the model cache: `init` is called
+# without `cache_path`, so it reads the model from V3Kite's own cache directory —
+# the one V3Kite's precompile workload compiled against. A copy placed anywhere
+# else is a DIFFERENT binary as far as the cached SciML specializations are
+# concerned, and costs ~40 s of re-JIT per process; see docs/sysimage_notes.md.
 #
 # The copied image comes from a different project, so afterwards both projects
 # are warmed up against it: the packages that are not baked into the image get
 # precompiled into pkgimage caches keyed to it, which would otherwise happen on
 # the first run of a script.
 #
-# Usage: bin/copy_model [path-to-checkout]
+# Usage: bin/copy_image [path-to-checkout]
 set -e
 
 if [[ $(basename $(pwd)) == "bin" ]]; then
