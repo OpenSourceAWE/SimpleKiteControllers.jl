@@ -84,4 +84,14 @@ awk -v newline="V3Kite = {path = \"$REL\"}" '
 cp "$TMP" "$PROJECT"
 
 status
-julia --project=examples -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
+
+julia_version=$(julia --version | awk '{print($3)}')
+julia_major=${julia_version:0:3}
+if [[ $julia_major == "1.1" ]]; then
+    julia_major=${julia_version:0:4}
+fi
+SOFILE="bin/kps-image-${julia_major}.so"
+JULIA_IMAGE_FLAG=()
+[[ -f $SOFILE ]] && JULIA_IMAGE_FLAG=(-J "$SOFILE")
+
+julia --project=examples "${JULIA_IMAGE_FLAG[@]}" -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'

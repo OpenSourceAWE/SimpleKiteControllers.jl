@@ -10,6 +10,9 @@
 # survives the round trip. DEFAULT_REV applies only when that memo is missing —
 # a hand-edited file, or a checkout switched by a bin/dev predating it.
 #
+# The closing resolve/instantiate runs under bin/kps-image-<major>.so if that
+# file exists, same as bin/run_julia.
+#
 # Usage: bin/free [rev]           force a rev instead of restoring the memo
 set -euo pipefail
 
@@ -19,6 +22,15 @@ fi
 
 PROJECT=examples/Project.toml
 [[ -f $PROJECT ]] || { echo "No $PROJECT" >&2; exit 1; }
+
+julia_version=$(julia --version | awk '{print($3)}')
+julia_major=${julia_version:0:3}
+if [[ $julia_major == "1.1" ]]; then
+    julia_major=${julia_version:0:4}
+fi
+SOFILE="bin/kps-image-${julia_major}.so"
+JULIA_IMAGE_FLAG=()
+[[ -f $SOFILE ]] && JULIA_IMAGE_FLAG=(-J "$SOFILE")
 
 URL="https://github.com/OpenSourceAWE/V3Kite.jl"
 DEFAULT_REV=v1.0.2
@@ -58,4 +70,4 @@ awk -v newline="$newline" '
 cp "$TMP" "$PROJECT"
 
 echo "V3Kite -> ${newline#*= }"
-julia --project=examples -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
+julia --project=examples "${JULIA_IMAGE_FLAG[@]}" -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
