@@ -34,7 +34,9 @@ Planned:
 `examples/simple_fig8.jl` flies the figure-of-eight controller on the TU Delft V3 kite,
 using [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) as the plant.
 
-![V3 Kite flying a 200 m figure-of-eight pattern](docs/V3_Kite_system_fig8_200m_pattern.png)
+<p align="center">
+  <img src="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/V3_Kite_system_fig8_200m_pattern.png" width="60%" alt="V3 Kite flying a 200 m figure-of-eight pattern">
+</p>
 
 For easy use of the examples and scripts it is suggested to install the package using git:
 
