@@ -144,8 +144,6 @@ Do not re-attempt these; `docs/sysimage_notes.md` has the numbers.
 5. Feeding a `--pkgimages=no` trace as `precompile_statements_file`: 44.8 s →
    22.2 s for +1.3 MB, Revise kept. Better than (4) on every axis and still
    pointless next to using the right binary.
-6. Both Discourse drafts in `docs/` rest on the disproven premise that a git-rev
-   source loses precompiled code. Retracted in place, not posted.
 
 ### Still open, upstream in V3Kite
 
