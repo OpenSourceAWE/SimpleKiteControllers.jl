@@ -27,9 +27,10 @@ PackageCompiler onto `examples/`'s (PackageCompiler is not a dependency of eithe
 and moves the resulting image into `bin/`.
 
 The workload traced into the image (via `precompile_execution_file`, in an
-isolated process) still runs `init`/`step!` on the V3 model, so the example
-scripts' full call path is exercised and the baked-in packages' own precompile
-statements get recorded.
+isolated process) still runs `init`/`step!` on the V3 model, plus a `save_log`/
+`load_log` round trip — `simple_fig8.jl`'s ~10 s Arrow write/read of a
+`Logger` — so `KiteUtils` is baked in too and its call path gets exercised the
+same way.
 """
 
 using Pkg
@@ -43,15 +44,21 @@ workload = tempname() * ".jl"
 write(workload, """
     using V3Kite
     using MakieControlPlots
+    using KiteUtils
 
     set_data_path(v3_data_path())
     s = init(9.51, 150.0; system_yaml = "system_reelout.yaml")
     for _ in 1:5
         step!(s; rel_depower = 0.25, set_length = s.sys_state.l_tether[1])
     end
+
+    log_path = mktempdir()
+    save_log(s.logger, "precompile_workload"; path = log_path, colmeta = timestamp_colmeta())
+    load_log("precompile_workload"; path = log_path)
+    rm(log_path; recursive = true)
     """)
 
-const SOLVER_PACKAGES = [:MakieControlPlots, :StaticArrays, :Rotations, :NonlinearSolve,
+const SOLVER_PACKAGES = [:MakieControlPlots, :KiteUtils, :StaticArrays, :Rotations, :NonlinearSolve,
     :OrdinaryDiffEqBDF, :OrdinaryDiffEqCore, :OrdinaryDiffEqNonlinearSolve,
     :SteadyStateDiffEq, :SymbolicIndexingInterface]
 const WINDOWS_IMAGE = Sys.iswindows()
