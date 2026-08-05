@@ -33,7 +33,7 @@ Planned:
 
 `examples/simple_fig8.jl` flies the figure-of-eight controller on the TU Delft V3 kite,
 using [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) as the plant. V3Kite is not
-registered and has to be **writable** (it caches settled wing geometry), so clone it next to this repository before running:
+registered, so clone it next to this repository before running:
 
 ```bash
 git clone https://github.com/OpenSourceAWE/V3Kite.jl V3Kite
@@ -41,6 +41,7 @@ cd V3Kite/bin
 ./install
 ./create_sys_image
 cd ../../SimpleKiteControllers
+./bin/copy_image
 ./bin/run_julia
 ```
 
