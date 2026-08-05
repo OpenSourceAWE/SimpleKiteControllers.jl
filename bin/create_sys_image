@@ -55,6 +55,6 @@ echo "System image created at $SOFILE"
 # this triggers Pkg's ordinary precompilation of it against the new sysimage, so
 # its PrecompileTools workload lands in a pkgimage cache keyed to it.
 echo "--- Precompiling examples/ with the new system image ---"
-julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots'
+julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots, SimpleKiteControllers'
 
 echo "Done."
