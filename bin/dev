@@ -10,6 +10,9 @@
 # The public url/rev line is commented out rather than overwritten, so bin/free
 # restores the pinned rev verbatim instead of reconstructing it from a default.
 #
+# The closing resolve/instantiate runs under bin/kps-image-<major>.so if that
+# file exists, same as bin/run_julia.
+#
 # Usage: bin/dev [path-to-checkout]
 #        bin/dev --status          report the current source, change nothing
 set -euo pipefail
