@@ -3,10 +3,7 @@
 
 """
 Builds a PackageCompiler system image with MakieControlPlots precompiled for the
-example scripts. That is all it buys: GLMakie/MakieControlPlots load time. It does
-not shorten `init()`, which is governed by whether the model binary being
-deserialized is the one V3Kite's `@compile_workload` compiled against — see
-[docs/sysimage_notes.md](../docs/sysimage_notes.md).
+example scripts. That is all it buys: GLMakie/MakieControlPlots load time. 
 
 Neither V3Kite nor SimpleKiteControllers goes into the image, so Revise keeps
 applying to both packages' sources. V3Kite is left to Pkg's ordinary
