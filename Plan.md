@@ -196,3 +196,15 @@ image on speed, at essentially the same size, without ever copying a system
 image out of a V3Kite checkout. `bin/copy_image` is no longer needed on this
 platform; it stays for Windows use until that path is measured separately.
 
+## Step 12 improve system image - DONE 2026-08-05 -
+
+`save_log`/`load_log` (KiteUtils) cost **15.3 s** under the step-11 image, which
+didn't bake in `KiteUtils` or exercise its Arrow write/read path. Added a
+`save_log`/`load_log` round trip to `examples/create_sys_image.jl`'s
+`precompile_execution_file` workload and `:KiteUtils` to the baked-in package
+list (already a direct dep of `examples/Project.toml`, so no new entry needed
+there).
+
+Rebuilt and measured: `save_log`+`load_log` now **2.6 s**, and the
+`using V3Kite, MakieControlPlots` load time (1.55 s) and image size (2.31 GB)
+are unchanged from step 11 within noise.
