@@ -15,6 +15,11 @@
 # wind, ...) returns HTTP 422 with the solver message; the previous
 # trajectory remains available under GET /trajectory.
 
+using Pkg
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    Pkg.activate(joinpath(@__DIR__))
+end
+
 using HTTP, JSON3, StructTypes
 
 # ---------------------------------------------------------------------------
