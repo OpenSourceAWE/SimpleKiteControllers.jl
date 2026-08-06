@@ -24,6 +24,15 @@ class InflowConditions(TypedDict):
 ```
 Is that good enough for you, or what shall I add/ change?
 
+I see you defined:
+```python
+              wind = Dict("model_type" => "tabulated",
+                          "heights" => [10.0, 100.0, 300.0],
+                          "speeds" => [5.5, 8.0, 9.3]),
+```
+I could add that as custom wind profile law. But that would require some discussion first, because it
+does not really define a profile law.
+
 **Which additional parameters are needed for init**
 
 I see you passed:
@@ -42,3 +51,6 @@ I think, all parameters needed for the initialization should be part of the `Ini
 - average power
 - RMS path following error in degrees
 - anything else ?
+
+**Other questions**
+Is an initial guess needed for the trajectory?
