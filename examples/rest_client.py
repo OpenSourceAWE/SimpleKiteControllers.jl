@@ -37,8 +37,13 @@ class InitParams(TypedDict):
     winch_params: WinchParams
     inflow_conditions: InflowConditions
     trajectory: Trajectory
+    # the following fields are optional; the defaults given in the comments are used if omitted
+    input_depower: NotRequired[float]         # depower setting, default: 1.6
+    reg_weight: NotRequired[float]            # regularization weight, default: 1.0
+    detect_simple_bounds: NotRequired[bool]   # solver flag, default: True
 
 
 class StepParams(TypedDict):
+    length: float      # current length of the tether
     winch_params: WinchParams
     trajectory: Trajectory

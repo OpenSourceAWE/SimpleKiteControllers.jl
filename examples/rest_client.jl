@@ -17,7 +17,6 @@ end
 struct WinchParams
     mode::String # valid values: "reelout", "reelin"
     k_v::Float64 # v_set = k_v * sqrt(force)
-    v_max::Float64 # maximum winch speed
     f_min::Float64 # minimum winch force
     f_max::Float64 # maximum winch force
 end
@@ -29,16 +28,21 @@ struct Trajectory
     elevation::Vector{Float64} # in degrees
 end
 
-struct InitParams
+Base.@kwdef struct InitParams
     name::String      # name of the simulation
     max_time::Float64 # maximum time for the simulation
     length::Float64   # initial length of the tether
     winch_params::WinchParams
     inflow_conditions::InflowConditions
     trajectory::Trajectory
+    # the following fields are optional; the defaults given below are used if omitted
+    input_depower::Float64 = 1.6        # depower setting
+    reg_weight::Float64 = 1.0           # regularization weight
+    detect_simple_bounds::Bool = true   # solver flag
 end
 
 struct StepParams
+    length::Float64   # current length of the tether
     winch_params::WinchParams
     trajectory::Trajectory
 end
