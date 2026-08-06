@@ -12,7 +12,7 @@
 **Which inflow conditions**
 
 My current suggestion would be the struct:
-```
+```python
 class InflowConditions(TypedDict):
     wind_speed: float                   # in m/s at 6 m height
     wind_direction: float               # in degrees, 0 = North, 90 = East
@@ -23,6 +23,19 @@ class InflowConditions(TypedDict):
     turbulence: NotRequired[float]      # in [0, 1], 0 = no turbulence, 1 = full turbulence, default: 0.0
 ```
 Is that good enough for you, or what shall I add/ change?
+
+**Which additional parameters are needed for init**
+
+I see you passed:
+```python
+             extras = Dict("sim_parameters" => Dict(
+                 "input_depower" => 1.6, "reg_weight" => 1.0,
+                 "detect_simple_bounds" => true)))
+```
+Shall these parameters be added to `InitParams` ?
+What is the meaning of these parameters?
+
+I think, all parameters needed for the initialization should be part of the `InitParams` struct.
 
 **Which result are we interested in**
 - average force
