@@ -1,27 +1,8 @@
-# Shared environment for the example scripts. It is NOT the package's own
-# environment: the plotting and simulation stacks (GLMakie, V3Kite and its
-# solver chain) are far heavier than anything SimpleKiteControllers itself needs,
-# and keeping them here leaves the package light.
-#
-# It IS a workspace member of the root project (`[workspace]` in ../Project.toml),
-# so the two resolve together into one Manifest.toml at the repository root —
-# a dependency shared by both is the same version here as in the package.
-#
-# The V3Kite source below is switched by two scripts, not by hand: `bin/dev`
-# points it at a local checkout (default ../V3Kite), `bin/free` puts it back on
-# `{url = ..., rev = "v1.0.2"}` — the committable state, so run `bin/free`
-# before pushing. The choice is about Revise on V3Kite's source only.
-#
-# ModelingToolkit, NonlinearSolve, OrdinaryDiffEqBDF, OrdinaryDiffEqCore,
-# OrdinaryDiffEqNonlinearSolve, Rotations, StaticArrays, SteadyStateDiffEq,
-# SymbolicAWEModels and SymbolicIndexingInterface are unused by any script
-# here — they are V3Kite's own solver-stack dependencies, added ONLY because
-# PackageCompiler.create_sysimage requires every baked-in package to be a
-# direct dependency of the active project. 
-
 [deps]
 DiscretePIDs = "c1363496-6848-4723-8758-079b737f6baf"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -38,18 +19,19 @@ SimpleKiteControllers = "6b1669b4-da33-4b52-bbac-669bd9da52ef"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
+StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
 SymbolicAWEModels = "9c9a347c-5289-41db-a9b9-25ccc76c3360"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
+[sources]
+SimpleKiteControllers = {path = ".."}
+V3Kite = {rev = "v1.0.2", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
+
 [compat]
 MakieControlPlots = "0.1.12"
 RuntimeGeneratedFunctions = "0.5.24"
-
-[sources]
-SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.2"}
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
