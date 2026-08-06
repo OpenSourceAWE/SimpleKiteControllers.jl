@@ -1,0 +1,9 @@
+#!/bin/bash
+# Copyright (c) 2025, 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+../AWETrim/bin/run_server "$@"
