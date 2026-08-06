@@ -23,6 +23,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using HTTP, JSON3, StructTypes
+using GLMakie, MakieControlPlots   # for the pattern plot at the end
 
 # ---------------------------------------------------------------------------
 # The shared structs (as agreed)
@@ -157,6 +158,14 @@ result = step(StepParams(200.0, winch, reply.trajectory))
 @info ("optimized: $(length(result.trajectory.azimuth)) pts, ",
         "elevation $(round(minimum(result.trajectory.elevation); digits=1))° – ",
         "$(round(maximum(result.trajectory.elevation); digits=1))°")
+
+# The pattern in the azimuth/elevation plane: initial guess vs. optimized path.
+p = plotxy([guess.azimuth, result.trajectory.azimuth],
+           [guess.elevation, result.trajectory.elevation];
+           xlabel = "azimuth [°]", ylabel = "elevation [°]",
+           legend = ["initial guess", "optimized"],
+           fig = "reelout pattern")
+display(p)
 
 # ... fly the kite along result.trajectory ...
 
