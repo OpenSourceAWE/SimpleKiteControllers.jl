@@ -83,8 +83,12 @@ StructTypes.StructType(::Type{StepParams}) = StructTypes.Struct()
 const BASE = "http://127.0.0.1:8000"
 
 function post(path, payload; timeout = 600)
+    # retry_non_idempotent: the server drops idle keep-alive connections, so a pooled
+    # socket can be dead by the next call; HTTP.jl only retries POST if it asked for it
+    # (safe: it retries only when no response bytes arrived, i.e. the server never saw it)
     response = HTTP.post(BASE * path, ["Content-Type" => "application/json"];
-                         body = JSON3.write(payload), read_idle_timeout = timeout)
+                         body = JSON3.write(payload), read_idle_timeout = timeout,
+                         retry_non_idempotent = true)
     return response.body
 end
 
