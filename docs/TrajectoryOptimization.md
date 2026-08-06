@@ -3,7 +3,7 @@
 ## First test case (in Julia)
 
 1. define inflow conditions
-2. send init request
+2. send init request with initial guess
 3. receive trajectory
 4. fly it
 
@@ -23,6 +23,7 @@ class InflowConditions(TypedDict):
     turbulence: NotRequired[float]      # in [0, 1], 0 = no turbulence, 1 = full turbulence, default: 0.0
 ```
 Is that good enough for you, or what shall I add/ change?
+--> can be implemented, currently only LOG and CONST implemented
 
 I see you defined:
 ```python
@@ -32,6 +33,7 @@ I see you defined:
 ```
 I could add that as custom wind profile law. But that would require some discussion first, because it
 does not really define a profile law.
+--> Which interpolation would be good? Uwe will investigate.
 
 **Which additional parameters are needed for init**
 
@@ -42,15 +44,22 @@ I see you passed:
                  "detect_simple_bounds" => true)))
 ```
 Shall these parameters be added to `InitParams` ?
+We should define for V3 what is zero and what is one for rel_depower.
 What is the meaning of these parameters?
+--> Uwe: Check how rel_depower is converted to depower line length in KitePod.jl
 
 I think, all parameters needed for the initialization should be part of the `InitParams` struct.
 
 **Which result are we interested in**
 - average force
+- average speed
 - average power
 - RMS path following error in degrees
 - anything else ?
 
+--> Uwe can compare time series data.
+
 **Other questions**
 Is an initial guess needed for the trajectory?
+-> YES
+Optimizer requires it.
