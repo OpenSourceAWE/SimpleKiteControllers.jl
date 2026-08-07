@@ -3,12 +3,13 @@
 # Dependencies:  ] add HTTP JSON3 StructTypes
 #
 # Contract: POST /init receives and replies InitParams; POST /step receives
-# and replies StepParams (both blocking — the reply contains the result).
+# and replies StepParams (blocking by default — the reply contains the result).
 # The reply trajectory is CLOSED (last point == first) with the same number
-# of points you sent. Angles in DEGREES here; the tether length is the
-# `length` field of InitParams / StepParams and the wind is the
-# `inflow_conditions` field of InitParams — nothing travels next to the
-# structs.
+# of points you sent. Angles in DEGREES here; the physical state travels in the
+# structs — the tether length is the `length` field of InitParams / StepParams,
+# the wind is the `inflow_conditions` field of InitParams. Call-mode knobs are
+# keyword arguments instead: `step(params; wait = false)` returns as soon as the
+# solve is queued, so the caller keeps running while the server optimizes.
 #
 # Winch coupling: the optimizer maps v_set = k_v*sqrt(force) onto its radial
 # force model, so the optimized path assumes exactly your winch behavior.
@@ -92,6 +93,8 @@ function post(path, payload; timeout = 600)
     return response.body
 end
 
+get_json(path) = JSON3.read(HTTP.get(BASE * path).body, Dict{String,Any})
+
 as_dict(x) = JSON3.read(JSON3.write(x), Dict{String,Any})
 as_winch(d) = WinchParams(d["mode"], d["k_v"], d["f_min"], d["f_max"])
 as_traj(d) = Trajectory(Float64.(d["azimuth"]), Float64.(d["elevation"]))
@@ -121,14 +124,25 @@ function init(params::InitParams)
 end
 
 """step: send StepParams (incl. the current tether length, + optional new
-inflow) -> receive StepParams with the OPTIMIZED trajectory. Blocks ~10-20 s."""
-function step(params::StepParams; inflow_conditions = nothing)
+inflow) -> receive StepParams with the OPTIMIZED trajectory. Blocks ~10-20 s.
+
+With `wait = false` the server accepts the job and replies immediately; this
+returns the step index instead of StepParams. Poll `status()` until its
+"state" leaves "solving", then fetch the result with `get_json("/trajectory")`
+(that table is in RADIANS, unlike the degrees of the blocking reply)."""
+function step(params::StepParams; inflow_conditions = nothing, wait = true)
     payload = as_dict(params)
     inflow_conditions !== nothing && (payload["inflow_conditions"] = as_dict(inflow_conditions))
+    payload["wait"] = wait
     reply = JSON3.read(post("/step", payload), Dict{String,Any})
+    wait || return reply["step_index"]::Int
     return StepParams(reply["length"], as_winch(reply["winch_params"]),
                       as_traj(reply["trajectory"]))
 end
+
+"""status: server state ("uninitialized"/"ready"/"solving"/"converged"/"failed"),
+step counters and the metrics of the last solve."""
+status() = get_json("/status")
 
 # ---------------------------------------------------------------------------
 # Demo
