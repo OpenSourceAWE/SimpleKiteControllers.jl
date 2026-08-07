@@ -23,8 +23,9 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
+using Timers; tic()
 using HTTP, JSON3, StructTypes
-using GLMakie, MakieControlPlots   # for the pattern plot at the end
+using MakieControlPlots   # for the pattern plot at the end
 
 # ---------------------------------------------------------------------------
 # The shared structs (as agreed)
@@ -164,10 +165,12 @@ inflow = InflowConditions(wind_speed = 5.2, wind_direction = 270.0, profile_law 
 reply = init(InitParams(name = "uwe-sim-1", length = 200.0,
                         winch_params = winch, inflow_conditions = inflow,
                         trajectory = guess))
-@info ("init ok: $(reply.name), starting path $(length(reply.trajectory.azimuth)) pts")
+toc("Executed init in :")
+@info ("Init ok: $(reply.name), starting path $(length(reply.trajectory.azimuth)) pts")
 
 # First optimization (blocking; reply contains the optimized path)
 result = step(StepParams(200.0, winch, reply.trajectory))
+toc("Executed step in: ")
 @info ("optimized: $(length(result.trajectory.azimuth)) pts, ",
         "elevation $(round(minimum(result.trajectory.elevation); digits=1))° – ",
         "$(round(maximum(result.trajectory.elevation); digits=1))°")
@@ -190,4 +193,4 @@ display(p)
 #                                                    profile_law = 6,
 #                                                    heights = [10.0, 50.0, 100.0, 200.0, 300.0],
 #                                                    speeds = [5.5, 7.4, 8.0, 9.3, 8.6]))
-println("refreshed trajectory received")
+# println("refreshed trajectory received")
