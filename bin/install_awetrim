@@ -1,0 +1,82 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# bash script to install the add_run_server branch of https://github.com/awegroup/AWETrim
+# in the folder ../../AWETrim
+#
+# AWETrim is a Python project, so it gets its own venv with the dev and server
+# extras installed in editable mode; bin/run_server (here and in AWETrim) expects
+# exactly that layout: ../AWETrim/venv/bin/python.
+#
+# The checkout is a sibling of this repository, not a subdirectory, so it is
+# shared with the other workspaces that talk to the same server.
+#
+# Re-running the script is safe: an existing checkout is fetched and fast-forwarded
+# rather than re-cloned, and the venv is only created if it is missing. A checkout
+# with local modifications is left alone apart from the dependency install.
+#
+# Usage: bin/install_awetrim
+set -euo pipefail
+
+REPO_URL="https://github.com/awegroup/AWETrim"
+BRANCH="add_run_server"
+TARGET="../AWETrim"
+
+if [[ $(basename "$(pwd)") == "bin" ]]; then
+    cd ..
+fi
+
+# --- prerequisites ------------------------------------------------------------
+for cmd in git python3; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERROR: $cmd not found in PATH." >&2
+        exit 1
+    fi
+done
+
+if ! python3 -c "import venv" >/dev/null 2>&1; then
+    echo "ERROR: the python3 venv module is missing." >&2
+    echo "On Debian/Ubuntu install it with:  sudo apt install python3-venv" >&2
+    exit 1
+fi
+
+# --- clone or update ----------------------------------------------------------
+if [[ -d $TARGET/.git ]]; then
+    echo "Found an existing checkout in $(cd "$TARGET" && pwd), updating it ..."
+    git -C "$TARGET" fetch origin "$BRANCH"
+    if [[ -n $(git -C "$TARGET" status --porcelain) ]]; then
+        echo "WARNING: the checkout has local modifications, skipping the branch update." >&2
+    else
+        git -C "$TARGET" checkout "$BRANCH"
+        git -C "$TARGET" merge --ff-only "origin/$BRANCH"
+    fi
+elif [[ -e $TARGET ]]; then
+    echo "ERROR: $TARGET exists but is not a git repository." >&2
+    echo "Move it out of the way and run this script again." >&2
+    exit 1
+else
+    echo "Cloning $REPO_URL ($BRANCH) into $TARGET ..."
+    git clone --branch "$BRANCH" "$REPO_URL" "$TARGET"
+fi
+
+cd "$TARGET"
+
+# --- virtual environment ------------------------------------------------------
+if [[ ! -x venv/bin/python ]]; then
+    echo "Creating the virtual environment in $(pwd)/venv ..."
+    python3 -m venv venv
+fi
+echo "Using $(venv/bin/python --version)"
+
+echo "Installing AWETrim with the dev and server extras ..."
+venv/bin/pip install --upgrade pip
+venv/bin/pip install -e '.[dev,server]'
+
+# --- check ---------------------------------------------------------------------
+if ! venv/bin/python -c "import fastapi, uvicorn" 2>/dev/null; then
+    echo "ERROR: the server dependencies are still missing after the install." >&2
+    exit 1
+fi
+
+echo "Done. Start the AWETrim server with bin/run_server"
