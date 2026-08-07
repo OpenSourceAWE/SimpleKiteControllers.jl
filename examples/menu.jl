@@ -34,6 +34,7 @@ const EXAMPLES = [
     "select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)" => "select_plots.jl",
     "simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
     "simple_fig8_plots.jl  - plot the last logged run of active project" => "simple_fig8_plots.jl",
+    "optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
 ]
 
 """
