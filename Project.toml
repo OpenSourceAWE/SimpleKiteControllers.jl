@@ -25,7 +25,6 @@ Printf = "1"
 StaticArrays = "1.9.18"
 Statistics = "1"
 YAML = "0.4.16"
-# 1.10, not 1.6.7: KiteUtils declares "1.10, 1.11, 1.12" itself.
 julia = "1.12"
 
 [extras]
