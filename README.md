@@ -5,6 +5,7 @@
 ## Introduction
 This package provides:
 - a path following figure of eight controller
+- a client for the AWETrim reelout flight-path optimizer
 
 Planned:
 - a controller for flying circles
@@ -50,6 +51,15 @@ cd ..
 ```
 The step `create_sys_image` is not strictly needed and takes 15-60 min. Skip it if you are short of time. 
 
+Optionally you can also install the flight path optimizer with the command:
+```
+./bin/install_awetrim
+```
+and start it in a second terminal window:
+```
+./bin/run_server
+```
+
 Then, from a Julia REPL in this repository:
 
 ```julia
@@ -64,6 +74,7 @@ Choose example to run or `q` to quit:
    select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)
    simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)
    simple_fig8_plots.jl  - plot the last logged run of active project
+   optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer
    quit
 ```
 The first three entries allow you to change the simulation settings. The script `simple_fig8.jl` runs the simulation and displays the results. The script `simple_fig8_plots.jl` allows you to analyse the results of simulations you run in the past. 
