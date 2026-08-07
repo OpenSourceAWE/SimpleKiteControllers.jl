@@ -56,7 +56,6 @@ end
 
 Base.@kwdef struct InitParams
     name::String
-    max_time::Float64
     length::Float64                    # initial length of the tether
     winch_params::WinchParams
     inflow_conditions::InflowConditions
@@ -107,7 +106,7 @@ function as_inflow(d)
 end
 
 function as_init_params(reply)
-    return InitParams(reply["name"], reply["max_time"], reply["length"],
+    return InitParams(reply["name"], reply["length"],
                       as_winch(reply["winch_params"]),
                       as_inflow(reply["inflow_conditions"]),
                       as_traj(reply["trajectory"]),
@@ -148,7 +147,7 @@ winch = WinchParams("reelout", 0.11, 1000.0, 8400.0)
 inflow = InflowConditions(wind_speed = 5.2, wind_direction = 270.0, profile_law = 2, z0 = 0.03)
 
 # 200 m of tether; the solver knobs are left at their defaults
-reply = init(InitParams(name = "uwe-sim-1", max_time = 600.0, length = 200.0,
+reply = init(InitParams(name = "uwe-sim-1", length = 200.0,
                         winch_params = winch, inflow_conditions = inflow,
                         trajectory = guess))
 @info ("init ok: $(reply.name), starting path $(length(reply.trajectory.azimuth)) pts")
