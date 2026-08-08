@@ -1,0 +1,15 @@
+# Session state of the example menu, written by `select_project()`,
+# `select_sim_time()`, `select_plots()` (examples/select_*.jl) and
+# `select_turbulence()`, which goes through V3Kite's `set_default_turbulence`.
+# It tracks which system project (150m/200m/300m fig8 pattern), simulation
+# time, set of figures and turbulence level the example scripts fly/show.
+# Not a tunable — copied to gui.yaml (gitignored) the first time a selector or
+# an example script runs. The `gui:` section and the quoted values are what
+# V3Kite's reader expects; the other keys share the section.
+gui:
+    default_turbulence: "default"        # turbulence level init() applies, between 0.0 and 1.0
+                                         # 0.0 disables turbulence, 1.0 is the Cabauw reference level
+                                         # "default" keeps use_turbulence from the settings YAML
+    project: "system_fig8_200m.yaml"     # system_fig8_{150,200,300}m.yaml
+    sim_time: "default"                  # seconds, or "default" for the project's own sim_time
+    plots: "pattern,time_series,aerodynamics"  # subset, or "none"
