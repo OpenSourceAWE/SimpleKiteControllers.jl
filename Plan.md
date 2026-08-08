@@ -210,3 +210,6 @@ Rebuilt and measured: `save_log`+`load_log` now **2.6 s**, and the
 are unchanged from step 11 within noise.
 
 # Step 13 Make turbulence work
+- Add a call to set_default_turbulence() as in V3Kite to the menu - DONE -
+- I set the turbulence to 0.2 and run simple_fig8.jl, but the turbulence is not used. Can you fix that?
+
