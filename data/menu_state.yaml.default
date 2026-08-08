@@ -1,9 +1,0 @@
-# Session state written by `select_project()`/`select_sim_time()`/`select_plots()`
-# (examples/select_project.jl, examples/select_sim_time.jl,
-# examples/select_plots.jl), tracking which system project (150m/200m/300m
-# fig8 pattern), simulation time and set of figures the example scripts
-# fly/show. Not a tunable — copied to menu_state.yaml (gitignored) the first
-# time any selector runs.
-project: system_fig8_200m.yaml
-sim_time: default
-plots: pattern,time_series,aerodynamics
