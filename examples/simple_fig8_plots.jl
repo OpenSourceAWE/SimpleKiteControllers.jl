@@ -40,7 +40,7 @@ the error the PID actually regulated (`var_06`), which rides on `psi - chi_set`
 at low kite speed and on `chi - chi_set` at high.
 
 Which of the three figures get shown is controlled by `select_plots()`
-(`examples/select_plots.jl`), persisted to `data/menu_state.yaml`.
+(`examples/select_plots.jl`), persisted to `data/gui.yaml`.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_fig8.jl:
@@ -63,9 +63,9 @@ using SimpleKiteControllers   # FC_Settings, figure_eight_path
 # Where simple_fig8.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
-# Read fresh from data/menu_state.yaml on every include, same as simple_fig8.jl,
+# Read fresh from data/gui.yaml on every include, same as simple_fig8.jl,
 # so a manual re-include never plots against a stale project or fcs.
-include(joinpath(@__DIR__, "menu_state.jl"))
+include(joinpath(@__DIR__, "gui_state.jl"))
 project = project_file(selected_project())
 fcs = FC_Settings(fc_settings(project))
 plots = selected_plots()

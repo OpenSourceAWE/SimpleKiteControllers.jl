@@ -5,14 +5,14 @@
 Interactive checkbox menu to choose which figures `simple_fig8_plots.jl`
 shows: `pattern`, `time series` and `aerodynamics`.
 
-Writes the choice to `data/menu_state.yaml` via [`set_selected_plots`](@ref)
-(`examples/menu_state.jl`) rather than a `Main` global, so `simple_fig8_plots.jl`
+Writes the choice to `data/gui.yaml` via [`set_selected_plots`](@ref)
+(`examples/gui_state.jl`) rather than a `Main` global, so `simple_fig8_plots.jl`
 reads the current selection straight off disk on every `include`.
 """
 
 using REPL.TerminalMenus
 
-include(joinpath(@__DIR__, "menu_state.jl"))
+include(joinpath(@__DIR__, "gui_state.jl"))
 
 const PLOT_LABELS = ["pattern", "time series", "aerodynamics"]
 const PLOT_KEYS = ["pattern", "time_series", "aerodynamics"]
@@ -21,7 +21,7 @@ const PLOT_KEYS = ["pattern", "time_series", "aerodynamics"]
     select_plots()
 
 Ask which figures to show via a checkbox menu and persist the choice to
-`data/menu_state.yaml`.
+`data/gui.yaml`.
 """
 function select_plots()
     current = selected_plots()

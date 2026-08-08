@@ -5,11 +5,12 @@
 Interactive menu for the example scripts.
 
 The chosen script is `include`d, so it runs exactly as it would by hand: it
-activates `examples/` itself. `select_project()`, `select_sim_time()` and
-`select_plots()` pick which system project (150m/200m/300m), how long a run
-lasts (the project's own `sim_time`, or a specific value in seconds) and
-which figures get shown; all three are persisted to `data/menu_state.yaml`
-and read fresh on every run rather than cached in a `Main` global. Selecting
+activates `examples/` itself. `select_project()`, `select_sim_time()`,
+`select_plots()` and `select_turbulence()` pick which system project
+(150m/200m/300m), how long a run lasts (the project's own `sim_time`, or a
+specific value in seconds), which figures get shown and how much turbulence
+`init` applies; all four are persisted to `data/gui.yaml` and read fresh on
+every run rather than cached in a `Main` global. Selecting
 the figure-eight run means minutes of
 wall time; its plots come up on their own at the end, so the plotting entry
 is for a log that is already on disk.
@@ -32,6 +33,7 @@ const EXAMPLES = [
     "select_project.jl     - choose which system project (150m/200m/300m) to fly" => "select_project.jl",
     "select_sim_time.jl    - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)" => "select_plots.jl",
+    "select_turbulence.jl  - choose the turbulence level init() applies (default or 0.0…1.0)" => "select_turbulence.jl",
     "simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
     "simple_fig8_plots.jl  - plot the last logged run of active project" => "simple_fig8_plots.jl",
     "optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",

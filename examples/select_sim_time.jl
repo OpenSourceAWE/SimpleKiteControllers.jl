@@ -6,14 +6,14 @@ Interactive menu to choose the simulation time `simple_fig8.jl` flies:
 `default` (the selected project's own `sim_time`) or a specific value in
 seconds, entered numerically.
 
-Writes the choice to `data/menu_state.yaml` via [`set_selected_sim_time`](@ref)
-(`examples/menu_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
+Writes the choice to `data/gui.yaml` via [`set_selected_sim_time`](@ref)
+(`examples/gui_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
 reads the current selection straight off disk on every `include`.
 """
 
 using REPL.TerminalMenus
 
-include(joinpath(@__DIR__, "menu_state.jl"))
+include(joinpath(@__DIR__, "gui_state.jl"))
 
 """
     ask_sim_time_seconds() -> Union{Float64, Nothing}
@@ -37,7 +37,7 @@ end
     select_sim_time()
 
 Ask for `default` or a specific simulation time in seconds and persist the
-choice to `data/menu_state.yaml`.
+choice to `data/gui.yaml`.
 """
 function select_sim_time()
     current = selected_sim_time()

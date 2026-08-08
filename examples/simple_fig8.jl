@@ -93,12 +93,14 @@ needs no edit of this script — define `fcs` first and it is used as-is:
 `sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
 changing the timestep means editing that file.
 
-Which system project is flown (150m/200m/300m pattern) and the run length
+Which system project is flown (150m/200m/300m pattern), the run length
 (`sim_time`, `default` for the project's own value or a specific number of
-seconds) are read fresh on every `include` from `data/menu_state.yaml`
-(`examples/menu_state.jl`), not `Main` globals: run `select_project()`
-(`examples/select_project.jl`) and `select_sim_time()`
-(`examples/select_sim_time.jl`) beforehand to change them.
+seconds) and the turbulence level (`use_turbulence`, `default` to leave the
+settings YAML in charge) are read fresh on every `include` from `data/gui.yaml`
+(`examples/gui_state.jl`), not `Main` globals: run `select_project()`
+(`examples/select_project.jl`), `select_sim_time()`
+(`examples/select_sim_time.jl`) and `select_turbulence()`
+(`examples/select_turbulence.jl`) beforehand to change them.
 
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
@@ -126,10 +128,12 @@ toc("Loaded packages in: ")
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "menu_state.jl"))
+include(joinpath(@__DIR__, "gui_state.jl"))
 PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
-@info "simple_fig8.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s")."
+TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
+@info "simple_fig8.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
+       turbulence = $TURBULENCE."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 project_set = Settings(project)
@@ -164,7 +168,7 @@ end
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, wc,
+    system_yaml = project, wc, use_turbulence = TURBULENCE,
     sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 

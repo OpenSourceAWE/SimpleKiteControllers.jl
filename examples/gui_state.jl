@@ -1,0 +1,136 @@
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
+"""
+Read/write access to `data/gui.yaml`, the single state file of the example
+menu: which system project (`system_fig8_*.yaml`), simulation time, set of
+plots and turbulence level the example scripts fly/show.
+
+Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
+[`selected_project`](@ref)/[`selected_sim_time`](@ref)/[`selected_plots`](@ref)
+/[`selected_turbulence`](@ref) fresh on every `include`, so a manual re-include
+always reflects the file on disk rather than a REPL variable left over from an
+earlier run. `select_project()`, `select_sim_time()`, `select_plots()` and
+`select_turbulence()` (`examples/select_*.jl`) are the only writers.
+
+`default_turbulence` shares the file because V3Kite's
+`get_default_turbulence`/`set_default_turbulence` read and write it there, in
+this package's `data/` rather than the model's read-only one; the writes are
+line-based, so all four keys and the comments survive each other.
+"""
+
+using SimpleKiteControllers: skc_data_path
+using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_section
+
+gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
+default_project() = "system_fig8_200m.yaml"
+default_plots() = ["pattern", "time_series", "aerodynamics"]
+
+function ensure_gui_state_file()
+    state_file = gui_state_file()
+    if !isfile(state_file)
+        default_file = state_file * ".default"
+        isfile(default_file) && cp(default_file, state_file)
+        # cp preserves the mode, and a read-only checkout would make the file unwritable.
+        isfile(state_file) && chmod(state_file, 0o644)
+    end
+    return state_file
+end
+
+function read_gui_field(name::String)
+    state_file = ensure_gui_state_file()
+    isfile(state_file) || return nothing
+    for line in eachline(state_file)
+        m = match(Regex("^\\s*" * name * ":\\s*([^#]*?)\\s*(?:#.*)?\$"), line)
+        isnothing(m) && continue
+        # String(): strip returns a SubString, and callers dispatch on ::String.
+        value = String(strip(m.captures[1], ['"']))
+        return isempty(value) ? nothing : value
+    end
+    return nothing
+end
+
+function write_gui_field(name::String, value)
+    state_file = ensure_gui_state_file()
+    lines = readfile(state_file)
+    new_lines, updated = update_yaml_scalar(lines, name * ":", value)
+    updated || ((new_lines, updated) = insert_yaml_scalar_in_section(lines, "gui:",
+                                                                     name * ":", value))
+    writefile(new_lines, state_file)
+    return nothing
+end
+
+"""
+    selected_project() -> String
+
+Currently selected system project file name, falling back to
+[`default_project`](@ref) if `gui.yaml` has no `project:` entry.
+"""
+function selected_project()
+    value = read_gui_field("project")
+    return isnothing(value) ? default_project() : value
+end
+
+"""
+    selected_sim_time() -> Union{Float64, Nothing}
+
+Persisted simulation-time override in seconds, or `nothing` for the
+`default` choice (the selected project's own `sim_time`).
+"""
+function selected_sim_time()
+    value = read_gui_field("sim_time")
+    (isnothing(value) || value == "default") && return nothing
+    return parse(Float64, value)
+end
+
+"""
+    selected_plots() -> Vector{String}
+
+Persisted set of plots `simple_fig8_plots.jl` shows, falling back to
+[`default_plots`](@ref) (all of them) if `gui.yaml` has no `plots:` entry.
+"""
+function selected_plots()
+    value = read_gui_field("plots")
+    isnothing(value) && return default_plots()
+    value == "none" && return String[]
+    return String.(split(value, ','))
+end
+
+"""
+    selected_turbulence() -> Union{Float64, String, Nothing}
+
+Persisted turbulence level `init` applies, or the `"default"` keyword when the
+settings YAML stays in charge. Pass it straight to `init`'s `use_turbulence`.
+Read here rather than through V3Kite's `get_default_turbulence` so that picking
+a project does not pull the kite model into the session.
+"""
+function selected_turbulence()
+    value = read_gui_field("default_turbulence")
+    (isnothing(value) || lowercase(value) == "default") && return "default"
+    return parse(Float64, value)
+end
+
+"""
+    set_selected_project(project::String)
+
+Persist `project` as the current selection, keeping the other entries unchanged.
+"""
+set_selected_project(project::String) = write_gui_field("project", project)
+
+"""
+    set_selected_sim_time(sim_time::Union{Real, Nothing})
+
+Persist `sim_time` (seconds, or `nothing` for `default`) as the current
+selection, keeping the other entries unchanged.
+"""
+set_selected_sim_time(sim_time::Union{Real, Nothing}) =
+    write_gui_field("sim_time", isnothing(sim_time) ? "default" : Float64(sim_time))
+
+"""
+    set_selected_plots(plots::Vector{String})
+
+Persist `plots` (a subset of [`default_plots`](@ref)) as the current selection,
+keeping the other entries unchanged.
+"""
+set_selected_plots(plots::Vector{String}) =
+    write_gui_field("plots", isempty(plots) ? "none" : join(plots, ","))
