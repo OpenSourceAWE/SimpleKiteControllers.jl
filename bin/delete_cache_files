@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# Delete the V3Kite cache files: the compiled model binary (model_*.bin), the
+# settled-geometry binaries (settled_*.bin) and the settling log
+# (settle_particle_dynamics_wing.arrow). They are pure caches - the next run
+# regenerates them, at the price of one model compilation plus one settling run
+# per configuration.
+#
+# Run this when a cache outlives the versions it was written against. The names
+# are version-stamped (see settled_cache_tag() in V3Kite/src/stabilization.jl),
+# so most upgrades turn into a plain cache miss, but a package that changes the
+# layout of a type it serializes *without* a version bump in the tag leaves a
+# file that deserialize() chokes on, e.g.
+#
+#   TypeError: in new, expected DataType, got a value of type
+#     SymbolicUtils.SmallVec{UnitRange{Int64}, Vector{UnitRange{Int64}}}
+#
+# Two locations are cleaned, matching V3Kite's default_cache_path():
+#   - the scratchspace keyed by V3Kite's UUID, used by a Pkg-INSTALLED V3Kite
+#   - data/ of a local V3Kite checkout, used by a `dev`ed V3Kite, plus data/ of
+#     this repository
+# Only the three cache patterns are removed; other .arrow files in those
+# directories are simulation output and are left alone.
+#
+# Usage: bin/delete_cache_files [path-to-checkout]
+#        bin/delete_cache_files --dry-run     list what would go, delete nothing
+#        bin/delete_cache_files --yes         skip the confirmation prompt
+set -euo pipefail
+
+# Resolve our own path before cd'ing away: --help reads the comment block below
+# out of this file, and every other path here is relative to the repo root.
+SELF_DIR=$(cd "$(dirname "$0")" && pwd)
+SELF=$SELF_DIR/$(basename "$0")
+cd "$SELF_DIR/.."
+
+V3KITE_UUID=4caac9c8-c726-438f-ab10-3553e918eab1  # V3Kite, see its Project.toml
+
+DRY_RUN=0
+ASSUME_YES=0
+CHECKOUT=""
+# while/shift rather than `for arg in "$@"`: bash before 4.4 (macOS ships 3.2)
+# treats an empty "$@" as unset and aborts under `set -u`.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1 ;;
+        --yes|-y)  ASSUME_YES=1 ;;
+        -h|--help) sed -n '4,29p' "$SELF" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -*)        echo "Unknown option: $1" >&2; exit 1 ;;
+        *)         CHECKOUT=$1 ;;
+    esac
+    shift
+done
+
+# Where V3Kite is `dev`ed from, so a local checkout's data/ is cleaned too. The
+# [sources] path in examples/Project.toml is stored relative to examples/.
+active_source_path() {
+    local project=examples/Project.toml line dir
+    [[ -f $project ]] || return 0
+    line=$(awk '
+        /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
+        in_sources && /^V3Kite[[:space:]]*=/ { print; exit }
+    ' "$project")
+    [[ $line =~ path[[:space:]]*= ]] || return 0
+    dir=$(sed -E 's|.*path[[:space:]]*=[[:space:]]*"([^"]*)".*|\1|' <<<"$line")
+    [[ $dir == /* ]] || dir="$PWD/examples/$dir"
+    # cd+pwd rather than `realpath -m`, which is GNU-only; fall back to the
+    # unnormalized path if the checkout is gone (find just won't match there).
+    if [[ -d $dir ]]; then (cd "$dir" && pwd); else printf '%s\n' "$dir"; fi
+}
+
+if [[ -z $CHECKOUT ]]; then
+    CHECKOUT=$(active_source_path)
+elif [[ ! -f "$CHECKOUT/Project.toml" ]]; then
+    echo "No Julia project at $CHECKOUT" >&2
+    exit 1
+fi
+
+# First entry of JULIA_DEPOT_PATH, the depot V3Kite writes its scratchspace to.
+DEPOT=${JULIA_DEPOT_PATH:-}
+DEPOT=${DEPOT%%:*}
+DEPOT=${DEPOT:-$HOME/.julia}
+
+DIRS=("$DEPOT/scratchspaces/$V3KITE_UUID/v3kite_cache" data)
+[[ -n $CHECKOUT ]] && DIRS+=("$CHECKOUT/data")
+
+VICTIMS=()
+# Counted separately: bash before 4.4 errors on ${#VICTIMS[@]} for an empty
+# array under `set -u`, which is exactly the "nothing to delete" case.
+N_VICTIMS=0
+for dir in "${DIRS[@]}"; do
+    [[ -d $dir ]] || continue
+    while IFS= read -r -d '' f; do
+        VICTIMS+=("$f")
+        N_VICTIMS=$((N_VICTIMS + 1))
+    done < <(find "$dir" -maxdepth 1 -type f \
+        \( -name 'model_*.bin' -o -name 'settled_*.bin' \
+           -o -name 'settle_particle_dynamics_wing.arrow' \
+           -o -name '*.bin.error.log' \) -print0)
+done
+
+if [[ $N_VICTIMS -eq 0 ]]; then
+    echo "No V3Kite cache files found."
+    exit 0
+fi
+
+echo "V3Kite cache files:"
+for f in "${VICTIMS[@]}"; do
+    echo "  $(du -h "$f" | cut -f1)  $f"
+done
+echo "Total: $(du -ch "${VICTIMS[@]}" | tail -1 | cut -f1)"
+echo
+
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "Dry run, nothing deleted."
+    exit 0
+fi
+
+if [[ $ASSUME_YES -eq 0 ]]; then
+    read -rp "Delete these $N_VICTIMS files? [y/N]: " reply
+    if [[ ! $reply =~ ^[Yy]$ ]]; then
+        echo "Nothing deleted."
+        exit 0
+    fi
+fi
+
+rm -f -- "${VICTIMS[@]}"
+echo "Deleted $N_VICTIMS files."
+echo "They are regenerated on the next run; expect one model compilation and"
+echo "one settling run per configuration."

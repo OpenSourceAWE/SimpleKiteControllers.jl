@@ -208,3 +208,5 @@ there).
 Rebuilt and measured: `save_log`+`load_log` now **2.6 s**, and the
 `using V3Kite, MakieControlPlots` load time (1.55 s) and image size (2.31 GB)
 are unchanged from step 11 within noise.
+
+# Step 13 Make turbulence work
