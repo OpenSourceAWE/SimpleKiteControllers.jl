@@ -134,6 +134,14 @@ not yet been lifted into a controller type.
   named file in the model's data. A project this package does not carry is passed
   through unchanged. The geometry, polars and VSM settings never go through the
   project file at all; V3Kite loads them from `v3_data_path()` directly.
+- **One state file, `data/gui.yaml`** (gitignored; `gui.yaml.default` is the template).
+  Project, `sim_time`, plots and `default_turbulence` all live in its `gui:` section.
+  `examples/gui_state.jl` reads it with a line regex and writes it with KiteUtils'
+  `update_yaml_scalar`, and V3Kite's `set_default_turbulence(; data_path = skc_data_path())`
+  writes the turbulence key into the same file — line-based on both sides, so the keys and
+  the comments survive each other. `simple_fig8.jl` passes the level to `init` as
+  `use_turbulence`: the model's own `data/gui.yaml` is never consulted, and is read-only
+  for a Pkg-installed V3Kite anyway.
 - **Bearing convention:** `0` = towards zenith, positive towards larger azimuth. `chi_set`
   is directly comparable to `SysState.heading`. `SysState.course` is **not** — it needs
   `wrap_to_pi(course + pi)`; feeding it raw is positive feedback and diverges the run.
