@@ -21,7 +21,7 @@ fc_settings:
   vsm_interval:       1        # Steps between VSM aero updates, 1 = tightest        [-]
   v_wind:             5.0      # Ground wind speed at reference height [m/s]
   compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
-  depower_setpoint:   0.26     # Depower held on the pattern                        [-]
+  depower_setpoint:   0.28     # Depower held on the pattern                        [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]
   warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
@@ -59,7 +59,7 @@ fc_settings:
   v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
   v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
   entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
-  entry_depower:      0.34     # Depower during the entry phases                    [-]
+  entry_depower:      0.37     # Depower during the entry phases                    [-]
 
   # --- feedback signal: heading at low kite speed, course at high -----------
   v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]

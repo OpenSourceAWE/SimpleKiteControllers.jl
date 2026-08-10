@@ -93,6 +93,23 @@ needs no edit of this script — define `fcs` first and it is used as-is:
 `sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
 changing the timestep means editing that file.
 
+The aerodynamics model is not among them either: `AERO_MODE` is set at the head of
+the USER PARAMETERS block and is `ContinuousAero()`, which integrates the VSM load
+instead of holding it frozen over a step. V3Kite's own default is `AeroDirect()`,
+the cheaper one — the continuous mode carries its own model binary and settled
+geometry and costs more per step.
+
+`SHOW_PLOTS = false` before the include suppresses the figures at the end,
+which is what makes a sweep bearable. It is ONE-SHOT: the script resets it to
+`true` while it starts up, so a leftover `false` can never silently swallow the
+plots of a later run. A sweep therefore sets it inside its loop:
+
+    for a in 55:5:70
+        fcs.f8_a = a
+        SHOW_PLOTS = false
+        include("examples/simple_fig8.jl")
+    end
+
 Which system project is flown (150m/200m/300m pattern), the run length
 (`sim_time`, `default` for the project's own value or a specific number of
 seconds) and the turbulence level (`use_turbulence`, `default` to leave the
@@ -129,6 +146,10 @@ toc("Loaded packages in: ")
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+# Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
+show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
+SHOW_PLOTS = true
+AERO_MODE = AeroDirect() # ContinuousAero() or AeroDirect()
 PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
@@ -168,7 +189,7 @@ end
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, wc, use_turbulence = TURBULENCE,
+    system_yaml = project, wc, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
     sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
@@ -361,8 +382,10 @@ let settled = findall(x -> Int(x) == 4, sl.sys_state)
     end
 end
 
-# SHOW_PLOTS = false in the REPL suppresses them, which is what makes a sweep bearable.
-@isdefined(SHOW_PLOTS) || (SHOW_PLOTS = true)
-SHOW_PLOTS && include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
+if show_plots
+    include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
+else
+    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+end
 
 nothing

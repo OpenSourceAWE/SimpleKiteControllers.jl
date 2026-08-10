@@ -36,8 +36,11 @@ include("examples/simple_fig8.jl")     # 150 s sim time = many minutes of wall t
 
 Override any parameter by defining `fcs` (and optionally `SHOW_PLOTS = false`) in the
 REPL *before* the `include`; the script only loads `fc_settings.yaml` into `fcs` if
-nothing else has. Keep the same REPL across runs — the first one compiles the V3 model
-(a few minutes, ~23 MB) into V3Kite's own cache directory.
+nothing else has. `SHOW_PLOTS` is one-shot — the script resets it to `true` at startup,
+so a sweep sets it inside its loop and a leftover `false` never silently swallows a
+later run's plots (`fcs` is sticky, it does not). Keep the same REPL across runs — the
+first one compiles the V3 model (a few minutes, ~23 MB) into V3Kite's own cache
+directory.
 
 `init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
 where its `@compile_workload` compiled against it — its `data/` for a local checkout, a

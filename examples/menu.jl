@@ -30,10 +30,10 @@ using REPL.TerminalMenus
 const EXAMPLES_DIR = @__DIR__
 
 const EXAMPLES = [
+    "select_turbulence.jl  - choose the turbulence level init() applies (default or 0.0…1.0)" => "select_turbulence.jl",
     "select_project.jl     - choose which system project (150m/200m/300m) to fly" => "select_project.jl",
     "select_sim_time.jl    - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)" => "select_plots.jl",
-    "select_turbulence.jl  - choose the turbulence level init() applies (default or 0.0…1.0)" => "select_turbulence.jl",
     "simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
     "simple_fig8_plots.jl  - plot the last logged run of active project" => "simple_fig8_plots.jl",
     "optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",

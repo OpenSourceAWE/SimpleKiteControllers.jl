@@ -27,7 +27,7 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.0.3"}
+V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.1.0"}
 
 [compat]
 MakieControlPlots = "0.1.12"
