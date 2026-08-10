@@ -1,4 +1,29 @@
 entries:
+  # First row identified with min_damping passed explicitly: the sweep flew
+  # [0, 0, 40] throughout, where the rows below predate the floor. c1 stays
+  # monotone in depower against the 0.25 row; c2 does not, and c2 is the term
+  # that moves most with damping — treat it as belonging to this run, not as
+  # continuous with the older ones. See docs/fig8_tuning_log.md.
+  - c2: -1.1124
+    c1: 0.3225
+    depower: 0.23
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    min_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    outcome: "sweep_done"
+    delay: 0.25
+    c1_rel_std: 0.0021
+    u_s_max: 0.175
+    g_rel_std: 0.1449
+    min_elevation: 73.05
+    l_tether: 150.0
+    dt: 0.05
+    date: 2026-08-10
   - c2: 0.07576191167222507
     c1: 0.31038589289512725
     depower: 0.25

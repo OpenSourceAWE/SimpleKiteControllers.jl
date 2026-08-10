@@ -67,7 +67,13 @@ set_data_path(skc_data_path())
 # so a manual re-include never plots against a stale project or fcs.
 include(joinpath(@__DIR__, "gui_state.jl"))
 project = project_file(selected_project())
-fcs = FC_Settings(fc_settings(project))
+# Same rule as simple_fig8.jl: an `fcs` already in `Main` wins. Included at the
+# end of a run that is the fcs actually FLOWN, so rebuilding it from the YAML
+# here would both draw the wrong reference path and throw away the caller's
+# assignments; only a standalone re-include with no `fcs` around reads the file.
+if !(@isdefined(fcs) && fcs isa FC_Settings)
+    fcs = FC_Settings(fc_settings(project))
+end
 plots = selected_plots()
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
 log_name = basename(Settings(project).log_file)

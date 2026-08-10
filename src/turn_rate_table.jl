@@ -35,8 +35,8 @@ end
 
 `true` if entry `e` may be used as an interpolation neighbour: a completed
 sweep (`outcome ∈ (:sweep_done, :time_limit)`), a tight `c1` fit, and low gain
-scatter. Legacy entries are excluded by the caller, not here — that check needs
-the table's `conditions`, which this function does not see.
+scatter. Identification QUALITY is the only bar — a row is never disqualified
+for the conditions it was identified at.
 """
 function _is_usable_turn_rate_entry(e)
     e.outcome in (:sweep_done, :time_limit) &&
@@ -45,20 +45,18 @@ function _is_usable_turn_rate_entry(e)
 end
 
 """
-    _parse_turn_rate_entry(edict, conditions) -> NamedTuple
+    _parse_turn_rate_entry(edict) -> NamedTuple
 
 Parse one `entries:` element of `turn_rate_coeffs.yaml` (a `Dict` with String
-keys, as `YAML.load_file` returns it) into a NamedTuple, and mark it `legacy`
-if any of its own fields override the table's `conditions` (e.g. a per-entry
-`l_tether` identified before the table settled on one tether length for
-everything — see V3Kite.jl's PlanC1C2.md).
+keys, as `YAML.load_file` returns it) into a NamedTuple.
+
+An entry may carry its own `l_tether`, `dt` or `date` alongside the table's
+`conditions` block. Those are PROVENANCE, not a disqualification: `c1` and `c2`
+are normalised by apparent wind speed and identified from a relay sweep, so
+neither the tether length nor the identification timestep changes them, and such
+a row is used like any other.
 """
-function _parse_turn_rate_entry(edict, conditions::Dict{Symbol, Any})
-    overrides = Dict{Symbol, Any}()
-    for (k, v) in conditions
-        ks = String(k)
-        haskey(edict, ks) && edict[ks] != v && (overrides[k] = edict[ks])
-    end
+function _parse_turn_rate_entry(edict)
     return (
         body_damping = Float64.(edict["body_damping"]),
         depower = Float64(edict["depower"]),
@@ -68,8 +66,6 @@ function _parse_turn_rate_entry(edict, conditions::Dict{Symbol, Any})
         c1_rel_std = Float64(get(edict, "c1_rel_std", 0.0)),
         g_rel_std = Float64(get(edict, "g_rel_std", 0.0)),
         outcome = Symbol(get(edict, "outcome", "sweep_done")),
-        legacy = !isempty(overrides),
-        overrides = overrides,
     )
 end
 
@@ -82,14 +78,11 @@ function _load_turn_rate_table()
     path = joinpath(skc_data_path(), TURN_RATE_TABLE_FILE)
     raw = YAML.load_file(path)
     conditions = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in raw["conditions"])
-    entries = [_parse_turn_rate_entry(e, conditions) for e in raw["entries"]]
+    entries = [_parse_turn_rate_entry(e) for e in raw["entries"]]
     return TurnRateTable(conditions, entries)
 end
 
 const _TURN_RATE_TABLE = Ref{TurnRateTable}()
-
-# Legacy rows already warned about; `maxlog` cannot be used, it dedups by call site.
-const _TURN_RATE_WARNED_LEGACY = Ref(Set{Tuple{Vector{Float64}, Float64}}())
 
 """
     reload_turn_rate_table!()
@@ -109,7 +102,6 @@ normally for any other caller asking for that combination.
 function reload_turn_rate_table!()
     table = _load_turn_rate_table()
     _TURN_RATE_TABLE[] = table
-    empty!(_TURN_RATE_WARNED_LEGACY[])
     global V3_TURN_RATE_COEFFS = Dict((e.body_damping, e.depower) => (c1 = e.c1, c2 = e.c2, delay = e.delay)
                                        for e in table.entries)
     try
@@ -133,18 +125,17 @@ Look up the V3 turn-rate-law coefficients for a given `body_damping` and
 ([`V3_TURN_RATE_COEFFS`](@ref) shows its grid points).
 
 - An exact `(body_damping, depower)` hit returns that row's values unchanged,
-  `interpolated = false` — including a *legacy* row (one identified at
-  conditions that no longer match the table's, e.g. a different tether length),
-  with a one-time warning naming the mismatch. A row whose own identification
-  did not pass (`outcome` other than `:sweep_done`/`:time_limit`, or too much
-  scatter) throws instead of returning it — a failed sweep is recorded, never
-  looked up as if it were data.
+  `interpolated = false`. A row whose own identification did not pass (`outcome`
+  other than `:sweep_done`/`:time_limit`, or too much scatter) throws instead of
+  returning it — a failed sweep is recorded, never looked up as if it were data.
+  Nothing else disqualifies a row: identification quality is the only bar, and
+  a row identified at its own tether length or timestep counts like any other.
 - Between two grid points *of the same `body_damping`*, `c1` is interpolated
   log-linearly (it decays close to exponentially with depower) and `c2`/`delay`
   linearly; `delay` is then rounded up to a multiple of the identification
-  `dt`, so an interpolated dead time is never optimistic. Legacy and
-  non-passing rows are never used as neighbours. `interpolate = false` disables
-  this and throws instead.
+  `dt`, so an interpolated dead time is never optimistic. Non-passing rows are
+  never used as neighbours. `interpolate = false` disables this and throws
+  instead.
 - Outside the identified depower range for that damping, or for a
   `body_damping` with no rows at all, this **throws** rather than
   extrapolating or guessing — re-identify with V3Kite.jl's `steering_test_v3.jl` +
@@ -181,12 +172,6 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
                 "c1_rel_std = $(e.c1_rel_std), g_rel_std = $(e.g_rel_std)). " *
                 "Re-identify with V3Kite.jl/examples/build_turn_rate_table.jl."))
         end
-        if e.legacy && (bd, dp) ∉ _TURN_RATE_WARNED_LEGACY[]
-            @warn "turn_rate_coeffs($bd, $dp): this row was identified at conditions " *
-                  "overriding data/$(TURN_RATE_TABLE_FILE)'s conditions block " *
-                  "($(e.overrides)); it is excluded from interpolation."
-            push!(_TURN_RATE_WARNED_LEGACY[], (bd, dp))
-        end
         return (c1 = e.c1, c2 = e.c2, delay = e.delay, interpolated = false)
     end
 
@@ -194,8 +179,7 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
         "No exact turn-rate entry for body_damping = $bd, depower = $dp " *
         "(interpolate = false)."))
 
-    usable = sort(filter(e -> !e.legacy && _is_usable_turn_rate_entry(e), group);
-                  by = e -> e.depower)
+    usable = sort(filter(_is_usable_turn_rate_entry, group); by = e -> e.depower)
     if length(usable) < 2
         throw(ArgumentError(
             "Not enough usable turn-rate entries to interpolate for " *
@@ -227,8 +211,8 @@ end
 
 Snapshot of every row of `data/turn_rate_coeffs.yaml`, as parsed at package
 load (or by the last [`reload_turn_rate_table!`](@ref)), keyed by
-`(body_damping, depower)`. Includes legacy and non-passing rows; prefer
-[`turn_rate_coeffs`](@ref), which applies the quality and legacy filtering and
+`(body_damping, depower)`. Includes non-passing rows; prefer
+[`turn_rate_coeffs`](@ref), which applies the quality filtering and
 interpolates between grid points.
 """
 V3_TURN_RATE_COEFFS = Dict{Tuple{Vector{Float64}, Float64}, Any}()

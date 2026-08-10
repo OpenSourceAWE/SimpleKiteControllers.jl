@@ -106,12 +106,23 @@ Add new findings there, not here.
     settled_d_gate = 5.0
 
     """
-    In-plane body damping. A FLIGHT parameter, not just a solver setting: it
-    sets `c1` and hence the achievable turn radius. `init`'s default is the most
-    agile and the only one that flies this pattern inside the identified
-    steering range.
+    Body damping settling STARTS from, per axis. It shapes the settling
+    transient and the settled geometry it converges to, but not the flown
+    dynamics: it decays to `min_damping`, which is what sets `c1` and hence the
+    achievable turn radius, and what [`turn_rate_coeffs`](@ref) is looked up
+    with.
     """
     body_damping::Vector{Float64} = [0.0, 0.0, 40.0]
+
+    """
+    Floor the body damping decays to during settling, elementwise, and hence the
+    damping the run is actually FLOWN with — `body_damping` only shapes the
+    settling transient above it. V3Kite's own default is `[0, 0, 20]`, half the
+    starting value; `[0, 0, 40]` is used here because that is the floor the
+    depower-0.23 row of `data/turn_rate_coeffs.yaml` was identified at. Keep it
+    equal to the damping of the row [`turn_rate_coeffs`](@ref) looks up.
+    """
+    min_damping::Vector{Float64} = [0.0, 0.0, 40.0]
 
     # ---- Pattern geometry [deg]; a SMALLER lemniscate is a TIGHTER one ------ #
     "Width of the eight [deg] (azimuth spans +-`f8_a`)"

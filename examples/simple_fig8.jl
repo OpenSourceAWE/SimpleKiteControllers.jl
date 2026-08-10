@@ -90,6 +90,20 @@ needs no edit of this script — define `fcs` first and it is used as-is:
     fcs.attractor_dist = 12.0
     include("examples/simple_fig8.jl")
 
+An `fcs` left in `Main` therefore SURVIVES the next `include` (unlike
+`SHOW_PLOTS`, which is one-shot) and the run says so in its log; drop the object
+or rebuild it from the file to get the YAML values back. Both `body_damping` and
+`min_damping` are among the fields, and they are INDEPENDENT — the first only
+shapes the settling transient, the second is the floor it decays to and hence
+what is flown:
+
+    fcs.min_damping = [0.0, 0.0, 20.0]   # softer in flight, settling unchanged
+    include("examples/simple_fig8.jl")
+
+A `min_damping` (or `body_damping`) the cache has not seen before makes V3Kite
+re-settle the wing, since the settled-geometry filename encodes both — one slow
+`init`, then it is cached like any other.
+
 `sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
 changing the timestep means editing that file.
 
@@ -157,6 +171,7 @@ TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the setti
        turbulence = $TURBULENCE."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+
 project_set = Settings(project)
 l_tether = project_set.l_tether
 
@@ -188,6 +203,7 @@ end
 # No cache_path either: V3Kite's default is where its own precompile workload
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
+    min_damping = fcs.min_damping,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, wc, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
     sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
@@ -201,26 +217,50 @@ fec = FigureEightController(FigureEightSettings(;
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
 
-# Never hardcode these: both arguments move them a lot.
-coeffs = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
-@info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
-                c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-               fcs.body_damping, fcs.depower_setpoint,
-               coeffs.interpolated ? " (INTERPOLATED)" : "",
-               c1, c2, delay)
+# Never hardcode these: both arguments move them a lot. The lookup takes
+# `min_damping`, NOT `body_damping`: the latter decays away during settling, so
+# the damping the model FLIES the pattern with — the one c1 was identified at —
+# is the floor. A `body_damping` above the floor changes only the settled
+# geometry it converges to, not the turn rate.
+#
+# The coefficients are DIAGNOSTIC here — they feed the feasibility check and the
+# dead-time context below, no gain and no control law — so a damping/depower the
+# table cannot serve costs the diagnosis, not the run. `turn_rate_coeffs` refuses
+# to extrapolate (by design: c1 moves violently with both arguments), so catch
+# that and fly on unadvised rather than aborting a deliberate off-grid run.
+coeffs = try
+    turn_rate_coeffs(fcs.min_damping, fcs.depower_setpoint)
+catch e
+    e isa ArgumentError || rethrow()
+    @warn "No turn-rate coefficients for min_damping = $(fcs.min_damping), \
+           depower = $(fcs.depower_setpoint) — flying WITHOUT the feasibility \
+           check. Identify this cell with V3Kite.jl's steering_test_v3.jl to get \
+           it back.\n$(e.msg)"
+    nothing
+end
 
-# c1 must match the body damping in use; that is what makes this check meaningful.
-feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
-feas.feasible ||
-    @warn "Pattern is tighter than the kite's minimum turn radius — expect \
-           curvature-limited tracking, not a tuning problem."
+if isnothing(coeffs)
+    c1 = c2 = delay = NaN
+else
+    c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
+    @info @sprintf("Turn-rate law at min_damping=%s, depower=%.2f%s: \
+                    c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
+                   fcs.min_damping, fcs.depower_setpoint,
+                   coeffs.interpolated ? " (INTERPOLATED)" : "",
+                   c1, c2, delay)
 
-# Dead-time context for attractor_dist: how long the lead arc takes to fly.
-lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
-@info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
-                vs %.2f s steering dead time (ratio %.1f).",
-               fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+    # c1 must match the damping in use; that is what makes this check meaningful.
+    feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
+    feas.feasible ||
+        @warn "Pattern is tighter than the kite's minimum turn radius — expect \
+               curvature-limited tracking, not a tuning problem."
+
+    # Dead-time context for attractor_dist: how long the lead arc takes to fly.
+    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
+    @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
+                    vs %.2f s steering dead time (ratio %.1f).",
+                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+end
 
 # N is the derivative filter's maximum gain; the DiscretePIDs default of 10 rings.
 heading_pid = create_heading_pid(;

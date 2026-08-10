@@ -27,12 +27,13 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.1.0"}
+# V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.1.0"}
+V3Kite = {path = "../../V3Kite"}
 
 [compat]
 MakieControlPlots = "0.1.12"
 RuntimeGeneratedFunctions = "0.5.24"
-V3Kite = "1.1.0"
+V3Kite = "1.1.1"
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

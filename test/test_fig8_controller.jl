@@ -237,6 +237,10 @@ _make_test_controller(; kwargs...) =
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
+        # 0.23, the first row identified with the min_damping floor (flown [0,0,40]).
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 ≈ 0.3225
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 >
+              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         # DEPOWER costs authority too: 0.25 -> 0.55 is ~2.95x of c1 and 16x the dead time.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 ≈ 0.1073
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 <
@@ -255,9 +259,11 @@ _make_test_controller(; kwargs...) =
         # the exported defaults track init's default damping at depower 0.25
         @test V3_TURN_RATE_C1 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         @test V3_TURN_RATE_C2 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c2
-        # Exact grid hits are never interpolated, legacy rows included.
+        # Exact grid hits are never interpolated.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).interpolated == false
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).interpolated == false
+        # A row carrying its own l_tether/dt is data like any other: no warning.
+        @test_logs turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin
@@ -265,15 +271,12 @@ _make_test_controller(; kwargs...) =
         bd = [0.0, 0.0, 40.0]
         entries = [
             (body_damping = bd, depower = 0.30, c1 = 0.20, c2 = -0.10, delay = 0.05,
-             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done,
-             legacy = false, overrides = Dict{Symbol, Any}()),
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
             (body_damping = bd, depower = 0.50, c1 = 0.05, c2 = 0.20, delay = 0.50,
-             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done,
-             legacy = false, overrides = Dict{Symbol, Any}()),
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
             # A failed sweep: kept in the table, but never used, not even on an exact hit.
             (body_damping = bd, depower = 0.60, c1 = 999.0, c2 = 0.0, delay = 0.0,
-             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :low_elevation,
-             legacy = false, overrides = Dict{Symbol, Any}()),
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :low_elevation),
         ]
         synthetic = SimpleKiteControllers.TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
@@ -318,36 +321,31 @@ _make_test_controller(; kwargs...) =
         end
     end
 
-    @testset "turn_rate_coeffs legacy-row warning (conditions block)" begin
-        # [20,20,40]/0.25 is the one legacy (150 m) row left in the real table.
-        empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
-        @test_logs (:warn,) turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)
-        @test_logs turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)  # same row again: silent
-        empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
-
-        # A distinct legacy row must not be silenced by an earlier one having warned.
+    @testset "turn_rate_coeffs own-conditions rows are ordinary data" begin
+        # A row carrying its own l_tether/dt (identified at a different tether
+        # length or timestep than the conditions block) is used unchanged and
+        # silently: neither quantity enters c1/c2, which are normalised by v_app.
         bd = [0.0, 0.0, 40.0]
-        legacy_entries = [
+        entries = [
             (body_damping = bd, depower = 0.20, c1 = 0.5, c2 = 0.0, delay = 0.03,
-             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done,
-             legacy = true, overrides = Dict{Symbol, Any}(:l_tether => 100.0)),
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
             (body_damping = bd, depower = 0.60, c1 = 0.05, c2 = 0.0, delay = 0.6,
-             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done,
-             legacy = true, overrides = Dict{Symbol, Any}(:l_tether => 100.0)),
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
         ]
         synthetic = SimpleKiteControllers.TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
-                               :l_tether => 200.0, :dt => 0.05 / 3), legacy_entries)
+                               :l_tether => 200.0, :dt => 0.05 / 3), entries)
         old = SimpleKiteControllers._TURN_RATE_TABLE[]
         SimpleKiteControllers._TURN_RATE_TABLE[] = synthetic
-        empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
         try
-            @test_logs (:warn,) turn_rate_coeffs(bd, 0.20)
-            @test_logs turn_rate_coeffs(bd, 0.20)          # same row again: silent
-            @test_logs (:warn,) turn_rate_coeffs(bd, 0.60) # different legacy row: warns
+            @test_logs turn_rate_coeffs(bd, 0.20)           # exact hit, no warning
+            @test turn_rate_coeffs(bd, 0.20).c1 == 0.5
+            # and they are interpolation neighbours like any other row
+            r = turn_rate_coeffs(bd, 0.40)
+            @test r.interpolated == true
+            @test r.c1 ≈ sqrt(0.5 * 0.05)
         finally
             SimpleKiteControllers._TURN_RATE_TABLE[] = old
-            empty!(SimpleKiteControllers._TURN_RATE_WARNED_LEGACY[])
         end
     end
 

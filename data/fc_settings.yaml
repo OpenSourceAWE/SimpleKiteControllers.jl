@@ -21,7 +21,7 @@ fc_settings:
   vsm_interval:       1        # Steps between VSM aero updates, 1 = tightest        [-]
   v_wind:             5.0      # Ground wind speed at reference height [m/s]
   compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
-  depower_setpoint:   0.28     # Depower held on the pattern                        [-]
+  depower_setpoint:   0.27     # Depower held on the pattern                        [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]
   warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
@@ -40,7 +40,8 @@ fc_settings:
   settled_d_gate:     5.0      # Cross-track error below which fig8 -> settled    [deg]
 
   # --- plant ----------------------------------------------------------------
-  body_damping:       [0.0, 0.0, 40.0]  # Per axis; sets c1, so also the turn radius
+  body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling transient only, decays away
+  min_damping:        [0.0, 0.0, 40.0]  # Floor it decays to; FLOWN, so this sets c1
 
   # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
   f8_a:               30.0     # Width of the eight, azimuth spans ±A             [deg]

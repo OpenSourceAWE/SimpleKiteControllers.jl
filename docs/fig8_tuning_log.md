@@ -932,3 +932,26 @@ since the dive happens before the cap is ever reached). At 40° the full sweep
 completes, min elevation 44.01° — above 40 but below the grid's normal floor, so
 this row's `outcome: time_limit` is not on quite the same footing as the rest of
 the grid. `c1` and G-scatter are otherwise solid (0.10 %, 15.4 %).
+
+**`[0,0,40]` / depower 0.23 — 2026-08-10.** Identified because `fc_settings.yaml`
+moved to depower 0.23, below the grid's 0.25 floor, and the table refuses to
+extrapolate. The FIRST row identified with `min_damping` passed explicitly:
+`steering_test_v3.jl` now sets it to `[0,0,40]`, equal to `body_damping`, so the
+sweep flew that damping throughout instead of whatever the settling decay left
+in place. The rows above were identified before the floor was introduced
+(2026-08-08). Run at 150 m / dt 0.05, which the table no longer penalises —
+neither enters `c1`, whose fit is normalised by apparent wind speed.
+
+PASS on all three criteria: `sweep_done` at the full 0.175 cap, min elevation
+73.05°, G scatter 14.49 %. `c1` = 0.3225 ± 0.21 %, and it sits just above the
+0.25 row's 0.3104 — monotone in depower, as it must be, and close enough that
+the damping-regime change did not move `c1` much.
+
+`c2` is the caveat: -1.1124 ± 12.5 %, against +0.0758 at depower 0.25 and a
+smooth +0.0758 -> +0.5925 trend across 0.25..0.55. `c2` is the gravity term and
+the one that moves most with damping (it swings from -0.38 to -2.08 across the
+damping levels at fixed depower), so the sign flip is plausibly the damping
+regime rather than depower — but it means the 0.23 and 0.25 rows should not be
+read as one continuous `c2` curve. Interpolating `c2` between them is
+meaningless until 0.25 is re-identified the same way. `c1` and `delay`
+(0.25 s vs 0.2667 s) are consistent across the pair.

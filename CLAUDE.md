@@ -102,7 +102,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   `check_pattern_feasible`).
 - `turn_rate_table.jl` — `turn_rate_coeffs(body_damping, depower)`, interpolating `c1`
   (log-linearly), `c2` and the steering `delay` from `data/turn_rate_coeffs.yaml`. Owns
-  the loaded table as mutable state (`reload_turn_rate_table!`). Non-passing and legacy
+  the loaded table as mutable state (`reload_turn_rate_table!`). Non-passing
   rows are never interpolation neighbours, and a lookup outside the identified range
   **throws** rather than extrapolating.
 - `fc_settings.jl` — `FC_Settings`, every tuning parameter of a figure-eight run, loaded
@@ -172,8 +172,9 @@ not yet been lifted into a controller type.
   `FigureEightSettings`), never hardcoded in a script. Unknown YAML keys are an error;
   missing ones fall back to the struct default. The YAML header comment block acts as the
   file's docstring.
-- Never hardcode `c1`/`c2`/`delay` — always `turn_rate_coeffs(body_damping, depower)`.
-  Both arguments move them a lot.
+- Never hardcode `c1`/`c2`/`delay` — always `turn_rate_coeffs(fcs.min_damping, depower)`.
+  Both arguments move them a lot. Pass `min_damping`, not `body_damping`: the latter
+  decays away during settling, so the floor is the damping the pattern is flown with.
 - The **dated tuning history** (sweeps, reverted attempts, why each lever is closed) lives
   in [docs/fig8_tuning_log.md](docs/fig8_tuning_log.md). Add findings there, not in the
   settings docstrings. Its older entries predate the migration: ALL-CAPS names are today's
