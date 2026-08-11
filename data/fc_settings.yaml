@@ -18,7 +18,7 @@
 # docs/fig8_tuning_log.md.
 fc_settings:
   # --- simulation conditions ------------------------------------------------
-  vsm_interval:       1        # Steps between VSM aero updates, 1 = tightest        [-]
+  vsm_interval:       5        # Steps between VSM aero updates, 1 = tightest        [-]
   v_wind:             5.0      # Ground wind speed at reference height [m/s]
   compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
   depower_setpoint:   0.27     # Depower held on the pattern                        [-]

@@ -181,7 +181,7 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
-AERO_MODE = AeroDirect() # ContinuousAero() or AeroDirect()
+AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
 DAMPING_PER_STIFFNESS = 0.001
@@ -299,6 +299,8 @@ toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
 
+# Assigned OUTSIDE the try: the loop's wall time must survive an early break.
+t_wall_start = time()
 try
     for _ in 1:s.steps
         t = s.sys_state.time
@@ -415,6 +417,9 @@ catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
     @error "Simulation stopped early at t≈$(round(s.sys_state.time, digits=2))s" exception=(exc, catch_backtrace())
 end
+# The loop ALONE: saving the log and scoring it below are not simulation.
+t_wall = time() - t_wall_start
+t_sim = Float64(s.sys_state.time)
 
 @info "Save the log"
 save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
@@ -441,6 +446,16 @@ let settled = findall(x -> Int(x) == 4, sl.sys_state)
                 mean(va), minimum(va), maximum(va),
                 fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
     end
+end
+
+# Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
+if t_sim > 0
+    @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
+             (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
+            t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / round(Int, t_sim / s.dt),
+            round(Int, t_sim / s.dt), s.dt, fcs.vsm_interval)
+else
+    @warn "No simulated time elapsed — no performance figure."
 end
 
 if show_plots
