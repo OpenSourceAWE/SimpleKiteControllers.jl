@@ -33,7 +33,7 @@ initial:
 solver:
   solver: 'FBDF'
   abs_tol: 0.01 # absolute tolerance of the DAE solver [m, m/s]
-  rel_tol: 0.001 # relative tolerance of the DAE solver [-]
+  rel_tol: 0.002 # relative tolerance of the DAE solver [-]
   relaxation: 0.6 # relaxation factor of inner linear Newton solver, needed for quasi-steady solver
 
 kite:
