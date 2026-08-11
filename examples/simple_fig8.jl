@@ -92,17 +92,16 @@ needs no edit of this script — define `fcs` first and it is used as-is:
 
 An `fcs` left in `Main` therefore SURVIVES the next `include` (unlike
 `SHOW_PLOTS`, which is one-shot) and the run says so in its log; drop the object
-or rebuild it from the file to get the YAML values back. Both `body_damping` and
-`min_damping` are among the fields, and they are INDEPENDENT — the first only
-shapes the settling transient, the second is the floor it decays to and hence
-what is flown:
+or rebuild it from the file to get the YAML values back. `body_damping` is among
+the fields; settling starts there and decays to `init`'s floor of 0.8x it, so the
+one value fixes both the settling transient and what is flown:
 
-    fcs.min_damping = [0.0, 0.0, 20.0]   # softer in flight, settling unchanged
+    fcs.body_damping = [0.0, 0.0, 25.0]  # softer, in settling and in flight
     include("examples/simple_fig8.jl")
 
-A `min_damping` (or `body_damping`) the cache has not seen before makes V3Kite
-re-settle the wing, since the settled-geometry filename encodes both — one slow
-`init`, then it is cached like any other.
+A `body_damping` the cache has not seen before makes V3Kite re-settle the wing,
+since the settled-geometry filename encodes it — one slow `init`, then it is
+cached like any other.
 
 `sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
 changing the timestep means editing that file.
@@ -112,6 +111,25 @@ the USER PARAMETERS block and is `ContinuousAero()`, which integrates the VSM lo
 instead of holding it frozen over a step. V3Kite's own default is `AeroDirect()`,
 the cheaper one — the continuous mode carries its own model binary and settled
 geometry and costs more per step.
+
+`DAMPING_PER_STIFFNESS` sits beside it and is not an `FC_Settings` field either.
+It sets the structural damping of the TETHER AND BRIDLE segments as a ratio of
+their stiffness (`unit_damping = ratio * unit_stiffness` [s]), overriding the
+material value in the model's `struc_geometry.yaml`; the wing frame keeps the
+damping given there, and `body_damping` (which acts on point velocity relative to
+the wing) is unaffected. V3Kite applies it from the start of settling, with a
+floor: below `MIN_SETTLE_DAMPING_PER_STIFFNESS` (0.0015) settling would diverge,
+so a lower ratio settles at the floor and is set on the settled structure
+afterwards. The FLOORED value is what enters the settled-geometry cache key, so
+every ratio below the floor shares one `settled_*.bin` — changing this value
+within that range costs no re-settle. Passing `nothing` instead restores V3Kite's
+default: bridles at the material value, main tether undamped.
+
+The turn-rate table is not indexed by it. `turn_rate_coeffs` is keyed on
+`body_damping` and `depower_setpoint` alone, so the `c1` printed below — and the
+feasibility margin built from it — was identified without tether damping and is
+only an estimate here. Both are diagnostic, so this costs the diagnosis, not the
+run.
 
 `SHOW_PLOTS = false` before the include suppresses the figures at the end,
 which is what makes a sweep bearable. It is ONE-SHOT: the script resets it to
@@ -164,6 +182,9 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
 AERO_MODE = AeroDirect() # ContinuousAero() or AeroDirect()
+# Structural damping of the tether and bridle segments, as a ratio of their
+# stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
+DAMPING_PER_STIFFNESS = 0.001
 PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
@@ -203,7 +224,7 @@ end
 # No cache_path either: V3Kite's default is where its own precompile workload
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(fcs.v_wind, l_tether; body_damping = fcs.body_damping,
-    min_damping = fcs.min_damping,
+    damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, wc, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
     sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
@@ -217,11 +238,11 @@ fec = FigureEightController(FigureEightSettings(;
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
 
-# Never hardcode these: both arguments move them a lot. The lookup takes
-# `min_damping`, NOT `body_damping`: the latter decays away during settling, so
-# the damping the model FLIES the pattern with — the one c1 was identified at —
-# is the floor. A `body_damping` above the floor changes only the settled
-# geometry it converges to, not the turn rate.
+# Never hardcode these: both arguments move them a lot. The lookup key is
+# `body_damping`, the value `init` was given: the damping the model FLIES the
+# pattern with is the floor that decays out of it (0.8x by default), so the one
+# value identifies both the settling transient and the flown damping c1 belongs
+# to.
 #
 # The coefficients are DIAGNOSTIC here — they feed the feasibility check and the
 # dead-time context below, no gain and no control law — so a damping/depower the
@@ -229,10 +250,10 @@ fec = FigureEightController(FigureEightSettings(;
 # to extrapolate (by design: c1 moves violently with both arguments), so catch
 # that and fly on unadvised rather than aborting a deliberate off-grid run.
 coeffs = try
-    turn_rate_coeffs(fcs.min_damping, fcs.depower_setpoint)
+    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
 catch e
     e isa ArgumentError || rethrow()
-    @warn "No turn-rate coefficients for min_damping = $(fcs.min_damping), \
+    @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
            depower = $(fcs.depower_setpoint) — flying WITHOUT the feasibility \
            check. Identify this cell with V3Kite.jl's steering_test_v3.jl to get \
            it back.\n$(e.msg)"
@@ -243,9 +264,9 @@ if isnothing(coeffs)
     c1 = c2 = delay = NaN
 else
     c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
-    @info @sprintf("Turn-rate law at min_damping=%s, depower=%.2f%s: \
+    @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
                     c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                   fcs.min_damping, fcs.depower_setpoint,
+                   fcs.body_damping, fcs.depower_setpoint,
                    coeffs.interpolated ? " (INTERPOLATED)" : "",
                    c1, c2, delay)
 

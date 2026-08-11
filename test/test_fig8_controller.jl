@@ -237,7 +237,7 @@ _make_test_controller(; kwargs...) =
         @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 <
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        # 0.23, the first row identified with the min_damping floor (flown [0,0,40]).
+        # 0.23, the first row identified with an explicit damping floor (flown [0,0,40]).
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 ≈ 0.3225
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 >
               turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1

@@ -107,22 +107,13 @@ Add new findings there, not here.
 
     """
     Body damping settling STARTS from, per axis. It shapes the settling
-    transient and the settled geometry it converges to, but not the flown
-    dynamics: it decays to `min_damping`, which is what sets `c1` and hence the
-    achievable turn radius, and what [`turn_rate_coeffs`](@ref) is looked up
-    with.
+    transient and the settled geometry it converges to; V3Kite's `init` decays
+    it over the settling run to its `min_damping` floor (0.8 x this by default),
+    and that floor is the damping the run is actually FLOWN with. Both are fixed
+    by this one value, so it is the key [`turn_rate_coeffs`](@ref) is looked up
+    with, and what sets `c1` and hence the achievable turn radius.
     """
     body_damping::Vector{Float64} = [0.0, 0.0, 40.0]
-
-    """
-    Floor the body damping decays to during settling, elementwise, and hence the
-    damping the run is actually FLOWN with — `body_damping` only shapes the
-    settling transient above it. V3Kite's own default is `[0, 0, 20]`, half the
-    starting value; `[0, 0, 40]` is used here because that is the floor the
-    depower-0.23 row of `data/turn_rate_coeffs.yaml` was identified at. Keep it
-    equal to the damping of the row [`turn_rate_coeffs`](@ref) looks up.
-    """
-    min_damping::Vector{Float64} = [0.0, 0.0, 40.0]
 
     # ---- Pattern geometry [deg]; a SMALLER lemniscate is a TIGHTER one ------ #
     "Width of the eight [deg] (azimuth spans +-`f8_a`)"

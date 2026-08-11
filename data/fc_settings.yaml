@@ -40,8 +40,8 @@ fc_settings:
   settled_d_gate:     5.0      # Cross-track error below which fig8 -> settled    [deg]
 
   # --- plant ----------------------------------------------------------------
-  body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling transient only, decays away
-  min_damping:        [0.0, 0.0, 40.0]  # Floor it decays to; FLOWN, so this sets c1
+  body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to
+                                        # 0.8x it, so this is the turn_rate_coeffs key
 
   # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
   f8_a:               30.0     # Width of the eight, azimuth spans ±A             [deg]
