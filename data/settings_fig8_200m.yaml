@@ -78,8 +78,8 @@ winch:
   i_speed: 0.1           # integral gain of the winch speed controller     [-]
 
 environment:
-  v_wind: 8.0       # wind speed at reference height          [m/s]
-  upwind_dir: -90.0 # upwind direction                        [deg]
+  v_wind: 8.0        # wind speed at reference height         [m/s]
+  upwind_dir: -90.0  # upwind direction                       [deg]
   wind_vec: [8.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
   use_wind_vec: true # use wind_vec instead of v_wind/upwind_dir
   temp_ref: 15.0     # temperature at reference height         [°C]
