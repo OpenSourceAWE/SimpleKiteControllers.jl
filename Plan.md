@@ -211,5 +211,33 @@ are unchanged from step 11 within noise.
 
 # Step 13 Make turbulence work
 - Add a call to set_default_turbulence() as in V3Kite to the menu - DONE -
-- I set the turbulence to 0.2 and run simple_fig8.jl, but the turbulence is not used. Can you fix that?
+
+# Step 14 Write v3_segments.csv table - DONE 2026-08-12 -
+Add a script export_v3_segments.jl.
+
+It shall create a csv file in the output folder with the columns:
+
+segment point1 point2 segment_type
+
+segment is a number from 1 to n
+point1 and point2 are the numbers of the point that the segment connects
+segment_type is tether or bridle
+
+**A third type was missing: the wing structure.** `tether`/`bridle` covers only
+49 of the V3's 95 segments; the other 46 (leading-edge tubes, struts,
+trailing-edge wires, diagonal springs) are neither. The exported types are
+therefore `wing` (46), `bridle` (43) and `tether` (6). Finer splits exist but
+were not taken: the four wing sub-kinds, and `power_line`/`steering_line` within
+the bridle (the KCU tapes 87–89 and the mains 63/64), which is what the
+deprecated `SegmentType` enum named.
+
+`Segment` carries no type — `SegmentType` is no longer a constructor parameter —
+so `examples/export_v3_segments.jl` derives it: in a tether's `segment_idxs` →
+`tether`; else both endpoints `is_wing_node` → `wing`; else `bridle`. It builds
+the structure with `load_sys_struct_from_yaml` (V3Kite's committed
+`data/struc_geometry.yaml`, `AeroNone` so no VSM geometry is loaded), not with
+`init`: seconds instead of minutes, and the loader still runs
+`expand_auto_tethers!`, without which the file would have 89 segments/39 points
+and no tether rows at all instead of 95/44. The trimmed geometry `init` actually
+flies differs only in positions and rest lengths, not in topology.
 
