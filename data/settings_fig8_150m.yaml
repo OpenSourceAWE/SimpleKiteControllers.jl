@@ -13,10 +13,9 @@
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
 # POSITION-mode winch gains are wc_settings.yaml, and the geometry,
 # polars and VSM settings are loaded by V3Kite from its own data directory and
-# never pass through this file. `v_wind` appears in both files; there the
-# fc_settings value wins, because it is passed to `init` explicitly. The
-# initial tether length (`l_tethers` below) is read from HERE alone —
-# fc_settings.yaml has no tether_length field.
+# never pass through this file. The wind speed `v_wind` and the initial tether
+# length (`l_tethers`) below are read from HERE alone — fc_settings.yaml has
+# neither field; the example passes both to `init` from this file.
 system:
   log_file: 'fig8_200m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
@@ -78,9 +77,9 @@ winch:
   i_speed: 0.1           # integral gain of the winch speed controller     [-]
 
 environment:
-  v_wind: 8.0        # wind speed at reference height         [m/s]
+  v_wind: 5.0        # wind speed at reference height         [m/s]
   upwind_dir: -90.0  # upwind direction                       [deg]
-  wind_vec: [8.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
+  wind_vec: [5.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
   use_wind_vec: true # use wind_vec instead of v_wind/upwind_dir
   temp_ref: 15.0     # temperature at reference height         [°C]
   height_gnd: 0.0    # height of groundstation above see level  [m]

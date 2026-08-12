@@ -9,8 +9,9 @@ a YAML file (`fc_settings.yaml`) rather than hard-coded in the example, so a
 sweep can vary them without editing the script.
 
 Everything here is a TUNING parameter of one run. The PLANT the run is flown
-against — including the length of the run (`sim_time`) and the timestep it is
-integrated with (`sample_freq`) — is the system project resolved by
+against — including the wind speed (`v_wind`), the length of the run
+(`sim_time`) and the timestep it is integrated with (`sample_freq`) — is the
+system project resolved by
 [`project_file`](@ref), i.e. `data/settings_fig8_200m.yaml`. The POSITION-mode
 winch gains are `data/wc_settings.yaml` (V3Kite's `WC_Settings` struct, this
 package's file) and the geometry is the model's own; the
@@ -30,8 +31,6 @@ Add new findings there, not here.
     aero lag for wall time. Passed straight to V3Kite's `step!`.
     """
     vsm_interval::Int64 = 1
-    "Ground wind speed at reference height [m/s]"
-    v_wind = 5.0
     """
     How soft the winch is [-]. Divides both `winch_len_kp` and `winch_damp`, so
     the steady-state yield scales linearly with it while the length loop's own

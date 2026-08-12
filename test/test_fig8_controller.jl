@@ -431,6 +431,9 @@ _make_test_controller(; kwargs...) =
         # The initial tether length is a plant condition (sim_settings' l_tethers), not FC_Settings.
         @test !hasfield(FC_Settings, :tether_length)
         @test haskey(settings_dict["initial"], "l_tethers")
+        # So is the wind speed: it is read from `environment.v_wind` alone.
+        @test !hasfield(FC_Settings, :v_wind)
+        @test settings_dict["environment"]["v_wind"] > 0
         # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
     end
