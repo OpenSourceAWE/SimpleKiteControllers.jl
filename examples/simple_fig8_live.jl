@@ -309,8 +309,6 @@ end
 # The wind speed comes from the same file: it is a plant condition, and passing the
 # project's own value keeps the mean wind and the turbulent field (which init builds
 # for `set.v_wind`) at the same speed.
-# No cache_path either: V3Kite's default is where its own precompile workload
-# compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
