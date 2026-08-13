@@ -27,19 +27,11 @@ committed file is the one that always exists.
 
 # How the type is decided
 
-`Segment` carries no type: the `SegmentType` enum
-(`POWER_LINE`/`STEERING_LINE`/`BRIDLE`) is deprecated in SymbolicAWEModels and
-no longer a constructor parameter, so the classification is structural, using
-the same wing test the package's own validation uses:
-
-1. a segment belonging to a tether (`tether.segment_idxs`) is `tether`,
-2. of the rest, one with both endpoints on the wing (`point.is_wing_node`, i.e.
-   a member of a twist surface) is `wing` — the leading-edge tubes, struts,
-   trailing-edge wires and diagonal springs,
-3. everything else is `bridle`, from the wing attachment points down to the KCU,
-   including the pulley halves and the power/steering tapes.
-
-For the V3 that gives 46 wing, 43 bridle and 6 tether segments.
+Structurally, by `examples/v3_segments.jl` — a segment of a tether is `tether`,
+one with both endpoints on the wing is `wing`, everything else is `bridle`, which
+for the V3 gives 46 wing, 43 bridle and 6 tether segments. The same file feeds
+the live viewer in `simple_fig8_live.jl`, so the exported table and the drawn one
+cannot disagree.
 
 Run from the menu, or by
 
@@ -57,20 +49,9 @@ using SimpleKiteControllers: project_file
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "v3_segments.jl"))
 
 const STRUC_YAML = joinpath(v3_data_path(), "struc_geometry.yaml")
-
-"""
-    segment_type(sys_struct, segment, tether_idxs) -> String
-
-Classify `segment` as `"tether"`, `"wing"` or `"bridle"`; `tether_idxs` is the
-set of indices of all segments belonging to a tether.
-"""
-function segment_type(sys_struct, segment, tether_idxs)
-    segment.idx in tether_idxs && return "tether"
-    all(sys_struct.points[i].is_wing_node for i in segment.point_idxs) && return "wing"
-    return "bridle"
-end
 
 """
     export_segments(sys_struct, csv_file) -> Vector{String}
@@ -79,11 +60,7 @@ Write the `segment, point1, point2, segment_type` table of `sys_struct` to
 `csv_file` and return the type of each segment, in the same order.
 """
 function export_segments(sys_struct, csv_file)
-    tether_idxs = Set{Int}()
-    for tether in sys_struct.tethers
-        union!(tether_idxs, tether.segment_idxs)
-    end
-    types = [segment_type(sys_struct, segment, tether_idxs) for segment in sys_struct.segments]
+    types = segment_types(sys_struct)
     open(csv_file, "w") do io
         println(io, "segment,point1,point2,segment_type")
         for (segment, type) in zip(sys_struct.segments, types)

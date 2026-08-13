@@ -241,21 +241,49 @@ the structure with `load_sys_struct_from_yaml` (V3Kite's committed
 and no tether rows at all instead of 95/44. The trimmed geometry `init` actually
 flies differs only in positions and rest lengths, not in topology.
 
-# Step 15 Live 3D view of a figure-eight run
+# Step 15 Live 3D view of a figure-eight run - IMPLEMENTED 2026-08-13, full run not yet flown -
 
 Integrate SimpleKiteControllers.jl with KiteViewers.jl: `examples/simple_fig8_live.jl`
-shall show the kite, bridle and tether **live**, updated from the simulation loop —
-not replayed from a log afterwards. `KiteViewers.jl/examples/park_v3.jl` is the
+shows the kite, bridle and tether **live**, updated from the simulation loop — not
+replayed from a log afterwards. `KiteViewers.jl/examples/park_v3.jl` was the
 reference for the API, not for the structure: it drives `update_segments!` from a
 finished `.arrow` log, this script drives it from `s.sys_state` right after `step!`.
 
-`examples/simple_fig8_live.jl` today is a **byte-identical copy** of
-`simple_fig8.jl`. The change should stay small and mechanical (roughly: the viewer
-set-up before the loop, three lines inside it, a teardown after it) so the two files
-can be diffed against each other. The fork is the cost of this step — the
-alternative, a one-shot `SHOW_VIEWER` global in `simple_fig8.jl` in the style of
-`SHOW_PLOTS`, avoids 470 duplicated lines but mixes an interactive window into the
-script that sweeps run headless.
+`examples/simple_fig8_live.jl` started as a **byte-identical copy** of
+`simple_fig8.jl` and the fork was kept minimal: outside the docstring, the diff is
+the three `VIEWER_*` parameters, the selective KiteViewers import, an eight-line
+viewer set-up before the loop, a twelve-line update block inside it, `for _` →
+`for i`, and a final frame after it. Nothing else. The fork is the cost of this
+step — the alternative, a one-shot `SHOW_VIEWER` global in `simple_fig8.jl` in the
+style of `SHOW_PLOTS`, avoids 470 duplicated lines but mixes an interactive window
+into the script that sweeps run headless.
+
+## What was built
+
+- `examples/v3_segments.jl` — the segment classification, lifted out of
+  `export_v3_segments.jl` so the exported CSV and the drawn topology come from one
+  place. `segment_types(sys_struct)` and `segment_matrix(sys_struct, type_code)`;
+  the caller passes the integer code per type name, so the file needs neither a
+  viewer nor GLMakie. `export_v3_segments.jl` now includes it.
+- `examples/simple_fig8_live.jl` — the live run, added to `examples/menu.jl`
+  (`pagesize` 8 → 10, the list no longer fitted).
+- Defaults: `VIEWER_INTERVAL = 5`, `VIEWER_SCALE = 0.08`, `VIEWER_KITE_SCALE = 6.0`.
+  The kite scale is measured, not copied: at `park_v3.jl`'s 2.0 the V3's 5 m wing on
+  a 200 m tether is a few pixels; 6 is where the wing structure and bridle read
+  without swamping the tether, 10 is too coarse.
+
+## Verified, and what is not
+
+Verified against a real log (`output/fig8_200m.arrow`, 9001 rows) driven through
+exactly the calls the loop makes: `segment_matrix` off the loaded structure gives
+95 × 3 over 44 points, 6 tether / 43 bridle / 46 wing — step 14's counts;
+`Viewer3D(project_set, false)` + `KiteViewers.init` + 451 frames of
+`update_segments!`/`update_status_text!` render the kite, tether and status text
+correctly, and `Z[1]` reads 93.96 m at the kite, confirming point 1 is the kite end.
+
+**Not yet run: a full live simulation.** The twelve lines inside the loop and the
+interaction between GLMakie's render task and V3Kite's stepping (whether `yield()`
+alone keeps the window responsive under `step!`) are still untested.
 
 ## Prerequisite: KiteViewers 0.6.0 — resolved, but only in the live manifest
 

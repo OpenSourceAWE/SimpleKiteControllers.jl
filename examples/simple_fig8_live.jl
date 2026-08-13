@@ -2,14 +2,41 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Figure-of-eight path following of the V3 kite via V3Kite's `init`/`step!`
-interface.
+Figure-of-eight path following of the V3 kite, shown LIVE in the KiteViewers 3D
+window while it flies.
+
+The live twin of `simple_fig8.jl`: identical flight, logging and scoring, plus a
+viewer the simulation loop drives directly. Everything below describes both;
+the section "The live viewer" is what the two files differ by, and a diff against
+`simple_fig8.jl` should show nothing else.
 
 The kite starts parked at ~73° and reaches the pattern through a four-phase
 entry (park -> dive -> hold -> fig8). Once engaged, the L0
 attractor guidance (`src/figure_eight_controller.jl`) commands a course and a PID
 (as in V3Kite's `simple_sinus.jl` / `simple_auto_parking.jl`) tracks it with the
 steering tape.
+
+# The live viewer
+
+A `Viewer3D` opens once the model is built and is updated from inside the loop,
+every `VIEWER_INTERVAL`-th step, with the point positions `step!` has just
+written into `s.sys_state` — not by replaying the log afterwards, which is what
+KiteViewers' own `park_v3.jl` does. The point/segment topology comes from
+`examples/v3_segments.jl`, classified from the running structure `s.sys`, so no
+`v3_segments.csv` has to exist or be current.
+
+The viewer is a window on the run, not a control over it: `STOP` (and `PAUSE`,
+which shares the same flag) ends the simulation early, at which point the log is
+still saved, scored and plotted, exactly as after the overspeed abort. Closing
+the window mid-run is not supported — press `STOP` instead. The run is far slower
+than realtime, so nothing paces the loop; it only yields, which is what keeps the
+window drawing and its buttons alive.
+
+`VIEWER_SCALE` shrinks the world into scene units and `VIEWER_KITE_SCALE` blows
+up bridle and wing about the KCU, leaving the tether alone: the V3's 5 m wing on
+a 200 m tether is a dot at true scale, and 6 is where its structure reads without
+swamping the tether. Neither is an `FC_Settings` field — they change the picture,
+not the flight.
 
 # What comes from where
 
@@ -88,7 +115,7 @@ needs no edit of this script — define `fcs` first and it is used as-is:
     fcs = FC_Settings(fc_settings(project_file()))
     fcs.el_center = 30.0
     fcs.attractor_dist = 12.0
-    include("examples/simple_fig8.jl")
+    include("examples/simple_fig8_live.jl")
 
 An `fcs` left in `Main` therefore SURVIVES the next `include` (unlike
 `SHOW_PLOTS`, which is one-shot) and the run says so in its log; drop the object
@@ -97,7 +124,7 @@ the fields; settling starts there and decays to `init`'s floor of 0.8x it, so th
 one value fixes both the settling transient and what is flown:
 
     fcs.body_damping = [0.0, 0.0, 25.0]  # softer, in settling and in flight
-    include("examples/simple_fig8.jl")
+    include("examples/simple_fig8_live.jl")
 
 A `body_damping` the cache has not seen before makes V3Kite re-settle the wing,
 since the settled-geometry filename encodes it — one slow `init`, then it is
@@ -139,7 +166,7 @@ plots of a later run. A sweep therefore sets it inside its loop:
     for a in 55:5:70
         fcs.f8_a = a
         SHOW_PLOTS = false
-        include("examples/simple_fig8.jl")
+        include("examples/simple_fig8_live.jl")
     end
 
 Which system project is flown (150m/200m/300m pattern), the run length
@@ -169,8 +196,11 @@ using KiteUtils: wc_settings   # resolves the wc-settings file named in the proj
 using LinearAlgebra: norm
 using Statistics: mean
 using Printf
+# Selectively: KiteViewers exports `init` too, which would make V3Kite's ambiguous.
+import KiteViewers
+using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop
 
-@info "simple_fig8.jl: figure-of-eight path following of the V3 kite."
+@info "simple_fig8_live.jl: figure-of-eight path following of the V3 kite."
 toc("Loaded packages in: ")
 
 # ==================== USER PARAMETERS ==================== #
@@ -178,9 +208,13 @@ toc("Loaded packages in: ")
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "v3_segments.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
+VIEWER_INTERVAL = 5     # draw every n-th step; the run is far slower than realtime anyway
+VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
+VIEWER_KITE_SCALE = 6.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
@@ -188,7 +222,7 @@ DAMPING_PER_STIFFNESS = 0.001
 PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
-@info "simple_fig8.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
+@info "simple_fig8_live.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
        turbulence = $TURBULENCE."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
@@ -298,6 +332,18 @@ entry_sign = 0              # latched sign of the entry descent limiter (0 = uns
 phase = 0
 hold_start = NaN            # [s] time the hold began
 
+# ==================== LIVE VIEWER ======================== #
+
+# The run's own settings, not `Viewer3D(false)`: the zero-argument constructor calls
+# `se()`, which wants a `system.yaml` this package's data/ deliberately does not have.
+# show_kite = false — the wing is drawn from the topology below, not from kite.obj.
+viewer = Viewer3D(project_set, false)
+# Classified from the RUNNING structure, so no v3_segments.csv has to exist or be current.
+KiteViewers.init(viewer, segment_matrix(s.sys,
+    Dict("tether" => Int(KiteViewers.TETHER), "bridle" => Int(KiteViewers.BRIDLE),
+         "wing" => Int(KiteViewers.WING))))
+clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the loop at once
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -305,7 +351,7 @@ toc("Start simulation loop...")
 # Assigned OUTSIDE the try: the loop's wall time must survive an early break.
 t_wall_start = time()
 try
-    for _ in 1:s.steps
+    for i in 1:s.steps
         t = s.sys_state.time
 
         # L0 attractor guidance -> commanded course [rad].
@@ -415,6 +461,19 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+
+        if i % VIEWER_INTERVAL == 0
+            update_segments!(viewer, s.sys_state; scale = VIEWER_SCALE,
+                             kite_scale = VIEWER_KITE_SCALE)
+            # Z[1] is the kite end of the tether: the V3's runs point 1 -> 39, 39 is the winch.
+            update_status_text!(viewer, s.sys_state; height = s.sys_state.Z[1])
+            # GLMakie renders in a task; a loop that never yields freezes the window.
+            yield()
+            if viewer.stop
+                @info @sprintf("Stopped from the viewer at t = %.2f s.", s.sys_state.time)
+                break
+            end
+        end
     end
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
@@ -423,6 +482,11 @@ end
 # The loop ALONE: saving the log and scoring it below are not simulation.
 t_wall = time() - t_wall_start
 t_sim = Float64(s.sys_state.time)
+
+# Last state drawn whatever the step count ended on; the window stays open afterwards.
+update_segments!(viewer, s.sys_state; scale = VIEWER_SCALE, kite_scale = VIEWER_KITE_SCALE)
+update_status_text!(viewer, s.sys_state; height = s.sys_state.Z[1])
+stop(viewer)
 
 @info "Save the log"
 save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())

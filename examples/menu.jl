@@ -35,6 +35,7 @@ const EXAMPLES = [
     "select_sim_time.jl    - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)" => "select_plots.jl",
     "simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
+    "simple_fig8_live.jl   - the same run, shown live in the 3D viewer (minutes!)" => "simple_fig8_live.jl",
     "simple_fig8_plots.jl  - plot the last logged run of active project" => "simple_fig8_plots.jl",
     "optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
@@ -50,7 +51,7 @@ function example_menu()
     push!(options, "quit")
     while true
         choice = request("\nChoose example to run or `q` to quit: ",
-                         RadioMenu(options, pagesize=8))
+                         RadioMenu(options, pagesize=10))
         if choice == -1 || choice == length(options)
             println("Left menu. Press <ctrl><d> to quit Julia!")
             return nothing
