@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "86637a3cf9d5a4efd889d7609aa2d027bbcae391"
+project_hash = "5803f93afbb46c121b37646f6ed45690549b1ee8"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5970c86505ae9c07bf5bc521ef2bbbb3849e8b7b"
@@ -1391,6 +1391,12 @@ git-tree-sha1 = "2f05ed29618da60c06a87e9c033982d4f71d0b6c"
 uuid = "ae98c720-c025-4a4a-838c-29b094483192"
 version = "0.2.1"
 
+[[deps.Joysticks]]
+deps = ["GLFW", "LinearAlgebra", "Observables", "Reexport"]
+git-tree-sha1 = "e4679b76fa83ce51972f2e6f04b6da8f250fbc0b"
+uuid = "82f05805-4863-42dc-b1a7-0852bd62c632"
+version = "0.1.4"
+
 [[deps.JpegTurbo]]
 deps = ["CEnum", "FileIO", "ImageCore", "JpegTurbo_jll", "TOML"]
 git-tree-sha1 = "9496de8fb52c224a2e3f9ff403947674517317d9"
@@ -1440,6 +1446,14 @@ deps = ["Arrow", "CSV", "DocStringExtensions", "LinearAlgebra", "OrderedCollecti
 git-tree-sha1 = "0d7307b9656072383b235e7b4e6ca546bc3fd7ae"
 uuid = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 version = "0.11.13"
+
+[[deps.KiteViewers]]
+deps = ["FileIO", "GLMakie", "GeometryBasics", "Joysticks", "KiteUtils", "LinearAlgebra", "Parameters", "Pkg", "PrecompileTools", "Printf", "Reexport", "Rotations", "StaticArrays", "StructArrays", "Timers"]
+git-tree-sha1 = "18666508f9dc2e9e4f2971ea6d1b79cd3a03dce5"
+repo-rev = "main"
+repo-url = "https://github.com/OpenSourceAWE/KiteViewers.jl.git"
+uuid = "2e593061-95e7-45e4-95f4-df0491f2e601"
+version = "0.6.0"
 
 [[deps.Krylov]]
 deps = ["LinearAlgebra", "Printf", "SparseArrays"]

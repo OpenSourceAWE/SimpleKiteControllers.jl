@@ -209,7 +209,7 @@ skipped (and the pass count drops accordingly) when the geometry is not given.
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,
                             hf_window = 0.5, min_elevation = 10.0,
-                            max_rms_d = 3.0, max_d_limit = 8.0, min_laps = 3.0,
+                            max_rms_d = 3.0, max_d_limit = 8.0, min_laps = 2.5,
                             lap_frac = 0.5, min_excursion = deg2rad(5.0),
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,

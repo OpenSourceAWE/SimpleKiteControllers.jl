@@ -241,3 +241,96 @@ the structure with `load_sys_struct_from_yaml` (V3Kite's committed
 and no tether rows at all instead of 95/44. The trimmed geometry `init` actually
 flies differs only in positions and rest lengths, not in topology.
 
+# Step 15 Live 3D view of a figure-eight run
+
+Integrate SimpleKiteControllers.jl with KiteViewers.jl: `examples/simple_fig8_live.jl`
+shall show the kite, bridle and tether **live**, updated from the simulation loop —
+not replayed from a log afterwards. `KiteViewers.jl/examples/park_v3.jl` is the
+reference for the API, not for the structure: it drives `update_segments!` from a
+finished `.arrow` log, this script drives it from `s.sys_state` right after `step!`.
+
+`examples/simple_fig8_live.jl` today is a **byte-identical copy** of
+`simple_fig8.jl`. The change should stay small and mechanical (roughly: the viewer
+set-up before the loop, three lines inside it, a teardown after it) so the two files
+can be diffed against each other. The fork is the cost of this step — the
+alternative, a one-shot `SHOW_VIEWER` global in `simple_fig8.jl` in the style of
+`SHOW_PLOTS`, avoids 470 duplicated lines but mixes an interactive window into the
+script that sweeps run headless.
+
+## Prerequisite: KiteViewers 0.6.0 — resolved, but only in the live manifest
+
+The point/segment API this step needs — `load_segments`, `init(kv, segments)`,
+`update_segments!`, `update_status_text!`, and the `SegmentType` values
+`TETHER`/`BRIDLE`/`WING` — arrived with KiteViewers 0.6.0 ("Add support for the
+V3Kite model") and is in **no registered version**: the newest registered tag is
+`v0.5.2`, which exports none of it. The dependency was added on 2026-08-13 and
+`Manifest-v1.12.toml` now holds `version = "0.6.0"` from
+`repo-url = ".../KiteViewers.jl.git"`, `repo-rev = "main"`; that copy has the API.
+Version bounds are not a problem — 0.6.0 accepts the GLMakie `0.13.13` and
+KiteUtils `0.11.13` the manifest already holds.
+
+Two things were needed to keep it, and both are DONE:
+
+1. The git source lived in the manifest alone, so a `Pkg.resolve()`/`Pkg.update()`
+   could have fallen back to the registered 0.5.2 and broken the script with a
+   `MethodError` on `init`. `examples/Project.toml` now carries
+   `KiteViewers = {url = ".../KiteViewers.jl.git", rev = "main"}` in `[sources]` and
+   `KiteViewers = "0.6"` in `[compat]`, which resolve confirmed keeps 0.6.0.
+2. `Manifest-v1.12.toml.default`, which `bin/install` copies over the working
+   manifest, still recorded 0.5.2 — a fresh clone would have installed the version
+   without the API. Refreshed from the resolved manifest.
+
+Still open: `rev = "main"` is a moving target, unlike the `rev = "v1.1.1"` V3Kite is
+pinned to. Move it to a tag as soon as KiteViewers 0.6.0 is released.
+
+## What the integration needs
+
+- **`init` collides.** V3Kite exports `init` (the model) and KiteViewers exports
+  `init` (the topology set-up), so a bare `using KiteViewers` beside `using V3Kite`
+  makes the unqualified `init` at the head of the script ambiguous. Import
+  selectively — `using KiteViewers: Viewer3D, update_segments!, update_status_text!,
+  clear_viewer, stop` — and call `KiteViewers.init(viewer, segments)` qualified.
+  Nothing else clashes: both packages re-export the same KiteUtils bindings
+  (`Settings`, `SysState`, `save_log`, `set_data_path`, …), which is not a conflict.
+- **Construct the viewer with the run's own settings:** `Viewer3D(project_set, false)`,
+  not `Viewer3D(false)` as in `park_v3.jl`. The zero-argument constructor calls
+  `se()`, which loads `system.yaml` from the current data path — and this package's
+  `data/` deliberately has no `system.yaml`, only `system_fig8_{150,200,300}m.yaml`.
+  `show_kite = false` because the wing is drawn from the segment topology, not from
+  the `kite.obj` mesh.
+- **Build the topology in memory, do not read the CSV.** `init(viewer, segments)`
+  wants a plain `n × 3` `(point1, point2, segment_type)` integer matrix;
+  `load_segments` is only a CSV reader for it. The live script already holds the
+  built structure as `s.sys`, so it can classify the 95 segments directly with the
+  rule step 14 established (in a tether's `segment_idxs` → `tether`; else both
+  endpoints `is_wing_node` → `wing`; else `bridle`) and never depend on
+  `output/v3_segments.csv` being present or current. That means lifting
+  `segment_type` out of `export_v3_segments.jl` into a small shared
+  `examples/v3_segments.jl` that both include, so the exported table and the drawn
+  one cannot disagree.
+- **Positions line up already.** `step!` calls `update_sys_state!`, so after it
+  `s.sys_state.X/Y/Z` hold the current point positions, in `s.sys.points` order;
+  `update_segments!` reads only slots `1:n_points` (44) and ignores the extra slots
+  (VSM panel corners, wing/body origins). `height = s.sys_state.Z[1]` is the kite
+  side: the V3's single tether runs point 1 → 39 and **39 is the winch point**.
+- **Update every `VIEWER_INTERVAL` steps** (default 5, a constant beside
+  `AERO_MODE` in the USER PARAMETERS block) with `update_segments!(viewer,
+  s.sys_state; scale, kite_scale)` and `update_status_text!`. `scale = 0.08`,
+  `kite_scale = 2.0` are `park_v3.jl`'s values for a comparable tether length and
+  are the starting point, not a measured choice.
+- **Yield to GLMakie.** The render loop is a task, and a `step!` loop that never
+  yields starves it into a frozen window; a `yield()` (or a very short `sleep`) at
+  each viewer update is what keeps the window drawing and its buttons alive.
+  No `wait_until` pacing: the run is far slower than realtime, so there is nothing
+  to slow down to.
+- **Let STOP end the run:** break the loop on `viewer.stop`, and treat that break
+  like the overspeed break — the log is still saved and scored. `park_v3.jl`'s
+  `replaying[]` guard around the PLAY button is a replay-only concern (a second
+  replay starting on top of the first) and has no counterpart here.
+- The tail of the script is unchanged: the log is saved, `print_fig8_metrics` runs,
+  and `simple_fig8_plots.jl` still comes up unless `SHOW_PLOTS = false`. Whether
+  the viewer window is closed at the end or left open for inspection is a choice —
+  leaving it open and letting the next run reuse it is friendlier in a REPL.
+
+Finally, add the script to `examples/menu.jl` beside `simple_fig8.jl`.
+

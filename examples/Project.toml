@@ -4,6 +4,7 @@ GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
+KiteViewers = "2e593061-95e7-45e4-95f4-df0491f2e601"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MakieControlPlots = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
@@ -26,10 +27,12 @@ Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 
 [sources]
+KiteViewers = {rev = "main", url = "https://github.com/OpenSourceAWE/KiteViewers.jl.git"}
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "v1.1.1"}
+V3Kite = {rev = "v1.1.1", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
 
 [compat]
+KiteViewers = "0.6"
 MakieControlPlots = "0.1.12"
 RuntimeGeneratedFunctions = "0.5.24"
 V3Kite = "1.1.1"
