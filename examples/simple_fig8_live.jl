@@ -266,6 +266,8 @@ VIDEO_MAX_FPS = 60      # frames above this are dropped, at the same playback sp
 VIDEO_SIZE = (1260, 1350) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
+TEXT_UPDATE_HZ = 5      # cap the on-screen status text to this many refreshes per second,
+                        # independent of the (much higher) geometry redraw rate
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
@@ -399,6 +401,20 @@ clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the
 frame_ns = VIEWER_INTERVAL * s.dt / VIEWER_TIME_LAPSE * 1e9
 frame_deadline = time_ns() + frame_ns
 
+# Geometry is redrawn every VIEWER_INTERVAL-th step, far more often than the status text
+# needs refreshing; gate text updates to TEXT_UPDATE_HZ by wall clock, not by step count,
+# so the cap holds regardless of solver speed or REPLAY_TIME_LAPSE. Live only — recorded
+# video keeps a fresh text per captured frame (see replay_run).
+text_update_ns = round(UInt64, 1e9 / TEXT_UPDATE_HZ)
+last_text_update = Ref(zero(UInt64))
+function maybe_update_status_text!(state; height)
+    now = time_ns()
+    if now - last_text_update[] >= text_update_ns
+        update_status_text!(viewer, state; height)
+        last_text_update[] = now
+    end
+end
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -523,7 +539,7 @@ try
             update_segments!(viewer, s.sys_state; scale = VIEWER_SCALE,
                              kite_scale = VIEWER_KITE_SCALE)
             # Z[1] is the kite end of the tether: the V3's runs point 1 -> 39, 39 is the winch.
-            update_status_text!(viewer, s.sys_state; height = s.sys_state.Z[1])
+            maybe_update_status_text!(s.sys_state; height = s.sys_state.Z[1])
             # GLMakie renders in a task; a loop that never yields freezes the window.
             yield()
             if viewer.stop
@@ -635,9 +651,9 @@ function replay_run(; video = nothing)
             if i % VIEWER_INTERVAL == 0 || i == length(sl)
                 update_segments!(viewer, state; scale = VIEWER_SCALE,
                                  kite_scale = VIEWER_KITE_SCALE)
-                update_status_text!(viewer, state; height = state.Z[1])
                 frame += 1
                 if isnothing(stream)
+                    maybe_update_status_text!(state; height = state.Z[1])
                     wait_until(deadline)
                     # `wait_until`'s last ~10ms is a non-yielding busy-spin (Timers.jl), and at
                     # REPLAY_TIME_LAPSE = 3 a frame's whole budget is often under that — with no
@@ -646,6 +662,9 @@ function replay_run(; video = nothing)
                     yield()
                     deadline = time_ns() + replay_frame_ns
                 elseif frame % stride == 0
+                    # Recorded video: keep text fresh on every captured frame, not throttled by
+                    # TEXT_UPDATE_HZ — the encoded rate is already capped by stride/VIDEO_MAX_FPS.
+                    update_status_text!(viewer, state; height = state.Z[1])
                     recordframe!(stream)
                     yield()
                 end
