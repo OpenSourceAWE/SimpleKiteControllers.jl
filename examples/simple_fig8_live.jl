@@ -388,7 +388,7 @@ hold_start = NaN            # [s] time the hold began
 # show_kite = false — the wing is drawn from the topology below, not from kite.obj.
 viewer = Viewer3D(project_set, false)
 # Classified from the RUNNING structure, so no v3_segments.csv has to exist or be current.
-KiteViewers.init(viewer, segment_matrix(s.sys,
+KiteViewers.init_segments(viewer, segment_matrix(s.sys,
     Dict("tether" => Int(KiteViewers.TETHER), "bridle" => Int(KiteViewers.BRIDLE),
          "wing" => Int(KiteViewers.WING))))
 clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the loop at once

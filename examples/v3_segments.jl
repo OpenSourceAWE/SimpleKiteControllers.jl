@@ -69,7 +69,7 @@ end
 
 The `n × 3` `(point1, point2, type)` topology matrix of `sys_struct`, with
 `type_code` mapping a type name onto the integer the consumer expects —
-KiteViewers' `SegmentType` values for `KiteViewers.init`.
+KiteViewers' `SegmentType` values for `KiteViewers.init_segments`.
 """
 function segment_matrix(sys_struct, type_code)
     types = segment_types(sys_struct)
