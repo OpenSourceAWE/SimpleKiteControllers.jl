@@ -166,6 +166,7 @@ using V3Kite
 using SimpleKiteControllers
 using DiscretePIDs: set_K!
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
+using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm
 using Statistics: mean
 using Printf
@@ -415,6 +416,8 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        # Not filled anywhere in the model chain: without this the log and the viewer read 0.
+        s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd
     end
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
