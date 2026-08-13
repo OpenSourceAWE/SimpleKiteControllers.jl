@@ -405,6 +405,9 @@ frame_deadline = time_ns() + frame_ns
 # needs refreshing; gate text updates to TEXT_UPDATE_HZ by wall clock, not by step count,
 # so the cap holds regardless of solver speed or REPLAY_TIME_LAPSE. Live only — recorded
 # video keeps a fresh text per captured frame (see replay_run).
+# `update_status_text!` has its OWN internal 1-in-`mod_text` throttle (default 4); leave that
+# at 1 (every call passes) so TEXT_UPDATE_HZ is the only throttle actually in effect.
+viewer.mod_text = 1
 text_update_ns = round(UInt64, 1e9 / TEXT_UPDATE_HZ)
 last_text_update = Ref(zero(UInt64))
 function maybe_update_status_text!(state; height)
@@ -412,6 +415,10 @@ function maybe_update_status_text!(state; height)
     if now - last_text_update[] >= text_update_ns
         update_status_text!(viewer, state; height)
         last_text_update[] = now
+        # Setting the Observable only queues the new text; GLMakie still needs a scheduling
+        # point to actually paint it. The caller's own yield() (once per drawn frame) is usually
+        # close enough, but this guarantees one right when the text itself changes.
+        yield()
     end
 end
 
