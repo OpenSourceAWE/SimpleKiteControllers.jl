@@ -267,10 +267,21 @@ into the script that sweeps run headless.
   viewer nor GLMakie. `export_v3_segments.jl` now includes it.
 - `examples/simple_fig8_live.jl` — the live run, added to `examples/menu.jl`
   (`pagesize` 8 → 10, the list no longer fitted).
-- Defaults: `VIEWER_INTERVAL = 5`, `VIEWER_SCALE = 0.08`, `VIEWER_KITE_SCALE = 6.0`.
-  The kite scale is measured, not copied: at `park_v3.jl`'s 2.0 the V3's 5 m wing on
-  a 200 m tether is a few pixels; 6 is where the wing structure and bridle read
-  without swamping the tether, 10 is too coarse.
+- Defaults: `VIEWER_INTERVAL = 5`, `VIEWER_TIME_LAPSE = 1.0`, `VIEWER_SCALE = 0.08`,
+  `VIEWER_KITE_SCALE = 4.0`. The kite scale is measured, not copied: at
+  `park_v3.jl`'s 2.0 the V3's 5 m wing on a 200 m tether is a few pixels, 10 is
+  too coarse.
+- Pacing, added after the first runs came out at 1x to 5x realtime depending on
+  how hard the step was: `wait_until` holds every drawn frame to
+  `VIEWER_INTERVAL * dt / VIEWER_TIME_LAPSE` seconds of wall time, with the
+  deadline reset from the clock after each wait rather than accumulated — a slow
+  frame is never repaid by a fast burst, which is what makes catch-up jerky.
+  Measured on a replay: 1.00x at lapse 1, 2.00x at lapse 2, and 0.62x when the
+  per-frame work exceeds the budget, i.e. it caps but never rushes. The waiting is
+  the whole cost — unpaced, the same frames take 0.1 ms each, since
+  `update_segments!` only writes observables and GLMakie renders them on its own.
+  Consequence: the `Performance: … x realtime` line of a live run reports the
+  pacing, not the solver.
 
 ## Verified, and what is not
 

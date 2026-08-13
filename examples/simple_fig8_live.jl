@@ -28,9 +28,32 @@ KiteViewers' own `park_v3.jl` does. The point/segment topology comes from
 The viewer is a window on the run, not a control over it: `STOP` (and `PAUSE`,
 which shares the same flag) ends the simulation early, at which point the log is
 still saved, scored and plotted, exactly as after the overspeed abort. Closing
-the window mid-run is not supported — press `STOP` instead. The run is far slower
-than realtime, so nothing paces the loop; it only yields, which is what keeps the
-window drawing and its buttons alive.
+the window mid-run is not supported — press `STOP` instead.
+
+Once the run is over the same window becomes a replay: `RUN` plays the saved log
+back from the start, paced by `REPLAY_TIME_LAPSE` (1 = realtime), and `PAUSE`
+(the same button, relabelled) or `STOP` ends it. The playback reads the log that
+was just loaded for the metrics, not the live model, so it can be repeated as
+often as wanted and costs nothing but the drawing. The REPL is free while it
+runs — the replay is an `@async` task driven by the button, so a second click
+never starts a second, overlapping playback.
+
+`VIEWER_TIME_LAPSE` caps the playback speed: each drawn frame is held to
+`VIEWER_INTERVAL * dt / VIEWER_TIME_LAPSE` seconds of wall time, so 1 flies at
+realtime and 2 at twice that (measured on a replay: 1.00x and 2.00x). Only a
+CAP — the solver runs at 1x to 5x realtime depending on how hard the step is, and
+the wait absorbs the fast stretches while the slow ones simply run slow. The
+deadline is taken from the clock after every wait rather than accumulated, so a
+slow frame is never paid back by a burst, which is what would otherwise make the
+motion jerky. Set it to `Inf` for the unpaced run.
+
+The waiting is where the time goes, not the drawing: an unpaced replay of the
+same frames costs 0.1 ms each, because `update_segments!` only writes observables
+and GLMakie renders them on its own.
+
+Waiting is what the frames are spent on, so the `Performance: … x realtime` line
+at the end reports the PACING, not the solver — `simple_fig8.jl` is where that
+number means something.
 
 `VIEWER_SCALE` shrinks the world into scene units and `VIEWER_KITE_SCALE` blows
 up bridle and wing about the KCU, leaving the tether alone: the V3's 5 m wing on
@@ -198,7 +221,8 @@ using Statistics: mean
 using Printf
 # Selectively: KiteViewers exports `init` too, which would make V3Kite's ambiguous.
 import KiteViewers
-using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop
+using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop,
+                   set_status, bring_viewer_to_front, on
 
 @info "simple_fig8_live.jl: figure-of-eight path following of the V3 kite."
 toc("Loaded packages in: ")
@@ -212,9 +236,11 @@ include(joinpath(@__DIR__, "v3_segments.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
-VIEWER_INTERVAL = 5     # draw every n-th step; the run is far slower than realtime anyway
+VIEWER_INTERVAL = 5     # draw every n-th step
+VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
+REPLAY_TIME_LAPSE = 3.0 # speed of the post-run replay on RUN: 1 = realtime
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
-VIEWER_KITE_SCALE = 6.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
+VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
@@ -343,6 +369,11 @@ KiteViewers.init(viewer, segment_matrix(s.sys,
     Dict("tether" => Int(KiteViewers.TETHER), "bridle" => Int(KiteViewers.BRIDLE),
          "wing" => Int(KiteViewers.WING))))
 clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the loop at once
+
+# Wall time one drawn frame is allowed to take at most; the deadline is reset from the
+# clock after every wait, so a slow frame is never made up for by a fast burst.
+frame_ns = VIEWER_INTERVAL * s.dt / VIEWER_TIME_LAPSE * 1e9
+frame_deadline = time_ns() + frame_ns
 
 toc("Start simulation loop...")
 
@@ -473,6 +504,10 @@ try
                 @info @sprintf("Stopped from the viewer at t = %.2f s.", s.sys_state.time)
                 break
             end
+            # Default always_sleep=false: the bulk of the wait is a real sleep, which is
+            # what lets GLMakie draw; only its last 10 ms spin.
+            wait_until(frame_deadline)
+            global frame_deadline = time_ns() + frame_ns
         end
     end
 catch exc
@@ -524,6 +559,61 @@ if t_sim > 0
 else
     @warn "No simulated time elapsed — no performance figure."
 end
+
+# ==================== REPLAY ==================== #
+
+# Guards against a second replay starting while one is in flight. `viewer.stop` cannot
+# serve as that guard: the viewer's own RUN/PAUSE handler flips it on EVERY click, and
+# being wired up in the constructor it always runs before the one below.
+replaying = Ref(false)
+
+"""
+    replay_run()
+
+Play the flown log back in the 3D viewer, from the first row to the last, drawing
+every `VIEWER_INTERVAL`-th one and holding each frame for as long as it covers in
+simulated time divided by `REPLAY_TIME_LAPSE` (1 = realtime). The frame rate comes
+from the log's own time column, so a run logged at a different `sample_freq` still
+plays at its true speed. Returns when the log is exhausted or `viewer.stop` is set
+by `PAUSE`/`STOP`, leaving the viewer stopped and ready for the next click.
+"""
+function replay_run()
+    replaying[] = true
+    viewer.stop = false
+    clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the loop at once
+    set_status(viewer, "Replay")
+    bring_viewer_to_front()
+    log_dt = length(sl.time) > 1 ? Float64(sl.time[2] - sl.time[1]) : s.dt
+    replay_frame_ns = VIEWER_INTERVAL * log_dt / REPLAY_TIME_LAPSE * 1e9
+    deadline = time_ns() + replay_frame_ns
+    try
+        for (i, state) in enumerate(sl)
+            viewer.stop && break
+            if i % VIEWER_INTERVAL == 0 || i == length(sl)
+                update_segments!(viewer, state; scale = VIEWER_SCALE,
+                                 kite_scale = VIEWER_KITE_SCALE)
+                update_status_text!(viewer, state; height = state.Z[1])
+                wait_until(deadline)
+                deadline = time_ns() + replay_frame_ns
+            end
+        end
+    catch exc
+        # An @async task that dies silently would just leave the button dead.
+        @error "Replay stopped early" exception=(exc, catch_backtrace())
+    finally
+        replaying[] = false
+        stop(viewer)
+    end
+end
+
+on(viewer.btn_PLAY.clicks) do _
+    # The built-in handler has already toggled `viewer.stop`: clicking RUN during a replay
+    # therefore reads as the PAUSE it is labelled, breaking the loop above instead of
+    # starting a second playback on top of it.
+    replaying[] || @async replay_run()
+end
+@info "Press RUN in the viewer to replay the run at \
+       $(REPLAY_TIME_LAPSE == 1 ? "realtime" : "$(REPLAY_TIME_LAPSE)x") speed."
 
 if show_plots
     include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
