@@ -261,12 +261,12 @@ VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
 REPLAY_TIME_LAPSE = 3.0 # speed of the post-run replay on RUN: 1 = realtime
 # Read and cleared like SHOW_PLOTS, so a sweep cannot go on writing videos unnoticed.
 record_video_ = @isdefined(RECORD_VIDEO) ? RECORD_VIDEO : false
-RECORD_VIDEO = true    # true: write output/<log_file>.mp4 once the run is scored
+RECORD_VIDEO = false    # true: write output/<log_file>.mp4 once the run is scored
 VIDEO_MAX_FPS = 60      # frames above this are dropped, at the same playback speed
 VIDEO_SIZE = (1260, 1350) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
-TEXT_UPDATE_HZ = 5      # cap the on-screen status text to this many refreshes per second,
+TEXT_UPDATE_HZ = 10    # cap the on-screen status text to this many refreshes per second,
                         # independent of the (much higher) geometry redraw rate
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
