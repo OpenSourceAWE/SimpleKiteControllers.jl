@@ -639,9 +639,15 @@ function replay_run(; video = nothing)
                 frame += 1
                 if isnothing(stream)
                     wait_until(deadline)
+                    # `wait_until`'s last ~10ms is a non-yielding busy-spin (Timers.jl), and at
+                    # REPLAY_TIME_LAPSE = 3 a frame's whole budget is often under that — with no
+                    # `yield()` here, the GLFW/render thread never gets scheduled and the window
+                    # is reported "not responding" by the window manager after a few seconds.
+                    yield()
                     deadline = time_ns() + replay_frame_ns
                 elseif frame % stride == 0
                     recordframe!(stream)
+                    yield()
                 end
             end
         end
