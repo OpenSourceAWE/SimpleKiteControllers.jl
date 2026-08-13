@@ -266,6 +266,7 @@ VIDEO_MAX_FPS = 60      # frames above this are dropped, at the same playback sp
 VIDEO_SIZE = (1260, 1350) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
+VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
@@ -386,7 +387,7 @@ hold_start = NaN            # [s] time the hold began
 # The run's own settings, not `Viewer3D(false)`: the zero-argument constructor calls
 # `se()`, which wants a `system.yaml` this package's data/ deliberately does not have.
 # show_kite = false — the wing is drawn from the topology below, not from kite.obj.
-viewer = Viewer3D(project_set, false)
+viewer = Viewer3D(project_set, false; px_per_unit = VIEWER_PX_PER_UNIT)
 # Classified from the RUNNING structure, so no v3_segments.csv has to exist or be current.
 KiteViewers.init_segments(viewer, segment_matrix(s.sys,
     Dict("tether" => Int(KiteViewers.TETHER), "bridle" => Int(KiteViewers.BRIDLE),
