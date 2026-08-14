@@ -54,7 +54,7 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
 VIEWER_INTERVAL = 3     # draw every n-th logged row
 REPLAY_TIME_LAPSE = 2.0 # 1 = realtime, N = N times faster
-VIEWER_SCALE = 0.06     # world -> scene units, as in KiteViewers' park_v3.jl
+VIEWER_SCALE = 0.04     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 150 m tether is a dot at 1
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 TEXT_UPDATE_HZ = 15      # cap the on-screen status text to this many refreshes per second
