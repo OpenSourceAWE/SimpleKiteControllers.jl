@@ -235,6 +235,7 @@ entry_sign = 0              # latched sign of the entry descent limiter (0 = uns
 phase = 0
 hold_start = NaN            # [s] time the hold began
 fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
+e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 toc("Start simulation loop...")
 
@@ -374,6 +375,11 @@ try
         s.sys_state.var_13 = get_f_err(rc)     # force error [N], NaN in speed control
         # Not filled anywhere in the model chain: without this the log and the viewer read 0.
         s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd
+        # Same story for e_mech, which KiteViewers' status text prints in Wh: the
+        # running integral of the SAME p_mech the viewer computes per frame.
+        global e_mech += s.sys_state.winch_force[1] * s.sys_state.v_reelout[1] *
+                         s.dt / 3600
+        s.sys_state.e_mech = e_mech
     end
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.

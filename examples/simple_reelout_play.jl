@@ -42,6 +42,7 @@ using SimpleKiteControllers
 import KiteViewers
 using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop,
                    bring_viewer_to_front, on
+using Printf
 
 @info "simple_reelout_play.jl: replaying a saved reel-out log in the KiteViewers 3D window."
 toc("Loaded packages in: ")
@@ -69,6 +70,24 @@ output_path = normpath(joinpath(@__DIR__, "..", "output"))
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 log_dt = length(sl.time) > 1 ? Float64(sl.time[2] - sl.time[1]) : 1 / project_set.sample_freq
+
+# The status text reads `e_mech` straight off the row, so a log recorded before
+# simple_reelout.jl started filling it replays at a flat 0.00 Wh. Rebuild it from
+# the same p_mech the viewer shows per frame; an all-zero column is the only case
+# where there is nothing to overwrite.
+if all(iszero, sl.e_mech)
+    p_mech = Float64.(getindex.(sl.winch_force, 1)) .*
+             Float64.(getindex.(sl.v_reelout, 1))
+    try
+        copyto!(sl.e_mech, cumsum(p_mech) .* (log_dt / 3600))
+        @info @sprintf("Log carries no e_mech; rebuilt it for the replay (%.1f Wh total).",
+                       sl.e_mech[end])
+    catch exc
+        # A memory-mapped Arrow column is read-only; the replay is still fine.
+        @warn "Log carries no e_mech and the column is not writable — the status \
+               text will show 0.00 Wh. Re-run simple_reelout.jl to log it." exception=exc
+    end
+end
 
 # ======================== TOPOLOGY ========================= #
 
