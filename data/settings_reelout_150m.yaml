@@ -57,22 +57,22 @@ tether:
 
 winch:
   winch_model: 'TorqueControlledMachine' # or AsynchMachine
-  max_force: 4000 # maximal (nominal) tether force; short overload allowed [N]
+  max_force: 8000 # maximal (nominal) tether force; short overload allowed [N]
   v_ro_max: 8.0          # maximal reel-out speed                        [m/s]
   v_ro_min: -8.0         # minimal reel-out speed (=max reel-in speed)   [m/s]
   drum_radius: 0.1615    # radius of the drum                              [m]
   max_acc: 4.0           # maximal acceleration of the winch            [m/s²]
   gear_ratio: 6.2        # gear ratio of the winch                         [-]
-  inertia_total: 0.204 # total inertia, as seen from the motor/generator [kgm²]
-  f_coulomb: 122.0       # coulomb friction                                [N]
-  c_vf: 30.6             # coefficient for the viscous friction         [Ns/m]
+  inertia_total: 0.408 # total inertia, as seen from the motor/generator [kgm²]
+  f_coulomb: 244.0       # coulomb friction                                [N]
+  c_vf: 61.2             # coefficient for the viscous friction         [Ns/m]
   p_speed: 1.0           # proportional gain of the winch speed controller [-]
   i_speed: 0.1           # integral gain of the winch speed controller     [-]
 
 environment:
-  v_wind: 5.0        # wind speed at reference height         [m/s]
+  v_wind: 6.0        # wind speed at reference height         [m/s]
   upwind_dir: -90.0  # upwind direction                       [deg]
-  wind_vec: [5.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
+  wind_vec: [6.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
   use_wind_vec: true # use wind_vec instead of v_wind/upwind_dir
   temp_ref: 15.0     # temperature at reference height         [°C]
   height_gnd: 0.0    # height of groundstation above see level  [m]
