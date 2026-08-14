@@ -12,6 +12,11 @@ speed control, 2 upper-force limit) — distinct from the bottom panel's ENTRY
 state machine (0 park … 4 settled). See `simple_fig8_plots.jl`'s docstring for
 everything else, which is unchanged here.
 
+Plus one figure that script has no counterpart for: `power`, the winch triple
+`F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
+measured. It is a selectable plot like the others, so `select_plots()` shows it
+in the menu; `simple_fig8_plots.jl` ignores the key.
+
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
 
@@ -154,6 +159,42 @@ if "time_series" in plots
         fig = fig_name * " – time series",
     )
     display(p2)
+    sleep(0.1)
+end
+
+if "power" in plots
+    @info "Plotting the winch power..."
+    f_tether = getindex.(sl.winch_force[rng], 1)
+    v_ro = getindex.(sl.v_reelout[rng], 1)
+    # Sign included: reeling in against the tether is negative mechanical power.
+    p_mech = f_tether .* v_ro ./ 1000
+    # Mean over the pay-out window only, which is what `reelout_power` scores.
+    pm = reelout_power(sl)
+    p_label = isnothing(pm) ? L"P_{\mathrm{mech}}" :
+              latexstring("P_{\\mathrm{mech}},~\\overline{P}_{\\mathrm{reel-out}} = " *
+                          string(round(pm.mean_power / 1000, digits = 1)) * "~\\mathrm{kW}")
+    p4 = plotx(
+        sl.time[rng],
+        f_tether,
+        v_ro,
+        p_mech;
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 16,
+        ylabels = [
+            L"F_{\mathrm{tether}}~[\mathrm{N}]",
+            L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
+            L"P_{\mathrm{mech}}~[\mathrm{kW}]",
+        ],
+        labels = [
+            nothing,
+            nothing,
+            # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
+            p_label,
+        ],
+        fig = fig_name * " – power",
+    )
+    display(p4)
     sleep(0.1)
 end
 
