@@ -258,7 +258,7 @@ show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
 VIEWER_INTERVAL = 3     # draw every n-th step
 VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
-REPLAY_TIME_LAPSE = 3.0 # speed of the post-run replay on RUN: 1 = realtime
+REPLAY_TIME_LAPSE = 2.0 # speed of the post-run replay on RUN: 1 = realtime
 # Read and cleared like SHOW_PLOTS, so a sweep cannot go on writing videos unnoticed.
 record_video_ = @isdefined(RECORD_VIDEO) ? RECORD_VIDEO : false
 RECORD_VIDEO = false    # true: write output/<log_file>.mp4 once the run is scored
