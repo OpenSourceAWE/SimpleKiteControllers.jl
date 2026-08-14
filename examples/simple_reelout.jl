@@ -4,8 +4,8 @@
 """
 Figure-of-eight path following of the V3 kite, extended with a REEL_OUT winch: the
 tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
-`simple_fig8.jl` (park -> dive -> hold -> fig8), and once the pattern is
-first tracked closely (phase 4) reels out under WinchControllers.jl's
+`simple_fig8.jl` (park -> dive -> hold -> fig8), and from the moment the
+guidance engages (phase 3) reels out under WinchControllers.jl's
 `v_set = kv * sqrt(force)` law until `fcs.reelout_l_max`, then holds that length
 for the rest of the run. No pumping cycle: there is no reel-in phase here.
 
@@ -58,15 +58,17 @@ through `var_09` are as in `simple_fig8.jl`):
 | `var_13` | force error of the active force limiter [N], NaN in speed control |
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
-1 dive, 2 hold, 3 fig8, 4 settled); reel-out begins the first time phase 4 is
-reached and stops once `l_set` reaches `fcs.reelout_l_max`.
+1 dive, 2 hold, 3 fig8, 4 settled); reel-out begins the first time phase 3 is
+reached and stops once `l_set` reaches `fcs.reelout_l_max`. Phase 4 still marks
+the first close tracking of the pattern, it just no longer gates the winch.
 
 # Parameters
 
 `fcs` works exactly as in `simple_fig8.jl` — define it before the `include` to
 override a value, e.g. `fcs.reelout_l_max = 300.0`. The REEL_OUT-specific fields
-are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max` (all feed
-WinchControllers.jl's `WCSettings`) and `reelout_l_max`, the stop length.
+are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
+`reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`) and
+`reelout_l_max`, the stop length.
 
 Which system project is flown, the run length and the turbulence level are read
 from `data/gui.yaml` exactly as in `simple_fig8.jl` — run `select_project()` to
@@ -149,7 +151,7 @@ s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # REEL_OUT controller: built fresh here so its soft-start ramp (t_startup) begins
-# the moment reel-out actually starts (phase 4), not at t = 0. `update(rcs)` is
+# the moment reel-out actually starts (phase 3), not at t = 0. `update(rcs)` is
 # NOT called: it would read this package's wc_settings.yaml, which is in V3Kite's
 # WC_Settings schema, not WinchControllers'. The tuning comes from fcs instead.
 rcs = WCSettings(dt = s.dt)
@@ -158,10 +160,11 @@ rcs.kv = fcs.reelout_kv
 rcs.f_low = fcs.reelout_f_low
 rcs.f_high = fcs.reelout_f_high
 rcs.v_sat = fcs.reelout_v_max
+rcs.t_startup = fcs.reelout_t_startup
 rc = WinchController(rcs)
 
 # Length setpoint: starts at the tether length after settling and warm-up, and
-# grows from the first step of phase 4 onward until it reaches `reelout_l_max`.
+# grows from the first step of phase 3 onward until it reaches `reelout_l_max`.
 l_set = s.sys_state.l_tether[1]
 
 fec = FigureEightController(FigureEightSettings(;
@@ -313,11 +316,15 @@ try
         rel_depower = (phase == 1 || phase == 2) ? fcs.entry_depower :
                                                    fcs.depower_setpoint
 
-        # REEL_OUT: only while phase 4 has been reached and l_set has not yet hit
-        # reelout_l_max. Once it does, l_set simply stops growing and the rest of
-        # the run is flown exactly like the constant-length example.
+        # REEL_OUT: from phase 3 (guidance engaged) onward, not phase 4 (settled),
+        # and only while l_set has not yet hit reelout_l_max. Once it does, l_set
+        # simply stops growing and the rest of the run is flown exactly like the
+        # constant-length example.
         local v_set = 0.0
-        if phase == 4 && l_set < fcs.reelout_l_max
+        if phase >= 3 && l_set < fcs.reelout_l_max
+            # The INSTANTANEOUS force: reeling out faster exactly when the kite
+            # pulls harder is what regulates the force. Lagging it is closed, see
+            # docs/fig8_tuning_log.md.
             v_set = calc_v_set(rc, reel_out_speed(s), winch_force(s), rcs.f_low)
             global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
@@ -387,7 +394,8 @@ print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
 let settled = findall(x -> Int(x) == 4, sl.sys_state)
     if isempty(settled)
-        @warn "Phase 4 never reached — no settled apparent wind speed, no reel-out."
+        # Reel-out runs from phase 3, so this is about the anchor only.
+        @warn "Phase 4 never reached — no settled apparent wind speed."
     else
         va = Float64.(sl.v_app[settled])
         @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
@@ -395,9 +403,10 @@ let settled = findall(x -> Int(x) == 4, sl.sys_state)
                 sl.time[settled[end]] - sl.time[settled[1]],
                 mean(va), minimum(va), maximum(va),
                 fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
-        @printf("  Tether: %.1f m -> %.1f m (target %.1f m).\n",
-                l_tether, sl.var_10[settled[end]], fcs.reelout_l_max)
     end
+    # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
+    @printf("  Tether: %.1f m -> %.1f m (target %.1f m).\n",
+            l_tether, sl.var_10[end], fcs.reelout_l_max)
 end
 
 let rp = reelout_power(sl)

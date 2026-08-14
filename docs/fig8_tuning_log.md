@@ -955,3 +955,39 @@ regime rather than depower — but it means the 0.23 and 0.25 rows should not be
 read as one continuous `c2` curve. Interpolating `c2` between them is
 meaningless until 0.25 is re-identified the same way. `c1` and `delay`
 (0.25 s vs 0.2667 s) are consistent across the pair.
+
+## REEL_OUT winch (`examples/simple_reelout.jl`)
+
+### Lagging the square-root law is CLOSED — it costs the force regulation (2026-08-14)
+
+`v_set = kv*sqrt(F)` on the INSTANTANEOUS measured force looks like a loop worth
+damping and is not. At 6 m/s wind, 150 m, the engagement of reel-out rings: `v_ro`
+overshoots to 4.6 m/s against a 3.0 m/s steady setpoint and oscillates at 2.04 s
+for about ten seconds, decaying (zeta = 0.12). The chain is visible in the log —
+force peaks, `v_set` (`var_11`) peaks 0.24 s later, `v_reelout` 0.39 s after that
+— and the loop gain `kv/(2*sqrt(F)) * dF/dv_ro` measured 0.77 (`dF/dv_ro` = 1400
+N per m/s from the oscillation amplitudes). No saturation involved: peak torque
+159 N·m against the 500 N·m correction limit, WinchController in speed mode
+(`var_12` = 1) throughout.
+
+A first-order low-pass with tau = 3 s on the speed setpoint (state 1 only, so the
+force limiters kept the raw signal) killed the ring and the run with it:
+
+| | raw law | tau = 3 s |
+|:--|--:|--:|
+| mean power over the pay-out | 7.2 kW | **5.0 kW** |
+| tether force | ~2500 N, near constant | mean 3330 N, sigma 2337, 411 .. 8137 N |
+| corr(F, v_ro) | — | **-0.773** |
+| `mean(F)*mean(v)` vs `mean(F*v)` | — | 8.7 kW vs 5.0 kW, i.e. -3.65 kW of covariance |
+
+The fast force feedback IS the force regulation. Reeling out harder exactly when
+the kite pulls harder is what holds the force flat; with a 3 s lag the speed
+arrives a quarter period late, so the drum reels SLOWLY into the force peaks
+(8137 N) and fast into the troughs (411 N). That anti-correlation is the whole
+2.2 kW: `mean(F*v)` loses 3.65 kW of covariance while the means barely move.
+
+So the ring is a startup transient of a loop that earns its keep in steady state.
+Shape the ENGAGEMENT instead — `reelout_t_startup` (2.0 s here, against
+WinchControllers' 0.25 s default), and if more is needed, the
+`acceleration_limit` `simple_reelout.jl` hands `step!`, currently `rcs.max_acc` =
+8 m/s² where the command only ever needs ~3. Do not slow the law itself.

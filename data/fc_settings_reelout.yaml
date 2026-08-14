@@ -42,6 +42,7 @@ fc_settings:
   reelout_f_high:     7600.0   # Upper limit; keep below the plant's max_force      [N]
   reelout_v_max:      8.0      # Reel-out speed limit                             [m/s]
   reelout_l_max:      350.0    # Tether length at which reel-out stops              [m]
+  reelout_t_startup:  2.0      # Soft start of the REEL_OUT controller              [s]
 
   # --- entry state machine: park -> dive -> hold -> fig8 --------------------
   chi_dive:           -85.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]

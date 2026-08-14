@@ -101,6 +101,16 @@ Add new findings there, not here.
     reelout_v_max = 8.0
     "Tether length [m] at which reel-out stops and the run holds the final length"
     reelout_l_max = 250.0
+    """
+    Soft-start time [s] of the REEL_OUT controller (`WCSettings.t_startup`),
+    counted from the moment reel-out engages. WinchControllers' own default is
+    0.25 s, which steps the drum into a pattern already flying at full speed;
+    stretching it bounds the initial overshoot (measured 4.6 m/s against a 3.0
+    m/s steady setpoint). It shapes the ENGAGEMENT only, and deliberately so:
+    slowing the law itself costs the force regulation, see
+    `docs/fig8_tuning_log.md`.
+    """
+    reelout_t_startup = 2.0
 
     # ---- Entry state machine: park -> dive -> hold -> fig8 ------------------ #
     """
