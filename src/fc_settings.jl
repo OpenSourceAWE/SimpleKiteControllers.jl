@@ -111,6 +111,19 @@ Add new findings there, not here.
     `docs/fig8_tuning_log.md`.
     """
     reelout_t_startup = 2.0
+    """
+    Delay [s] between the guidance engaging (phase 3) and reel-out starting.
+    `0` reels out from the first step of phase 3.
+
+    It buys energy per metre, not power: pay-out ends at `reelout_l_max`, so the
+    window is set by the metres to pay out and not by when it opens, and the
+    metres flown before the pattern settles are the cheap ones. Measured at 6
+    m/s wind, 150 -> 350 m: engaging at phase 3 gave 2.32 kJ/m against 2.49 kJ/m
+    when the winch waited for phase 4 (mean power 6.5 vs 7.2 kW over a window
+    that barely moved, 71.4 vs ~69 s). Delaying past the settling recovers that;
+    delaying further only shortens the run's harvest.
+    """
+    reelout_delay = 0.0
 
     # ---- Entry state machine: park -> dive -> hold -> fig8 ------------------ #
     """

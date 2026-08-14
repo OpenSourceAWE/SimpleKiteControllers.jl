@@ -58,17 +58,19 @@ through `var_09` are as in `simple_fig8.jl`):
 | `var_13` | force error of the active force limiter [N], NaN in speed control |
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
-1 dive, 2 hold, 3 fig8, 4 settled); reel-out begins the first time phase 3 is
-reached and stops once `l_set` reaches `fcs.reelout_l_max`. Phase 4 still marks
-the first close tracking of the pattern, it just no longer gates the winch.
+1 dive, 2 hold, 3 fig8, 4 settled); reel-out begins `fcs.reelout_delay` seconds
+after phase 3 is reached and stops once `l_set` reaches `fcs.reelout_l_max`.
+Phase 4 still marks the first close tracking of the pattern, it just no longer
+gates the winch.
 
 # Parameters
 
 `fcs` works exactly as in `simple_fig8.jl` — define it before the `include` to
 override a value, e.g. `fcs.reelout_l_max = 300.0`. The REEL_OUT-specific fields
 are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
-`reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`) and
-`reelout_l_max`, the stop length.
+`reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`),
+`reelout_l_max`, the stop length, and `reelout_delay`, how long after phase 3
+the winch waits before it starts paying out.
 
 Which system project is flown, the run length and the turbulence level are read
 from `data/gui.yaml` exactly as in `simple_fig8.jl` — run `select_project()` to
@@ -232,6 +234,7 @@ entry_sign = 0              # latched sign of the entry descent limiter (0 = uns
 # (phase 3 with cross-track error below settled_d_gate for the first time).
 phase = 0
 hold_start = NaN            # [s] time the hold began
+fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
 
 toc("Start simulation loop...")
 
@@ -257,6 +260,7 @@ try
             global hold_start = t
         elseif phase == 2 && t - hold_start >= fcs.hold_time
             global phase = 3
+            global fig8_start = t
         elseif phase == 3 && dmin < fcs.settled_d_gate
             global phase = 4
         end
@@ -316,12 +320,13 @@ try
         rel_depower = (phase == 1 || phase == 2) ? fcs.entry_depower :
                                                    fcs.depower_setpoint
 
-        # REEL_OUT: from phase 3 (guidance engaged) onward, not phase 4 (settled),
-        # and only while l_set has not yet hit reelout_l_max. Once it does, l_set
-        # simply stops growing and the rest of the run is flown exactly like the
-        # constant-length example.
+        # REEL_OUT: `reelout_delay` seconds after phase 3 (guidance engaged), not
+        # at phase 4 (settled), and only while l_set has not yet hit
+        # reelout_l_max. Once it does, l_set simply stops growing and the rest of
+        # the run is flown exactly like the constant-length example.
         local v_set = 0.0
-        if phase >= 3 && l_set < fcs.reelout_l_max
+        if phase >= 3 && t - fig8_start >= fcs.reelout_delay &&
+           l_set < fcs.reelout_l_max
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
             # docs/fig8_tuning_log.md.
