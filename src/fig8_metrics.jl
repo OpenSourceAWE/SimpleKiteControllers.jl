@@ -10,7 +10,8 @@ sweeps.
 Assumes the V3 log layout: `set_steering` is dimensionless `rel_steering`, not
 meters, so high-frequency content is reported in rel-steering units; the single
 winch is logged in `winch_force[1]`; `var_01` carries the cross-track error
-[deg] (`simple_fig8.jl` has the full slot mapping).
+[deg] (`simple_fig8.jl` has the full slot mapping; `simple_reelout.jl` adds
+`var_10`-`var_13`, used by [`reelout_power`](@ref)).
 """
 
 """
@@ -188,6 +189,29 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
         max_tape_rate,
         v_steering,
     )
+end
+
+"""
+    reelout_power(sl) -> NamedTuple or `nothing`
+
+Mean mechanical reel-out power `mean(winch_force * v_reelout)` [W] over the
+window where the tether length setpoint (`var_10`, `examples/simple_reelout.jl`
+only) was still increasing — the run's actual reel-out phase, between the
+pattern settling and `reelout_l_max`. Returns `nothing` for a log that never
+reeled out: a plain figure-eight run (`var_10` is unused there, so constant),
+or a reel-out run that never reached phase 4.
+
+Headless, no plotting dependency, so a sweep can call it on every log.
+"""
+function reelout_power(sl)
+    l_set = Float64.(sl.var_10)
+    length(l_set) > 1 || return nothing
+    # +1: `diff` reports the change INTO sample i+1, which is the reeling one.
+    reeling = findall(>(0.0), diff(l_set)) .+ 1
+    isempty(reeling) && return nothing
+    fp = Float64.(getindex.(sl.winch_force[reeling], 1))
+    v_ro = Float64.(getindex.(sl.v_reelout[reeling], 1))
+    return (; mean_power = mean(fp .* v_ro), n = length(reeling))
 end
 
 """

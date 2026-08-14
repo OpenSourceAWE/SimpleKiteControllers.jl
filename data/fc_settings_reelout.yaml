@@ -1,0 +1,92 @@
+# Settings of the flight controller flown by examples/simple_reelout.jl. A copy
+# of fc_settings.yaml (used by simple_fig8.jl) with one change: `compliance: 0`,
+# fixed at POSITION mode because REEL_OUT and V3Kite's own FORCE mode both drive
+# the winch and only one can hold the drum at a time — simple_reelout.jl errors
+# rather than silently picking one if this is left nonzero. Named by
+# system_reelout_150m.yaml next to it; every key below is a field of
+# `FC_Settings` (src/fc_settings.jl), where the full rationale for each value is
+# documented. A missing key falls back to the struct default, an unknown key is
+# an error.
+#
+# The PLANT is not here either: the system project (system_reelout_150m.yaml
+# next to this file) and the simulation settings it names — including sim_time,
+# the sample_freq whose inverse is the timestep, the wind speed (v_wind) and the
+# initial tether length (l_tethers) — describe what is being flown, not how it
+# is controlled.
+#
+# The POSITION-mode winch gains are NOT here — they live in wc_settings.yaml
+# next to this file and are read straight from there; simple_reelout.jl uses
+# them via V3Kite's own POSITION torque loop, driven by the REEL_OUT length
+# setpoint. The winch_force_* keys below are FORCE-mode parameters, unused at
+# compliance = 0; kept so this stays a complete FC_Settings, same as
+# wc_settings.yaml keeps its unused force-mode keys. The REEL_OUT-specific keys
+# (reelout_*) are what actually govern the winch here.
+fc_settings:
+  # --- simulation conditions ------------------------------------------------
+  vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
+  compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
+  depower_setpoint:   0.27     # Depower held on the pattern                        [-]
+  elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
+  park_time:          2.0      # Park: zero steering while the transients decay     [s]
+  warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
+
+  # --- force-mode winch; unused here (compliance = 0), kept for a complete struct
+  winch_force_tau:    10.0     # Compliance timescale; NOT scaled by compliance      [s]
+  winch_len_kp:       100.0    # Length trim, length error -> reference force     [N/m]
+  winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
+  winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
+
+  # --- REEL_OUT winch ---------------------------------------------------------
+  reelout_kv:         0.06     # v_set = reelout_kv * sqrt(force)                  [-]
+  reelout_f_low:      350.0    # Below: LowerForceController reels in, not the law  [N]
+  reelout_f_high:     3800.0   # Upper limit; keep below the plant's max_force      [N]
+  reelout_v_max:      8.0      # Reel-out speed limit                             [m/s]
+  reelout_l_max:      250.0    # Tether length at which reel-out stops              [m]
+
+  # --- entry state machine: park -> dive -> hold -> fig8 --------------------
+  chi_dive:           -85.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
+  chi_hold:           -90.0    # Course commanded during the hold                 [deg]
+  dive_el_margin:     7.0      # Margin above el_center where the dive ends       [deg]
+  hold_time:          0.8      # Duration of the hold                               [s]
+  settled_d_gate:     5.0      # Cross-track error below which fig8 -> settled    [deg]
+
+  # --- plant ----------------------------------------------------------------
+  body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to
+                                        # 0.8x it, so this is the turn_rate_coeffs key
+
+  # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
+  f8_a:               30.0     # Width of the eight, azimuth spans ±A             [deg]
+  f8_b:               12.0     # Height of the eight, elevation spans ±B/2        [deg]
+  f8_c:               0.0      # Size of the right part                           [deg]
+  f8_d:               0.0      # Asymmetry factor                                   [-]
+  el_center:          26.0     # Centre elevation; lower turns easier, costs energy [deg]
+  attractor_dist:     10.0     # Arc distance Q -> attractor                      [deg]
+  up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
+
+  # --- heading/course PID ---------------------------------------------------
+  heading_p:          0.1941   # Gain at v_app_ref; only their product is physical   [-]
+  heading_i:          false    # Integral time [s], or false for no integral action
+  heading_d:          0.12     # Derivative time [s]
+  heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
+  v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
+  v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
+  entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
+  entry_depower:      0.37     # Depower during the entry phases                    [-]
+
+  # --- feedback signal: heading at low kite speed, course at high -----------
+  v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]
+  v_kite_course:      10.0     # At/above: pure course feedback                   [m/s]
+  fig8_pure_course:   false    # Course alone in phase 3; the schedule then governs entry
+  max_steering:       0.32     # Command limit; raising it is CLOSED, see the log    [-]
+
+  # --- entry descent limiter ------------------------------------------------
+  entry_chi_max:      95.0     # Steepest course while off-path; 180 disables it   [deg]
+  entry_d_gate:       12.0     # Cross-track error below which it is bypassed     [deg]
+  entry_d_blend:      4.0      # Blend band above the gate, 0 = hard switch       [deg]
+  entry_cut_margin:   30.0     # Distance from ±180° where chi_set's sign is noise [deg]
+
+  # --- guards and metrics ---------------------------------------------------
+  v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
+  entry_time:         62.0     # Settle time after park_time before the metrics     [s]
+  min_elevation:      10.0     # Floor criterion over the WHOLE run               [deg]
+  min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]

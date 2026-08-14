@@ -83,6 +83,25 @@ Add new findings there, not here.
     "Floor on the reference force, keeps the tether taut [N]"
     winch_force_min = 100.0
 
+    # ---- REEL_OUT winch; mutually exclusive with `compliance > 0` ----------- #
+    """
+    Proportional factor of WinchControllers.jl's REEL_OUT law,
+    `v_set = reelout_kv * sqrt(force)` (its `WCSettings.kv`). Used by
+    `examples/simple_reelout.jl` only.
+    """
+    reelout_kv = 0.06
+    """
+    Lower force limit [N] (`WCSettings.f_low`): below it the
+    LowerForceController reels in rather than holding the square-root law.
+    """
+    reelout_f_low = 350.0
+    "Upper force limit [N] (`WCSettings.f_high`), keep below the plant's `max_force`"
+    reelout_f_high = 3800.0
+    "Reel-out speed limit [m/s] (`WCSettings.v_sat`), also passed as `step!`'s `speed_limit`"
+    reelout_v_max = 8.0
+    "Tether length [m] at which reel-out stops and the run holds the final length"
+    reelout_l_max = 250.0
+
     # ---- Entry state machine: park -> dive -> hold -> fig8 ------------------ #
     """
     Course commanded during the dive [deg]. |chi| > 90 is descending, < 90

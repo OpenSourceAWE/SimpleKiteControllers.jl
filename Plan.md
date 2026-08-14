@@ -92,7 +92,11 @@ PID and blending are unchanged.
 
 **Dependency.** Add `WinchControllers` to `examples/Project.toml` (compat `0.5.5`). The
 root Manifest already pins the ecosystem, so use `Pkg.add("WinchControllers@0.5.5")` —
-`Pkg.resolve()` alone will not pull it in.
+`Pkg.resolve()` alone will not pull it in. **As implemented:** the registered 0.5.5 does
+not have the `mode` field from step 1 yet (unpublished), so `[sources]` points at a local
+`path = "../../WinchControllers.jl"` for now, with a comment saying to switch to a
+`rev`/`url` pin once a release ships it — same pattern as V3Kite's `bin/dev`, just not
+wired to a script since this is the only package that needs it today.
 
 **Settings collision — do NOT call `update(wcs)` / `WCSettings(true; dt)`.**
 WinchControllers' `update` reads `joinpath(get_data_path(), wc_settings())`, which under
@@ -102,9 +106,17 @@ overlap, so the load would silently leave every WinchControllers field at its de
 Build `WCSettings(dt = s.dt)` in code instead and set its fields from `FC_Settings`,
 which is where this repo's convention puts a run's tuning anyway.
 
-**New `FC_Settings` fields** (`src/fc_settings.jl` + `data/fc_settings.yaml`):
+**New `FC_Settings` fields** (`src/fc_settings.jl`):
 `reelout_kv` -> `wcs.kv`, `reelout_f_low` -> `wcs.f_low`, `reelout_f_high` -> `wcs.f_high`,
-`reelout_v_max` -> `wcs.v_sat`, and `reelout_l_max` [m], the stop length.
+`reelout_v_max` -> `wcs.v_sat`, and `reelout_l_max` [m], the stop length. **As
+implemented:** these live in a NEW `data/fc_settings_reelout.yaml` (a copy of
+`fc_settings.yaml` with `compliance: 0`), not the shared `fc_settings.yaml` —
+that file's `compliance: 0.5` default is fig8's FORCE-mode tuning, and REEL_OUT
+needs `compliance = 0` (see the exclusivity check below). Two files avoids
+either a silent default mismatch or making every `simple_reelout.jl` run start
+with a manual `fcs.compliance = 0` override; `system_reelout_150m.yaml`'s
+`fc_settings:` key names the new file, exactly as `wc_settings:`/`sim_settings:`
+already point at their own files per project.
 
 **Coupling to V3Kite.** `step!` accepts `set_length` or `set_torque`, never a speed, so
 the controller's `v_set` is integrated into the length setpoint:
@@ -175,22 +187,34 @@ Finally add the script to `examples/menu.jl`.
 
 ## Step 4 — Acceptance
 
-1. WinchControllers' full test suite still passes with the mode defaulted to
-   `vroPiecewise`, and `examples/test_winchcontroller.jl` is unchanged.
-2. On the clean leg of `test_reelout.jl`, `v_ro` tracks `kv*sqrt(F_t)` to within a stated
-   tolerance in steady state, with the lag explained by `p_speed`/`i_speed` and `max_acc`.
-3. `simple_reelout.jl` completes a run in which the tether grows monotonically from `l0`
-   (~150 m) to `reelout_l_max` and then holds, with no overspeed abort and no solver
-   failure.
-4. The figure-eight metrics over the reel-out window are no worse than a constant-length
-   run **at the same 150 m** — not the 200 m numbers in `docs/fig8_tuning_log.md`, which
-   were flown on a longer tether. Fly `system_fig8_150m.yaml` once for that baseline.
-   Mean reel-out power is reported.
+1. **VERIFIED.** WinchControllers' full test suite: 126/126 pass (`Pkg.test()`), the mode
+   defaults to `"piecewise"`, and `examples/test_winchcontroller.jl` is unchanged.
+2. **VERIFIED.** `test/test_reelout.jl`'s clean leg (`f_high = 8000`, above the dummy
+   force's peak): `v_ro` tracks `kv*sqrt(F_t)` to within 0.25 m/s once the speed
+   controller has been continuously active for >= 1 s. The excluded transient is a real
+   one, not a law error: every trough drives the force below `f_low` and the
+   `LowerForceController` reels all the way in (down to ~-5 m/s in the bench test) before
+   handing back, and recovering from that excursion takes a settling window.
+3. **VERIFIED.** A 200 s run of `simple_reelout.jl` (`system_reelout_150m.yaml`,
+   `fc_settings_reelout.yaml`) grew the tether from 150.0 m to exactly 250.0 m
+   (`reelout_l_max`) and held there, printing feasibility margins 1.22 (start, 150 m) and
+   2.04 (end, 250 m). No overspeed abort, no solver failure, 200 s sim in 99.5 s wall
+   (2.01x realtime, matching the "~2x realtime" documented elsewhere). All 3 plots
+   (`simple_reelout_plots.jl`) rendered without error.
+4. **VERIFIED.** Fig8 metrics over the reel-out run's settled window (RMS d = 1.23°, mean
+   0.91°, max 4.94°, 7 laps, all 7 success criteria passed) are AS GOOD AS or better than
+   a 90 s constant-length baseline flown on `system_fig8_150m.yaml` at the same 150 m
+   start (RMS d = 1.51°, mean 1.08°, max 4.98°, 4 laps, all 7 criteria passed) — reeling
+   out did not degrade tracking. Mean reel-out power: 3502 W over 2589 samples (the active
+   pay-out window, ≈29 s of the 200 s run).
 
 ## Open questions
 
-- **Is the pattern feasible at 150 m at all?** See the feasibility paragraph above — the
-  tuning log moved away from 150 m for this pattern. Measure it before anything else; the answer may mean a pattern change belongs in step 3 as work, not as a check.
+- **Is the pattern feasible at 150 m at all? — RESOLVED, yes.** Measured with today's
+  `fc_settings.yaml` (`body_damping = [0,0,40]`, `max_steering = 0.32`, `c1 = 0.2819`):
+  margin 1.22 at 150 m, 1.63 at 200 m, 2.04 at 250 m — all feasible, growing with length
+  as expected. The tuning log's 150 -> 200 move predates the current `body_damping`/
+  pattern values; no pattern change is needed to start this run at 150 m.
 - Does the pattern centre need to descend as the tether grows, or is holding `el_center`
   good enough for a 100 m pay-out? Decide from the first run, not up front.
 - Naming of the mode field and its enum values is not fixed; `vroReelOut`/`vroPiecewise`
