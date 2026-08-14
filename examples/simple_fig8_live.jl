@@ -256,7 +256,7 @@ include(joinpath(@__DIR__, "v3_segments.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
-VIEWER_INTERVAL = 2     # draw every n-th step
+VIEWER_INTERVAL = 3     # draw every n-th step
 VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
 REPLAY_TIME_LAPSE = 3.0 # speed of the post-run replay on RUN: 1 = realtime
 # Read and cleared like SHOW_PLOTS, so a sweep cannot go on writing videos unnoticed.
@@ -266,7 +266,7 @@ VIDEO_MAX_FPS = 60      # frames above this are dropped, at the same playback sp
 VIDEO_SIZE = (1260, 1350) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 200 m tether is a dot at 1
-TEXT_UPDATE_HZ = 10    # cap the on-screen status text to this many refreshes per second,
+TEXT_UPDATE_HZ = 5    # cap the on-screen status text to this many refreshes per second,
                         # independent of the (much higher) geometry redraw rate
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
@@ -428,6 +428,9 @@ toc("Start simulation loop...")
 
 # Assigned OUTSIDE the try: the loop's wall time must survive an early break.
 t_wall_start = time()
+# No GC pause is allowed to eat a frame deadline; re-enabled in the `finally` below, so an
+# early break or an exception can never leave the REPL with collection switched off.
+GC.enable(false)
 try
     for i in 1:s.steps
         t = s.sys_state.time
@@ -547,21 +550,22 @@ try
                              kite_scale = VIEWER_KITE_SCALE)
             # Z[1] is the kite end of the tether: the V3's runs point 1 -> 39, 39 is the winch.
             maybe_update_status_text!(s.sys_state; height = s.sys_state.Z[1])
-            # GLMakie renders in a task; a loop that never yields freezes the window.
-            yield()
             if viewer.stop
                 @info @sprintf("Stopped from the viewer at t = %.2f s.", s.sys_state.time)
                 break
             end
             # Default always_sleep=false: the bulk of the wait is a real sleep, which is
             # what lets GLMakie draw; only its last 10 ms spin.
-            wait_until(frame_deadline)
+            wait_until(frame_deadline; always_sleep = true)
             global frame_deadline = time_ns() + frame_ns
         end
     end
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
     @error "Simulation stopped early at t≈$(round(s.sys_state.time, digits=2))s" exception=(exc, catch_backtrace())
+finally
+    GC.enable(true)
+    GC.gc()
 end
 # The loop ALONE: saving the log and scoring it below are not simulation.
 t_wall = time() - t_wall_start
@@ -653,20 +657,22 @@ function replay_run(; video = nothing)
         stream = isnothing(video) ? nothing :
                  VideoStream(viewer.fig; visible = true,
                              framerate = max(1, round(Int, 1e9 / replay_frame_ns / stride)))
+        # Paced playback only: a GC pause does not fit in a frame budget that is often under
+        # 10 ms. Recording keeps GC on — it holds every captured frame and is unpaced anyway.
+        isnothing(stream) && GC.enable(false)
         for (i, state) in enumerate(sl)
             viewer.stop && break
-            if i % VIEWER_INTERVAL == 0 || i == length(sl)
+            if i % (VIEWER_INTERVAL*REPLAY_TIME_LAPSE) == 0 || i == length(sl)
                 update_segments!(viewer, state; scale = VIEWER_SCALE,
                                  kite_scale = VIEWER_KITE_SCALE)
                 frame += 1
                 if isnothing(stream)
                     maybe_update_status_text!(state; height = state.Z[1])
-                    wait_until(deadline)
+                    wait_until(deadline; always_sleep = true)
                     # `wait_until`'s last ~10ms is a non-yielding busy-spin (Timers.jl), and at
                     # REPLAY_TIME_LAPSE = 3 a frame's whole budget is often under that — with no
                     # `yield()` here, the GLFW/render thread never gets scheduled and the window
                     # is reported "not responding" by the window manager after a few seconds.
-                    yield()
                     deadline = time_ns() + replay_frame_ns
                 elseif frame % stride == 0
                     # Recorded video: keep text fresh on every captured frame, not throttled by
@@ -682,6 +688,11 @@ function replay_run(; video = nothing)
         # An @async task that dies silently would just leave the button dead.
         @error "Replay stopped early" exception=(exc, catch_backtrace())
     finally
+        # `video`, not `stream`: the try body is its own scope, and the two are nothing together.
+        if isnothing(video)
+            GC.enable(true)
+            GC.gc()
+        end
         replaying[] = false
         stop(viewer)
     end
