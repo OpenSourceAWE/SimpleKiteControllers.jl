@@ -29,19 +29,15 @@ V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
 WinchControllers = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
 
 [sources]
-KiteViewers = {rev = "main", url = "https://github.com/OpenSourceAWE/KiteViewers.jl.git"}
 SimpleKiteControllers = {path = ".."}
 V3Kite = {rev = "v1.1.1", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
-# Local path: the REEL_OUT mode calc_vro dispatches on (simple_reelout.jl) is not in
-# a tagged release yet. Switch to a `rev`/`url` pin once WinchControllers publishes it.
-WinchControllers = {path = "../../WinchControllers.jl"}
 
 [compat]
 KiteViewers = "0.6"
 MakieControlPlots = "0.1.12"
 RuntimeGeneratedFunctions = "0.5.24"
+SymbolicAWEModels = "~0.13"
 V3Kite = "1.1.1"
-WinchControllers = "0.5.5"
 
 [extras]
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
