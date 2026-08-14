@@ -24,9 +24,6 @@ if [[ $julia_major == "1.1" ]]; then
 else
     GCT=""
 fi
-if [[ $HOSTNAME == "ufryzen" || $HOSTNAME == "framework" ]]; then
-    export NO_MTK=true
-fi
 
 # Without arguments an interactive session starts with menu() defined, which
 # brings up examples/menu.jl. With arguments they are passed to julia unchanged.
@@ -40,7 +37,7 @@ fi
 
 if test -f "bin/kps-image-${julia_major}.so"; then
     echo "Found system image!"
-    PLOT=1 julia -J  bin/kps-image-${julia_major}.so  $GCT --project "${JULIA_ARGS[@]}"
+    PLOT=1 julia -J  bin/kps-image-${julia_major}.so -t auto $GCT --project "${JULIA_ARGS[@]}"
 else
-    PLOT=1 julia --project  $GCT "${JULIA_ARGS[@]}"
+    PLOT=1 julia --project -t auto  $GCT "${JULIA_ARGS[@]}"
 fi
