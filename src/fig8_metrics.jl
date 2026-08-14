@@ -194,12 +194,19 @@ end
 """
     reelout_power(sl) -> NamedTuple or `nothing`
 
-Mean mechanical reel-out power `mean(winch_force * v_reelout)` [W] over the
-window where the tether length setpoint (`var_10`, `examples/simple_reelout.jl`
-only) was still increasing — the run's actual reel-out phase, between the
-pattern settling and `reelout_l_max`. Returns `nothing` for a log that never
-reeled out: a plain figure-eight run (`var_10` is unused there, so constant),
-or a reel-out run that never reached phase 4.
+Mechanical reel-out power `winch_force * v_reelout` scored over the window where
+the tether length setpoint (`var_10`, `examples/simple_reelout.jl` only) was
+still increasing — the run's actual reel-out phase, between the guidance
+engaging and `reelout_l_max`. Returns `nothing` for a log that never reeled out:
+a plain figure-eight run (`var_10` is unused there, so constant), or a reel-out
+run that never got past the entry.
+
+Fields: `mean_power` [W] and `energy` [J] over that window, its `duration` [s]
+and sample count `n`, plus `energy_run` [J], the same integral over the WHOLE
+log. The pair is the point — a change that starts reeling earlier trades mean
+power against a longer window, and only `energy_run` says which way the run came
+out. It is the honest total: it also counts what the drum gives back on the
+reel-in transients outside the window, which `energy` cannot see.
 
 Headless, no plotting dependency, so a sweep can call it on every log.
 """
@@ -209,9 +216,13 @@ function reelout_power(sl)
     # +1: `diff` reports the change INTO sample i+1, which is the reeling one.
     reeling = findall(>(0.0), diff(l_set)) .+ 1
     isempty(reeling) && return nothing
-    fp = Float64.(getindex.(sl.winch_force[reeling], 1))
-    v_ro = Float64.(getindex.(sl.v_reelout[reeling], 1))
-    return (; mean_power = mean(fp .* v_ro), n = length(reeling))
+    dt = Float64(sl.time[2]) - Float64(sl.time[1])
+    p_all = Float64.(getindex.(sl.winch_force, 1)) .*
+            Float64.(getindex.(sl.v_reelout, 1))
+    p = p_all[reeling]
+    return (; mean_power = mean(p), energy = sum(p) * dt,
+            duration = length(reeling) * dt, n = length(reeling),
+            energy_run = sum(p_all) * dt)
 end
 
 """

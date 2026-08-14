@@ -14,8 +14,12 @@ everything else, which is unchanged here.
 
 Plus one figure that script has no counterpart for: `power`, the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
-measured. It is a selectable plot like the others, so `select_plots()` shows it
-in the menu; `simple_fig8_plots.jl` ignores the key.
+measured, over a running integral `E_mech` [kJ]. The legends carry the scores
+from `reelout_power`: mean power and energy over the pay-out window, and the
+whole-run energy the `E_mech` curve ends on — which is the number to compare
+across runs, since a change to when reel-out engages moves mean power and window
+length in opposite directions. It is a selectable plot like the others, so
+`select_plots()` shows it in the menu; `simple_fig8_plots.jl` ignores the key.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -168,16 +172,27 @@ if "power" in plots
     v_ro = getindex.(sl.v_reelout[rng], 1)
     # Sign included: reeling in against the tether is negative mechanical power.
     p_mech = f_tether .* v_ro ./ 1000
-    # Mean over the pay-out window only, which is what `reelout_power` scores.
+    # Running integral of the SAME series, so the curve ends on `energy_run`.
+    dt_log = Float64(sl.time[2]) - Float64(sl.time[1])
+    e_mech = cumsum(p_mech) .* dt_log
+    # Mean and the two totals; the window is the one `reelout_power` scores.
     pm = reelout_power(sl)
     p_label = isnothing(pm) ? L"P_{\mathrm{mech}}" :
-              latexstring("P_{\\mathrm{mech}},~\\overline{P}_{\\mathrm{reel-out}} = " *
-                          string(round(pm.mean_power / 1000, digits = 1)) * "~\\mathrm{kW}")
+              latexstring("\\overline{P}_{\\mathrm{reel-out}} = " *
+                          string(round(pm.mean_power / 1000, digits = 1)) *
+                          "~\\mathrm{kW~over~}" *
+                          string(round(pm.duration, digits = 1)) * "~\\mathrm{s}")
+    e_label = isnothing(pm) ? L"E" :
+              latexstring("E_{\\mathrm{run}} = " *
+                          string(round(pm.energy_run / 1000)) * "~\\mathrm{kJ},~" *
+                          "E_{\\mathrm{reel-out}} = " *
+                          string(round(pm.energy / 1000)) * "~\\mathrm{kJ}")
     p4 = plotx(
         sl.time[rng],
         f_tether,
         v_ro,
-        p_mech;
+        p_mech,
+        e_mech;
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
         legendsize = 16,
@@ -185,12 +200,14 @@ if "power" in plots
             L"F_{\mathrm{tether}}~[\mathrm{N}]",
             L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
             L"P_{\mathrm{mech}}~[\mathrm{kW}]",
+            L"E_{\mathrm{mech}}~[\mathrm{kJ}]",
         ],
         labels = [
             nothing,
             nothing,
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
             p_label,
+            e_label,
         ],
         fig = fig_name * " – power",
     )

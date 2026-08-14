@@ -413,7 +413,11 @@ let rp = reelout_power(sl)
     if isnothing(rp)
         @warn "Tether never reeled out — no reel-out power to report."
     else
-        @printf("  Reel-out power: mean %.0f W over %d samples.\n", rp.mean_power, rp.n)
+        # Both totals: an earlier engagement trades mean power for a longer window.
+        @printf("  Reel-out power: mean %.0f W over %.1f s (%d samples), \
+                 E = %.1f kJ; whole run E = %.1f kJ.\n",
+                rp.mean_power, rp.duration, rp.n, rp.energy / 1000,
+                rp.energy_run / 1000)
     end
 end
 
