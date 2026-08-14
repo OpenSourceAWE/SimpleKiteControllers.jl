@@ -208,6 +208,55 @@ Finally add the script to `examples/menu.jl`.
    out did not degrade tracking. Mean reel-out power: 3502 W over 2589 samples (the active
    pay-out window, ≈29 s of the 200 s run).
 
+## Finding (2026-08-14) — `v_ro` lags `v_set` by ~1.2 s and halves its amplitude
+
+Visible in the winch panel of `simple_reelout_plots.jl`: `v_ro` follows the sawtooth of
+`v_set` at roughly half the amplitude and about a quarter period late. **MEASURED** on
+`output/reelout_150m.arrow` over phase 4 (47.2 -> 124.8 s, `v_set > 0`):
+
+| quantity                        | value                                    |
+|:--------------------------------|:-----------------------------------------|
+| dominant period of `v_set`      | 5.69 s (omega = 1.10 rad/s), 13 cycles    |
+| mean `v_set` / mean `v_ro`      | 2.58 / 2.49 m/s — no steady-state error  |
+| std `v_set` / std `v_ro`        | 3.01 / 1.48 m/s — amplitude ratio 0.49   |
+| best cross-correlation lag      | 1.16 s (corr 0.986)                      |
+
+**Cause: the length integration, not the winch.** The means match, so this is a
+first-order phase lag, not a transport delay or a slow drum. `step!` takes a length or a
+torque, never a speed, so the loop integrates `v_set` into `l_set`; V3Kite's
+`winch_position_torque!` then differentiates it back out through a *pure P* outer loop,
+`v_sp = kp_pos * (l_set - l)` with `winch_pos_kp = 0.5` 1/s. Integrator + P loop is
+exactly a first-order lag of `tau = 1/kp_pos = 2 s`. The inner PI speed loop adds a
+second, much smaller pole: `winch_speed_k = 30` N*m*s/m is 30*G/r ~ 1150 N per m/s at the
+tether against a drum inertia of 0.204*G^2/r^2 ~ 300 kg equivalent linear mass, so
+`tau_inner ~ 0.25 s`. Predicted at omega = 1.10: gain 0.40, lag 1.28 s — versus 0.49 and
+1.16 s measured. The outer P loop accounts for essentially all of it.
+
+Same root cause, same fix, one more symptom: a P loop tracking a *ramp* must run a
+proportional error, so the actual tether length trails `l_set` by `v_ro/kp_pos` = 2*2.5 ~
+**5 m** for the whole pay-out.
+
+Neither limiter is binding: `v_set` slews at ~4.7 m/s^2 peak, against `speed_limit` = 8
+m/s and `acceleration_limit` = `rcs.max_acc` = 8 m/s^2 — note that is the `WCSettings`
+default, NOT the settings YAML's `max_acc: 4.0`, which `simple_reelout.jl` never reads.
+
+Options, best first. **Resolved: option 1 was implemented and shipped, and it made
+options 2 and 3 unnecessary — see "Improve reel-out winch control" below for the
+before/after measurements.**
+
+1. **Speed feed-forward** (removes the lag structurally). Give `step!` /
+   `winch_position_torque!` a `v_ff` kwarg fed the current `v_set`, and use
+   `v_sp = v_ff + kp_pos * (l_set - l)`. Leaves only `tau_inner ~ 0.25 s` and kills the 5 m
+   length offset too. Needs no retuning; the change is in V3Kite, not here.
+2. **Raise `winch_pos_kp`** in `data/wc_settings.yaml`, 0.5 -> 1.0...1.3, for `tau ~ 0.8 s`.
+   One number, no API change. Do not go far past 1.3 without also raising
+   `winch_speed_k`: the cascade wants the outer pole well inside 1/(3*tau_inner) ~ 1.3.
+3. **Question the setpoint instead.** `v_set = kv*sqrt(F)` uses the *instantaneous* force,
+   which swings over each figure-eight. Chasing +/-3 m/s at a 5.7 s period costs +/-900 N of
+   tether force just to accelerate the drum's 300 kg equivalent inertia — force taken out
+   of the kite. The attenuation may be the plant correctly filtering a setpoint that should
+   not have been that lively; low-passing the force into `calc_v_set` is the alternative.
+
 ## Open questions
 
 - **Is the pattern feasible at 150 m at all? — RESOLVED, yes.** Measured with today's
@@ -219,3 +268,76 @@ Finally add the script to `examples/menu.jl`.
   good enough for a 100 m pay-out? Decide from the first run, not up front.
 - Naming of the mode field and its enum values is not fixed; `vroReelOut`/`vroPiecewise`
   above is a placeholder consistent with the `wcs*` state names.
+
+## Improve reel-out winch control
+1. implement speed feed-forward control as explained above in V3Kite repo —
+   **DONE and VERIFIED.** `step!` and
+   `winch_position_torque!` gained a `v_ff` keyword [m/s]:
+   `v_sp = v_ff + kp_pos * (set_length - l)`, with `speed_limit` and
+   `acceleration_limit` still acting on the total setpoint. Default `v_ff = 0.0`
+   is the old pure-feedback behaviour, so `simple_fig8.jl` and every
+   constant-length caller are untouched. Covered by a new
+   `test/test-interface.jl` testset asserting the default, the no-length-error
+   case (`v_sp == v_ff`), that the P term ADDS to the feed-forward, and that
+   `speed_limit` clamps the sum.
+
+   **WIRED UP here too.** `bin/dev` re-pointed `examples/Project.toml` at the local
+   `path = "../../V3Kite"` (the `rev = "v1.1.1"` pin, which predates the kwarg, is
+   commented out above it and must come back — pointing at a new tag, not v1.1.1 —
+   before this is released), and the loop now passes
+   `step!(s; ..., set_length = l_set, v_ff = v_set, ...)`. `v_set` is already `0.0`
+   outside the pay-out window, where `l_set` is constant and there is nothing to
+   feed forward, so no extra gating is needed.
+
+   **MEASURED**, same run configuration, on the pay-out window of
+   `output/reelout_150m.arrow` (phase 4 with `v_set > 0`; 150 -> 350 m, 82.5 s):
+
+   | quantity                       | `v_ff = 0` | `v_ff = v_set` |
+   |:-------------------------------|-----------:|---------------:|
+   | lag `v_set` -> `v_ro`          |     1.16 s |     **0.20 s** |
+   | `l_set` - actual tether length | ~5 m standing | **-0.05 m** mean (-0.15 .. +0.59) |
+   | std of `v_set`                 | 3.01 m/s   |   **0.14 m/s** |
+   | std of `v_ro`                  | 1.48 m/s   |       0.17 m/s |
+   | mean `v_set` / mean `v_ro`     | 2.58 / 2.49 |    2.42 / 2.42 |
+   | time in speed control          | cycled 0<->1<->2 | **99.4 %**, state 0 never |
+   | mean reel-out power            |     3502 W |     **4015 W** |
+   | fig8 RMS cross-track           |     1.23 deg |     unchanged |
+
+   The residual 0.20 s is the inner speed loop, right at the predicted ~0.25 s, and
+   the standing length error is gone. Both expected.
+
+   **The unpredicted result is row 3: the setpoint itself stopped oscillating.**
+   `v_set = kv*sqrt(F)` is closed-loop — reel-out speed feeds back into apparent
+   wind and so into force. At 1.16 s of lag that feedback arrived a fifth of a
+   period late and sustained the 0 .. 7.5 m/s sawtooth; at 0.20 s it damps it. The
+   sawtooth was never a property of the flight, it was the winch lag beating
+   against its own force law. Two consequences:
+   - Option 3 above (low-pass the force into `calc_v_set`) is **moot** — there is
+     no longer an oscillation to filter. Do not implement it.
+   - The +14.6 % power is not from reeling out faster; mean `v_ro` is slightly
+     LOWER. It is from no longer falling into the force troughs: the
+     `LowerForceController`, which used to reel IN at every trough, is now never
+     invoked (state 0: 0.0 % of the window).
+
+   **One side effect, understood and bounded.** Winch force peaks at 4582 N, above
+   both `reelout_f_high` (3800 N) and the plant's nominal `max_force` (4000 N). It
+   is a single 0.48 s excursion at t = 47.3 s — the very instant pay-out engages,
+   with the drum still stationary (`v_ro` = 0.01 m/s) and the kite at its fastest
+   coming out of the entry (`v_app` = 22.8 m/s vs 14.7 m/s mean). After the first
+   2 s the max force over the remaining 80 s is 1893 N, less than half of
+   `max_force`; p99 is 1777 N. So it is the engagement transient, not a flight
+   load.
+
+   The mechanism is the drum's own inertia: `inertia_total * gear_ratio^2 /
+   drum_radius^2` = 0.204*6.2^2/0.1615^2 = 301 kg of equivalent linear mass, and
+   `acceleration_limit` is `rcs.max_acc` = **8.0 m/s^2**, the `WCSettings` default —
+   NOT `settings_reelout_150m.yaml`'s `max_acc: 4.0`, which this script never
+   reads. 301 kg * 8 m/s^2 = 2406 N of inertial reaction on top of the ~1700-2300 N
+   steady force, which is the 4582 N observed, and 8 m/s^2 to ~4 m/s takes 0.5 s,
+   which is the 0.48 s observed. Before `v_ff` the lagging P loop ramped the drum
+   up gradually and spread this out; the feed-forward asks for it at once.
+   **Fix if it matters: pass `acceleration_limit = 4.0`** (the plant's own value —
+   either read it from the settings or set `rcs.max_acc`), halving the inertial
+   term to ~1200 N and the peak to ~2900 N, below `f_high`. Not done yet; it costs
+   ~0.5 s of engagement ramp and nothing else, since 4 m/s^2 is still far above
+   anything the steady pay-out asks for.

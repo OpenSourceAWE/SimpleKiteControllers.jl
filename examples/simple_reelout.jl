@@ -21,6 +21,12 @@ step it turns the measured `reel_out_speed(s)`/`winch_force(s)` into a speed
 `step!`'s `set_length` — the same mechanism the constant-length run uses, just
 with a setpoint that grows. `step!` accepts a length or a torque, never a speed
 directly, which is why the integration happens here rather than inside V3Kite.
+`v_set` itself is ALSO passed, as `step!`'s `v_ff`: V3Kite's position winch is a
+P loop on the length error, so integrating a speed here and differentiating it
+back out there is a first-order lag of `1/winch_pos_kp` = 2 s — measured at 1.16 s
+of delay and 0.49 of the commanded amplitude on the 5.7 s reel-out oscillation
+before `v_ff` existed, plus a standing `v_ro/winch_pos_kp` ≈ 5 m length error.
+Feeding the speed forward leaves the P loop only the error to correct.
 `fcs.compliance` must be `0` (POSITION mode): REEL_OUT and V3Kite's own FORCE mode
 both drive `set_length`/`set_torque`, and only one winch can hold the drum at a
 time — this script errors at startup otherwise, rather than silently picking
@@ -317,7 +323,12 @@ try
             on_timer(rc)
         end
 
-        step!(s; rel_depower, rel_steering, set_length = l_set,
+        # `v_ff = v_set`: the winch's outer P loop is told the speed being
+        # commanded instead of having to rediscover it from a length error. See
+        # the docstring — without it the pair (integrate here, differentiate
+        # there) is a 1/winch_pos_kp = 2 s lag. Zero outside the pay-out window,
+        # where `l_set` is constant and there is nothing to feed forward.
+        step!(s; rel_depower, rel_steering, set_length = l_set, v_ff = v_set,
               speed_limit = fcs.reelout_v_max, acceleration_limit = rcs.max_acc,
               vsm_interval = fcs.vsm_interval)
 
