@@ -106,12 +106,7 @@ TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the setti
 @info "simple_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
        turbulence = $TURBULENCE."
 project = project_file(PROJECT)
-# An `fcs` already in `Main` wins (see the docstring): only a fresh REPL, or one
-# with no `fcs` around, reads the file — a re-include never throws away an
-# override, including `compliance = 0` set for this script's own winch.
-if !(@isdefined(fcs) && fcs isa FC_Settings)
-    fcs = FC_Settings(fc_settings(project))
-end
+fcs = FC_Settings(fc_settings(project))
 
 project_set = Settings(project)
 l_tether = project_set.l_tether
