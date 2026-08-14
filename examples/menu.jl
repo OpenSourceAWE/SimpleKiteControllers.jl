@@ -10,10 +10,11 @@ activates `examples/` itself. `select_project()`, `select_sim_time()`,
 (150m/200m/300m), how long a run lasts (the project's own `sim_time`, or a
 specific value in seconds), which figures get shown and how much turbulence
 `init` applies; all four are persisted to `data/gui.yaml` and read fresh on
-every run rather than cached in a `Main` global. Selecting
-the figure-eight run means minutes of
-wall time; its plots come up on their own at the end, so the plotting entry
-is for a log that is already on disk.
+every run rather than cached in a `Main` global. Once the model
+and settling caches exist, the figure-eight run simulates at about twice
+realtime, so its wall time is roughly half the selected `sim_time`; the first
+run of a fresh cache takes minutes longer. Its plots come up on their own at
+the end, so the plotting entry is for a log that is already on disk.
 
 Started by `menu()` in a REPL from `bin/run_julia`, or by
 

@@ -44,8 +44,9 @@ here are in `docs/fig8_tuning_log.md`.
 Logs the run to `output/<log_file>.arrow`, where `log_file` is the project's
 `system.log_file` setting (e.g. `fig8_200m`), and `include`s
 `simple_fig8_plots.jl` at the end, so the figures come up without a second
-call. Even a 30 s simulation is several thousand `step!` calls and takes
-minutes of wall time.
+call. With the packages precompiled and the model and settling caches in place
+the simulation runs at about twice realtime, so a 150 s run costs roughly 75 s
+of wall time; the first run of a fresh cache takes minutes longer.
 
 Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 

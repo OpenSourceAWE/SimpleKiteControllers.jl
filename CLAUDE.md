@@ -31,7 +31,7 @@ image at `bin/kps-image-<version>-<branch>.so` if one exists.
 The example is run by `include`, not from the shell — it activates `examples/` itself:
 
 ```julia
-include("examples/simple_fig8.jl")     # 150 s sim time = many minutes of wall time
+include("examples/simple_fig8.jl")     # cached: ~2x realtime, 150 s sim = ~75 s wall
 ```
 
 Override any parameter by defining `fcs` (and optionally `SHOW_PLOTS = false`) in the
@@ -40,7 +40,10 @@ nothing else has. `SHOW_PLOTS` is one-shot — the script resets it to `true` at
 so a sweep sets it inside its loop and a leftover `false` never silently swallows a
 later run's plots (`fcs` is sticky, it does not). Keep the same REPL across runs — the
 first one compiles the V3 model (a few minutes, ~23 MB) into V3Kite's own cache
-directory.
+directory and settles the wing into `examples/cache/settled_*.bin`. Both are reused
+afterwards, and that is what the ~2x realtime above assumes: with the packages
+precompiled and both caches present the run is fast, the very first one is minutes
+slower. A `body_damping` the settling cache has not seen pays that cost again.
 
 `init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
 where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
