@@ -319,25 +319,112 @@ before/after measurements.**
      `LowerForceController`, which used to reel IN at every trough, is now never
      invoked (state 0: 0.0 % of the window).
 
-   **One side effect, understood and bounded.** Winch force peaks at 4582 N, above
-   both `reelout_f_high` (3800 N) and the plant's nominal `max_force` (4000 N). It
-   is a single 0.48 s excursion at t = 47.3 s — the very instant pay-out engages,
-   with the drum still stationary (`v_ro` = 0.01 m/s) and the kite at its fastest
-   coming out of the entry (`v_app` = 22.8 m/s vs 14.7 m/s mean). After the first
-   2 s the max force over the remaining 80 s is 1893 N, less than half of
-   `max_force`; p99 is 1777 N. So it is the engagement transient, not a flight
-   load.
+   **`acceleration_limit`: leave it at `rcs.max_acc` = 8.0 m/s^2, the `WCSettings`
+   default, NOT the plant's `winch: max_acc: 4.0`.** With `v_ff` the pay-out speed
+   is asked for the instant reel-out engages instead of being ramped in by a
+   lagging P loop, so the drum's own inertia (`inertia_total * gear_ratio^2 /
+   drum_radius^2` = 0.408*6.2^2/0.1615^2 = 602 kg of equivalent linear mass) is a
+   plausible source of an engagement force spike, and the plant's own 4 m/s^2 the
+   obvious cure. **TRIED AND REVERTED — it does not work.** Two runs, identical but
+   for the kwarg (`output/archives/2026-08-15_214448` = `rcs.max_acc` 8.0,
+   `2026-08-15_220138` = `project_set.max_acc` 4.0):
 
-   The mechanism is the drum's own inertia: `inertia_total * gear_ratio^2 /
-   drum_radius^2` = 0.204*6.2^2/0.1615^2 = 301 kg of equivalent linear mass, and
-   `acceleration_limit` is `rcs.max_acc` = **8.0 m/s^2**, the `WCSettings` default —
-   NOT `settings_reelout_150m.yaml`'s `max_acc: 4.0`, which this script never
-   reads. 301 kg * 8 m/s^2 = 2406 N of inertial reaction on top of the ~1700-2300 N
-   steady force, which is the 4582 N observed, and 8 m/s^2 to ~4 m/s takes 0.5 s,
-   which is the 0.48 s observed. Before `v_ff` the lagging P loop ramped the drum
-   up gradually and spread this out; the feed-forward asks for it at once.
-   **Fix if it matters: pass `acceleration_limit = 4.0`** (the plant's own value —
-   either read it from the settings or set `rcs.max_acc`), halving the inertial
-   term to ~1200 N and the peak to ~2900 N, below `f_high`. Not done yet; it costs
-   ~0.5 s of engagement ramp and nothing else, since 4 m/s^2 is still far above
-   anything the steady pay-out asks for.
+   | | a = 8 | a = 4 |
+   |:--|--:|--:|
+   | peak force, reeling window | 3758 N | 3783 N |
+   | peak force, first 5 s bin  | 3641 N | 3732 N |
+   | ring overshoot             | 0.88 m/s | 0.98 m/s |
+   | ring duration              | 8.5 s | 9.6 s |
+   | ring zeta                  | 0.120 | 0.113 |
+   | mean reel-out power        | 7763 W | 7761 W |
+
+   Three findings, all of which outlive the reverted change:
+
+   - **The limiter is almost never the binding constraint.** Reconstructing the raw
+     setpoint `v_sp = v_ff + kp*(l_set - l)` (kp = 0.5) over the pay-out window,
+     `|dv_sp/dt|` exceeds 4 m/s^2 in ~1 % of steps and 8 m/s^2 in 0.03 %. Mean
+     `v_set` is 2.33 m/s, max 2.93. There is nothing there to clip.
+   - **There is no engagement spike left to cure.** The one this fix was aimed at
+     (4582 N for 0.48 s at the instant of engagement) was measured back when
+     `reelout_t_startup` was 2.0 s and `reelout_f_high` 3800 N; the tuning has since
+     moved to `t_startup: 10.0` and `f_high: 7600`, and the plant's `max_force` from
+     4000 to 8000 N. The 10 s soft start spreads engagement out on its own. Today's
+     peak is 3783 N at t = 37.2 s, 6.6 s AFTER pay-out begins, and per-5-s-bin
+     maxima sit at 3.5-3.8 kN every ~10 s across the whole 86 s window — the
+     figure-eight turn load, less than half of `max_force`, not a drum-inertia
+     transient.
+   - **The engagement ring is not inertia-limited.** Slowing the setpoint made it
+     worse, not better (rows 3-5): the tighter limiter makes the drum lag the
+     `t_startup` ramp, the length error grows, and the P term hands it back later.
+     Past t ~ 40 s the two runs agree to three digits. So look at `t_startup` and at
+     the inner speed loop for the ring, not at `acceleration_limit`.
+
+## Implement parallel execution harness
+To optimize the shape of the figure of eight, many simulations are needed. Write the code that enables parallel simulations in separate Julia processes. 
+
+There should be a file optimization.yaml with the settings:
+max_processes = 6
+min_f8_a = 20
+max_f8_a = 30
+min_f8_b = 8
+max_f8_b = 12
+step_size = 1 # step size in degrees
+
+The results shall be stored in the file
+optimization_results.yaml. The results table must be protected against concurrent access.
+
+Key parameter to optimize is the power.
+
+Side conditions:
+- the upper force controller shall never become engaged
+- pct_time_within_2pct_of_peak must not exceed 5%
+
+**IMPLEMENTED**, not yet run over the full grid.
+
+- `data/optimization.yaml` — the settings above, plus the results file name, a
+  `max_runs_per_process` restart bound, and the two side conditions as explicit
+  limits (`max_pct_time_upper_force: 0.0`,
+  `max_pct_time_within_2pct_of_peak: 5.0`). Read into `OptSettings`
+  (`src/optimization.jl`) the same way `fc_settings.yaml` is read into
+  `FC_Settings`: unknown key is an error, missing key falls back to the default.
+- `examples/optimize_fig8.jl` — the driver. Prints the plan (grid, cores, free
+  RAM, project, wind conditions, both limits), starts the workers, reports
+  progress and an ETA every 30 s, restarts a worker that dies while work is left,
+  and prints/writes the ranked report at the end
+  (`output/optimization_report.txt`).
+- `examples/optimize_fig8_worker.jl` — one worker. Claims a grid point, flies it
+  by `include`ing `simple_reelout.jl` with `FCS_OVERRIDES = Dict(:f8_a => …,
+  :f8_b => …)`, records the run's metrics, repeats. Long-lived and task-pulling
+  rather than one process per run: package load plus model build is about a
+  minute against a few minutes of simulation.
+- `simple_reelout.jl` gained three optional globals, all read-and-cleared on the
+  `SHOW_PLOTS` convention so a sweep can never leak into an interactive run:
+  `FCS_OVERRIDES` (the swept parameters), `OUTPUT_PATH` (each worker logs into
+  its own `output/optimization/w<id>/`, since the output names come from the
+  project and would otherwise be one shared file) and `RUN_ARCHIVE = false` (55
+  archive folders each holding a 40 MB copy of the arrow log, for information the
+  results table already carries).
+- `winch_state_pct` (`src/fig8_metrics.jl`) is the new metric the first side
+  condition needs: the share of the reel-out window spent in each of the
+  `WinchController`'s three states, scored over the same window as
+  `reelout_power`. It also goes into every run summary as
+  `reelout: winch_state:`, so the interactive script reports it too. Measured on
+  the two runs above: 100 % speed control, upper force never engaged.
+
+Two things worth knowing before reading the first sweep:
+
+- **Concurrency.** Claiming a grid point and appending a result share ONE lock,
+  an atomic `mkdir` (`with_file_lock`), so a combination is never flown twice and
+  entries never interleave. Verified with six real processes racing over the
+  55-point grid: 55 entries, 55 unique, whole grid covered, no malformed entry.
+  Appending (rather than rewriting the table) keeps the critical section O(1) and
+  means a killed process can at worst leave one truncated entry.
+- **The first run is flown alone.** On a cold checkout the settled-geometry and
+  model caches do not exist, and six processes building them into the same files
+  would corrupt them. The driver therefore starts one worker, waits for its first
+  result, and only then starts the rest — and aborts the sweep if that first run
+  did not complete, rather than repeating the same failure 55 times.
+
+The results table is also the resume state: a combination already in it is never
+re-flown, so an interrupted sweep continues where it stopped and starting over
+means deleting `output/optimization_results.yaml`.

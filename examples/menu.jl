@@ -41,6 +41,7 @@ const EXAMPLES = [
     "simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)" => "simple_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
     "simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer" => "simple_reelout_play.jl",
+    "optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)" => "optimize_fig8.jl",
     "optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
 ]

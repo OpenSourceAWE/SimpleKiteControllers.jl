@@ -238,6 +238,45 @@ function reelout_power(sl)
 end
 
 """
+    winch_state_pct(sl) -> NamedTuple or `nothing`
+
+How the REEL_OUT winch controller spent the reel-out window, as the percentage
+of its samples in each of WinchControllers.jl's three states (logged to `var_12`
+by `examples/simple_reelout.jl`): `lower_force_pct` (state 0, the
+`LowerForceController` reeling IN to keep the tether taut), `speed_pct` (state 1,
+the `v_set = kv*sqrt(force)` law itself) and `upper_force_pct` (state 2, the
+`UpperForceController` capping the force at `reelout_f_high`).
+
+Scored over the same window as [`reelout_power`](@ref) — the samples where the
+length setpoint was still growing — because `var_12` only means anything while
+the controller is being stepped: before pay-out engages it still reads whatever
+state the freshly built controller started in. Returns `nothing` for a log that
+never reeled out, same guard as [`reelout_power`](@ref).
+
+`upper_force_pct` is a side CONDITION rather than a quality metric, and is why
+this function exists: the pattern sweep (`examples/optimize_fig8.jl`) rejects any
+shape that engages the upper limiter, because a shape which pulls harder than the
+winch is allowed to hold had its power bought against the force cap — the number
+describes the cap, not the pattern. `lower_force_pct` is the mirror image and
+worth watching for the same reason (see the `v_ff` entry in `Plan.md`, where it
+going to zero was the whole power gain).
+"""
+function winch_state_pct(sl)
+    l_set = Float64.(sl.var_10)
+    length(l_set) > 1 || return nothing
+    # +1: `diff` reports the change INTO sample i+1, exactly as in `reelout_power`.
+    reeling = findall(>(0.0), diff(l_set)) .+ 1
+    isempty(reeling) && return nothing
+    # Logged as a Float32 through `var_12`; round before comparing to the enum values.
+    state = round.(Int, Float64.(sl.var_12[reeling]))
+    n = length(state)
+    return (; lower_force_pct = 100 * count(==(0), state) / n,
+            speed_pct = 100 * count(==(1), state) / n,
+            upper_force_pct = 100 * count(==(2), state) / n,
+            n)
+end
+
+"""
     _longest_run(idx) -> AbstractVector{Int}
 
 Longest run of consecutive integers in the sorted vector `idx`. Used to drop a

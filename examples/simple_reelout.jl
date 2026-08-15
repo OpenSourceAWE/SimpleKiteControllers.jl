@@ -69,7 +69,14 @@ gates the winch.
 
 `fcs` works exactly as in `simple_fig8.jl`: rebuilt from `data/fc_settings_reelout.yaml`
 unconditionally on every `include`, so a value is overridden by editing that file,
-not by pre-defining or mutating `fcs` in the REPL. The REEL_OUT-specific fields
+not by pre-defining or mutating `fcs` in the REPL. The one exception is
+`FCS_OVERRIDES`, a `Dict{Symbol, Any}` of field => value applied on top of the file
+and then CLEARED, which is how the shape sweep (`examples/optimize_fig8.jl`) flies
+one `f8_a`/`f8_b` pair per `include`; `OUTPUT_PATH` and `RUN_ARCHIVE` are read and
+cleared the same way, and let those parallel runs keep their logs apart and skip
+the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
+value left over from a sweep must never change an interactive run. The
+REEL_OUT-specific fields
 are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
 `reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`),
 `reelout_l_max`, the stop length, and `reelout_delay`, how long after phase 3
@@ -127,11 +134,29 @@ TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the setti
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 
+# Per-run overrides of the settings just loaded, for a SWEEP: read and cleared
+# here like SHOW_PLOTS above, so a leftover value can never silently change the
+# next interactive run. `examples/optimize_fig8.jl` sets it before each include.
+fcs_overrides = @isdefined(FCS_OVERRIDES) ? FCS_OVERRIDES : Dict{Symbol, Any}()
+FCS_OVERRIDES = Dict{Symbol, Any}()
+for (key, value) in fcs_overrides
+    hasfield(FC_Settings, key) ||
+        error("FCS_OVERRIDES: \"$key\" is not a field of FC_Settings.")
+    setfield!(fcs, key, convert(fieldtype(FC_Settings, key), value))
+end
+isempty(fcs_overrides) ||
+    @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
+
 project_set = Settings(project)
 l_tether = project_set.l_tether
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
-output_path = normpath(joinpath(@__DIR__, "..", "output"))
+# OUTPUT_PATH redirects them, so that parallel runs of this script (the sweep)
+# cannot overwrite each other's log, summary and archive. Read and cleared like
+# SHOW_PLOTS; `nothing` is the default output/.
+output_path = (@isdefined(OUTPUT_PATH) && !isnothing(OUTPUT_PATH)) ? OUTPUT_PATH :
+              normpath(joinpath(@__DIR__, "..", "output"))
+OUTPUT_PATH = nothing
 mkpath(output_path)
 log_name = basename(project_set.log_file)
 
@@ -350,6 +375,13 @@ try
         # the docstring — without it the pair (integrate here, differentiate
         # there) is a 1/winch_pos_kp = 2 s lag. Zero outside the pay-out window,
         # where `l_set` is constant and there is nothing to feed forward.
+        # `acceleration_limit` is `rcs.max_acc` (8 m/s²), NOT the plant's own
+        # `winch: max_acc:` = 4 which V3Kite's `step!` would otherwise default to.
+        # Deliberate, and measured: the total setpoint asks for more than 4 m/s² in
+        # ~1 % of the steps and more than 8 in 0.03 %, so the limiter is nearly
+        # never the binding constraint, and tightening it to 4 only made the drum
+        # lag the `t_startup` ramp harder — the engagement ring grew from 0.88 to
+        # 0.98 m/s and the peak force rose slightly. See Plan.md.
         step!(s; rel_depower, rel_steering, set_length = l_set, v_ff = v_set,
               speed_limit = fcs.reelout_v_max, acceleration_limit = rcs.max_acc,
               vsm_interval = fcs.vsm_interval)
@@ -561,6 +593,23 @@ else
         "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
 end
 
+ws = winch_state_pct(sl)
+if isnothing(ws)
+    @warn "Tether never reeled out — no winch controller states to report."
+else
+    @printf("  Winch states over the reeling window: speed %.1f %%, lower force %.1f %%, \
+             upper force %.1f %%.\n",
+            ws.speed_pct, ws.lower_force_pct, ws.upper_force_pct)
+    reelout_summary["winch_state"] = OrderedDict(
+        "speed_pct" => (round(ws.speed_pct; digits = 1),
+            "% of the reeling window in speed control (state 1)"),
+        "lower_force_pct" => (round(ws.lower_force_pct; digits = 1),
+            "% in the LowerForceController, reeling in (state 0)"),
+        "upper_force_pct" => (round(ws.upper_force_pct; digits = 1),
+            "% in the UpperForceController, force capped at reelout_f_high (state 2)"),
+        "n_samples" => (ws.n, "sample count in the reeling window"))
+end
+
 rr = reelout_ringing(sl)
 if isnothing(rr)
     @warn "Tether never reeled out — no ringing to report."
@@ -616,23 +665,33 @@ end
 
 # One timestamped folder per run under output/archives/, so the exact config
 # that produced a log survives even after the next run overwrites output/*.
-archive_dir = joinpath(output_path, "archives", Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
-mkpath(archive_dir)
-input_yaml_files = [
-    project,                                              # system project
-    joinpath(dirname(project), project_set.sim_settings), # plant/solver settings
-    joinpath(skc_data_path(), wc_settings(project)),      # winch gains
-    joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
-    joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
-]
-output_files = [
-    joinpath(output_path, log_name * ".arrow"),
-    joinpath(output_path, log_name * ".yaml"),
-]
-for f in unique(vcat(input_yaml_files, output_files))
-    isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
+# RUN_ARCHIVE = false skips it, read and cleared like SHOW_PLOTS: a sweep writes
+# one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
+# and its own results table already records what distinguished the runs.
+run_archive = @isdefined(RUN_ARCHIVE) ? RUN_ARCHIVE : true
+RUN_ARCHIVE = true
+if run_archive
+    archive_dir = joinpath(output_path, "archives",
+                           Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
+    mkpath(archive_dir)
+    input_yaml_files = [
+        project,                                              # system project
+        joinpath(dirname(project), project_set.sim_settings), # plant/solver settings
+        joinpath(skc_data_path(), wc_settings(project)),      # winch gains
+        joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
+        joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
+    ]
+    output_files = [
+        joinpath(output_path, log_name * ".arrow"),
+        joinpath(output_path, log_name * ".yaml"),
+    ]
+    for f in unique(vcat(input_yaml_files, output_files))
+        isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
+    end
+    @info "Archived run inputs and outputs to $archive_dir"
+else
+    @info "Archiving suppressed by RUN_ARCHIVE = false; it is back to true for the next run."
 end
-@info "Archived run inputs and outputs to $archive_dir"
 
 if show_plots
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))

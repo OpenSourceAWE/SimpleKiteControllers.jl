@@ -988,6 +988,7 @@ arrives a quarter period late, so the drum reels SLOWLY into the force peaks
 
 So the ring is a startup transient of a loop that earns its keep in steady state.
 Shape the ENGAGEMENT instead — `reelout_t_startup` (2.0 s here, against
-WinchControllers' 0.25 s default), and if more is needed, the
-`acceleration_limit` `simple_reelout.jl` hands `step!`, currently `rcs.max_acc` =
-8 m/s² where the command only ever needs ~3. Do not slow the law itself.
+WinchControllers' 0.25 s default). Do not slow the law itself — and note that the
+other candidate, the `acceleration_limit` `simple_reelout.jl` hands `step!`
+(`rcs.max_acc` = 8 m/s²), was tried at the plant's own 4 m/s² and made the ring
+WORSE, not better; see Plan.md for the measurement.

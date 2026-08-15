@@ -1,0 +1,36 @@
+# Settings of the figure-of-eight SHAPE sweep run by examples/optimize_fig8.jl:
+# how many simulations run at once, which (f8_a, f8_b) grid they cover, and the
+# side conditions a run must satisfy before its power is ranked at all.
+# Read into SimpleKiteControllers' `OptSettings`; every key below is a field of
+# that struct and an unknown key is an error.
+#
+# Everything NOT listed here — plant, wind, tether length, controller tuning —
+# comes from the system project the workers fly (data/system_reelout_150m.yaml
+# and the fc_settings_reelout.yaml it names), exactly as an interactive
+# simple_reelout.jl run would. Only f8_a and f8_b are overridden per run, so the
+# sweep compares SHAPES and nothing else.
+optimization:
+    max_processes: 6       # simulations run in parallel, one per worker process
+    min_f8_a: 20.0         # pattern width, lower bound, inclusive             [deg]
+    max_f8_a: 30.0         # pattern width, upper bound, inclusive             [deg]
+    min_f8_b: 8.0          # pattern height, lower bound, inclusive            [deg]
+    max_f8_b: 12.0         # pattern height, upper bound, inclusive            [deg]
+    step_size: 1.0         # grid increment of both axes                       [deg]
+
+    # Results table under output/, appended to under a file lock as each run
+    # finishes. It is also the resume state: a combination already listed there
+    # is never re-flown, so delete the file to start a sweep over.
+    results_file: "optimization_results.yaml"
+    # Restart a worker after this many simulations (0 = never), so a long sweep
+    # cannot accumulate a leaked model. A restart costs one package load, ~1 min.
+    max_runs_per_process: 0
+
+    # ---- Side conditions: broken means "not ranked", not "not run" ---------- #
+    # Share of the reel-out window the winch's UpperForceController may hold the
+    # drum. 0.0 is "shall never become engaged": a pattern whose power was capped
+    # by the force limiter measures the limiter, not the shape.
+    max_pct_time_upper_force: 0.0
+    # Share of the settled window the steering command may sit within 2 % of its
+    # own peak, i.e. clamped against max_steering. A shape only flyable at full
+    # steering has no margin left for a gust.
+    max_pct_time_within_2pct_of_peak: 5.0

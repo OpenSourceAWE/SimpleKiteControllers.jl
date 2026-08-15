@@ -24,9 +24,16 @@ export reload_turn_rate_table!
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
+export winch_state_pct
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings
+
+# Parallel shape optimization (examples/optimize_fig8.jl)
+export OptSettings, opt_grid, task_key
+export with_file_lock, init_results_file, record_result!, load_results
+export claim_task!, reset_claims!
+export run_metrics, side_conditions, rank_results, format_results_table
 
 # Data
 export skc_data_path
@@ -50,6 +57,9 @@ include("turn_rate_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")
 include("fc_settings.jl")
+# After fc_settings.jl: OptSettings is loaded the same way and documents itself
+# against FC_Settings, whose fields the sweep overrides.
+include("optimization.jl")
 
 function __init__()
     reload_turn_rate_table!()
