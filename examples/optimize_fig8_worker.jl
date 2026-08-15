@@ -47,7 +47,10 @@ const WORK_PATH = joinpath(OUTPUT_ROOT, "optimization", "w$(WORKER_ID)")
 mkpath(WORK_PATH)
 
 log_stamp() = Dates.format(Dates.now(), "HH:MM:SS")
-say(msg) = println("[w$(WORKER_ID) $(log_stamp())] $msg")
+# Flushed: stdout is a FILE here, which Julia block-buffers, and a progress line
+# that only appears when the process exits is not progress. The simulation's own
+# chatter in between can stay buffered — it is read after the fact, not watched.
+say(msg) = (println("[w$(WORKER_ID) $(log_stamp())] $msg"); flush(stdout))
 
 # The summary of the run just flown, which `run_metrics` reads back. Deleted
 # BEFORE each run: if the include throws early, a summary left over from this
@@ -73,7 +76,9 @@ while true
         break
     end
 
-    task = claim_task!(grid, RESULTS_PATH)
+    # The worker id goes into the claim: only the driver, and only for a worker it
+    # has seen exit, may release it again (see `release_claims!`).
+    task = claim_task!(grid, RESULTS_PATH; worker = WORKER_ID)
     if isnothing(task)
         say("No grid points left. Done after $runs run(s).")
         break

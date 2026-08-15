@@ -41,6 +41,15 @@ interactive `simple_reelout.jl` run would; only `f8_a` and `f8_b` are overridden
     """
     max_runs_per_process::Int64 = 0
     """
+    PRE-FLIGHT: the smallest curvature margin
+    ([`check_pattern_feasible`](@ref), path radius / the kite's minimum turn
+    radius) a shape must have at the STARTING tether length to be flown at all.
+    Below 1.0 the pattern is tighter than the kite can turn, so the run measures
+    the steering clamp instead of the shape and costs minutes to say so. `0.0`
+    disables the filter and flies the whole grid.
+    """
+    min_feasibility_margin = 1.0
+    """
     SIDE CONDITION: the maximum share of the reel-out window the winch's
     UpperForceController may hold the drum [%]. `0.0` is "shall never become
     engaged" — a pattern whose power was capped by the force limiter is a
@@ -97,6 +106,49 @@ function opt_grid(os::OptSettings)
                     for i in 0:floor(Int, (hi - lo) / os.step_size + 1e-9)]
     return [(; f8_a, f8_b) for f8_a in axis(os.min_f8_a, os.max_f8_a)
                            for f8_b in axis(os.min_f8_b, os.max_f8_b)]
+end
+
+"""
+    pattern_margin(fcs::FC_Settings, f8_a, f8_b, l_tether; c1) -> Float64
+
+Curvature margin of one shape: the tightest radius of the (`f8_a`, `f8_b`)
+lemniscate over the kite's minimum turn radius at `l_tether`, from
+[`check_pattern_feasible`](@ref). Below 1.0 the path asks for a turn the kite
+cannot fly at `fcs.max_steering`.
+
+Everything except the two swept sizes comes from `fcs`, so the margin describes
+the same run the sweep would fly. Evaluate it at the STARTING tether length: a
+longer tether only ever shrinks the kite's angular turn radius, so the start is
+the worst case (see `examples/simple_reelout.jl`).
+"""
+function pattern_margin(fcs::FC_Settings, f8_a, f8_b, l_tether; c1 = V3_TURN_RATE_C1)
+    # dt does not enter the geometry; the controller is built only to be measured.
+    fec = FigureEightController(FigureEightSettings(;
+        dt = 0.01, A = f8_a, B = f8_b, C = fcs.f8_c, D = fcs.f8_d,
+        az_center = 0.0, el_center = fcs.el_center,
+        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
+    return check_pattern_feasible(fec, l_tether, fcs.max_steering; c1, prn = false).margin
+end
+
+"""
+    filter_grid(grid, fcs::FC_Settings, l_tether; c1, min_margin=1.0)
+        -> (kept, dropped)
+
+Split `grid` on the curvature margin: `kept` is the shapes worth flying,
+`dropped` a vector of `task => margin` for the ones that are tighter than the
+kite can turn. `min_margin = 0` keeps everything.
+
+This is a PRE-FLIGHT filter, not a side condition, and the difference matters:
+the side conditions are properties measured from a run, while this one is
+geometry known before the run starts. A shape below the margin does not produce a
+bad number, it produces a number about the steering clamp — at the cost of the
+minutes the simulation takes to reach it.
+"""
+function filter_grid(grid, fcs::FC_Settings, l_tether; c1 = V3_TURN_RATE_C1,
+                     min_margin = 1.0)
+    margins = [pattern_margin(fcs, t.f8_a, t.f8_b, l_tether; c1) for t in grid]
+    keep = margins .>= min_margin
+    return grid[keep], [t => m for (t, m) in zip(grid[.!keep], margins[.!keep])]
 end
 
 """
@@ -216,6 +268,11 @@ destroying the table.
 """
 function record_result!(results_path, entry; lock_path = results_path * ".lock")
     with_file_lock(lock_path) do
+        # Under the lock, and not only in the driver: appending to a file that has
+        # no `results:` header yet would write a top-level LIST, which the next
+        # `load_results` cannot read. A worker run by hand has no driver to have
+        # created it.
+        init_results_file(results_path)
         open(results_path, "a") do io
             print(io, format_result_entry(entry))
         end
@@ -234,34 +291,50 @@ appended whole.
 function load_results(results_path)
     isfile(results_path) || return Dict{String, Any}[]
     dict = YAML.load_file(results_path)
-    results = get(dict, "results", nothing)
+    # A bare list is a table written before its header existed (see
+    # `record_result!`): readable, so read it rather than failing on the type.
+    results = dict isa AbstractDict ? get(dict, "results", nothing) : dict
     isnothing(results) && return Dict{String, Any}[]
     return Vector{Dict{String, Any}}(results)
 end
 
-"""
-    claim_task!(grid, results_path; claims_path, lock_path) -> task or `nothing`
+# One claim per line, `"<task key> <worker id>"`. The owner is part of the record
+# because a claim can only be released by whoever can be shown to have abandoned
+# it — see `release_claims!`.
+_read_claims(claims_path) =
+    isfile(claims_path) ?
+    [(k = first(parts), w = length(parts) > 1 ? parts[2] : "0")
+     for parts in split.(strip.(readlines(claims_path)))  if !isempty(parts)] :
+    NamedTuple{(:k, :w), Tuple{SubString{String}, SubString{String}}}[]
 
-Hand out the next unflown grid point, or `nothing` once the sweep is complete.
+_done_keys(results_path) =
+    Set(task_key(r["f8_a"], r["f8_b"]) for r in load_results(results_path))
+
+"""
+    claim_task!(grid, results_path; worker=0, claims_path, lock_path)
+        -> task or `nothing`
+
+Hand out the next unflown grid point to `worker`, or `nothing` once every point is
+claimed or finished.
 
 Claiming and recording share ONE lock, so a combination cannot be handed to two
 workers: under the lock the claim file and the results table are read, the first
 grid point in neither is appended to the claim file, and only then is the lock
 released. The claim file is separate from the results table because a claim is
-not a result — it is dropped when the sweep restarts, which is what lets a
-combination whose worker died be picked up again.
+not a result — a claim can be released again (see [`release_claims!`](@ref)),
+which is what lets the grid point of a worker that died be picked up by another.
 """
-function claim_task!(grid, results_path;
+function claim_task!(grid, results_path; worker = 0,
                      claims_path = results_path * ".claims",
                      lock_path = results_path * ".lock")
     with_file_lock(lock_path) do
-        done = Set(task_key(r["f8_a"], r["f8_b"]) for r in load_results(results_path))
-        claimed = isfile(claims_path) ? Set(strip.(readlines(claims_path))) : Set{String}()
+        done = _done_keys(results_path)
+        claimed = Set(c.k for c in _read_claims(claims_path))
         for task in grid
             key = task_key(task.f8_a, task.f8_b)
             (key in done || key in claimed) && continue
             open(claims_path, "a") do io
-                println(io, key)
+                println(io, key, " ", worker)
             end
             return task
         end
@@ -270,23 +343,70 @@ function claim_task!(grid, results_path;
 end
 
 """
+    n_unclaimed(grid, results_path; claims_path, lock_path) -> Int
+
+Grid points that are neither finished nor claimed by a live worker — the work a
+NEW worker could pick up. The driver restarts a worker that exited only when this
+is positive: a worker that exits because the last points are already being flown
+by its colleagues has done nothing wrong, and restarting it would only have it
+exit again.
+"""
+function n_unclaimed(grid, results_path;
+                     claims_path = results_path * ".claims",
+                     lock_path = results_path * ".lock")
+    with_file_lock(lock_path) do
+        done = _done_keys(results_path)
+        claimed = Set(c.k for c in _read_claims(claims_path))
+        return count(t -> !(task_key(t.f8_a, t.f8_b) in done) &&
+                          !(task_key(t.f8_a, t.f8_b) in claimed), grid)
+    end
+end
+
+"""
+    release_claims!(results_path, worker; claims_path, lock_path) -> Int
+
+Drop the unfinished claims of `worker` and return how many, so that the grid
+points a dead worker was holding can be flown by somebody else.
+
+Scoped to one worker on purpose. Releasing every unfinished claim instead would
+also release the ones that live workers are flying RIGHT NOW, and those points
+would then be handed out a second time — which is exactly what happened before
+the claim file recorded an owner (see Plan.md).
+"""
+function release_claims!(results_path, worker;
+                         claims_path = results_path * ".claims",
+                         lock_path = results_path * ".lock")
+    with_file_lock(lock_path) do
+        done = _done_keys(results_path)
+        claims = _read_claims(claims_path)
+        keep = [c for c in claims if c.w != string(worker) || c.k in done]
+        open(claims_path, "w") do io
+            for c in keep
+                println(io, c.k, " ", c.w)
+            end
+        end
+        return length(claims) - length(keep)
+    end
+end
+
+"""
     reset_claims!(grid, results_path; claims_path, lock_path) -> Int
 
 Rewrite the claim file to hold only the combinations that actually have a result,
-and return how many claims were dropped. Called by the driver when the pool has
-gone quiet with work outstanding: those claims belong to workers that died, and
-without this their grid points would be skipped forever.
+and return how many claims were dropped. For the START of a sweep, where every
+claim without a result was left behind by a process that is gone: during a sweep
+use [`release_claims!`](@ref), which cannot take a claim away from a live worker.
 """
 function reset_claims!(grid, results_path;
                        claims_path = results_path * ".claims",
                        lock_path = results_path * ".lock")
     with_file_lock(lock_path) do
-        done = Set(task_key(r["f8_a"], r["f8_b"]) for r in load_results(results_path))
-        claimed = isfile(claims_path) ? Set(strip.(readlines(claims_path))) : Set{String}()
+        done = _done_keys(results_path)
+        claimed = Set(c.k for c in _read_claims(claims_path))
         orphaned = setdiff(claimed, done)
         open(claims_path, "w") do io
             for key in sort(collect(done))
-                println(io, key)
+                println(io, key, " 0")
             end
         end
         return length(orphaned)
@@ -384,6 +504,22 @@ function side_conditions(result, os::OptSettings)
 end
 
 """
+    unique_results(results) -> Vector
+
+One entry per grid point, the LAST recorded winning — a re-flown combination is a
+re-measurement, not a second data point. Defensive rather than expected: the
+claim protocol is what prevents a duplicate, and this only keeps one from
+reaching the ranking if it ever slips through.
+"""
+function unique_results(results)
+    seen = Dict{String, Int}()
+    for (i, r) in enumerate(results)
+        seen[task_key(r["f8_a"], r["f8_b"])] = i
+    end
+    return [results[i] for i in sort(collect(values(seen)))]
+end
+
+"""
     rank_results(results, os::OptSettings) -> (accepted, rejected)
 
 Split `results` on the side conditions of [`OptSettings`](@ref) and sort the
@@ -394,7 +530,7 @@ sorted by power so that a near-miss is easy to spot next to the winner.
 function rank_results(results, os::OptSettings)
     accepted = Dict{String, Any}[]
     rejected = Pair{Dict{String, Any}, Vector{String}}[]
-    for result in results
+    for result in unique_results(results)
         reasons = side_conditions(result, os)
         isempty(reasons) ? push!(accepted, result) : push!(rejected, result => reasons)
     end
@@ -422,7 +558,7 @@ function format_results_table(results, os::OptSettings)
     gen(x) = isnothing(x) ? "-" : @sprintf("%g", x)
 
     println(io, "RANKED by mean reel-out power, side conditions satisfied ",
-            "($(length(accepted)) of $(length(results)) runs):")
+            "($(length(accepted)) of $(length(unique_results(results))) runs):")
     println(io, "     f8_a   f8_b    power    energy    force   upper     sat   d_rms  laps")
     println(io, "     [deg]  [deg]     [W]      [kJ]      [N]     [%]     [%]   [deg]      ")
     for (i, r) in enumerate(accepted)
@@ -440,13 +576,28 @@ function format_results_table(results, os::OptSettings)
         println(io, "     (none — every run broke a side condition)")
     end
 
+    # A shape that was never flown is not a shape that failed: the first list is
+    # about the sweep's verdict, the second about what the sweep declined to spend
+    # minutes on. Merging them buries the former under the latter.
+    skipped = [p for p in rejected if startswith(get(first(p), "status", ""), "skipped")]
+    failed = [p for p in rejected if !startswith(get(first(p), "status", ""), "skipped")]
+
     println(io)
-    println(io, "REJECTED ($(length(rejected))):")
-    for (r, reasons) in rejected
+    println(io, "REJECTED, flown ($(length(failed))):")
+    for (r, reasons) in failed
         @printf(io, "     f8_a = %5.1f, f8_b = %5.1f, power %s W: %s\n",
                 r["f8_a"], r["f8_b"], ints(get(r, "mean_power_W", nothing)),
                 join(reasons, "; "))
     end
-    isempty(rejected) && println(io, "     (none)")
+    isempty(failed) && println(io, "     (none)")
+
+    if !isempty(skipped)
+        println(io)
+        println(io, "NOT FLOWN ($(length(skipped))), curvature margin below the limit:")
+        for (r, _) in skipped
+            @printf(io, "     f8_a = %5.1f, f8_b = %5.1f, margin %s\n", r["f8_a"],
+                    r["f8_b"], dec2(get(r, "feasibility_margin", nothing)))
+        end
+    end
     return String(take!(io))
 end

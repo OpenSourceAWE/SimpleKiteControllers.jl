@@ -30,10 +30,11 @@ export winch_state_pct
 export FC_Settings, winch_force_gains, project_file, fc_settings
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
-export OptSettings, opt_grid, task_key
+export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
 export with_file_lock, init_results_file, record_result!, load_results
-export claim_task!, reset_claims!
-export run_metrics, side_conditions, rank_results, format_results_table
+export claim_task!, release_claims!, reset_claims!, n_unclaimed
+export run_metrics, side_conditions, rank_results, unique_results
+export format_results_table
 
 # Data
 export skc_data_path

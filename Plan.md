@@ -428,3 +428,10 @@ Two things worth knowing before reading the first sweep:
 The results table is also the resume state: a combination already in it is never
 re-flown, so an interrupted sweep continues where it stopped and starting over
 means deleting `output/optimization_results.yaml`.
+
+## Verify harness
+Before committing hours, fly two points: set `max_f8_a: 21.0` and
+`max_f8_b: 8.0` in `data/optimization.yaml` (a 2 x 1 grid) with
+`max_processes: 2`, run this script, and check that
+`output/optimization_results.yaml` has two entries whose `mean_power_W` and
+`pct_time_upper_force` are filled in.

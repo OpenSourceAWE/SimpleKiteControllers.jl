@@ -80,6 +80,10 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using SimpleKiteControllers
+# `Settings` for the plant's starting tether length, which the pre-flight
+# curvature check needs. Named explicitly rather than pulled in wholesale: this
+# script deliberately does not load the kite model, only what reads its config.
+using KiteUtils: Settings
 using Printf
 import Dates
 
@@ -91,23 +95,69 @@ const OUTPUT_ROOT = normpath(joinpath(@__DIR__, "..", "output"))
 const WORKER_SCRIPT = joinpath(@__DIR__, "optimize_fig8_worker.jl")
 
 os = OptSettings("optimization.yaml")
-grid = opt_grid(os)
+full_grid = opt_grid(os)
 results_path = init_results_file(joinpath(OUTPUT_ROOT, os.results_file))
 work_root = joinpath(OUTPUT_ROOT, "optimization")
 mkpath(work_root)
+
+# ==================== PRE-FLIGHT ==================== #
+
+# The shapes are filtered on curvature BEFORE anything is flown: a pattern
+# tighter than the kite's minimum turn radius does not measure the shape, it
+# measures the steering clamp, and takes a full simulation to say so. The
+# geometry says it in microseconds. Same settings the workers will fly, read the
+# same way, and at the STARTING tether length, which is the worst case.
+sweep_project = project_file(selected_reelout_project())
+sweep_fcs = FC_Settings(fc_settings(sweep_project))
+l_tether_start = Settings(sweep_project).l_tether
+c1_sweep = try
+    turn_rate_coeffs(sweep_fcs.body_damping, sweep_fcs.depower_setpoint).c1
+catch err
+    err isa ArgumentError || rethrow()
+    @warn "No turn-rate coefficients for this damping/depower — filtering the grid \
+           with the default c1 = $(V3_TURN_RATE_C1) instead.\n$(err.msg)"
+    V3_TURN_RATE_C1
+end
+grid, too_tight = filter_grid(full_grid, sweep_fcs, l_tether_start;
+                              c1 = c1_sweep, min_margin = os.min_feasibility_margin)
+
+# Recorded, not merely skipped: the table then covers every combination that was
+# asked for, and says why the missing ones were not flown.
+if !isempty(too_tight)
+    already = Set(task_key(r["f8_a"], r["f8_b"]) for r in load_results(results_path))
+    for (task, margin) in too_tight
+        task_key(task.f8_a, task.f8_b) in already && continue
+        entry = run_metrics("", task.f8_a, task.f8_b;
+                            status = @sprintf("skipped: pattern too tight (curvature \
+                                               margin %.2f < %.2f at %.0f m)",
+                                              margin, os.min_feasibility_margin,
+                                              l_tether_start))
+        push!(entry, "feasibility_margin" => round(margin; digits = 3))
+        record_result!(results_path, entry)
+    end
+    @info "Skipped $(length(too_tight)) of $(length(full_grid)) shapes as tighter than \
+           the kite can turn (margin < $(os.min_feasibility_margin)): " *
+          join((@sprintf("%.0f/%.0f (%.2f)", t.f8_a, t.f8_b, m) for (t, m) in too_tight), ", ")
+end
 
 # ==================== PLAN ==================== #
 
 # Claims of a previous, interrupted sweep belong to processes that are gone; kept,
 # they would make their grid points invisible to this one.
 orphaned = reset_claims!(grid, results_path)
-done_at_start = length(load_results(results_path))
+# Counted over the FLYABLE grid only: the skipped shapes have results too, and
+# including them would have the sweep report itself finished before it started.
+flyable = Set(task_key(t.f8_a, t.f8_b) for t in grid)
+n_done() = count(r -> task_key(r["f8_a"], r["f8_b"]) in flyable,
+                 load_results(results_path))
+done_at_start = n_done()
 gb(bytes) = bytes / 2^30
 
 @info """
 Figure-eight shape sweep
   grid          : f8_a $(os.min_f8_a):$(os.step_size):$(os.max_f8_a) deg x \
-f8_b $(os.min_f8_b):$(os.step_size):$(os.max_f8_b) deg = $(length(grid)) runs
+f8_b $(os.min_f8_b):$(os.step_size):$(os.max_f8_b) deg = $(length(full_grid)) shapes, \
+$(length(grid)) to fly$(isempty(too_tight) ? "" : ", $(length(too_tight)) too tight")
   already done  : $done_at_start (resumed from $(basename(results_path))\
 $(orphaned > 0 ? ", $orphaned stale claim(s) dropped" : ""))
   processes     : $(os.max_processes) on $(Sys.CPU_THREADS) CPU threads, \
@@ -116,6 +166,8 @@ $(round(gb(Sys.free_memory()); digits = 1)) GB of $(round(gb(Sys.total_memory())
   sim_time      : $(something(selected_sim_time(), "project default"))
   turbulence    : $(selected_turbulence())
   objective     : max mean reel-out power
+  pre-flight    : curvature margin >= $(os.min_feasibility_margin) at \
+$(round(Int, l_tether_start)) m (c1 = $(round(c1_sweep; digits = 4)))
   side cond.    : upper force controller <= $(os.max_pct_time_upper_force) % of the \
 reel-out window, steering saturation <= $(os.max_pct_time_within_2pct_of_peak) %
   results       : $results_path
@@ -132,20 +184,36 @@ else
     launch(id) -> Base.Process
 
 Start worker `id` detached, with its console output going to its own log file.
-Single-threaded on purpose: the parallelism here is `max_processes` whole
-simulations, and letting each of them also spread over the cores only makes them
-fight for the same ones.
+
+Single-threaded on purpose, and that takes FOUR settings, not one: the
+parallelism here is `max_processes` whole simulations, and a worker that also
+spreads itself over the cores only fights the other five for them. `--threads=1`
+bounds Julia's own tasks, but the numerical libraries have their own pools:
+`OPENBLAS_NUM_THREADS` for OpenBLAS and `MKL_NUM_THREADS`/`OMP_NUM_THREADS` for
+MKL, which this stack also loads (`libmkl_rt` + `libiomp5`) and which OpenBLAS's
+variable does not reach.
+
+Measured, because the default is a trap. Unpinned, MKL takes the physical core
+count — 8 here — so each worker ran 10 OS threads at ~250 % CPU while the model
+is far too small for threaded BLAS to pay: one run alone takes 102 s of
+simulation whether MKL has 8 threads or 1. Six such workers saturated all 16
+hardware threads and had not finished a single 128 s run in eight minutes, i.e.
+six processes delivering well under twice the throughput of one. Intel's OpenMP
+spin-waits by default, so the cost is real even when the threads have nothing to
+do.
 """
 function launch(id)
     logfile = joinpath(work_root, "w$(id).log")
     args = ["--project=$(@__DIR__)", "--startup-file=no", "--threads=1",
             WORKER_SCRIPT, string(id)]
-    cmd = addenv(`$(Base.julia_cmd()) $args`, "OPENBLAS_NUM_THREADS" => "1")
+    cmd = addenv(`$(Base.julia_cmd()) $args`,
+                 "OPENBLAS_NUM_THREADS" => "1",
+                 "MKL_NUM_THREADS" => "1",
+                 "OMP_NUM_THREADS" => "1")
     return run(pipeline(cmd; stdout = logfile, stderr = logfile, append = true);
                wait = false)
 end
 
-n_done() = length(load_results(results_path))
 alive(procs) = count(Base.process_running, procs)
 stop_all(procs) = foreach(p -> Base.process_running(p) && kill(p), procs)
 
@@ -198,15 +266,22 @@ try
                 @info @sprintf("%d/%d runs done, %d worker(s) alive, %.0f min elapsed%s",
                                done, length(grid), alive(workers), (time() - t_start) / 60,
                                isnan(eta) ? "" : @sprintf(", ~%.0f min left", eta / 60))
+                # Same reason as the worker's `say`: this script is also run with
+                # its output redirected to a file, where Julia buffers by block.
+                flush(stderr)
             end
-            # A worker that hit max_runs_per_process, crashed or was killed: replace
-            # it while there is work, first releasing whatever it had claimed and
-            # not finished — otherwise that grid point would never be flown.
-            if done < length(grid)
-                for (i, p) in enumerate(workers)
-                    Base.process_running(p) && continue
-                    reset_claims!(grid, results_path)
-                    @info "Worker $i is gone; restarting it."
+            # A worker that hit max_runs_per_process, crashed or was killed: release
+            # ITS unfinished claim, so that grid point is flown by somebody, and
+            # restart it only if a point is actually waiting. A worker also exits
+            # when the last points are already being flown by its colleagues, and
+            # restarting it then would just have it exit again — while releasing
+            # every unfinished claim would hand a running colleague's point out a
+            # second time, which is how this loop once produced a duplicate run.
+            for (i, p) in enumerate(workers)
+                Base.process_running(p) && continue
+                released = release_claims!(results_path, i)
+                if n_unclaimed(grid, results_path) > 0
+                    @info "Worker $i is gone ($released claim(s) released); restarting it."
                     workers[i] = launch(i)
                 end
             end
@@ -233,12 +308,13 @@ open(report_path, "w") do io
             Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS"),
             outcome == "finished" ? "" : " ($(uppercase(outcome)))")
     println(io, "Project $(selected_reelout_project()), turbulence \
-                 $(selected_turbulence()), $(length(results)) of $(length(grid)) runs.\n")
+                 $(selected_turbulence()), $(n_done()) of $(length(grid)) shapes flown \
+                 ($(length(too_tight)) skipped as too tight).\n")
     println(io, report)
 end
-@info @sprintf("Sweep %s after %.0f min: %d of %d runs. Report: %s",
+@info @sprintf("Sweep %s after %.0f min: %d of %d shapes flown. Report: %s",
                outcome, (time() - t_start) / 60,
-               length(results), length(grid), report_path)
+               n_done(), length(grid), report_path)
 
 accepted, _ = rank_results(results, os)
 if !isempty(accepted)
