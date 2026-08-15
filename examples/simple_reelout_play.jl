@@ -54,8 +54,8 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
 VIEWER_INTERVAL = 3     # draw every n-th logged row
-REPLAY_TIME_LAPSE = 2.0 # 1 = realtime, N = N times faster
-VIEWER_SCALE = 0.04     # world -> scene units, as in KiteViewers' park_v3.jl
+REPLAY_TIME_LAPSE = 3.0 # 1 = realtime, N = N times faster
+VIEWER_SCALE = 0.06     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 150 m tether is a dot at 1
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 TEXT_UPDATE_HZ = 15      # cap the on-screen status text to this many refreshes per second
@@ -122,6 +122,10 @@ function replay()
     frame_ns = VIEWER_INTERVAL * log_dt / REPLAY_TIME_LAPSE * 1e9
     text_update_ns = round(UInt64, 1e9 / TEXT_UPDATE_HZ)
     last_text_update = zero(UInt64)
+    # GC off for the duration of the playback: a collection landing inside a frame
+    # shows up as a visible stutter. Re-enabled in the finally below, so an abort
+    # (STOP, a dead viewer, the @error path) cannot leave it off in the REPL.
+    GC.enable(false)
     try
         viewer.stop = false
         clear_viewer(viewer; stop_ = false)
@@ -146,6 +150,7 @@ function replay()
         # An @async task that dies silently would just leave the button dead.
         @error "Replay stopped early" exception=(exc, catch_backtrace())
     finally
+        GC.enable(true)
         replaying[] = false
         stop(viewer)
     end
