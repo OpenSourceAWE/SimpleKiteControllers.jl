@@ -582,6 +582,28 @@ open(joinpath(output_path, log_name * ".yaml"), "w") do io
     write_yaml_commented(io, 0, summary)
 end
 
+# ==================== ARCHIVE ==================== #
+
+# One timestamped folder per run under output/archives/, so the exact config
+# that produced a log survives even after the next run overwrites output/*.
+archive_dir = joinpath(output_path, "archives", Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
+mkpath(archive_dir)
+input_yaml_files = [
+    project,                                              # system project
+    joinpath(dirname(project), project_set.sim_settings), # plant/solver settings
+    joinpath(skc_data_path(), wc_settings(project)),      # winch gains
+    joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
+    joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
+]
+output_files = [
+    joinpath(output_path, log_name * ".arrow"),
+    joinpath(output_path, log_name * ".yaml"),
+]
+for f in unique(vcat(input_yaml_files, output_files))
+    isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
+end
+@info "Archived run inputs and outputs to $archive_dir"
+
 if show_plots
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
 else
