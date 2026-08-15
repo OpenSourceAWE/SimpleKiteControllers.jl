@@ -75,10 +75,14 @@ are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
 `reelout_l_max`, the stop length, and `reelout_delay`, how long after phase 3
 the winch waits before it starts paying out.
 
-Which system project is flown, the run length and the turbulence level are read
-from `data/gui.yaml` exactly as in `simple_fig8.jl` — run `select_project()` to
-choose `system_reelout_150m.yaml` (or any other `system*.yaml`; a shorter tether
-means less margin to cover, see Feasibility above).
+The run length and the turbulence level are read from `data/gui.yaml` exactly as
+in `simple_fig8.jl`. The system project is too, but only when the selection is a
+reel-out one: `selected_reelout_project()` (`examples/gui_state.jl`) ignores a
+fig8 selection left over from `simple_fig8.jl` — whose FORCE-mode `fc_settings`
+this script rejects at startup — and flies `system_reelout_150m.yaml` instead, so
+no `select_project()` call is needed in between. Selecting another
+`system_reelout_*.yaml` still switches this script to it (a shorter tether means
+less margin to cover, see Feasibility above).
 """
 
 using Pkg
@@ -115,7 +119,7 @@ AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See simple_fig8.jl's docstring.
 DAMPING_PER_STIFFNESS = 0.001
-PROJECT = selected_project() # e.g. system_reelout_150m.yaml, set via select_project()
+PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 @info "simple_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \

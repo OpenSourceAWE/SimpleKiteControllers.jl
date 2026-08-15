@@ -42,10 +42,11 @@ using SimpleKiteControllers   # FC_Settings, figure_eight_path
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
-# Read fresh from data/gui.yaml on every include, same as simple_reelout.jl,
-# so a manual re-include never plots against a stale project or fcs.
+# Read fresh from data/gui.yaml on every include, same as simple_reelout.jl (a
+# fig8 selection falls back to the reel-out default there and here alike), so a
+# manual re-include never plots against a stale project or fcs.
 include(joinpath(@__DIR__, "gui_state.jl"))
-project = project_file(selected_project())
+project = project_file(selected_reelout_project())
 # Same rule as simple_reelout.jl: an `fcs` already in `Main` wins. Included at the
 # end of a run that is the fcs actually FLOWN, so rebuilding it from the YAML
 # here would both draw the wrong reference path and throw away the caller's

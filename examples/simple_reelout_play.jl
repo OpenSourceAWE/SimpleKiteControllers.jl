@@ -9,10 +9,12 @@ a `v3_segments.csv`.
 
 # Where the pieces come from
 
-The project is resolved exactly like `simple_reelout.jl`: `selected_project()`
-(`data/gui.yaml`, set via `select_project()`) names a `system*.yaml`, whose
-`sim_settings` gives `log_file` — the arrow log this script loads from
-`output/`. Run `simple_reelout.jl` first so that log exists.
+The project is resolved exactly like `simple_reelout.jl`:
+`selected_reelout_project()` (`data/gui.yaml`, set via `select_project()`, and
+falling back to `system_reelout_150m.yaml` whenever the selection is a fig8 one)
+names a `system_reelout_*.yaml`, whose `sim_settings` gives `log_file` — the
+arrow log this script loads from `output/`. Run `simple_reelout.jl` first so that
+log exists.
 
 The point/segment topology comes from `examples/v3_segments.jl`, exactly as in
 `simple_fig8_live.jl`, but built the cheap way `examples/export_v3_segments.jl`
@@ -72,7 +74,7 @@ VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 150 m tether is 
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 TEXT_UPDATE_HZ = 15      # cap the on-screen status text to this many refreshes per second
 
-PROJECT = selected_project() # e.g. system_reelout_150m.yaml, set via select_project()
+PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
 project = project_file(PROJECT)
 project_set = Settings(project)
 log_name = basename(project_set.log_file)

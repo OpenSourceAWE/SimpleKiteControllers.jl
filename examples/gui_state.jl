@@ -3,7 +3,7 @@
 
 """
 Read/write access to `data/gui.yaml`, the single state file of the example
-menu: which system project (`system_fig8_*.yaml`), simulation time, set of
+menu: which system project (`system_*.yaml`), simulation time, set of
 plots and turbulence level the example scripts fly/show.
 
 Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
@@ -24,6 +24,7 @@ using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_
 
 gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
 default_project() = "system_fig8_200m.yaml"
+default_reelout_project() = "system_reelout_150m.yaml"
 default_plots() = ["pattern", "time_series", "power", "aerodynamics"]
 
 function ensure_gui_state_file()
@@ -69,6 +70,25 @@ Currently selected system project file name, falling back to
 function selected_project()
     value = read_gui_field("project")
     return isnothing(value) ? default_project() : value
+end
+
+"""
+    selected_reelout_project() -> String
+
+Project the `simple_reelout*.jl` scripts fly: the persisted selection when it
+already names a reel-out project (`system_reelout_*.yaml`), otherwise
+[`default_reelout_project`](@ref).
+
+`project:` is a single shared key, so without this a fig8 selection left over
+from `simple_fig8.jl` would run the reel-out scripts against that project's
+`fc_settings.yaml`, whose `compliance: 0.5` (FORCE mode) `simple_reelout.jl`
+rejects at startup. Falling back here keeps both families runnable without
+re-selecting in between, while `select_project()` still decides between several
+reel-out projects once there is more than one.
+"""
+function selected_reelout_project()
+    project = selected_project()
+    return startswith(project, "system_reelout") ? project : default_reelout_project()
 end
 
 """
