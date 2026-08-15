@@ -208,6 +208,11 @@ power against a longer window, and only `energy_run` says which way the run came
 out. It is the honest total: it also counts what the drum gives back on the
 reel-in transients outside the window, which `energy` cannot see.
 
+Also `peak_power` [W], the window's maximum, and `cf_power_ro`, its crest factor
+`peak_power / mean_power` — how peaky the reel-out power is, relevant for
+sizing the generator and grid connection. `mean_force`/`peak_force`/`cf_force_ro`
+[N] are the same triple for the tether force alone, over the same window.
+
 Headless, no plotting dependency, so a sweep can call it on every log.
 """
 function reelout_power(sl)
@@ -217,10 +222,17 @@ function reelout_power(sl)
     reeling = findall(>(0.0), diff(l_set)) .+ 1
     isempty(reeling) && return nothing
     dt = Float64(sl.time[2]) - Float64(sl.time[1])
-    p_all = Float64.(getindex.(sl.winch_force, 1)) .*
-            Float64.(getindex.(sl.v_reelout, 1))
+    f_all = Float64.(getindex.(sl.winch_force, 1))
+    p_all = f_all .* Float64.(getindex.(sl.v_reelout, 1))
     p = p_all[reeling]
-    return (; mean_power = mean(p), energy = sum(p) * dt,
+    f = f_all[reeling]
+    mean_power = mean(p)
+    peak_power = maximum(p)
+    mean_force = mean(f)
+    peak_force = maximum(f)
+    return (; mean_power, peak_power, cf_power_ro = peak_power / mean_power,
+            mean_force, peak_force, cf_force_ro = peak_force / mean_force,
+            energy = sum(p) * dt,
             duration = length(reeling) * dt, n = length(reeling),
             energy_run = sum(p_all) * dt)
 end

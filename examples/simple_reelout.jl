@@ -435,13 +435,24 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_
 
 summary = OrderedDict{String, Any}()
 run_time = Dates.now()
+# The package repo, not `examples/` — this reports the controller code, not the script's own project.
+pkg_dir = pkgdir(SimpleKiteControllers)
+git_hash, git_status = try
+    hash = strip(read(`git -C $pkg_dir rev-parse --short HEAD`, String))
+    dirty = !isempty(strip(read(`git -C $pkg_dir status --porcelain`, String)))
+    (hash, dirty ? "dirty" : "clean")
+catch
+    ("unknown", "unknown")
+end
 summary["simulation"] = OrderedDict{String, Any}(
     "script" => (basename(@__FILE__), "script that produced this run"),
     "project" => (PROJECT, "system project flown"),
     "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
     "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
     "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
-    "hostname" => (gethostname(), "machine the run executed on"))
+    "hostname" => (gethostname(), "machine the run executed on"),
+    "git_hash" => (git_hash, "SimpleKiteControllers.jl commit hash"),
+    "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
 if fig8m !== nothing
     summary["fig8_metrics"] = OrderedDict{String, Any}(
         "settled_from_s" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
@@ -524,13 +535,21 @@ rp = reelout_power(sl)
 if isnothing(rp)
     @warn "Tether never reeled out — no reel-out power to report."
 else
+    @printf("  Reel-out force: mean %.0f N, peak %.0f N (cf=%.2f).\n",
+            rp.mean_force, rp.peak_force, rp.cf_force_ro)
     # Both totals: an earlier engagement trades mean power for a longer window.
-    @printf("  Reel-out power: mean %.0f W over %.1f s (%d samples), \
+    @printf("  Reel-out power: mean %.0f W, peak %.0f W (cf=%.2f) over %.1f s (%d samples), \
              E = %.1f kJ; whole run E = %.1f kJ.\n",
-            rp.mean_power, rp.duration, rp.n, rp.energy / 1000,
-            rp.energy_run / 1000)
+            rp.mean_power, rp.peak_power, rp.cf_power_ro, rp.duration, rp.n,
+            rp.energy / 1000, rp.energy_run / 1000)
+    reelout_summary["force"] = OrderedDict(
+        "mean_N" => (round(Int, rp.mean_force), "mean tether force over the reeling window [N]"),
+        "peak_N" => (round(Int, rp.peak_force), "peak tether force over the reeling window [N]"),
+        "cf_force_ro" => (round(rp.cf_force_ro; digits = 2), "crest factor: peak_N / mean_N"))
     reelout_summary["power"] = OrderedDict(
         "mean_W" => (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"),
+        "peak_W" => (round(Int, rp.peak_power), "peak reel-out power over the reeling window [W]"),
+        "cf_power_ro" => (round(rp.cf_power_ro; digits = 2), "crest factor: peak_W / mean_W"),
         "duration_s" => (round(rp.duration; digits = 1), "reeling window length [s]"),
         "n_samples" => (rp.n, "sample count in the reeling window"),
         "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
