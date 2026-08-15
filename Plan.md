@@ -435,3 +435,94 @@ Before committing hours, fly two points: set `max_f8_a: 21.0` and
 `max_processes: 2`, run this script, and check that
 `output/optimization_results.yaml` has two entries whose `mean_power_W` and
 `pct_time_upper_force` are filled in.
+
+**DONE**, and it earned its keep: the 2-point run flew both shapes but recorded
+THREE results, because the driver treated a worker that had exited normally (its
+colleague already held the last point) as crashed, and `reset_claims!` then took
+that point away from the worker still flying it. Claims now carry their owner and
+only the driver, and only for a worker it has seen exit, may release one; a worker
+is restarted only when a point is actually unclaimed. Regression test replays that
+exact interleaving.
+
+## Sweep results
+
+**RUN, 2026-08-15.** 60 shapes (`f8_a` 19..30, `f8_b` 8..12), 30 flown, 30 skipped
+by the curvature filter, in 13 + 5 min of wall time. Every flown shape passed both
+side conditions — the upper force controller never engaged anywhere (0.0 % of the
+reel-out window in all 30), and steering saturation peaked at 2 %.
+
+| rank | `f8_a` | `f8_b` | mean power | margin |
+|-----:|-------:|-------:|-----------:|-------:|
+| 1 | 20 | 12 | **8130 W** | 1.05 |
+| 2 | 20 | 10 | 8129 W | 1.03 |
+| 3 | 20 | 11 | 8129 W | 1.07 |
+| 4 | 19 | 10 | 8126 W | 1.00 |
+| 5 | 19 | 11 | 8126 W | 1.01 |
+| 6 | 21 | 10 | 8101 W | 1.06 |
+| … | | | | |
+| 30 | 30 | 11 | 7758 W | 1.05 |
+
+Four things this says, in order of how much they matter:
+
+- **The optimum is interior and the search on this axis is closed.** Power rises
+  from 8101 W at `f8_a = 21` to 8130 W at 20 and falls again to 8126 W at 19, so 20
+  is a genuine maximum rather than the edge of the grid. Below 19 nothing is
+  flyable at any height (margins 0.96 down to 0.46), which is why 19 is now
+  `min_f8_a`.
+- **`f8_b` is not an optimization axis.** At `f8_a = 20` the three heights differ
+  by 1 W. Pick the height for ROBUSTNESS instead: `b = 11` has the largest
+  curvature margin (1.07 against 1.03 and 1.05) at the same power.
+- **The whole feasible range spans 2.7 %** (7758..8130 W) and is monotone in
+  `f8_a` outside the plateau. Against the incumbent 30/12 the best shape is
+  +4.8 %, which is worth having, but the gradient points at the CONSTRAINT: more
+  power needs whatever moves the curvature limit (`max_steering`, or `c1` via
+  depower/body damping), not a finer grid.
+- **The feasibility ridge turns over at `f8_a` ~ 20.** Above it a taller eight is
+  easier to fly (margin rises with `f8_b`), below it harder. The lower-left corner
+  of the original 20..30 x 8..12 grid was therefore infeasible by construction —
+  27 of its 55 shapes, half the sweep, would have been minutes each spent
+  measuring the steering clamp.
+
+Margin map at `l_tether = 150 m`, `c1 = 0.2819`, `max_steering = 0.32`
+(`*` = not flown):
+
+```
+        b=8    b=9    b=10   b=11   b=12   b=13   b=14
+a=18   *0.86  *0.93  *0.96  *0.94  *0.90  *0.86  *0.82
+a=19   *0.85  *0.95   1.00   1.01  *0.98  *0.94  *0.89
+a=20   *0.82  *0.96   1.03   1.07   1.05   1.01  *0.97
+a=22   *0.76  *0.94   1.06   1.14   1.17   1.16   1.12
+a=25   *0.67  *0.85   1.03   1.17   1.26   1.31   1.34
+a=30   *0.56  *0.71  *0.87   1.05   1.22   1.37   1.47
+```
+
+Note the `b > 12` columns: they are outside the swept grid and every one of them
+is feasible from `a = 22` up, with margins that keep growing (1.47 at 30/14). The
+sweep never asked whether a TALLER eight pays, and the ridge above suggests the
+question is open in a way the width axis no longer is.
+
+### Parallel speed-up, and the MKL trap
+
+Measured from the results table's own timestamps, splitting runs by how many were
+in flight:
+
+| | per run | throughput | vs serial |
+|:--|--:|--:|--:|
+| serial, warm process | 86 s | 42 runs/h | 1.0x |
+| 6 workers, thread pools pinned | 122 s | 129 runs/h | **3.1x** |
+| 6 workers, MKL unpinned | >= 480 s | <= 45 runs/h | ~1.1x |
+
+The third row is the trap, and it cost an hour to find. The stack loads MKL
+(`libmkl_rt` + `libiomp5`) as well as OpenBLAS, and `OPENBLAS_NUM_THREADS` does
+not reach it: MKL takes the physical core count (8 here), so each worker ran 10 OS
+threads at ~250 % CPU. Six of them saturated all 16 hardware threads, load average
+43, and not one 128 s run finished in eight minutes — six processes delivering
+within 10 % of ONE serial process. The threads buy nothing even alone (a run takes
+102 s of simulation whether MKL has 8 threads or 1; this model is far too small
+for threaded BLAS), and Intel's OpenMP spin-waits, so they burn cores while idle.
+`launch` now sets `MKL_NUM_THREADS` and `OMP_NUM_THREADS` as well.
+
+The remaining 122 vs 86 s is not contention but CLOCK: on a 28 W Ryzen 7 7840U,
+six busy cores cannot hold the frequency one busy core can. 52 % parallel
+efficiency on 6 workers is therefore close to this machine's ceiling; 8 workers
+would trade clock for cores and leave nothing for the IDE.

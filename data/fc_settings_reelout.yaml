@@ -57,8 +57,21 @@ fc_settings:
                                         # 0.8x it, so this is the turn_rate_coeffs key
 
   # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
-  f8_a:               30.0     # Width of the eight, azimuth spans ±A             [deg]
-  f8_b:               12.0     # Height of the eight, elevation spans ±B/2        [deg]
+  # 20/11 comes from the shape sweep of 2026-08-15 (examples/optimize_fig8.jl, 30
+  # shapes flown over f8_a 19..30 x f8_b 8..12; see Plan.md). It is +4.8 % of mean
+  # reel-out power over the previous 30/12 — 8129 W against 7762 W — with the
+  # winch's upper force controller never engaging and the steering command never
+  # near its clamp.
+  #
+  # Width is the whole effect and 20 is a genuine interior optimum: 8101 W at 21,
+  # 8130 at 20, 8126 at 19, and below 19 no height is flyable at all. Height is
+  # NOT: at f8_a = 20 the three flown heights differ by 1 W, so 11 is chosen for
+  # curvature MARGIN (1.07, against 1.03 at b = 10 and 1.05 at b = 12) rather than
+  # for power. That margin is the reason to keep an eye on this pair — 1.07 is
+  # thinner than the old 30/12's 1.22, so anything that lowers c1 (a depower or
+  # body_damping change) eats into it faster than it used to.
+  f8_a:               20.0     # Width of the eight, azimuth spans ±A             [deg]
+  f8_b:               11.0     # Height of the eight, elevation spans ±B/2        [deg]
   f8_c:               0.0      # Size of the right part                           [deg]
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          26.0     # Centre elevation; lower turns easier, costs energy [deg]

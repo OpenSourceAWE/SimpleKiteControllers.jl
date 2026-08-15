@@ -11,7 +11,11 @@
 # sweep compares SHAPES and nothing else.
 optimization:
     max_processes: 6       # simulations run in parallel, one per worker process
-    min_f8_a: 20.0         # pattern width, lower bound, inclusive             [deg]
+    # 19 is the FEASIBILITY floor, not a guess: at 18 and below the pattern is
+    # tighter than the kite can turn at every height in this range (margins 0.96
+    # down to 0.46), so there is nothing below it to sweep. See the margin map in
+    # Plan.md.
+    min_f8_a: 19.0         # pattern width, lower bound, inclusive             [deg]
     max_f8_a: 30.0         # pattern width, upper bound, inclusive             [deg]
     min_f8_b: 8.0          # pattern height, lower bound, inclusive            [deg]
     max_f8_b: 12.0         # pattern height, upper bound, inclusive            [deg]
