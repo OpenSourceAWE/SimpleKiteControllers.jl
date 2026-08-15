@@ -6,8 +6,6 @@ if [[ $(basename $(pwd)) == "bin" ]]; then
     cd ..
 fi
 
-export MPLBACKEND=qt5agg
-
 if command -v nproc &> /dev/null; then
     FAST_CORES=$(($(nproc) / 2 - 1))
 else
