@@ -27,7 +27,13 @@ geometry this loads is enough.
 RUN plays the log back from the start at `REPLAY_TIME_LAPSE`x (1 = realtime);
 PAUSE (the same button, relabelled) or STOP ends it. The window is left open
 afterwards; clicking RUN again replays from the start. Runs once automatically
-when included.
+when included, or, with `RECORD_VIDEO = true`, that automatic run is written to
+`output/<log_file>.mp4` instead of paced onscreen — `record_video()` can also
+be called manually afterwards, any number of times, since it just replays `sl`
+again. Above `VIDEO_MAX_FPS` the frames are thinned by an integer factor, which
+keeps the encoded speed a true `REPLAY_TIME_LAPSE` rather than encoding a huge
+file. `VIDEO_SIZE` fixes the recording's resolution independently of how the
+window has been dragged; `nothing` records it as it is.
 """
 
 using Pkg
@@ -41,8 +47,11 @@ using SimpleKiteControllers
 # Selectively: KiteViewers exports `init` in some versions too, which would clash with V3Kite's.
 import KiteViewers
 using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop,
-                   bring_viewer_to_front, on
+                   set_status, bring_viewer_to_front, on
 using Printf
+# `GLMakie.save` stays qualified: `save` is a name several packages here export.
+import GLMakie
+using GLMakie: VideoStream, recordframe!
 
 @info "simple_reelout_play.jl: replaying a saved reel-out log in the KiteViewers 3D window."
 toc("Loaded packages in: ")
@@ -55,7 +64,10 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
 VIEWER_INTERVAL = 3     # draw every n-th logged row
 REPLAY_TIME_LAPSE = 3.0 # 1 = realtime, N = N times faster
-VIEWER_SCALE = 0.06     # world -> scene units, as in KiteViewers' park_v3.jl
+RECORD_VIDEO = true     # true: write output/<log_file>.mp4 instead of the automatic replay
+VIDEO_MAX_FPS = 60       # frames above this are dropped, at the same playback speed
+VIDEO_SIZE = (1820, 1024) # window size to record at, restored after; `nothing` = as it is
+VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
 VIEWER_KITE_SCALE = 3.0 # bridle and wing only: a 5 m wing on a 150 m tether is a dot at 1
 VIEWER_PX_PER_UNIT = 2.0 # GLMakie screen supersampling; smooths thin tether/segment cylinders
 TEXT_UPDATE_HZ = 15      # cap the on-screen status text to this many refreshes per second
@@ -110,50 +122,117 @@ clear_viewer(viewer; stop_ = false) # stop_ = false: a stopped viewer breaks the
 replaying = Ref(false)
 
 """
-    replay()
+    replay(; video = nothing)
 
 Play `sl` back in the 3D viewer, from the first row to the last, drawing every
 `VIEWER_INTERVAL`-th one and holding each frame for as long as it covers in logged
 time divided by `REPLAY_TIME_LAPSE` (1 = realtime). Returns when the log is
 exhausted or `viewer.stop` is set by PAUSE/STOP.
+
+`video` is a path to write the same frames to as an MP4 instead of pacing them:
+the encoded frame rate carries the playback speed, so the file plays at
+`REPLAY_TIME_LAPSE` while the recording itself runs as fast as the window draws.
+Use [`record_video`](@ref) rather than this keyword.
 """
-function replay()
+function replay(; video = nothing)
     replaying[] = true
     frame_ns = VIEWER_INTERVAL * log_dt / REPLAY_TIME_LAPSE * 1e9
     text_update_ns = round(UInt64, 1e9 / TEXT_UPDATE_HZ)
     last_text_update = zero(UInt64)
-    # GC off for the duration of the playback: a collection landing inside a frame
-    # shows up as a visible stutter. Re-enabled in the finally below, so an abort
-    # (STOP, a dead viewer, the @error path) cannot leave it off in the REPL.
-    GC.enable(false)
+    frame = 0
     try
         viewer.stop = false
         clear_viewer(viewer; stop_ = false)
+        set_status(viewer, isnothing(video) ? "Replay" : "Recording")
         bring_viewer_to_front()
+        # Drawn frames can outrun any sane frame rate, so the video takes every
+        # stride-th one — an INTEGER factor, which keeps the encoded rate a true
+        # REPLAY_TIME_LAPSE.
+        stride = max(1, ceil(Int, 1e9 / frame_ns / VIDEO_MAX_FPS))
+        # visible = true: the config is applied to the window that is ALREADY open, and
+        # VideoStream's own default (false) would hide it for the rest of the session.
+        stream = isnothing(video) ? nothing :
+                 VideoStream(viewer.fig; visible = true,
+                             framerate = max(1, round(Int, 1e9 / frame_ns / stride)))
+        # GC off for the paced playback only: a collection landing inside a frame
+        # shows up as a visible stutter. Recording keeps GC on — it is unpaced anyway.
+        # Re-enabled in the finally below, so an abort (STOP, a dead viewer, the
+        # @error path) cannot leave it off in the REPL.
+        isnothing(stream) && GC.enable(false)
         deadline = time_ns() + frame_ns
         for (i, state) in enumerate(sl)
             viewer.stop && break
             if i % VIEWER_INTERVAL == 0 || i == length(sl)
                 update_segments!(viewer, state; scale = VIEWER_SCALE,
                                  kite_scale = VIEWER_KITE_SCALE)
-                now = time_ns()
-                if now - last_text_update >= text_update_ns
+                frame += 1
+                if isnothing(stream)
+                    now = time_ns()
+                    if now - last_text_update >= text_update_ns
+                        update_status_text!(viewer, state; height = state.Z[1])
+                        last_text_update = now
+                        yield()
+                    end
+                    wait_until(deadline; always_sleep = true)
+                    deadline = time_ns() + frame_ns
+                elseif frame % stride == 0
+                    # Recorded video: keep text fresh on every captured frame, not
+                    # throttled by TEXT_UPDATE_HZ — the encoded rate is already capped.
                     update_status_text!(viewer, state; height = state.Z[1])
-                    last_text_update = now
+                    recordframe!(stream)
                     yield()
                 end
-                wait_until(deadline; always_sleep = true)
-                deadline = time_ns() + frame_ns
             end
         end
+        isnothing(stream) || GLMakie.save(video, stream)
     catch exc
         # An @async task that dies silently would just leave the button dead.
         @error "Replay stopped early" exception=(exc, catch_backtrace())
     finally
-        GC.enable(true)
+        isnothing(video) && GC.enable(true)
         replaying[] = false
         stop(viewer)
     end
+end
+
+"""
+    record_video(file = joinpath(output_path, log_name * ".mp4"); window_size = VIDEO_SIZE)
+
+Record the replay of `sl` to `file` and return its path. Runs the same loop as
+[`replay`](@ref) but unpaced, so it finishes well inside the flown time; the MP4
+still plays at `REPLAY_TIME_LAPSE`, because that is what sets the encoded frame
+rate. Needs the viewer window open — it captures what is on it, buttons and all —
+and refuses while a replay is in flight.
+
+The video is as many pixels as the window's framebuffer, so `window_size` resizes
+the window for the recording and puts it back afterwards; `nothing` records it as
+it currently is. Sizes are rounded UP to even numbers, which h264 requires. A
+display that scales (HiDPI) gives a file that many times larger, since the
+framebuffer is what is read.
+
+`RECORD_VIDEO = true` in the USER PARAMETERS section above does this
+automatically instead of the plain replay. The first call in a session also
+pays for compiling Makie's video path, which is tens of seconds and is not
+repeated.
+"""
+function record_video(file = joinpath(output_path, log_name * ".mp4");
+                      window_size = VIDEO_SIZE)
+    replaying[] && error("A replay is running — press PAUSE before recording.")
+    mkpath(dirname(abspath(file)))
+    old_size = size(viewer.fig.scene)
+    rec_size = isnothing(window_size) ? old_size : Tuple(2 .* cld.(window_size, 2))
+    if rec_size != old_size
+        resize!(viewer.fig, rec_size...)
+        sleep(0.3) # GLFW resizes on its next poll, and VideoStream fixes the frame size at once
+    end
+    t_rec = @elapsed try
+        replay(; video = file)
+    finally
+        rec_size == old_size || resize!(viewer.fig, old_size...)
+    end
+    @info @sprintf("Video: %s at %d x %d (%.1f s of flight recorded in %.1f s).",
+                   file, rec_size[1], rec_size[2], sl.time[end] - sl.time[1], t_rec)
+    file
 end
 
 on(viewer.btn_PLAY.clicks) do _
@@ -163,7 +242,8 @@ on(viewer.btn_PLAY.clicks) do _
     replaying[] || @async replay()
 end
 @info "Press RUN in the viewer to replay at \
-       $(REPLAY_TIME_LAPSE == 1 ? "realtime" : "$(REPLAY_TIME_LAPSE)x") speed."
+       $(REPLAY_TIME_LAPSE == 1 ? "realtime" : "$(REPLAY_TIME_LAPSE)x") speed, \
+       or call record_video() to write it to output/$(log_name).mp4."
 
-replay()
+RECORD_VIDEO ? record_video() : replay()
 nothing
