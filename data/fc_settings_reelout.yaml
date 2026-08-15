@@ -46,6 +46,8 @@ fc_settings:
                                 # to hold ~3458 N, the pay-out mean force — see the log    [-]
   reelout_t_startup:  0.25     # Force limiters held in reset this long; does NOT ramp v_set [s]
   reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
+  reelout_softstop:   6.0      # Linear decel trigger at the OTHER end; being tuned
+                                # against the power undershoot — see the log        [s]
   reelout_delay:      4.0      # Wait after phase 3 before reel-out starts          [s]
 
   # --- entry state machine: park -> dive -> hold -> fig8 --------------------

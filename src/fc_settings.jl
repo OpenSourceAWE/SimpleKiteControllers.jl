@@ -137,6 +137,22 @@ Add new findings there, not here.
     """
     reelout_softstart = 0.0
     """
+    Soft-stop trigger [s], the mirror image of [`reelout_softstart`](@ref): once
+    the remaining pay-out would finish within this many seconds AT THE CURRENT
+    RATE, `v_set` decelerates LINEARLY from whatever it is at that instant to 0,
+    landing exactly at `reelout_l_max` — continuous with the speed already being
+    flown, so unlike a hard stop there is no discontinuity for the POSITION loop
+    to correct with a reel-IN transient (a power undershoot,
+    `docs/fig8_tuning_log.md`, "soft-stop"). A linear ramp's area is
+    `v_entry*T/2`, so the ACTUAL deceleration time is solved exactly from the
+    remaining distance and comes out around 2x this value, not equal to it. `0`
+    disables it (the pre-2026-08-16 hard stop). Loosening `step!`'s
+    `acceleration_limit` instead was tried and made the undershoot WORSE: it
+    lets the drum coast further past `reelout_l_max` before turning around, so
+    the position error the loop then corrects is bigger, not smaller.
+    """
+    reelout_softstop = 0.0
+    """
     Delay [s] between the guidance engaging (phase 3) and reel-out starting.
     `0` reels out from the first step of phase 3.
 

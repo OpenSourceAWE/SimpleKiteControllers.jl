@@ -89,8 +89,13 @@ winch waits before it starts paying out, and `reelout_softstart`, which ramps
 the COMMANDED speed (`v_ff` and the `l_set` integration together, not the law
 inside `WinchController`) linearly from 0 to the computed `v_set` over that
 many seconds — `reelout_t_startup` does not do this, see its own docstring.
+`reelout_softstop` is the OTHER end of pay-out: once the remaining distance
+would finish within that many seconds at the current rate, `v_set` decelerates
+LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
+speed already being flown — avoiding the reel-in transient (a power undershoot)
+a hard stop leaves the POSITION loop to correct.
 `depower_final` is flown once phase 5 (final) is reached; its own docstring in
-`src/fc_settings.jl` explains why it is not yet tuned and how to do so.
+`src/fc_settings.jl` has the tuned value and where it came from.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
@@ -280,6 +285,9 @@ entry_sign = 0              # latched sign of the entry descent limiter (0 = uns
 phase = 0
 hold_start = NaN            # [s] time the hold began
 fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
+stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
+stop_v_entry = NaN          # [m/s] v_set at the moment it latched
+stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 toc("Start simulation loop...")
@@ -395,7 +403,33 @@ try
             ramp = fcs.reelout_softstart > 0 ?
                 clamp((t - fig8_start - fcs.reelout_delay) / fcs.reelout_softstart,
                       0.0, 1.0) : 1.0
-            v_set = ramp * v_raw
+            v_cmd = ramp * v_raw
+
+            remaining = fcs.reelout_l_max - l_set
+            # Soft-stop: a hard cut of v_set to 0 the instant l_set clamps to
+            # reelout_l_max leaves the drum with the old command's momentum —
+            # the POSITION loop then brakes it with a transient reel-IN (a power
+            # undershoot). LOOSENING the acceleration limit instead (tried, see
+            # `docs/fig8_tuning_log.md`, "soft-stop") makes it WORSE: the drum
+            # coasts further past l_max before turning around, so the error the
+            # position loop corrects is BIGGER, not smaller (measured: 0.36 m
+            # overshoot / -3 kW at 8 m/s² becomes 3.5 m / -6.7 kW at 1 m/s²).
+            # The fix has to be in v_set/l_set's own trajectory, matching the
+            # CURRENT commanded speed at the moment braking starts (not 0 — that
+            # would just move the discontinuity to the start of the ramp) and
+            # landing on exactly 0 at reelout_l_max: latch once the remaining
+            # distance would be covered within `reelout_softstop` seconds AT THE
+            # CURRENT RATE, then decelerate LINEARLY from `v_cmd` to 0. A linear
+            # ramp's area is `v_entry*T/2`, so `stop_T` (usually ~2x
+            # `reelout_softstop`) is solved for exactly, not just guessed.
+            if isnan(stop_start) && fcs.reelout_softstop > 0 && v_cmd > 0 &&
+               remaining <= v_cmd * fcs.reelout_softstop
+                global stop_start = t
+                global stop_v_entry = v_cmd
+                global stop_T = 2 * remaining / v_cmd
+            end
+            v_set = isnan(stop_start) ? v_cmd :
+                stop_v_entry * (1 - clamp((t - stop_start) / stop_T, 0.0, 1.0))
             global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
         end

@@ -1021,3 +1021,47 @@ against a static `l_set` than a growing one — see `depower_final`'s docstring
 in `src/fc_settings.jl` for the mechanism. This value is specific to 150 -> 350 m
 at 6 m/s; a different `reelout_l_max`, wind speed or `depower_setpoint` changes
 the target force and needs its own sweep.
+
+### `reelout_softstop` — a hard pay-out stop leaves a reel-in power dip (2026-08-16)
+
+A hard cut of `v_set` to 0 the instant `l_set` clamps to `reelout_l_max` (the
+mirror image of the engagement transient `reelout_softstart` fixes) leaves the
+drum with the old command's momentum: it overshoots `reelout_l_max` by ~0.36 m
+before the POSITION loop reels it back in, a transient dip to about -3 kW at
+the pay-out/final boundary (150 -> 350 m, 6 m/s).
+
+**Loosening `step!`'s `acceleration_limit` for a few seconds after entering
+phase 5 (final), instead of shaping `v_set`, is CLOSED — it makes the dip
+WORSE, not better.** Tried at `reelout_stop_acc = 1.0` m/s² for
+`reelout_stop_time = 5.0` s (against the usual `rcs.max_acc` = 8 m/s²): the
+drum coasts much further past `reelout_l_max` before turning around —
+overshoot grew from 0.36 m to **3.5 m** — and the correction the position loop
+then applies scales with that error, so the dip grew from -3 kW to **-6.7 kW**.
+A looser rate limiter cannot introduce a discontinuity of its own, but it also
+does nothing to stop the SETPOINT itself from freezing abruptly, so all it
+does here is let more excess distance accumulate before the mismatch is
+corrected.
+
+The fix that worked: decelerate `v_set` itself, but CONTINUOUSLY — matching
+whatever speed pay-out is actually flying at the moment braking starts, not 0.
+A first attempt using a rest-to-rest smoothstep (`3f^2-2f^3`, `f = (t-t_0)/T`)
+got this wrong at the OTHER end: its velocity is 0 at `f=0` by construction, so
+latching it mid-flight (at ~2.4 m/s) still stepped the command to 0 for one
+sample — small (a single-sample gap, `diff(l_set) <= 0` once), but visible in
+the log as a rougher run overall (whole-run force CV jumped to 41 % against the
+usual 5-8 %), plausibly a chaotic-ish knock-on since the pattern is a repeating
+closed loop.
+
+`reelout_softstop`'s actual mechanism: latch once the remaining pay-out would
+finish within `reelout_softstop` seconds at the CURRENT rate, record the
+CURRENT `v_set` as `v_entry`, then decelerate LINEARLY from `v_entry` to 0.
+A linear ramp's area is `v_entry*T/2`, so `T = 2*remaining/v_entry` is solved
+exactly (not guessed) to land precisely on `reelout_l_max` — `T` comes out to
+roughly 2x `reelout_softstop`, since braking from `v_entry` covers only half
+the distance a constant `v_entry` would over the same time. Measured at
+`reelout_softstop = 6.0` s (150 -> 350 m, 6 m/s): overshoot **0.016 m** (from
+0.36 m), dip **-0.49 kW** (from -3 kW), whole-run force CV back to a normal
+17 % (blended phase-4/phase-5 window — plain phase-5 CV alone is single
+digits, per the `depower_final` sweep above), all 7 success criteria still
+pass. `v_reelout` itself dips to only -0.09 m/s in the process — the residual
+dip is the plant's own response lag, not the setpoint shape.
