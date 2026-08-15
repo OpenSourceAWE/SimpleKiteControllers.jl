@@ -79,8 +79,11 @@ value left over from a sweep must never change an interactive run. The
 REEL_OUT-specific fields
 are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
 `reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`),
-`reelout_l_max`, the stop length, and `reelout_delay`, how long after phase 3
-the winch waits before it starts paying out.
+`reelout_l_max`, the stop length, `reelout_delay`, how long after phase 3 the
+winch waits before it starts paying out, and `reelout_softstart`, which ramps
+the COMMANDED speed (`v_ff` and the `l_set` integration together, not the law
+inside `WinchController`) linearly from 0 to the computed `v_set` over that
+many seconds — `reelout_t_startup` does not do this, see its own docstring.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
@@ -365,7 +368,15 @@ try
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
             # docs/fig8_tuning_log.md.
-            v_set = calc_v_set(rc, reel_out_speed(s), winch_force(s), rcs.f_low)
+            v_raw = calc_v_set(rc, reel_out_speed(s), winch_force(s), rcs.f_low)
+            # Ramps the COMMAND, not the law: rc's internal state (integrators,
+            # force limiters) sees the true v_raw throughout, only the value
+            # handed to l_set/v_ff is scaled. `t_startup` does not do this — see
+            # its docstring in `src/fc_settings.jl`.
+            ramp = fcs.reelout_softstart > 0 ?
+                clamp((t - fig8_start - fcs.reelout_delay) / fcs.reelout_softstart,
+                      0.0, 1.0) : 1.0
+            v_set = ramp * v_raw
             global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
         end

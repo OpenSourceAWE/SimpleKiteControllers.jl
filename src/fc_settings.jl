@@ -102,15 +102,28 @@ Add new findings there, not here.
     "Tether length [m] at which reel-out stops and the run holds the final length"
     reelout_l_max = 250.0
     """
-    Soft-start time [s] of the REEL_OUT controller (`WCSettings.t_startup`),
-    counted from the moment reel-out engages. WinchControllers' own default is
-    0.25 s, which steps the drum into a pattern already flying at full speed;
-    stretching it bounds the initial overshoot (measured 4.6 m/s against a 3.0
-    m/s steady setpoint). It shapes the ENGAGEMENT only, and deliberately so:
-    slowing the law itself costs the force regulation, see
-    `docs/fig8_tuning_log.md`.
+    Time [s] `WinchControllers.jl`'s lower/upper force limiters (`WCSettings.t_startup`)
+    are held in reset after reel-out engages, so they cannot activate before the
+    force measurement has settled. It does NOT ramp `v_set` or the commanded
+    speed — see [`reelout_softstart`](@ref) for that. While the winch stays in
+    speed-control state throughout engagement (the usual case), this has no
+    observable effect at all; `WinchControllers`' own default is 0.25 s.
     """
-    reelout_t_startup = 2.0
+    reelout_t_startup = 0.25
+    """
+    Soft-start time [s]: the commanded reel-out speed (both `v_ff` and the
+    `l_set` integration, i.e. the actual pay-out rate) is ramped linearly from
+    `0` to WinchControllers.jl's `v_set = reelout_kv * sqrt(force)` over this
+    many seconds, counted from the moment reel-out engages (`reelout_delay`
+    after phase 3). `0` disables the ramp (the command jumps straight to the
+    computed value, the pre-2026-08-15 behaviour). Only the value USED is
+    scaled — the winch controller's own internal state (integrators, force
+    limiters) still sees the true, unscaled law throughout, so this shapes the
+    ENGAGEMENT transient only and does not lag the steady-state force
+    regulation the way filtering the law itself would (`docs/fig8_tuning_log.md`,
+    "Lagging the square-root law is CLOSED").
+    """
+    reelout_softstart = 0.0
     """
     Delay [s] between the guidance engaging (phase 3) and reel-out starting.
     `0` reels out from the first step of phase 3.

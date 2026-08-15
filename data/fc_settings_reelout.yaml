@@ -42,7 +42,8 @@ fc_settings:
   reelout_f_high:     7600.0   # Upper limit; keep below the plant's max_force      [N]
   reelout_v_max:      8.0      # Reel-out speed limit                             [m/s]
   reelout_l_max:      350.0    # Tether length at which reel-out stops              [m]
-  reelout_t_startup:  10.0      # Soft start of the REEL_OUT controller              [s]
+  reelout_t_startup:  0.25     # Force limiters held in reset this long; does NOT ramp v_set [s]
+  reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
   reelout_delay:      4.0      # Wait after phase 3 before reel-out starts          [s]
 
   # --- entry state machine: park -> dive -> hold -> fig8 --------------------
