@@ -102,6 +102,18 @@ Add new findings there, not here.
     "Tether length [m] at which reel-out stops and the run holds the final length"
     reelout_l_max = 250.0
     """
+    Depower flown once `reelout_l_max` is reached (phase 5, "final") [-]. Reel-out
+    used to bleed off part of a force excursion by paying out line instead of
+    holding it; once the length is frozen, `step!`'s POSITION loop can only
+    resist a load spike with more torque against a now-static setpoint, so a
+    depower left at `depower_setpoint` runs noticeably tenser than during
+    pay-out — confirmed nonlinear and much larger than expected, `docs/fig8_tuning_log.md`
+    ("`depower_final` sweep"). Tuned for `reelout_l_max = 350` at 150 -> 350 m,
+    6 m/s wind: a different length, wind speed or `depower_setpoint` moves the
+    target force and needs its own sweep, not a linear rescale of this value.
+    """
+    depower_final = 0.328
+    """
     Time [s] `WinchControllers.jl`'s lower/upper force limiters (`WCSettings.t_startup`)
     are held in reset after reel-out engages, so they cannot activate before the
     force measurement has settled. It does NOT ramp `v_set` or the commanded

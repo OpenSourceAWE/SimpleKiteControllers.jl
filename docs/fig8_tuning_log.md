@@ -992,3 +992,32 @@ WinchControllers' 0.25 s default). Do not slow the law itself — and note that 
 other candidate, the `acceleration_limit` `simple_reelout.jl` hands `step!`
 (`rcs.max_acc` = 8 m/s²), was tried at the plant's own 4 m/s² and made the ring
 WORSE, not better; see Plan.md for the measurement.
+
+### `depower_final` sweep — force jumps once the length freezes (2026-08-16)
+
+Phase 5 ("final", `sys_state == 5`) begins the moment `l_set` reaches
+`reelout_l_max` and keeps flying the pattern at `depower_final` instead of
+`depower_setpoint`. The premise — that a frozen length needs MORE depower than
+pay-out did to hold the same mean force — is confirmed, and by a much larger
+margin than expected: at 150 -> 350 m, 6 m/s wind, `system_reelout_150m.yaml`,
+`sim_time` extended to 190 s so phase 5 gets a ~74 s window (t = 115.7..190 s):
+
+| `depower_final` | phase-5 mean force [N] | std [N] |
+|--:|--:|--:|
+| 0.30 | 5149 | 285 |
+| 0.328 | **3456** | 190 |
+| 0.333 | 3232 | 185 |
+| 0.35 | 2578 | 201 |
+
+Target was 3458 N, `reelout_power`'s mean force over the pay-out window at
+`depower_setpoint` = 0.27 (same run, unaffected by `depower_final`). The
+relationship is clearly nonlinear over this range (a quadratic fit through the
+0.30/0.333/0.35 points, solved for 3458 N, landed almost exactly on the 0.328
+that was then confirmed directly) — do not linearly interpolate between two
+points far apart; fit at least three. The frozen-length force at
+`depower_final = depower_setpoint` (0.27, untested directly) would be well
+above the reel-out mean, consistent with the POSITION loop needing more torque
+against a static `l_set` than a growing one — see `depower_final`'s docstring
+in `src/fc_settings.jl` for the mechanism. This value is specific to 150 -> 350 m
+at 6 m/s; a different `reelout_l_max`, wind speed or `depower_setpoint` changes
+the target force and needs its own sweep.

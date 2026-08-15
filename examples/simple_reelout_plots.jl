@@ -7,10 +7,12 @@ Plotting for simple_reelout.jl results.
 A copy of `simple_fig8_plots.jl` with the time-series figure's tether-length
 panel changed from a flat `l0` line to the actual REEL_OUT setpoint (`var_10`),
 and two panels added: reel-out speed (measured `v_reelout` vs the setpoint
-`var_11`) and the WinchController's own state (`var_12`: 0 lower-force limit, 1
-speed control, 2 upper-force limit) — distinct from the bottom panel's ENTRY
-state machine (0 park … 4 settled). See `simple_fig8_plots.jl`'s docstring for
-everything else, which is unchanged here.
+`var_11`) and the commanded depower `u_d` (`var_14`, `rel_depower` — filled by
+`step!` itself, since `SysState` has no `set_depower` field) — worth watching
+here because `depower_final` steps it up once phase 5 (final) begins. Distinct
+from the bottom panel's ENTRY state machine (0 park … 4 settled, plus 5 final
+once pay-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
+for everything else, which is unchanged here.
 
 Plus one figure that script has no counterpart for: `power`, the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
@@ -116,7 +118,7 @@ if "time_series" in plots
     l_set = Float64.(sl.var_10[rng])          # REEL_OUT setpoint, not flat like simple_fig8
     v_reelout = getindex.(sl.v_reelout[rng], 1)
     v_set = Float64.(sl.var_11[rng])
-    rc_state = Float64.(sl.var_12[rng])       # WinchController state: 0/1/2
+    u_d = Float64.(sl.var_14[rng])            # commanded rel_depower, filled by step! itself
     # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
     state = Float64.(sl.sys_state[rng])
     p2 = plotx(
@@ -130,7 +132,7 @@ if "time_series" in plots
         getindex.(sl.winch_force[rng], 1),
         [l_tether, l_set],
         [v_reelout, v_set],
-        rc_state,
+        u_d,
         state;
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
@@ -144,7 +146,7 @@ if "time_series" in plots
             L"F_{\mathrm{tether}}~[\mathrm{N}]",
             L"l_{\mathrm{tether}}~[\mathrm{m}]",
             L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
-            L"\mathrm{rc~state}~[-]",
+            L"u_{\mathrm{d}}~[-]",
             L"\mathrm{state}~[-]",
         ],
         labels = [
@@ -157,9 +159,9 @@ if "time_series" in plots
             nothing,
             [L"l_{\mathrm{tether}}", L"l_{\mathrm{set}}"],
             [L"v_{\mathrm{ro}}", L"v_{\mathrm{set}}"],
-            L"0=\mathrm{lower~force},~1=\mathrm{speed},~2=\mathrm{upper~force}",
+            nothing,
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled}",
+            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled},~5=\mathrm{final}",
         ],
         fig = fig_name * " – time series",
     )

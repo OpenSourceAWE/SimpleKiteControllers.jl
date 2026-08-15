@@ -7,7 +7,10 @@ tether starts at `l_tether` (150 m by default), flies the same four-phase entry 
 `simple_fig8.jl` (park -> dive -> hold -> fig8), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
 `v_set = kv * sqrt(force)` law until `fcs.reelout_l_max`, then holds that length
-for the rest of the run. No pumping cycle: there is no reel-in phase here.
+for the rest of the run. Once pay-out stops, a fifth phase (final) takes over:
+the pattern keeps flying, but depower switches from `depower_setpoint` to
+`depower_final`, meant to hold roughly the force pay-out was regulating away.
+No pumping cycle: there is no reel-in phase here.
 
 # What comes from where
 
@@ -60,10 +63,12 @@ through `var_09` are as in `simple_fig8.jl`):
 | `var_13` | force error of the active force limiter [N], NaN in speed control |
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
-1 dive, 2 hold, 3 fig8, 4 settled); reel-out begins `fcs.reelout_delay` seconds
-after phase 3 is reached and stops once `l_set` reaches `fcs.reelout_l_max`.
-Phase 4 still marks the first close tracking of the pattern, it just no longer
-gates the winch.
+1 dive, 2 hold, 3 fig8, 4 settled), plus a fifth phase this script adds: 5 final,
+entered from either 3 or 4 the moment `l_set` reaches `fcs.reelout_l_max`. Reel-out
+begins `fcs.reelout_delay` seconds after phase 3 is reached and stops at the same
+length that triggers phase 5. Phase 4 still marks the first close tracking of the
+pattern, it just no longer gates the winch, and does not gate phase 5 either — a
+run that never settles still reaches final once pay-out is done.
 
 # Parameters
 
@@ -84,6 +89,8 @@ winch waits before it starts paying out, and `reelout_softstart`, which ramps
 the COMMANDED speed (`v_ff` and the `l_set` integration together, not the law
 inside `WinchController`) linearly from 0 to the computed `v_set` over that
 many seconds — `reelout_t_startup` does not do this, see its own docstring.
+`depower_final` is flown once phase 5 (final) is reached; its own docstring in
+`src/fc_settings.jl` explains why it is not yet tuned and how to do so.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
@@ -268,7 +275,8 @@ heading_pid = create_heading_pid(;
 entry_sign = 0              # latched sign of the entry descent limiter (0 = unset)
 
 # 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged, 4 = settled
-# (phase 3 with cross-track error below settled_d_gate for the first time).
+# (phase 3 with cross-track error below settled_d_gate for the first time),
+# 5 = final (pay-out reached reelout_l_max; still flying fig8, at depower_final).
 phase = 0
 hold_start = NaN            # [s] time the hold began
 fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
@@ -301,6 +309,11 @@ try
             global fig8_start = t
         elseif phase == 3 && dmin < fcs.settled_d_gate
             global phase = 4
+        end
+        # Separate from the ladder above so it can fire the SAME step as a 3->4
+        # transition: pay-out finishing does not wait for settling.
+        if phase in (3, 4) && l_set >= fcs.reelout_l_max
+            global phase = 5
         end
 
         # Entry descent limiter, active only while the kite is far off the path.
@@ -354,9 +367,15 @@ try
             heading_pid(0.0, err, 0.0)
         end
 
-        # entry_depower during the dive and hold, depower_setpoint elsewhere.
-        rel_depower = (phase == 1 || phase == 2) ? fcs.entry_depower :
-                                                   fcs.depower_setpoint
+        # entry_depower during the dive and hold, depower_final once pay-out has
+        # stopped (phase 5), depower_setpoint elsewhere.
+        rel_depower = if phase == 1 || phase == 2
+            fcs.entry_depower
+        elseif phase == 5
+            fcs.depower_final
+        else
+            fcs.depower_setpoint
+        end
 
         # REEL_OUT: `reelout_delay` seconds after phase 3 (guidance engaged), not
         # at phase 4 (settled), and only while l_set has not yet hit
@@ -407,7 +426,7 @@ try
         end
 
         # After step!, which overwrites parts of sys_state.
-        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8, 4 settled
+        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8, 4 settled, 5 final
         s.sys_state.bearing = chi_cmd          # the course actually tracked
         s.sys_state.attractor .= (deg2rad(az_attr), deg2rad(el_attr))
         s.sys_state.var_01 = dmin              # cross-track error [deg]
