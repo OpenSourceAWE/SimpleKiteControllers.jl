@@ -45,7 +45,9 @@ to 1.63 at 200 m and 2.04 at 250 m, so no pattern change is needed to start at
 150 m — see `Plan.md`.
 
 Logs the run to `output/<log_file>.arrow` and `include`s `simple_reelout_plots.jl`
-at the end, exactly like `simple_fig8.jl`.
+at the end, exactly like `simple_fig8.jl`. The printed RESULTS summary is also
+written to `output/<log_file>.yaml`, structured the same way and with each value
+commented, for later comparison across runs without re-parsing console output.
 
 Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`; `var_01`
 through `var_09` are as in `simple_fig8.jl`):
@@ -94,6 +96,8 @@ using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm
 using Statistics: mean
 using Printf
+import Dates
+using OrderedCollections: OrderedDict
 
 @info "simple_reelout.jl: figure-of-eight path following with REEL_OUT of the tether."
 toc("Loaded packages in: ")
@@ -394,52 +398,169 @@ save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
 
 # ==================== RESULTS ==================== #
 
+"""
+    write_yaml_commented(io, indent, node)
+
+Serialize a nested `OrderedDict` as YAML, recursing into `OrderedDict` values
+and appending a trailing `# comment` for leaves given as `(value, comment)`
+pairs, aligned to `comment_col` where the line is short enough.
+`YAML.write_file` has no concept of comments, hence this by hand.
+"""
+function write_yaml_commented(io, indent, node; comment_col = 36)
+    pad = "  "^indent
+    for (k, v) in node
+        if v isa AbstractDict
+            println(io, pad, k, ":")
+            write_yaml_commented(io, indent + 1, v; comment_col)
+        else
+            value, comment = v isa Tuple ? v : (v, "")
+            val = value isa AbstractString ? "\"$value\"" : string(value)
+            prefix = string(pad, k, ": ", val)
+            if isempty(comment)
+                println(io, prefix)
+            else
+                println(io, prefix, " "^max(1, comment_col - length(prefix)), "# ", comment)
+            end
+        end
+    end
+end
+
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
-print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
+fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = 0.0,
                    az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
                    min_span_frac = fcs.min_span_frac)
 
-# On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-let settled = findall(x -> Int(x) == 4, sl.sys_state)
-    if isempty(settled)
-        # Reel-out runs from phase 3, so this is about the anchor only.
-        @warn "Phase 4 never reached — no settled apparent wind speed."
-    else
-        va = Float64.(sl.v_app[settled])
-        @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
-                 | v_app_ref = %.1f (%+.1f%%)\n",
-                sl.time[settled[end]] - sl.time[settled[1]],
-                mean(va), minimum(va), maximum(va),
-                fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
-    end
-    # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
-    @printf("  Tether: %.1f m -> %.1f m (target %.1f m).\n",
-            l_tether, sl.var_10[end], fcs.reelout_l_max)
+summary = OrderedDict{String, Any}()
+run_time = Dates.now()
+summary["simulation"] = OrderedDict{String, Any}(
+    "script" => (basename(@__FILE__), "script that produced this run"),
+    "project" => (PROJECT, "system project flown"),
+    "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
+    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
+    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
+    "hostname" => (gethostname(), "machine the run executed on"))
+if fig8m !== nothing
+    summary["fig8_metrics"] = OrderedDict{String, Any}(
+        "settled_from_s" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
+        "settle_time_s" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
+        "laps" => (fig8m.laps, "figure-eight laps completed"),
+        "cross_track_deg" => OrderedDict(
+            "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error [deg]"),
+            "mean" => (round(fig8m.mean_d; digits = 2), "mean cross-track error [deg]"),
+            "max" => (round(fig8m.max_d; digits = 2), "max cross-track error [deg]")),
+        "elevation_deg" => OrderedDict(
+            "min_settled" => (round(fig8m.min_elevation_settled; digits = 1), "min elevation, settled window [deg]"),
+            "min_whole_run" => (round(fig8m.min_elevation_all; digits = 1), "min elevation, whole run [deg]")),
+        "peak_turn_rate_deg_s" => (round(Int, fig8m.max_turn_rate), "peak heading rate [deg/s]"),
+        "extent" => OrderedDict(
+            "azimuth_deg" => OrderedDict(
+                "min" => (round(-fig8m.az_reach_neg; digits = 1), "flown azimuth reach, negative side [deg]"),
+                "max" => (round(fig8m.az_reach_pos; digits = 1), "flown azimuth reach, positive side [deg]")),
+            "azimuth_pct_of_amplitude" => OrderedDict(
+                "min" => (round(Int, 100 * fig8m.az_fill_neg), "negative reach as % of the pattern's ±A"),
+                "max" => (round(Int, 100 * fig8m.az_fill_pos), "positive reach as % of the pattern's ±A")),
+            "worst_lobe_deg" => OrderedDict(
+                "min" => (round(-fig8m.az_reach_neg_worst; digits = 1), "weakest lobe, negative side [deg]"),
+                "max" => (round(fig8m.az_reach_pos_worst; digits = 1), "weakest lobe, positive side [deg]")),
+            "elevation_span_deg" => (round(fig8m.el_span; digits = 1), "flown elevation span [deg]"),
+            "elevation_span_pct_of_b" => (round(Int, 100 * fig8m.el_fill), "flown span as % of the pattern's B")),
+        "tether_force_N" => OrderedDict(
+            "mean" => (round(Int, fig8m.mean_force), "mean tether force, settled window [N]"),
+            "std" => (round(Int, fig8m.std_force), "std tether force, settled window [N]"),
+            "cv_pct" => (round(100 * fig8m.cv_force; digits = 1), "coefficient of variation [%]")),
+        "steering" => OrderedDict(
+            "peak_abs_u_s" => (round(fig8m.max_steering_used; digits = 3), "peak |rel_steering| commanded"),
+            "pct_time_within_2pct_of_peak" => (round(Int, 100 * fig8m.steering_sat_frac),
+                "% of time within 2% of peak (saturation)"),
+            "hf_std_steering" => (round(fig8m.steering_hf_std; digits = 4), "high-frequency std of steering (chatter)"),
+            "hf_std_turnrate_deg_s" => (round(fig8m.turnrate_hf_std; digits = 2),
+                "high-frequency std of heading rate [deg/s]")),
+        "tape" => OrderedDict(
+            "delivered_peak_abs_u_s" => (round(fig8m.max_steering_delivered; digits = 3),
+                "peak steering the KCU tape delivered"),
+            "commanded_peak_abs_u_s" => (round(fig8m.max_steering_used; digits = 3), "peak steering commanded"),
+            "rate_limited_pct_time" => (round(Int, 100 * fig8m.tape_rate_frac),
+                "% of time the tape's rate limit was hit"),
+            "rate_limited_peak_per_s" => (round(fig8m.max_tape_rate; digits = 3), "peak tape rate reached [1/s]"),
+            "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")),
+        "success_criteria" => (isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
+            "FAILED: " * join(fig8m.criteria_failed, ", "), "pass/fail verdict vs V3Kite's success criteria"))
 end
 
-let rp = reelout_power(sl)
-    if isnothing(rp)
-        @warn "Tether never reeled out — no reel-out power to report."
-    else
-        # Both totals: an earlier engagement trades mean power for a longer window.
-        @printf("  Reel-out power: mean %.0f W over %.1f s (%d samples), \
-                 E = %.1f kJ; whole run E = %.1f kJ.\n",
-                rp.mean_power, rp.duration, rp.n, rp.energy / 1000,
-                rp.energy_run / 1000)
-    end
+reelout_summary = OrderedDict{String, Any}()
+# On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
+settled = findall(x -> Int(x) == 4, sl.sys_state)
+if isempty(settled)
+    # Reel-out runs from phase 3, so this is about the anchor only.
+    @warn "Phase 4 never reached — no settled apparent wind speed."
+else
+    va = Float64.(sl.v_app[settled])
+    duration = sl.time[settled[end]] - sl.time[settled[1]]
+    @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
+             | v_app_ref = %.1f (%+.1f%%)\n",
+            duration, mean(va), minimum(va), maximum(va),
+            fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
+    reelout_summary["v_app_phase4"] = OrderedDict(
+        "duration_s" => (round(duration; digits = 1), "phase-4 window length [s]"),
+        "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
+        "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
+        "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
+        "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
+        "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
+            "mean v_app deviation from v_app_ref [%]"))
 end
+# Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
+@printf("  Tether: %.1f m -> %.1f m (target %.1f m).\n",
+        l_tether, sl.var_10[end], fcs.reelout_l_max)
+reelout_summary["tether"] = OrderedDict(
+    "start_m" => (l_tether, "tether length at run start [m]"),
+    "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
+    "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"))
+
+rp = reelout_power(sl)
+if isnothing(rp)
+    @warn "Tether never reeled out — no reel-out power to report."
+else
+    # Both totals: an earlier engagement trades mean power for a longer window.
+    @printf("  Reel-out power: mean %.0f W over %.1f s (%d samples), \
+             E = %.1f kJ; whole run E = %.1f kJ.\n",
+            rp.mean_power, rp.duration, rp.n, rp.energy / 1000,
+            rp.energy_run / 1000)
+    reelout_summary["power"] = OrderedDict(
+        "mean_W" => (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"),
+        "duration_s" => (round(rp.duration; digits = 1), "reeling window length [s]"),
+        "n_samples" => (rp.n, "sample count in the reeling window"),
+        "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
+        "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
+end
+summary["reelout"] = reelout_summary
 
 # Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
 if t_sim > 0
+    steps = round(Int, t_sim / s.dt)
     @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
-            t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / round(Int, t_sim / s.dt),
-            round(Int, t_sim / s.dt), s.dt, fcs.vsm_interval)
+            t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / steps,
+            steps, s.dt, fcs.vsm_interval)
+    summary["performance"] = OrderedDict(
+        "sim_time_s" => (round(t_sim; digits = 1), "simulated time [s]"),
+        "wall_time_s" => (round(t_wall; digits = 1), "wall-clock time [s]"),
+        "realtime_factor" => (round(t_sim / t_wall; digits = 2), "sim_time / wall_time"),
+        "ms_per_step" => (round(1000 * t_wall / steps; digits = 1), "wall time per step [ms]"),
+        "steps" => (steps, "step count"),
+        "dt_s" => (s.dt, "simulation timestep [s]"),
+        "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))
 else
     @warn "No simulated time elapsed — no performance figure."
+end
+
+open(joinpath(output_path, log_name * ".yaml"), "w") do io
+    println(io, "# Run summary for output/", log_name,
+            ".arrow, written by examples/simple_reelout.jl at the end of the run.")
+    write_yaml_commented(io, 0, summary)
 end
 
 if show_plots
