@@ -238,6 +238,113 @@ function reelout_power(sl)
 end
 
 """
+    _longest_run(idx) -> AbstractVector{Int}
+
+Longest run of consecutive integers in the sorted vector `idx`. Used to drop a
+one-sample glitch (`var_10` logs 0 for the first couple of steps) from the
+reel-out window before it is mistaken for the start of the ring.
+"""
+function _longest_run(idx)
+    best_start = 1
+    best_len = 1
+    start = 1
+    for i in 2:length(idx)
+        if idx[i] != idx[i - 1] + 1
+            len = i - start
+            len > best_len && ((best_len, best_start) = (len, start))
+            start = i
+        end
+    end
+    len = length(idx) - start + 1
+    len > best_len && ((best_len, best_start) = (len, start))
+    return idx[best_start:(best_start + best_len - 1)]
+end
+
+"""
+    reelout_ringing(sl; detrend_window=2.0, ring_span=20.0, min_peak_gap=1.0,
+                    peak_floor=0.02, settle_frac=0.05) -> NamedTuple or `nothing`
+
+Characterizes the underdamped ring the winch's `v_set = kv*sqrt(force)` law
+excites when reel-out engages (`docs/fig8_tuning_log.md`, "REEL_OUT winch"):
+`v_reelout` overshoots the speed the square-root law settles to and rings for
+several cycles before decaying into it. Returns `nothing` for a log that never
+reeled out, same guard as [`reelout_power`](@ref).
+
+The ring rides on the startup ramp (force, and with it `v_reelout`, is still
+rising over the same seconds), so peaks are found on the RESIDUAL of
+`v_reelout` after subtracting a centered moving average `detrend_window` [s]
+wide — the ramp, not the ring, dominates the raw signal's own peak spacing.
+Only residual maxima above `peak_floor` [m/s] and at least `min_peak_gap` [s]
+apart, within `ring_span` [s] of reel-out starting, count as ring peaks; this
+excludes the slower, much smaller speed variation the flown pattern itself
+imposes once the ring has died out.
+
+Fields: `n_peaks`; `period_s`, the mean peak-to-peak spacing; `zeta`, the
+damping ratio from the log decrement of successive peak amplitudes; `overshoot_m_s`,
+the first peak's amplitude above the local trend; `duration_s`, the time from
+reel-out start until the residual last exceeds `settle_frac` of `overshoot_m_s`;
+`peak_v_reelout_m_s`, the raw (not detrended) speed maximum within `ring_span`;
+and `steady_v_reelout_m_s`, the mean `v_reelout` after `ring_span` for
+comparison. `period_s` and `zeta` are `NaN` when fewer than 2 (respectively no
+decaying pair of) peaks are found.
+"""
+function reelout_ringing(sl; detrend_window = 2.0, ring_span = 20.0,
+                         min_peak_gap = 1.0, peak_floor = 0.02, settle_frac = 0.05)
+    l_set = Float64.(sl.var_10)
+    length(l_set) > 1 || return nothing
+    reeling = findall(>(0.0), diff(l_set)) .+ 1
+    isempty(reeling) && return nothing
+    reeling = _longest_run(reeling)
+    t_all = Float64.(sl.time)
+    dt = t_all[2] - t_all[1]
+    v_ro = Float64.(getindex.(sl.v_reelout, 1))[reeling]
+    t_rel = t_all[reeling] .- t_all[reeling[1]]
+
+    head = findall(<=(ring_span), t_rel)
+    n = max(1, round(Int, detrend_window / dt))
+    half = n ÷ 2
+    v_head = v_ro[head]
+    resid = similar(v_head)
+    for i in eachindex(v_head)
+        lo = max(1, i - half)
+        hi = min(length(v_head), i + half)
+        resid[i] = v_head[i] - mean(@view v_head[lo:hi])
+    end
+
+    peaks = Int[]
+    for i in 2:(length(resid) - 1)
+        resid[i] > resid[i - 1] && resid[i] >= resid[i + 1] && resid[i] > peak_floor || continue
+        if isempty(peaks) || t_rel[head[i]] - t_rel[head[peaks[end]]] >= min_peak_gap
+            push!(peaks, i)
+        elseif resid[i] > resid[peaks[end]]
+            peaks[end] = i
+        end
+    end
+
+    steady_idx = findall(>=(ring_span), t_rel)
+    steady_v_reelout_m_s = isempty(steady_idx) ? NaN : mean(v_ro[steady_idx])
+    n_peaks = length(peaks)
+    n_peaks == 0 && return (; n_peaks, period_s = NaN, zeta = NaN, overshoot_m_s = NaN,
+                            duration_s = 0.0, peak_v_reelout_m_s = maximum(v_head),
+                            steady_v_reelout_m_s)
+
+    peak_amps = resid[peaks]
+    peak_times = t_rel[head[peaks]]
+    period_s = n_peaks >= 2 ? mean(diff(peak_times)) : NaN
+    decrements = [log(peak_amps[i] / peak_amps[i + 1]) for i in 1:(n_peaks - 1)
+                  if peak_amps[i] > 0 && peak_amps[i + 1] > 0]
+    delta = isempty(decrements) ? NaN : mean(decrements)
+    zeta = isnan(delta) ? NaN : delta / sqrt((2pi)^2 + delta^2)
+
+    thresh = settle_frac * peak_amps[1]
+    settle_idx = findlast(x -> abs(x) >= thresh, resid)
+    duration_s = settle_idx === nothing ? 0.0 : t_rel[head[settle_idx]]
+
+    return (; n_peaks, period_s, zeta, overshoot_m_s = peak_amps[1], duration_s,
+            peak_v_reelout_m_s = maximum(v_head), steady_v_reelout_m_s)
+end
+
+"""
     print_fig8_metrics(sl; kwargs...)
 
 [`fig8_metrics`](@ref) plus a human-readable summary and a pass/fail line

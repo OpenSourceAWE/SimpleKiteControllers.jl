@@ -67,8 +67,9 @@ gates the winch.
 
 # Parameters
 
-`fcs` works exactly as in `simple_fig8.jl` — define it before the `include` to
-override a value, e.g. `fcs.reelout_l_max = 300.0`. The REEL_OUT-specific fields
+`fcs` works exactly as in `simple_fig8.jl`: rebuilt from `data/fc_settings_reelout.yaml`
+unconditionally on every `include`, so a value is overridden by editing that file,
+not by pre-defining or mutating `fcs` in the REPL. The REEL_OUT-specific fields
 are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
 `reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`),
 `reelout_l_max`, the stop length, and `reelout_delay`, how long after phase 3
@@ -554,6 +555,31 @@ else
         "n_samples" => (rp.n, "sample count in the reeling window"),
         "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
         "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
+end
+
+rr = reelout_ringing(sl)
+if isnothing(rr)
+    @warn "Tether never reeled out — no ringing to report."
+elseif rr.n_peaks == 0
+    @printf("  Reel-out ring: none detected (peak %.2f m/s vs steady %.2f m/s).\n",
+            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
+    reelout_summary["ringing"] = OrderedDict(
+        "n_peaks" => (0, "ring peaks detected above peak_floor"),
+        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
+        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
+else
+    @printf("  Reel-out ring: period %.2f s, zeta %.2f, overshoot %.2f m/s, decays in %.1f s \
+             (peak %.2f m/s vs steady %.2f m/s).\n",
+            rr.period_s, rr.zeta, rr.overshoot_m_s, rr.duration_s,
+            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
+    reelout_summary["ringing"] = OrderedDict(
+        "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
+        "period_s" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
+        "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
+        "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
+        "duration_s" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
+        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
+        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
 end
 summary["reelout"] = reelout_summary
 

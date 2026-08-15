@@ -83,26 +83,18 @@ draws it as the bottom panel of the time-series figure.
 
 Every tuning parameter of the run is a field of `FC_Settings`
 (`src/fc_settings.jl`), loaded from this package's `data/fc_settings.yaml` into
-the global `fcs`; each field is documented there. A run with different values
-needs no edit of this script — define `fcs` first and it is used as-is:
-
-    fcs = FC_Settings(fc_settings(project_file()))
-    fcs.el_center = 30.0
-    fcs.attractor_dist = 12.0
-    include("examples/simple_fig8.jl")
-
-An `fcs` left in `Main` therefore SURVIVES the next `include` (unlike
-`SHOW_PLOTS`, which is one-shot) and the run says so in its log; drop the object
-or rebuild it from the file to get the YAML values back. `body_damping` is among
-the fields; settling starts there and decays to `init`'s floor of 0.8x it, so the
-one value fixes both the settling transient and what is flown:
-
-    fcs.body_damping = [0.0, 0.0, 25.0]  # softer, in settling and in flight
-    include("examples/simple_fig8.jl")
-
-A `body_damping` the cache has not seen before makes V3Kite re-settle the wing,
-since the settled-geometry filename encodes it — one slow `init`, then it is
-cached like any other.
+the global `fcs`; each field is documented there. `fcs = FC_Settings(fc_settings(project))`
+runs unconditionally near the top of this script, with no `@isdefined` guard —
+unlike `SHOW_PLOTS`, a pre-defined or hand-mutated `fcs` left in `Main` does NOT
+survive the next `include`: it is discarded and rebuilt from the YAML file before
+the run that was meant to use it even starts. There is no REPL-side override; a
+run with different values means editing `data/fc_settings.yaml` itself (or, for a
+sweep, editing it between iterations — see `docs/fig8_tuning_log.md` for how past
+sweeps did this). `body_damping` is among the fields; settling starts there and
+decays to `init`'s floor of 0.8x it, so the one value fixes both the settling
+transient and what is flown. A `body_damping` the cache has not seen before makes
+V3Kite re-settle the wing, since the settled-geometry filename encodes it — one
+slow `init`, then it is cached like any other.
 
 `sample_freq` is not among them: it is in `data/settings_fig8_200m.yaml`, so
 changing the timestep means editing that file.
@@ -135,13 +127,11 @@ run.
 `SHOW_PLOTS = false` before the include suppresses the figures at the end,
 which is what makes a sweep bearable. It is ONE-SHOT: the script resets it to
 `true` while it starts up, so a leftover `false` can never silently swallow the
-plots of a later run. A sweep therefore sets it inside its loop:
-
-    for a in 55:5:70
-        fcs.f8_a = a
-        SHOW_PLOTS = false
-        include("examples/simple_fig8.jl")
-    end
+plots of a later run. Because `fcs` is rebuilt from the YAML file on every
+`include` (see above), a sweep over an `FC_Settings` field cannot mutate `fcs` in
+the loop — it must rewrite the YAML file itself between iterations, e.g. with
+KiteUtils' `update_yaml_scalar` (`examples/gui_state.jl` uses it the same way for
+`data/gui.yaml`).
 
 Which system project is flown (150m/200m/300m pattern), the run length
 (`sim_time`, `default` for the project's own value or a specific number of

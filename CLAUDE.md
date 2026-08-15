@@ -34,11 +34,14 @@ The example is run by `include`, not from the shell — it activates `examples/`
 include("examples/simple_fig8.jl")     # cached: ~2x realtime, 150 s sim = ~75 s wall
 ```
 
-Override any parameter by defining `fcs` (and optionally `SHOW_PLOTS = false`) in the
-REPL *before* the `include`; the script only loads `fc_settings.yaml` into `fcs` if
-nothing else has. `SHOW_PLOTS` is one-shot — the script resets it to `true` at startup,
-so a sweep sets it inside its loop and a leftover `false` never silently swallows a
-later run's plots (`fcs` is sticky, it does not). Keep the same REPL across runs — the
+`SHOW_PLOTS = false` before the `include` suppresses the figures at the end. It is
+one-shot — the script resets it to `true` at startup, so a sweep sets it inside its
+loop and a leftover `false` never silently swallows a later run's plots. `fcs` is NOT
+sticky: every `include` reloads it fresh from `fc_settings.yaml` via
+`fcs = FC_Settings(fc_settings(project))`, unconditionally and with no `@isdefined`
+guard, so a pre-defined or hand-mutated `fcs` left in the REPL is discarded the moment
+the run that was meant to use it starts — override a parameter by editing the YAML
+file instead. Keep the same REPL across runs — the
 first one compiles the V3 model (a few minutes, ~23 MB) into V3Kite's own cache
 directory and settles the wing into `examples/cache/settled_*.bin`. Both are reused
 afterwards, and that is what the ~2x realtime above assumes: with the packages
