@@ -37,7 +37,7 @@ fc_settings:
   winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
   # --- REEL_OUT winch ---------------------------------------------------------
-  reelout_kv:         0.06     # v_set = reelout_kv * sqrt(force)                  [-]
+  reelout_kv:         0.0408   # v_set = reelout_kv * sqrt(force)                  [-]
   reelout_f_low:      350.0    # Below: LowerForceController reels in, not the law  [N]
   reelout_f_high:     7600.0   # Upper limit; keep below the plant's max_force      [N]
   reelout_v_max:      8.0      # Reel-out speed limit                             [m/s]
