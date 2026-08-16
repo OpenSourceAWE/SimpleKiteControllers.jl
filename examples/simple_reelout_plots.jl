@@ -154,7 +154,7 @@ if "time_series" in plots
             [L"\mathrm{kite}", L"\mathrm{pattern~centre}"],
             [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
             [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
-             L"\mathrm{regulated}"],
+             L"\psi' - \psi'_{\mathrm{set}}"],
             [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
             nothing,
             [L"l_{\mathrm{tether}}", L"l_{\mathrm{set}}"],
@@ -227,7 +227,7 @@ if "aerodynamics" in plots
         [Float64.(sl.v_app[rng]), v_kite];
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
-        legendsize = 16,
+        legendsize = 20,
         ylabels = [
             L"\alpha~[°]",
             L"L/D~[-]",
