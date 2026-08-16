@@ -1,5 +1,7 @@
 # Combining heading and course
 
+**Just as reference, not used in this form for this package**
+
 The accuracy of the controller can be improved further, if not only the heading angle is
 controlled in a feedback loop, but also the course angle: A difference between the course
 and the heading angles is induced (i) by the gravity forces and (ii) by wind turbulences.
