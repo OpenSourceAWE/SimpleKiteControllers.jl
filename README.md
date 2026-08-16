@@ -71,7 +71,7 @@ This function will show the following menu:
 Choose example to run or `q` to quit: 
  > select_project.jl     - choose which system project (150m/200m/300m) to fly
    select_sim_time.jl    - choose the simulation time (default or a specific value)
-   select_plots.jl       - choose which figures to show (pattern/time series/aerodynamics)
+   select_plots.jl       - choose which figures to show (pattern/3d path/time series/aerodynamics)
    simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)
    simple_fig8_plots.jl  - plot the last logged run of active project
    optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer

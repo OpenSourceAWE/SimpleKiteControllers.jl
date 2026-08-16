@@ -25,7 +25,7 @@ using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_
 gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
 default_project() = "system_fig8_200m.yaml"
 default_reelout_project() = "system_reelout_150m.yaml"
-default_plots() = ["pattern", "time_series", "power", "aerodynamics"]
+default_plots() = ["pattern", "path_3d", "time_series", "power", "aerodynamics"]
 
 function ensure_gui_state_file()
     state_file = gui_state_file()

@@ -14,14 +14,24 @@ from the bottom panel's ENTRY state machine (0 park … 4 fig8, plus 5 final
 once reel-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
 for everything else, which is unchanged here.
 
-Plus one figure that script has no counterpart for: `power`, the winch triple
+Plus two figures that script has no counterpart for.
+
+`path_3d` draws the flown trajectory in the ENU world frame with GLMakie's
+`Axis3` (raw Makie, not MakieControlPlots, which has no 3D plot), coloured by
+time so the entry phases and the figure-of-eights can be told apart, with the
+ground track underneath it and the straight line to the ground station at the
+origin for depth. The kite position itself is NOT a logged field: it is
+reconstructed here from the logged particle positions exactly as V3Kite's
+`pos_kite` does.
+
+`power` shows the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
 measured, over a running integral `E_mech` [kJ]. The legends carry the scores
 from `reelout_power`: mean power and energy over the reel-out window, and the
 whole-run energy the `E_mech` curve ends on — which is the number to compare
 across runs, since a change to when reel-out engages moves mean power and window
-length in opposite directions. It is a selectable plot like the others, so
-`select_plots()` shows it in the menu; `simple_fig8_plots.jl` ignores the key.
+length in opposite directions. Both are selectable plots like the others, so
+`select_plots()` shows them in the menu; `simple_fig8_plots.jl` ignores the keys.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -108,6 +118,60 @@ if "pattern" in plots
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
     )
     display(p1)
+    sleep(0.1)
+end
+
+if "path_3d" in plots
+    @info "Plotting the 3D flight path..."
+    # The kite position is no logged field of its own: X/Y/Z hold ALL particle
+    # positions (`ss.X[point.idx] = point.pos_w[1]`), so reconstruct it the way
+    # V3Kite's `pos_kite` does — the centre of pressure of the four mid-span
+    # wing points 10..13 (10/12 leading edge, 11/13 trailing edge), each pair
+    # weighted 0.7 LE + 0.3 TE for the ~30 % chord position and then averaged
+    # over both sides.
+    cop(C) = (0.7 .* getindex.(C, 10) .+ 0.3 .* getindex.(C, 11) .+
+              0.7 .* getindex.(C, 12) .+ 0.3 .* getindex.(C, 13)) ./ 2
+    x_kite = Float64.(cop(sl.X[rng]))
+    y_kite = Float64.(cop(sl.Y[rng]))
+    z_kite = Float64.(cop(sl.Z[rng]))
+    t_kite = Float64.(sl.time[rng])
+    fig3 = Figure(size = (1000, 780))
+    # `aspect = :data` keeps the three axes on one scale, so the pattern is not
+    # stretched by the tether length dominating the x range.
+    ax3 = Axis3(fig3[1, 1];
+        xlabel = L"x~[\mathrm{m}]",
+        ylabel = L"y~[\mathrm{m}]",
+        zlabel = L"z~[\mathrm{m}]",
+        xlabelsize = 18, ylabelsize = 18, zlabelsize = 18,
+        aspect = :data,
+    )
+    # Ground track: the same path at z = 0, which is what makes the height
+    # readable in a projection that has no depth cues of its own.
+    lines!(ax3, x_kite, y_kite, zeros(length(z_kite));
+        color = (:gray, 0.4), linewidth = 1, label = L"\mathrm{ground~track}")
+    # The ground station sits at the origin (that is the frame `calc_elevation`
+    # and `calc_azimuth` measure in); a straight line to it, sag ignored — the
+    # tether particles ARE logged, but at indices that depend on the tether's
+    # `n_segments`, which the log alone does not carry.
+    lines!(ax3, [0.0, x_kite[end]], [0.0, y_kite[end]], [0.0, z_kite[end]];
+        color = (:black, 0.5), linewidth = 1, linestyle = :dash,
+        label = L"\mathrm{tether~(straight)}")
+    path = lines!(ax3, x_kite, y_kite, z_kite;
+        color = t_kite, colormap = :viridis, linewidth = 2)
+    scatter!(ax3, [x_kite[1]], [y_kite[1]], [z_kite[1]];
+        color = :green, markersize = 14, label = L"\mathrm{start}")
+    scatter!(ax3, [x_kite[end]], [y_kite[end]], [z_kite[end]];
+        color = :red, markersize = 14, label = L"\mathrm{end}")
+    scatter!(ax3, [0.0], [0.0], [0.0];
+        color = :black, marker = :rect, markersize = 12,
+        label = L"\mathrm{ground~station}")
+    Colorbar(fig3[1, 2], path; label = L"\mathrm{time}~[\mathrm{s}]",
+        labelsize = 18)
+    axislegend(ax3; position = :rt, labelsize = 16)
+    # Same window handling as MakieControlPlots' figures: a named GLMakie
+    # screen, so this plot does not steal or reuse one of theirs.
+    screen3 = GLMakie.Screen(title = fig_name * " – 3D path")
+    display(screen3, fig3)
     sleep(0.1)
 end
 
