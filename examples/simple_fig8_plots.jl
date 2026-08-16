@@ -165,7 +165,7 @@ if "time_series" in plots
             [L"\mathrm{kite}", L"\mathrm{pattern~centre}"],
             [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
             [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
-             L"\mathrm{regulated}"],
+             L"\psi' - \psi'_{\mathrm{set}}"],
             [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
             nothing,
             [L"l_{\mathrm{tether}}", L"l_{0}"],
