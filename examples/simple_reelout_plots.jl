@@ -10,7 +10,7 @@ and two panels added: reel-out speed (measured `v_reelout` vs the setpoint
 `var_11`) and the commanded depower `u_d` (`var_14`, `rel_depower` — filled by
 `step!` itself, since `SysState` has no `set_depower` field) — worth watching
 here because `depower_final` steps it up once phase 5 (final) begins. Distinct
-from the bottom panel's ENTRY state machine (0 park … 4 settled, plus 5 final
+from the bottom panel's ENTRY state machine (0 park … 4 fig8, plus 5 final
 once reel-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
 for everything else, which is unchanged here.
 
@@ -161,7 +161,7 @@ if "time_series" in plots
             [L"v_{\mathrm{ro}}", L"v_{\mathrm{set}}"],
             nothing,
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled},~5=\mathrm{final}",
+            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8},~5=\mathrm{final}",
         ],
         fig = fig_name * " – time series",
     )

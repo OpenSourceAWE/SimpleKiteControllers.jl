@@ -122,7 +122,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   log. No plotting dependency, so sweeps can run headless.
 
 `examples/simple_fig8.jl` is the integration: it owns the four-phase entry state machine
-(park → dive → hold → fig8), the entry descent limiter, the heading/course feedback
+(park → dive → hold → transition), the entry descent limiter, the heading/course feedback
 blend, the winch mode choice and the simulation loop. Per the README TODO, that logic has
 not yet been lifted into a controller type.
 

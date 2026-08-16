@@ -6,7 +6,7 @@ Figure-of-eight path following of the V3 kite via V3Kite's `init`/`step!`
 interface.
 
 The kite starts parked at ~73° and reaches the pattern through a four-phase
-entry (park -> dive -> hold -> fig8). Once engaged, the L0
+entry (park -> dive -> hold -> transition). Once engaged, the L0
 attractor guidance (`src/figure_eight_controller.jl`) commands a course and a PID
 (as in V3Kite's `simple_sinus.jl` / `simple_auto_parking.jl`) tracks it with the
 steering tape.
@@ -72,10 +72,10 @@ course is fed back at any speed (`fig8_pure_course`), so `var_08` is 1
 throughout phase 3 and the schedule governs the entry only.
 
 The `sys_state` field carries the ENTRY STATE MACHINE (0 park, 1 dive, 2 hold,
-3 fig8), using the same codes as the reference controller's log so both can be
-read with the same scripts, plus a fourth state added here: 4 (settled), which
+3 transition), using the same codes as the reference controller's log so both can
+be read with the same scripts, plus a fourth state added here: 4 (fig8), which
 phase 3 advances to the first time the cross-track error drops below
-`settled_d_gate`. Control is unaffected — 3 and 4 are flown identically — it
+`fig8_d_gate`. Control is unaffected — 3 and 4 are flown identically — it
 only marks when the pattern was first tracked closely. `simple_fig8_plots.jl`
 draws it as the bottom panel of the time-series figure.
 
@@ -292,8 +292,8 @@ heading_pid = create_heading_pid(;
 
 entry_sign = 0              # latched sign of the entry descent limiter (0 = unset)
 
-# 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged, 4 = settled
-# (phase 3 with cross-track error below settled_d_gate for the first time).
+# 0 = park, 1 = dive, 2 = hold, 3 = transition (figure-eight guidance engaged), 4 = fig8
+# (phase 3 with cross-track error below fig8_d_gate for the first time).
 phase = 0
 hold_start = NaN            # [s] time the hold began
 
@@ -321,7 +321,7 @@ try
             global hold_start = t
         elseif phase == 2 && t - hold_start >= fcs.hold_time
             global phase = 3
-        elseif phase == 3 && dmin < fcs.settled_d_gate
+        elseif phase == 3 && dmin < fcs.fig8_d_gate
             global phase = 4
         end
 
@@ -401,7 +401,7 @@ try
         end
 
         # After step!, which overwrites parts of sys_state.
-        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8, 4 settled
+        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 transition, 4 fig8
         s.sys_state.bearing = chi_cmd          # the course actually tracked
         s.sys_state.attractor .= (deg2rad(az_attr), deg2rad(el_attr))
         s.sys_state.var_01 = dmin              # cross-track error [deg]
@@ -440,14 +440,14 @@ print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_span_frac = fcs.min_span_frac)
 
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-let settled = findall(x -> Int(x) == 4, sl.sys_state)
-    if isempty(settled)
-        @warn "Phase 4 never reached — no settled apparent wind speed."
+let fig8 = findall(x -> Int(x) == 4, sl.sys_state)
+    if isempty(fig8)
+        @warn "Phase 4 never reached — no fig8 apparent wind speed."
     else
-        va = Float64.(sl.v_app[settled])
+        va = Float64.(sl.v_app[fig8])
         @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
                  | v_app_ref = %.1f (%+.1f%%)\n",
-                sl.time[settled[end]] - sl.time[settled[1]],
+                sl.time[fig8[end]] - sl.time[fig8[1]],
                 mean(va), minimum(va), maximum(va),
                 fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
     end

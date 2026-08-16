@@ -14,7 +14,7 @@ three figures:
    heading and course vs the commanded course, the course-tracking error,
    steering command vs the KCU's tape-lagged value, tether force, and tether
    length against its setpoint. The bottom panel is the entry state machine
-   (`sys_state`: 0 park, 1 dive, 2 hold, 3 fig8, 4 settled), which dates every
+   (`sys_state`: 0 park, 1 dive, 2 hold, 3 transition, 4 fig8), which dates every
    feature above it — an anomaly in phase 1-2 is the open-loop entry, one in
    phase 3-4 is the path controller, and they are not diagnosed the same way;
 3. an aerodynamics figure: angle of attack and lift-to-drag ratio, over the
@@ -170,7 +170,7 @@ if "time_series" in plots
             nothing,
             [L"l_{\mathrm{tether}}", L"l_{0}"],
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{fig8},~4=\mathrm{settled}",
+            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8}",
         ],
         fig = fig_name * " – time series",
     )

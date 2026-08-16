@@ -146,7 +146,7 @@ Add new findings there, not here.
     """
     reelout_delay = 0.0
 
-    # ---- Entry state machine: park -> dive -> hold -> fig8 ------------------ #
+    # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
     """
     Course commanded during the dive [deg]. |chi| > 90 is descending, < 90
     climbing, 90 exactly horizontal. A POSITIVE commanded course drives the kite
@@ -161,11 +161,11 @@ Add new findings there, not here.
     "Duration of the hold [s]"
     hold_time = 0.8
     """
-    Cross-track error [deg] below which phase 3 (fig8) advances to phase 4
-    (settled), the first time it is crossed. A milestone in the log only —
+    Cross-track error [deg] below which phase 3 (transition) advances to phase 4
+    (fig8), the first time it is crossed. A milestone in the log only —
     it does not change how the kite is flown.
     """
-    settled_d_gate = 5.0
+    fig8_d_gate = 5.0
 
     """
     Body damping settling STARTS from, per axis. It shapes the settling
@@ -258,8 +258,8 @@ Add new findings there, not here.
     "[m/s] at/above: pure course feedback; linearly blended in between"
     v_kite_course = 10.0
     """
-    In FIG8 mode (phase 3), feed back COURSE alone and ignore the `v_kite_*`
-    schedule; the entry phases keep it. Path following is a course problem, and
+    From phase 3 on (transition and fig8), feed back COURSE alone and ignore the
+    `v_kite_*` schedule; the entry phases keep it. Path following is a course problem, and
     on the pattern the schedule asks for course anyway — it only dips into the
     band during the slow part of a turn, swapping the feedback signal
     mid-manoeuvre. `false` restores the pure speed schedule in every phase.

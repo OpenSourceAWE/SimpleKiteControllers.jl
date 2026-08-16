@@ -32,12 +32,12 @@ fc_settings:
   winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
   winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
-  # --- entry state machine: park -> dive -> hold -> fig8 --------------------
+  # --- entry state machine: park -> dive -> hold -> transition --------------
   chi_dive:           -85.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
   dive_el_margin:     7.0      # Margin above el_center where the dive ends       [deg]
   hold_time:          0.8      # Duration of the hold                               [s]
-  settled_d_gate:     5.0      # Cross-track error below which fig8 -> settled    [deg]
+  fig8_d_gate:        5.0      # Cross-track error, transition -> fig8            [deg]
 
   # --- plant ----------------------------------------------------------------
   body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to
@@ -65,7 +65,7 @@ fc_settings:
   # --- feedback signal: heading at low kite speed, course at high -----------
   v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]
   v_kite_course:      10.0     # At/above: pure course feedback                   [m/s]
-  fig8_pure_course:   false    # Course alone in phase 3; the schedule then governs entry
+  fig8_pure_course:   false    # Course alone from phase 3 on; schedule governs entry
   max_steering:       0.32     # Command limit; raising it is CLOSED, see the log    [-]
 
   # --- entry descent limiter ------------------------------------------------

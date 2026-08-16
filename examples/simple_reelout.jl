@@ -4,7 +4,7 @@
 """
 Figure-of-eight path following of the V3 kite, extended with a REEL_OUT winch: the
 tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
-`simple_fig8.jl` (park -> dive -> hold -> fig8), and from the moment the
+`simple_fig8.jl` (park -> dive -> hold -> transition), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
 `v_set = kv * sqrt(force)` law until `fcs.reelout_l_max`, then holds that length
 for the rest of the run. Once reel-out stops, a fifth phase (final) takes over:
@@ -82,7 +82,7 @@ phases 0-2 and reels in when needed, logged into `var_10`/`var_11` same as the
 main reel-out law.
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
-1 dive, 2 hold, 3 fig8, 4 settled), plus a fifth phase this script adds: 5 final,
+1 dive, 2 hold, 3 transition, 4 fig8), plus a fifth phase this script adds: 5 final,
 entered from either 3 or 4 the moment `l_set` reaches `fcs.reelout_l_max`. Reel-out
 begins `fcs.reelout_delay` seconds after phase 3 is reached and stops at the same
 length that triggers phase 5. Phase 4 still marks the first close tracking of the
@@ -323,12 +323,12 @@ heading_pid = create_heading_pid(;
 
 entry_sign = 0              # latched sign of the entry descent limiter (0 = unset)
 
-# 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged, 4 = settled
-# (phase 3 with cross-track error below settled_d_gate for the first time),
+# 0 = park, 1 = dive, 2 = hold, 3 = transition (figure-eight guidance engaged), 4 = fig8
+# (phase 3 with cross-track error below fig8_d_gate for the first time),
 # 5 = final (reel-out reached reelout_l_max; still flying fig8, at depower_final).
 phase = 0
 hold_start = NaN            # [s] time the hold began
-fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
+transition_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
 stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
@@ -358,8 +358,8 @@ try
             global hold_start = t
         elseif phase == 2 && t - hold_start >= fcs.hold_time
             global phase = 3
-            global fig8_start = t
-        elseif phase == 3 && dmin < fcs.settled_d_gate
+            global transition_start = t
+        elseif phase == 3 && dmin < fcs.fig8_d_gate
             global phase = 4
         end
         # Separate from the ladder above so it can fire the SAME step as a 3->4
@@ -430,11 +430,11 @@ try
         end
 
         # REEL_OUT: `reelout_delay` seconds after phase 3 (guidance engaged), not
-        # at phase 4 (settled), and only while l_set has not yet hit
+        # at phase 4 (fig8), and only while l_set has not yet hit
         # reelout_l_max. Once it does, l_set simply stops growing and the rest of
         # the run is flown exactly like the constant-length example.
         local v_set = 0.0
-        if phase >= 3 && t - fig8_start >= fcs.reelout_delay &&
+        if phase >= 3 && t - transition_start >= fcs.reelout_delay &&
            l_set < fcs.reelout_l_max
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
@@ -445,7 +445,7 @@ try
             # handed to l_set/v_ff is scaled. `t_startup` does not do this — see
             # its docstring in `src/fc_settings.jl`.
             ramp = fcs.reelout_softstart > 0 ?
-                clamp((t - fig8_start - fcs.reelout_delay) / fcs.reelout_softstart,
+                clamp((t - transition_start - fcs.reelout_delay) / fcs.reelout_softstart,
                       0.0, 1.0) : 1.0
             v_cmd = ramp * v_raw
 
@@ -528,7 +528,7 @@ try
         end
 
         # After step!, which overwrites parts of sys_state.
-        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 fig8, 4 settled, 5 final
+        s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 transition, 4 fig8, 5 final
         s.sys_state.bearing = chi_cmd          # the course actually tracked
         s.sys_state.attractor .= (deg2rad(az_attr), deg2rad(el_attr))
         s.sys_state.var_01 = dmin              # cross-track error [deg]
@@ -674,13 +674,13 @@ end
 
 reelout_summary = OrderedDict{String, Any}()
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-settled = findall(x -> Int(x) == 4, sl.sys_state)
-if isempty(settled)
+fig8 = findall(x -> Int(x) == 4, sl.sys_state)
+if isempty(fig8)
     # Reel-out runs from phase 3, so this is about the anchor only.
-    @warn "Phase 4 never reached — no settled apparent wind speed."
+    @warn "Phase 4 never reached — no fig8 apparent wind speed."
 else
-    va = Float64.(sl.v_app[settled])
-    duration = sl.time[settled[end]] - sl.time[settled[1]]
+    va = Float64.(sl.v_app[fig8])
+    duration = sl.time[fig8[end]] - sl.time[fig8[1]]
     @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
              | v_app_ref = %.1f (%+.1f%%)\n",
             duration, mean(va), minimum(va), maximum(va),
