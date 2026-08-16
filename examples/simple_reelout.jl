@@ -7,9 +7,9 @@ tether starts at `l_tether` (150 m by default), flies the same four-phase entry 
 `simple_fig8.jl` (park -> dive -> hold -> fig8), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
 `v_set = kv * sqrt(force)` law until `fcs.reelout_l_max`, then holds that length
-for the rest of the run. Once pay-out stops, a fifth phase (final) takes over:
+for the rest of the run. Once reel-out stops, a fifth phase (final) takes over:
 the pattern keeps flying, but depower switches from `depower_setpoint` to
-`depower_final`, meant to hold roughly the force pay-out was regulating away.
+`depower_final`, meant to hold roughly the force reel-out was regulating away.
 No pumping cycle: there is no reel-in phase here.
 
 # What comes from where
@@ -52,7 +52,7 @@ It can now.
 # Feasibility
 
 `check_pattern_feasible` is printed at both `l_tether` (the START of the run,
-before any pay-out — the worst case, since a longer tether only ever shrinks the
+before any reel-out — the worst case, since a longer tether only ever shrinks the
 kite's minimum angular turn radius) and `fcs.reelout_l_max` (the end). Measured
 with `fc_settings_reelout.yaml`'s defaults at 150 m the margin is 1.22, growing
 to 1.63 at 200 m and 2.04 at 250 m, so no pattern change is needed to start at
@@ -87,7 +87,7 @@ entered from either 3 or 4 the moment `l_set` reaches `fcs.reelout_l_max`. Reel-
 begins `fcs.reelout_delay` seconds after phase 3 is reached and stops at the same
 length that triggers phase 5. Phase 4 still marks the first close tracking of the
 pattern, it just no longer gates the winch, and does not gate phase 5 either — a
-run that never settles still reaches final once pay-out is done.
+run that never settles still reaches final once reel-out is done.
 
 # Parameters
 
@@ -101,12 +101,12 @@ cleared the same way, and let those parallel runs keep their logs apart and skip
 the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
 value left over from a sweep must never change an interactive run. The
 REEL_OUT-specific fields are `reelout_l_max`, the stop length, `reelout_delay`,
-how long after phase 3 the winch waits before it starts paying out, and
+how long after phase 3 the winch waits before it starts reeling out, and
 `reelout_softstart`, which ramps the COMMANDED speed (`v_ff` and the `l_set`
 integration together, not the law inside `WinchController`) linearly from 0 to
 the computed `v_set` over that many seconds — `rcs.t_startup`
 (`data/wc_settings.yaml`) does not do this, see the comment on that key.
-`reelout_softstop` is the OTHER end of pay-out: once the remaining distance
+`reelout_softstop` is the OTHER end of reel-out: once the remaining distance
 would finish within that many seconds at the current rate, `v_set` decelerates
 LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
 speed already being flown — avoiding the reel-in transient (a power undershoot)
@@ -300,7 +300,7 @@ else
                    c1, c2, delay)
 
     # c1 must match the damping in use; that is what makes this check meaningful.
-    # At l_tether (the START, before any pay-out) this is the WORST case: a longer
+    # At l_tether (the START, before any reel-out) this is the WORST case: a longer
     # tether only ever shrinks the kite's minimum angular turn radius.
     feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
     feas_start.feasible ||
@@ -325,7 +325,7 @@ entry_sign = 0              # latched sign of the entry descent limiter (0 = uns
 
 # 0 = park, 1 = dive, 2 = hold, 3 = figure-eight guidance engaged, 4 = settled
 # (phase 3 with cross-track error below settled_d_gate for the first time),
-# 5 = final (pay-out reached reelout_l_max; still flying fig8, at depower_final).
+# 5 = final (reel-out reached reelout_l_max; still flying fig8, at depower_final).
 phase = 0
 hold_start = NaN            # [s] time the hold began
 fig8_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
@@ -363,7 +363,7 @@ try
             global phase = 4
         end
         # Separate from the ladder above so it can fire the SAME step as a 3->4
-        # transition: pay-out finishing does not wait for settling.
+        # transition: reel-out finishing does not wait for settling.
         if phase in (3, 4) && l_set >= fcs.reelout_l_max
             global phase = 5
         end
@@ -419,7 +419,7 @@ try
             heading_pid(0.0, err, 0.0)
         end
 
-        # entry_depower during the dive and hold, depower_final once pay-out has
+        # entry_depower during the dive and hold, depower_final once reel-out has
         # stopped (phase 5), depower_setpoint elsewhere.
         rel_depower = if phase == 1 || phase == 2
             fcs.entry_depower
@@ -492,7 +492,7 @@ try
             # Reel-IN only: guard_lfc's own saturation allows v_sat (reel-out) on
             # the upper side too, meant for the main `rc` controller it shares a
             # type with. Before reel-out starts this guard exists to catch a force
-            # SAG, never to pay out, so its output is clamped here.
+            # SAG, never to reel out, so its output is clamped here.
             v_guard = min(get_v_set_out(guard_lfc), 0.0)
             on_timer(guard_lfc)
             if guard_lfc.active
@@ -504,7 +504,7 @@ try
         # `v_ff = v_set`: the winch's outer P loop is told the speed being
         # commanded instead of having to rediscover it from a length error. See
         # the docstring — without it the pair (integrate here, differentiate
-        # there) is a 1/winch_pos_kp = 2 s lag. Zero outside the pay-out window,
+        # there) is a 1/winch_pos_kp = 2 s lag. Zero outside the reel-out window,
         # where `l_set` is constant and there is nothing to feed forward.
         # `acceleration_limit` is `rcs.max_acc` (8 m/s²), NOT the plant's own
         # `winch: max_acc:` = 4 which V3Kite's `step!` would otherwise default to.
@@ -598,7 +598,7 @@ syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 # require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
-# (which never goes past 4) — checks pay-out actually finished within the run.
+# (which never goes past 4) — checks reel-out actually finished within the run.
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = 0.0,
                    az_amplitude = fcs.f8_a, el_height = fcs.f8_b,

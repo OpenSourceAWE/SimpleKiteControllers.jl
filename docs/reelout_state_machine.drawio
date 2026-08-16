@@ -1,0 +1,245 @@
+<mxfile host="app.diagrams.net" agent="Claude Code" type="device">
+  <diagram id="flight-phases" name="Flight phases">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1050" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="p1title" value="&lt;b&gt;simple_reelout.jl — flight phase&lt;/b&gt;&amp;nbsp;&amp;nbsp;(&lt;i&gt;phase&lt;/i&gt;, logged as &lt;i&gt;sys_state.sys_state&lt;/i&gt;)" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="60" y="30" width="1000" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p1sub" value="&lt;font style=&quot;font-size:12px&quot;&gt;All guards are evaluated once per step, at the top of the loop, on the sys_state as of the &lt;b&gt;previous&lt;/b&gt; step — step! runs afterwards.&lt;br&gt;The phase never runs backwards: each transition is one-way and, once taken, its guard is no longer tested.&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="60" y="62" width="1000" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="entrybox" value="&lt;font style=&quot;font-size:12px&quot;&gt;&lt;b&gt;entry manoeuvre&lt;/b&gt; — steering gain entry_gain · heading_p&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d79b00;dashed=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="150" width="380" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="patternbox" value="&lt;font style=&quot;font-size:12px&quot;&gt;&lt;b&gt;pattern flight&lt;/b&gt; — full heading_p, attractor guidance&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;dashed=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="580" width="380" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="start" value="" style="ellipse;html=1;fillColor=#000000;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="433" y="112" width="24" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s0" value="&lt;b&gt;0&lt;/b&gt;&amp;nbsp;&amp;nbsp;park" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="355" y="210" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="&lt;b&gt;1&lt;/b&gt;&amp;nbsp;&amp;nbsp;dive" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="355" y="340" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="&lt;b&gt;2&lt;/b&gt;&amp;nbsp;&amp;nbsp;hold" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="355" y="480" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="&lt;b&gt;3&lt;/b&gt;&amp;nbsp;&amp;nbsp;fig8" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="355" y="640" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="&lt;b&gt;4&lt;/b&gt;&amp;nbsp;&amp;nbsp;settled" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="355" y="770" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="&lt;b&gt;5&lt;/b&gt;&amp;nbsp;&amp;nbsp;final" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="355" y="920" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;" edge="1" parent="1" source="start" target="s0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e01" value="&lt;font style=&quot;font-size:11px&quot;&gt;t ≥ park_time&amp;nbsp; (2 s)&lt;br&gt;&lt;i&gt;nothing about the kite&#39;s state is checked&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s0" target="s1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="&lt;font style=&quot;font-size:11px&quot;&gt;el ≤ el_center + dive_el_margin (7°)&lt;br&gt;&lt;i&gt;latch hold_start = t&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23" value="&lt;font style=&quot;font-size:11px&quot;&gt;t − hold_start ≥ hold_time (0.8 s)&lt;br&gt;&lt;i&gt;latch fig8_start = t&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry x="-0.55" relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e34" value="&lt;font style=&quot;font-size:11px&quot;&gt;dmin &amp;lt; settled_d_gate (5°)&lt;br&gt;&lt;i&gt;first time only&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;dashed=1;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e45" value="&lt;font style=&quot;font-size:11px&quot;&gt;l_set ≥ reelout_l_max&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e35" value="&lt;font style=&quot;font-size:11px&quot;&gt;l_set ≥&lt;br&gt;reelout_l_max&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;align=right;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="s3" target="s5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-14" as="offset" />
+            <Array as="points">
+              <mxPoint x="200" y="665" />
+              <mxPoint x="200" y="945" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="p1table" value="&lt;table border=&quot;1&quot; cellpadding=&quot;6&quot; cellspacing=&quot;0&quot; style=&quot;width:100%;border-collapse:collapse;font-size:12px;border-color:#b3b3b3&quot;&gt;&lt;tr style=&quot;background:#e6e6e6&quot;&gt;&lt;th align=&quot;left&quot; width=&quot;4%&quot;&gt;#&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;10%&quot;&gt;name&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;48%&quot;&gt;what is flown&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;20%&quot;&gt;steering gain&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;18%&quot;&gt;depower&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;0&lt;/td&gt;&lt;td&gt;park&lt;/td&gt;&lt;td&gt;zero steering; guidance and PID run but are not applied — the PID is stepped with a zero error and its output discarded, so engagement in phase 1 is bumpless&lt;/td&gt;&lt;td&gt;entry_gain · heading_p&lt;/td&gt;&lt;td&gt;depower_setpoint&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;dive&lt;/td&gt;&lt;td&gt;open-loop course chi_dive (≈ −85°, descending) — overrides the guidance&lt;/td&gt;&lt;td&gt;entry_gain · heading_p&lt;/td&gt;&lt;td&gt;entry_depower&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;2&lt;/td&gt;&lt;td&gt;hold&lt;/td&gt;&lt;td&gt;open-loop course chi_hold (−90°, horizontal) — overrides the guidance, so the kite arrives flat rather than still descending&lt;/td&gt;&lt;td&gt;entry_gain · heading_p&lt;/td&gt;&lt;td&gt;entry_depower&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;3&lt;/td&gt;&lt;td&gt;fig8&lt;/td&gt;&lt;td&gt;attractor guidance engaged; pure course feedback; winch armed (page 2)&lt;/td&gt;&lt;td&gt;heading_p&lt;/td&gt;&lt;td&gt;depower_setpoint&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;4&lt;/td&gt;&lt;td&gt;settled&lt;/td&gt;&lt;td&gt;identical to phase 3 in how the kite is flown and how the winch behaves — a logging milestone only, marking the start of the window v_app is reported over&lt;/td&gt;&lt;td&gt;heading_p&lt;/td&gt;&lt;td&gt;depower_setpoint&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;5&lt;/td&gt;&lt;td&gt;final&lt;/td&gt;&lt;td&gt;as 3/4, but reel-out is finished and the length setpoint frozen&lt;/td&gt;&lt;td&gt;heading_p&lt;/td&gt;&lt;td&gt;depower_final&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;overflow=fill;" vertex="1" parent="1">
+          <mxGeometry x="740" y="150" width="800" height="460" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p1notes2" value="&lt;b&gt;Not phase-gated&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;Gain scaling.&lt;/b&gt; On top of the phase factor above, the steering gain is always scaled by v_app_ref / v_app — turn rate ~ u_s · v_app, so that is the plant gain.&lt;br&gt;&lt;b&gt;Descent limiter.&lt;/b&gt; entry_chi_max, weighted by w_lim, applies wherever the guidance is far off the path, in any phase.&lt;br&gt;&lt;b&gt;Feedback angle.&lt;/b&gt; Blended heading → course by kite speed in phases 0–2; with fig8_pure_course, phases 3+ use pure course feedback.&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#b3b3b3;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="630" width="800" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p1note35" value="&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;The 3/4 → 5 guard&lt;/b&gt; is tested &lt;b&gt;outside&lt;/b&gt; the elseif ladder, so it can fire on the &lt;b&gt;same step&lt;/b&gt; as 3 → 4: reel-out finishing does not wait for settling. It is also reachable from phase 3 directly — a run whose tracking never gets inside settled_d_gate still reaches final, which is why the results section gates the reel-out numbers on phase 3, not phase 4.&lt;br&gt;&lt;br&gt;There is &lt;b&gt;no&lt;/b&gt; transition out of phase 5, and no reel-in phase: this is a single reel-out, not a pumping cycle.&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#b3b3b3;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="800" width="390" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p1latch" value="&lt;b&gt;Latched state&lt;/b&gt; — set exactly once, at the transition shown&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;hold_start&lt;/b&gt; — 1 → 2 — the hold_time timer&lt;br&gt;&lt;b&gt;fig8_start&lt;/b&gt; — 2 → 3 — the reelout_delay and reelout_softstart timers&lt;br&gt;&lt;b&gt;entry_sign&lt;/b&gt; — first time the descent limiter clips near ±180°, to keep the limited course&#39;s sign stable through the wrap&lt;br&gt;&lt;b&gt;l_set&lt;/b&gt; — every reel-out / guard step — the position setpoint handed to step!, and the 3/4 → 5 guard&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="800" width="390" height="200" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="winch" name="Winch">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1150" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="p2title" value="&lt;b&gt;simple_reelout.jl — winch&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="60" y="30" width="1000" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p2sub" value="&lt;font style=&quot;font-size:12px&quot;&gt;Per step exactly one branch runs. &lt;b&gt;Whether&lt;/b&gt; the winch reels out is decided by the flight phase (page 1) plus two timers;&lt;br&gt;&lt;b&gt;how fast&lt;/b&gt; it then reels out is decided by WinchControllers.jl&#39;s own three-state controller (bottom right).&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="60" y="62" width="1000" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="reelbox" value="&lt;font style=&quot;font-size:12px&quot;&gt;&lt;b&gt;reel-out branch&lt;/b&gt; — phase ≥ 3 &lt;b&gt;and&lt;/b&gt; t − fig8_start ≥ reelout_delay&lt;br&gt;&lt;b&gt;and&lt;/b&gt; l_set &amp;lt; reelout_l_max&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;dashed=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="420" width="380" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="w_guard" value="&lt;b&gt;force-floor guard&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;phase &amp;lt; 3&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="150" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w_wait" value="&lt;b&gt;waiting&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;frozen: v_set = 0&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="300" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w_soft" value="&lt;b&gt;soft-start&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;v_cmd = ramp · v_raw&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="490" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w_steady" value="&lt;b&gt;steady&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;v_cmd = v_raw&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="630" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w_stop" value="&lt;b&gt;soft-stop&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;linear decel to 0&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="760" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w_final" value="&lt;b&gt;frozen&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;phase 5: v_set = 0, l_set held&lt;/font&gt;" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="355" y="920" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="we1" value="&lt;font style=&quot;font-size:11px&quot;&gt;phase 2 → 3&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_guard" target="w_wait">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="we2" value="&lt;font style=&quot;font-size:11px&quot;&gt;t − fig8_start ≥ reelout_delay&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_wait" target="w_soft">
+          <mxGeometry x="-0.55" relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="we3" value="&lt;font style=&quot;font-size:11px&quot;&gt;ramp reaches 1,&lt;br&gt;after reelout_softstart&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_soft" target="w_steady">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="we4" value="&lt;font style=&quot;font-size:11px&quot;&gt;remaining ≤ v_cmd · reelout_softstop&lt;br&gt;&lt;i&gt;latch stop_start, stop_v_entry, stop_T&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_steady" target="w_stop">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="we5" value="&lt;font style=&quot;font-size:11px&quot;&gt;l_set ≥ reelout_l_max&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_stop" target="w_final">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="we_bypass1" value="&lt;font style=&quot;font-size:11px&quot;&gt;reelout_softstart = 0&lt;br&gt;&lt;i&gt;the default:&lt;br&gt;ramp disabled&lt;/i&gt;&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#808080;fontColor=#808080;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;align=right;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_wait" target="w_steady">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-14" as="offset" />
+            <Array as="points">
+              <mxPoint x="240" y="330" />
+              <mxPoint x="240" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="we_bypass2" value="&lt;font style=&quot;font-size:11px&quot;&gt;reelout_softstop = 0&lt;br&gt;&lt;i&gt;the default: no decel&lt;/i&gt;&lt;br&gt;l_set ≥ reelout_l_max&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#808080;fontColor=#808080;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;align=right;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="w_steady" target="w_final">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-14" as="offset" />
+            <Array as="points">
+              <mxPoint x="190" y="660" />
+              <mxPoint x="190" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="p2branches" value="&lt;table border=&quot;1&quot; cellpadding=&quot;6&quot; cellspacing=&quot;0&quot; style=&quot;width:100%;border-collapse:collapse;font-size:12px;border-color:#b3b3b3&quot;&gt;&lt;tr style=&quot;background:#e6e6e6&quot;&gt;&lt;th align=&quot;left&quot; width=&quot;15%&quot;&gt;branch&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;33%&quot;&gt;condition&lt;/th&gt;&lt;th align=&quot;left&quot; width=&quot;52%&quot;&gt;effect&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;reel-out&lt;/b&gt;&lt;/td&gt;&lt;td&gt;phase ≥ 3 &lt;b&gt;and&lt;/b&gt; t − fig8_start ≥ reelout_delay &lt;b&gt;and&lt;/b&gt; l_set &amp;lt; reelout_l_max&lt;/td&gt;&lt;td&gt;v_set from the kv·√force law (through the ramps on the left); l_set integrates it, clamped at reelout_l_max; rc is stepped (on_timer). v_set is passed to step! twice over: integrated into l_set and fed forward as v_ff, which removes the 1/winch_pos_kp = 2 s lag the integrate-here / differentiate-there pair would otherwise have.&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;force-floor guard&lt;/b&gt;&lt;/td&gt;&lt;td&gt;phase &amp;lt; 3&lt;/td&gt;&lt;td&gt;guard_lfc, a standalone LowerForceController, reels &lt;b&gt;in&lt;/b&gt; (its output is clamped to ≤ 0) if the measured force sags below rcs.f_low — only while guard_lfc.active. Otherwise v_set = 0 and l_set stays flat.&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;frozen&lt;/b&gt;&lt;/td&gt;&lt;td&gt;neither — i.e. phase 3/4 before reelout_delay has elapsed, or phase 5&lt;/td&gt;&lt;td&gt;v_set = 0, l_set unchanged.&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;overflow=fill;" vertex="1" parent="1">
+          <mxGeometry x="740" y="150" width="800" height="240" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p2note" value="&lt;b&gt;Why the guard is not rc&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Stepping the full WinchController through the entry lets its SpeedController integrator wind up while its output is ignored, which dumps a saturated +v_sat command the moment it is first used (measured). A bare LowerForceController has no such integrator, and rc&#39;s soft-start clock stays at 0 until phase 3.&lt;br&gt;&lt;br&gt;&lt;b&gt;Note the asymmetry:&lt;/b&gt; the guard runs in phases 0–2 only. In the window between phase 3 and reelout_delay expiring there is &lt;b&gt;no&lt;/b&gt; force floor, on the assumption that the guidance is already loading the wing by then.&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="410" width="800" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p2ramps" value="&lt;b&gt;The two ramps&lt;/b&gt; — both default to 0 in FC_Settings, which disables them&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;Soft-start:&lt;/b&gt; ramp = clamp((t − fig8_start − reelout_delay) / reelout_softstart, 0, 1) scales the &lt;i&gt;command&lt;/i&gt; only — rc&#39;s internal integrators and force limiters still see the unscaled v_raw, so it shapes the engagement transient without lagging the steady-state force regulation.&lt;br&gt;&lt;br&gt;&lt;b&gt;Soft-stop:&lt;/b&gt; latches once, when remaining ≤ v_cmd · reelout_softstop with v_cmd &amp;gt; 0. At that instant stop_start = t, stop_v_entry = v_cmd and stop_T = 2 · remaining / v_cmd — a linear ramp&#39;s area is v_entry · T / 2, so the time is solved exactly, not guessed (it comes out at roughly 2 × reelout_softstop). From then on v_set = stop_v_entry · (1 − clamp((t − stop_start)/stop_T, 0, 1)), reaching 0 exactly at reelout_l_max. The latch is never cleared, so soft-stop is terminal within the reel-out branch.&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#b3b3b3;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="580" width="800" height="190" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wcbox" value="&lt;font style=&quot;font-size:12px&quot;&gt;&lt;b&gt;WinchControllers.jl state&lt;/b&gt; — calc_v_set(rc, …), which runs inside the reel-out branch only, i.e. from phase 3 on. Logged as var_12, the active limiter&#39;s force error as var_13 (NaN in speed control). Before phase 3 it is guard_lfc that acts, and its output shows up in var_10 / var_11 just like the main law&#39;s.&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c8ebf;dashed=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="790" width="800" height="330" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wc0" value="&lt;b&gt;0&lt;/b&gt;&amp;nbsp;&amp;nbsp;lower force limit" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="860" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="wc1" value="&lt;b&gt;1&lt;/b&gt;&amp;nbsp;&amp;nbsp;speed control" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="960" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="wc2" value="&lt;b&gt;2&lt;/b&gt;&amp;nbsp;&amp;nbsp;upper force limit" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="1050" width="220" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wc0lbl" value="&lt;font style=&quot;font-size:11px&quot;&gt;reels &lt;b&gt;in&lt;/b&gt; to restore tension&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="1250" y="860" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="wc1lbl" value="&lt;font style=&quot;font-size:11px&quot;&gt;the normal regime: v_set = kv · √force&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="1250" y="960" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="wc2lbl" value="&lt;font style=&quot;font-size:11px&quot;&gt;reels out faster to cap the force&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="1250" y="1050" width="270" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wce1" value="&lt;font style=&quot;font-size:11px&quot;&gt;force &amp;lt; f_low&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;align=right;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="wc1" target="wc0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wce2" value="&lt;font style=&quot;font-size:11px&quot;&gt;tension restored&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="wc0" target="wc1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wce3" value="&lt;font style=&quot;font-size:11px&quot;&gt;force ≥ f_high&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;align=left;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="wc1" target="wc2">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wce4" value="&lt;font style=&quot;font-size:11px&quot;&gt;force falls back&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;align=right;verticalAlign=middle;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="wc2" target="wc1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

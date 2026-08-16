@@ -507,7 +507,7 @@ try
         rel_depower = (phase == 1 || phase == 2) ? fcs.entry_depower :
                                                    fcs.depower_setpoint
 
-        # Force mode pays out under load; compliance = 0 holds the length outright.
+        # Force mode reels out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
             step!(s; rel_depower, rel_steering,
                   set_torque = winch_torque!(wpc, s, l0),

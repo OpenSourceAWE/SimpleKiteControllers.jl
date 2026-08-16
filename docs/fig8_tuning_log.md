@@ -358,7 +358,7 @@ elevation.
 **`50 -> 45` (2026-08-01, -10 %): re-test, and it works.** The failure recorded
 below was on the fixed-length tether; the winch now runs in force mode (10.6 m
 of travel, +2.1/-1.2 m/s), and that failure was an ENERGY failure — overspeed in
-the power zone at 3494 N — which is exactly what a paying-out winch relieves.
+the power zone at 3494 N — which is exactly what a reeling-out winch relieves.
 45° now survives the full 30 s where it aborted at 17.4 s on the fixed tether,
 and the steering finally comes off the clamp (92 % vs 100 %). Cost: RMS d
 4.93 -> 6.79°, max 7.77 -> 10.02°, force 1675 -> 2456 N (CV 15.2 %). The
@@ -811,7 +811,7 @@ so a sweep should not expect the two sides to agree to the millimetre.
 
 **`winch_damp` is not optional.** Without it force mode has no velocity feedback
 at all — the drum is a free mass on the `winch_len_kp` spring and its speed runs
-away: measured 3.5 m/s of payout, `v_app` 49.6 m/s, run lost at t = 19.8 s. It
+away: measured 3.5 m/s of reel-out, `v_app` 49.6 m/s, run lost at t = 19.8 s. It
 is what makes the winch compliant rather than free-wheeling. That runaway also
 bounds the useful range of `compliance` above 1.0 (2.0 = twice as soft).
 
@@ -975,7 +975,7 @@ force limiters kept the raw signal) killed the ring and the run with it:
 
 | | raw law | tau = 3 s |
 |:--|--:|--:|
-| mean power over the pay-out | 7.2 kW | **5.0 kW** |
+| mean power over the reel-out | 7.2 kW | **5.0 kW** |
 | tether force | ~2500 N, near constant | mean 3330 N, sigma 2337, 411 .. 8137 N |
 | corr(F, v_ro) | — | **-0.773** |
 | `mean(F)*mean(v)` vs `mean(F*v)` | — | 8.7 kW vs 5.0 kW, i.e. -3.65 kW of covariance |
@@ -998,7 +998,7 @@ WORSE, not better; see Plan.md for the measurement.
 Phase 5 ("final", `sys_state == 5`) begins the moment `l_set` reaches
 `reelout_l_max` and keeps flying the pattern at `depower_final` instead of
 `depower_setpoint`. The premise — that a frozen length needs MORE depower than
-pay-out did to hold the same mean force — is confirmed, and by a much larger
+reel-out did to hold the same mean force — is confirmed, and by a much larger
 margin than expected: at 150 -> 350 m, 6 m/s wind, `system_reelout_150m.yaml`,
 `sim_time` extended to 190 s so phase 5 gets a ~74 s window (t = 115.7..190 s):
 
@@ -1009,7 +1009,7 @@ margin than expected: at 150 -> 350 m, 6 m/s wind, `system_reelout_150m.yaml`,
 | 0.333 | 3232 | 185 |
 | 0.35 | 2578 | 201 |
 
-Target was 3458 N, `reelout_power`'s mean force over the pay-out window at
+Target was 3458 N, `reelout_power`'s mean force over the reel-out window at
 `depower_setpoint` = 0.27 (same run, unaffected by `depower_final`). The
 relationship is clearly nonlinear over this range (a quadratic fit through the
 0.30/0.333/0.35 points, solved for 3458 N, landed almost exactly on the 0.328
@@ -1022,13 +1022,13 @@ in `src/fc_settings.jl` for the mechanism. This value is specific to 150 -> 350 
 at 6 m/s; a different `reelout_l_max`, wind speed or `depower_setpoint` changes
 the target force and needs its own sweep.
 
-### `reelout_softstop` — a hard pay-out stop leaves a reel-in power dip (2026-08-16)
+### `reelout_softstop` — a hard reel-out stop leaves a reel-in power dip (2026-08-16)
 
 A hard cut of `v_set` to 0 the instant `l_set` clamps to `reelout_l_max` (the
 mirror image of the engagement transient `reelout_softstart` fixes) leaves the
 drum with the old command's momentum: it overshoots `reelout_l_max` by ~0.36 m
 before the POSITION loop reels it back in, a transient dip to about -3 kW at
-the pay-out/final boundary (150 -> 350 m, 6 m/s).
+the reel-out/final boundary (150 -> 350 m, 6 m/s).
 
 **Loosening `step!`'s `acceleration_limit` for a few seconds after entering
 phase 5 (final), instead of shaping `v_set`, is CLOSED — it makes the dip
@@ -1043,7 +1043,7 @@ does here is let more excess distance accumulate before the mismatch is
 corrected.
 
 The fix that worked: decelerate `v_set` itself, but CONTINUOUSLY — matching
-whatever speed pay-out is actually flying at the moment braking starts, not 0.
+whatever speed reel-out is actually flying at the moment braking starts, not 0.
 A first attempt using a rest-to-rest smoothstep (`3f^2-2f^3`, `f = (t-t_0)/T`)
 got this wrong at the OTHER end: its velocity is 0 at `f=0` by construction, so
 latching it mid-flight (at ~2.4 m/s) still stepped the command to 0 for one
@@ -1052,7 +1052,7 @@ the log as a rougher run overall (whole-run force CV jumped to 41 % against the
 usual 5-8 %), plausibly a chaotic-ish knock-on since the pattern is a repeating
 closed loop.
 
-`reelout_softstop`'s actual mechanism: latch once the remaining pay-out would
+`reelout_softstop`'s actual mechanism: latch once the remaining reel-out would
 finish within `reelout_softstop` seconds at the CURRENT rate, record the
 CURRENT `v_set` as `v_entry`, then decelerate LINEARLY from `v_entry` to 0.
 A linear ramp's area is `v_entry*T/2`, so `T = 2*remaining/v_entry` is solved

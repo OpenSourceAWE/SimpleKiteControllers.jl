@@ -80,7 +80,7 @@ end
     winch_force_hold!(wfc::WinchForceController, s::V3KITE, set_length) -> torque
 
 The force-mode counterpart of [`winch_torque!`](@ref): the drum holds a FORCE,
-paying out whenever the tether pulls harder than the reference, and only trims
+reeling out whenever the tether pulls harder than the reference, and only trims
 towards `set_length`. Returns a torque for `step!`'s `set_torque`.
 """
 function winch_force_hold!(wfc::WinchForceController, s::V3KITE, set_length)

@@ -182,6 +182,10 @@ not yet been lifted into a controller type.
   Both arguments move them a lot. `body_damping` is the key: V3Kite's `init` decays it to a
   floor of 0.8x it, so the one value fixes both the settling transient and the damping the
   pattern is flown with.
+- **Terminology: "reel-out", never "pay-out".** The tether is reeled out, the winch reels
+  out, the phase is the reel-out window — in code, comments, docstrings, YAML, docs and
+  diagrams alike. "pay-out"/"pays out"/"paying out" were renamed out of the repo on
+  2026-08-16; do not reintroduce them.
 - The **dated tuning history** (sweeps, reverted attempts, why each lever is closed) lives
   in [docs/fig8_tuning_log.md](docs/fig8_tuning_log.md). Add findings there, not in the
   settings docstrings. Its older entries predate the migration: ALL-CAPS names are today's

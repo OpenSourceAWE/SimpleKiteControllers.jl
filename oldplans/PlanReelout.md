@@ -13,7 +13,7 @@ maximum tether length is reached — then flies on at constant length until `sim
   V3Kite. This package keeps only the run's tuning (`FC_Settings`) and the example.
 - **The run starts at 150 m and lasts 150-300 s.** The simulation is about twice as fast
   as realtime, so wall time is about half the sim time — a 300 s run costs ~150 s. The
-  run is therefore sized by what the pay-out needs, not by cost.
+  run is therefore sized by what the reel-out needs, not by cost.
 - **REEL_OUT is not a fourth `WinchControllerState`.** The three existing states
   (`wcsLowerForceLimit`, `wcsSpeedControl`, `wcsUpperForceLimit`) name which
   sub-controller the 3-channel mixer has selected; they are an output, not a user
@@ -149,7 +149,7 @@ constant-length example. Log which of the three it is in.
 `check_pattern_feasible(fec, l_tether, ...)` is evaluated at one length today. A longer
 tether *shrinks* the minimum angular turn radius (`1/(L*c1*u_s)`), so reel-out only ever
 helps the margin — the **worst case is the start**, at 150 m, before a single metre has
-been paid out. That is exactly the length `docs/fig8_tuning_log.md` (TETHER_LENGTH,
+been reeled out. That is exactly the length `docs/fig8_tuning_log.md` (TETHER_LENGTH,
 2026-07-26) records the pattern being moved *away* from: 150 -> 200 m was made because the
 angular turn radius at 150 m was too large for this pattern, and it is called the single
 most effective lever after `c1`. So before writing any winch code, run
@@ -168,12 +168,12 @@ files — here the script docstring, the plots script and the metrics.
 **Project files.** The run **starts at 150 m**: add `data/system_reelout_150m.yaml` +
 `data/settings_reelout_150m.yaml` as copies of the 150 m pair (`l_tethers: [150.0]`), with
 `log_file: 'reelout_150m'` and **`sim_time` between 150 s and 300 s** — the 150 m file's
-90 s is sized for the entry plus two laps, not for a pay-out, and the simulation runs at
+90 s is sized for the entry plus two laps, not for a reel-out, and the simulation runs at
 about twice realtime (a 300 s run costs ~150 s of wall time), so run length is not a
 constraint here. Start
-at 150 s and lengthen if the pay-out is still running at the end. `reelout_l_max = 250.0`
+at 150 s and lengthen if the reel-out is still running at the end. `reelout_l_max = 250.0`
 m is the starting value, which ends the run at the length the constant-length pattern was
-tuned around and then some; at ~2 m/s the 100 m pay-out is ~50 s on top of the ~40 s
+tuned around and then some; at ~2 m/s the 100 m reel-out is ~50 s on top of the ~40 s
 entry, so 150 s leaves room for laps at the final length. `select_project.jl` picks up
 any `system*.yaml` in `data/`, so nothing else needs to change. The `wc_settings:` key in
 the new system file still names the V3Kite-format file — see the collision above.
@@ -206,7 +206,7 @@ Finally add the script to `examples/menu.jl`.
    a 90 s constant-length baseline flown on `system_fig8_150m.yaml` at the same 150 m
    start (RMS d = 1.51°, mean 1.08°, max 4.98°, 4 laps, all 7 criteria passed) — reeling
    out did not degrade tracking. Mean reel-out power: 3502 W over 2589 samples (the active
-   pay-out window, ≈29 s of the 200 s run).
+   reel-out window, ≈29 s of the 200 s run).
 
 ## Finding (2026-08-14) — `v_ro` lags `v_set` by ~1.2 s and halves its amplitude
 
@@ -234,7 +234,7 @@ tether against a drum inertia of 0.204*G^2/r^2 ~ 300 kg equivalent linear mass, 
 
 Same root cause, same fix, one more symptom: a P loop tracking a *ramp* must run a
 proportional error, so the actual tether length trails `l_set` by `v_ro/kp_pos` = 2*2.5 ~
-**5 m** for the whole pay-out.
+**5 m** for the whole reel-out.
 
 Neither limiter is binding: `v_set` slews at ~4.7 m/s^2 peak, against `speed_limit` = 8
 m/s and `acceleration_limit` = `rcs.max_acc` = 8 m/s^2 — note that is the `WCSettings`
@@ -265,7 +265,7 @@ before/after measurements.**
   as expected. The tuning log's 150 -> 200 move predates the current `body_damping`/
   pattern values; no pattern change is needed to start this run at 150 m.
 - Does the pattern centre need to descend as the tether grows, or is holding `el_center`
-  good enough for a 100 m pay-out? Decide from the first run, not up front.
+  good enough for a 100 m reel-out? Decide from the first run, not up front.
 - Naming of the mode field and its enum values is not fixed; `vroReelOut`/`vroPiecewise`
   above is a placeholder consistent with the `wcs*` state names.
 
@@ -286,10 +286,10 @@ before/after measurements.**
    commented out above it and must come back — pointing at a new tag, not v1.1.1 —
    before this is released), and the loop now passes
    `step!(s; ..., set_length = l_set, v_ff = v_set, ...)`. `v_set` is already `0.0`
-   outside the pay-out window, where `l_set` is constant and there is nothing to
+   outside the reel-out window, where `l_set` is constant and there is nothing to
    feed forward, so no extra gating is needed.
 
-   **MEASURED**, same run configuration, on the pay-out window of
+   **MEASURED**, same run configuration, on the reel-out window of
    `output/reelout_150m.arrow` (phase 4 with `v_set > 0`; 150 -> 350 m, 82.5 s):
 
    | quantity                       | `v_ff = 0` | `v_ff = v_set` |
@@ -320,7 +320,7 @@ before/after measurements.**
      invoked (state 0: 0.0 % of the window).
 
    **`acceleration_limit`: leave it at `rcs.max_acc` = 8.0 m/s^2, the `WCSettings`
-   default, NOT the plant's `winch: max_acc: 4.0`.** With `v_ff` the pay-out speed
+   default, NOT the plant's `winch: max_acc: 4.0`.** With `v_ff` the reel-out speed
    is asked for the instant reel-out engages instead of being ramped in by a
    lagging P loop, so the drum's own inertia (`inertia_total * gear_ratio^2 /
    drum_radius^2` = 0.408*6.2^2/0.1615^2 = 602 kg of equivalent linear mass) is a
@@ -341,7 +341,7 @@ before/after measurements.**
    Three findings, all of which outlive the reverted change:
 
    - **The limiter is almost never the binding constraint.** Reconstructing the raw
-     setpoint `v_sp = v_ff + kp*(l_set - l)` (kp = 0.5) over the pay-out window,
+     setpoint `v_sp = v_ff + kp*(l_set - l)` (kp = 0.5) over the reel-out window,
      `|dv_sp/dt|` exceeds 4 m/s^2 in ~1 % of steps and 8 m/s^2 in 0.03 %. Mean
      `v_set` is 2.33 m/s, max 2.93. There is nothing there to clip.
    - **There is no engagement spike left to cure.** The one this fix was aimed at
@@ -349,7 +349,7 @@ before/after measurements.**
      `reelout_t_startup` was 2.0 s and `reelout_f_high` 3800 N; the tuning has since
      moved to `t_startup: 10.0` and `f_high: 7600`, and the plant's `max_force` from
      4000 to 8000 N. The 10 s soft start spreads engagement out on its own. Today's
-     peak is 3783 N at t = 37.2 s, 6.6 s AFTER pay-out begins, and per-5-s-bin
+     peak is 3783 N at t = 37.2 s, 6.6 s AFTER reel-out begins, and per-5-s-bin
      maxima sit at 3.5-3.8 kN every ~10 s across the whole 86 s window — the
      figure-eight turn load, less than half of `max_force`, not a drum-inertia
      transient.
@@ -530,10 +530,10 @@ would trade clock for cores and leave nothing for the IDE.
 ## `reelout_softstop` disabled — a nonzero value produces a force peak (2026-08-16)
 
 `reelout_softstop` (`FC_Settings`, `docs/fig8_tuning_log.md` "reelout_softstop —
-a hard pay-out stop leaves a reel-in power dip") decelerates `v_set` linearly
-to 0 as pay-out approaches `reelout_l_max`, so the drum does not overshoot the
+a hard reel-out stop leaves a reel-in power dip") decelerates `v_set` linearly
+to 0 as reel-out approaches `reelout_l_max`, so the drum does not overshoot the
 target length and get reeled back in — it fixed a -3 kW power undershoot at
-the pay-out/final boundary. **Set back to `0.0` in `data/fc_settings_reelout.yaml`**:
+the reel-out/final boundary. **Set back to `0.0` in `data/fc_settings_reelout.yaml`**:
 any nonzero value instead produces a FORCE PEAK. Not yet root-caused or
 re-measured against the current tuning (`f8_a`/`f8_b` = 20/11,
 `depower_final` = 0.328, `reelout_delay` = 4.0) — this is the user's own
@@ -546,8 +546,8 @@ once phase 5 begins. Right now `depower_final` (raised specifically to hold
 force steady once the tether is frozen, see the sweep in
 `docs/fig8_tuning_log.md`) only takes effect AFTER `l_set` reaches
 `reelout_l_max` — so for the whole `reelout_softstop` deceleration window, the
-kite is already slowing its pay-out (losing the "valve" that bleeds off a load
-spike by paying out line) while STILL flying at the lower, higher-force
+kite is already slowing its reel-out (losing the "valve" that bleeds off a load
+spike by reeling out line) while STILL flying at the lower, higher-force
 `depower_setpoint`. Slowly increasing depower toward `depower_final` DURING
 the slow-down phase, in sync with the speed ramp rather than at its end, is
 the natural candidate for closing that gap — needs its own measurement before

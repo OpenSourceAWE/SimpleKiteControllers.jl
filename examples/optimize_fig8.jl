@@ -21,8 +21,7 @@ are for.
 
 # Objective and side conditions
 
-Ranked by `mean_power_W`, the mean mechanical reel-out power over the pay-out
-window. Two side conditions come first, and a run that breaks either is reported
+Ranked by `mean_power_W`, the mean mechanical power over the reel-out window. Two side conditions come first, and a run that breaks either is reported
 but never ranked (`data/optimization.yaml` holds both limits):
 
   - **The upper force controller must never engage.** Its share of the reel-out

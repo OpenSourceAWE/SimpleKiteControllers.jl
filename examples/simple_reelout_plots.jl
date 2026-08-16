@@ -11,13 +11,13 @@ and two panels added: reel-out speed (measured `v_reelout` vs the setpoint
 `step!` itself, since `SysState` has no `set_depower` field) — worth watching
 here because `depower_final` steps it up once phase 5 (final) begins. Distinct
 from the bottom panel's ENTRY state machine (0 park … 4 settled, plus 5 final
-once pay-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
+once reel-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
 for everything else, which is unchanged here.
 
 Plus one figure that script has no counterpart for: `power`, the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
 measured, over a running integral `E_mech` [kJ]. The legends carry the scores
-from `reelout_power`: mean power and energy over the pay-out window, and the
+from `reelout_power`: mean power and energy over the reel-out window, and the
 whole-run energy the `E_mech` curve ends on — which is the number to compare
 across runs, since a change to when reel-out engages moves mean power and window
 length in opposite directions. It is a selectable plot like the others, so

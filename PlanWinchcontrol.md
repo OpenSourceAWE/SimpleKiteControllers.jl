@@ -103,7 +103,7 @@ uses internally (`set_reset`, `set_f_set`, `set_v_sw`, `set_v_act`,
 `set_tracking(0.0)`, `set_force`, `get_v_set_out`, `on_timer`); `l_set` moves
 only while `guard_lfc.active`. `rc` itself is now untouched until phase 3,
 exactly as before EITHER attempt — its soft-start clock, integrators etc. see
-nothing before pay-out is meant to begin.
+nothing before reel-out is meant to begin.
 
 **VERIFIED in isolation**: at 500 N (above `f_low`), `guard_lfc` stays
 inactive with `v_guard` EXACTLY `0.0` for the whole 2 s tested — no drift, no

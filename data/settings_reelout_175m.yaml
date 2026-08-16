@@ -1,9 +1,9 @@
 # Simulation settings of the reel-out run, named by system_reelout_150m.yaml next
 # to it and loaded into a KiteUtils `Settings` by the kite model. A copy of
 # settings_fig8_150m.yaml with a longer sim_time: the run starts at 150 m and
-# pays out to fc_settings.yaml's reelout_l_max (250 m by default) once the
+# reels out to fc_settings.yaml's reelout_l_max (250 m by default) once the
 # pattern is established, on top of the usual ~40 s entry. Start at 150 s and
-# lengthen if a run is still paying out at the end — see Plan.md.
+# lengthen if a run is still reeling out at the end — see Plan.md.
 #
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
 # POSITION-mode winch gains are wc_settings.yaml (unused by simple_reelout.jl,
@@ -12,7 +12,7 @@
 system:
   log_file: 'reelout_150m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
-  sim_time: 125.0 # simulation time; entry (~40 s) + pay-out + laps at final length [sim only]
+  sim_time: 125.0 # simulation time; entry (~40 s) + reel-out + laps at final length [sim only]
   sample_freq: 90 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81

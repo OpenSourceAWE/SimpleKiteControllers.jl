@@ -249,7 +249,7 @@ the `v_set = kv*sqrt(force)` law itself) and `upper_force_pct` (state 2, the
 
 Scored over the same window as [`reelout_power`](@ref) — the samples where the
 length setpoint was still growing — because `var_12` only means anything while
-the controller is being stepped: before pay-out engages it still reads whatever
+the controller is being stepped: before reel-out engages it still reads whatever
 state the freshly built controller started in. Returns `nothing` for a log that
 never reeled out, same guard as [`reelout_power`](@ref).
 
@@ -403,7 +403,7 @@ Pass `require_final = true` (default `false`) to also check that `sys_state`
 reaches `5` (phase "final") somewhere in the log — `examples/simple_reelout.jl`
 only, whose entry state machine has that phase; a plain `simple_fig8.jl` run's
 `sys_state` never goes past `4` and would fail this check every time, hence the
-default off. Checks that pay-out actually finished (`l_set` reached
+default off. Checks that reel-out actually finished (`l_set` reached
 `reelout_l_max`) within the run, not just that the pattern was tracked well.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,

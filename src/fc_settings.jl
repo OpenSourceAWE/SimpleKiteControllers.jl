@@ -89,11 +89,11 @@ Add new findings there, not here.
     reelout_l_max = 250.0
     """
     Depower flown once `reelout_l_max` is reached (phase 5, "final") [-]. Reel-out
-    used to bleed off part of a force excursion by paying out line instead of
+    used to bleed off part of a force excursion by reeling out line instead of
     holding it; once the length is frozen, `step!`'s POSITION loop can only
     resist a load spike with more torque against a now-static setpoint, so a
     depower left at `depower_setpoint` runs noticeably tenser than during
-    pay-out — confirmed nonlinear and much larger than expected, `docs/fig8_tuning_log.md`
+    reel-out — confirmed nonlinear and much larger than expected, `docs/fig8_tuning_log.md`
     ("`depower_final` sweep"). Tuned for `reelout_l_max = 350` at 150 -> 350 m,
     6 m/s wind: a different length, wind speed or `depower_setpoint` moves the
     target force and needs its own sweep, not a linear rescale of this value.
@@ -101,7 +101,7 @@ Add new findings there, not here.
     depower_final = 0.328
     """
     Soft-start time [s]: the commanded reel-out speed (both `v_ff` and the
-    `l_set` integration, i.e. the actual pay-out rate) is ramped linearly from
+    `l_set` integration, i.e. the actual reel-out rate) is ramped linearly from
     `0` to WinchControllers.jl's `v_set = kv * sqrt(force)` over this many
     seconds, counted from the moment reel-out engages (`reelout_delay` after
     phase 3). `0` disables the ramp (the command jumps straight to the computed
@@ -118,7 +118,7 @@ Add new findings there, not here.
     reelout_softstart = 0.0
     """
     Soft-stop trigger [s], the mirror image of [`reelout_softstart`](@ref): once
-    the remaining pay-out would finish within this many seconds AT THE CURRENT
+    the remaining reel-out would finish within this many seconds AT THE CURRENT
     RATE, `v_set` decelerates LINEARLY from whatever it is at that instant to 0,
     landing exactly at `reelout_l_max` — continuous with the speed already being
     flown, so unlike a hard stop there is no discontinuity for the POSITION loop
@@ -136,8 +136,8 @@ Add new findings there, not here.
     Delay [s] between the guidance engaging (phase 3) and reel-out starting.
     `0` reels out from the first step of phase 3.
 
-    It buys energy per metre, not power: pay-out ends at `reelout_l_max`, so the
-    window is set by the metres to pay out and not by when it opens, and the
+    It buys energy per metre, not power: reel-out ends at `reelout_l_max`, so the
+    window is set by the metres to reel out and not by when it opens, and the
     metres flown before the pattern settles are the cheap ones. Measured at 6
     m/s wind, 150 -> 350 m: engaging at phase 3 gave 2.32 kJ/m against 2.49 kJ/m
     when the winch waited for phase 4 (mean power 6.5 vs 7.2 kW over a window
