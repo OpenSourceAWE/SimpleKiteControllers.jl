@@ -9,6 +9,6 @@
 # (fc_settings_reelout.yaml, not fig8's fc_settings.yaml) because REEL_OUT needs
 # `compliance: 0`, unlike the figure-eight runs' default of 0.5.
 system:
-    sim_settings: "settings_reelout_175m.yaml"
+    sim_settings: "settings_reelout_150m.yaml"
     wc_settings: "wc_settings.yaml"
     fc_settings: "fc_settings_reelout.yaml"
