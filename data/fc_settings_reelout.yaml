@@ -92,7 +92,7 @@ fc_settings:
   v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
   v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
   entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
-  entry_depower:      0.32     # Depower during the entry phases                    [-]
+  entry_depower:      0.34     # Depower during the entry phases                    [-]
 
   # --- feedback signal: heading at low kite speed, course at high -----------
   v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]
