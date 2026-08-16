@@ -1,0 +1,182 @@
+# The state machine of the reel-out controller
+
+Reference for the phases of `examples/simple_reelout.jl` and the conditions that
+move between them. There are **two** state machines running side by side:
+
+1. The **flight phase** (`phase`, logged as `sys_state.sys_state`), which
+   sequences the entry manoeuvre and decides what steering gain, depower and
+   winch behaviour is in force. Phases 0-4 are shared with `simple_fig8.jl`;
+   phase 5 is this script's addition.
+2. The **winch state**, which is partly the same `phase` (it gates *whether* the
+   winch pays out) and partly `WinchControllers.jl`'s own three-state controller
+   (logged as `var_12`), which decides *how fast*.
+
+All conditions below are evaluated once per step, at the top of the loop, on the
+`sys_state` **as of the previous step** — `step!` runs afterwards.
+
+## 1. Flight phases
+
+| # | name | what is flown | steering gain | depower |
+|:--|:-----|:--------------|:--------------|:--------|
+| 0 | park | zero steering; guidance and PID run but are not applied | `entry_gain * heading_p` | `depower_setpoint` |
+| 1 | dive | open-loop course `chi_dive` (≈ -85°, descending) | `entry_gain * heading_p` | `entry_depower` |
+| 2 | hold | open-loop course `chi_hold` (-90°, horizontal) | `entry_gain * heading_p` | `entry_depower` |
+| 3 | fig8 | attractor guidance engaged; winch starts paying out | `heading_p` | `depower_setpoint` |
+| 4 | settled | same as 3; a logging milestone only | `heading_p` | `depower_setpoint` |
+| 5 | final | same as 3/4, pay-out finished, length frozen | `heading_p` | `depower_final` |
+
+The phase never runs backwards: each transition is one-way and, once taken, its
+guard is no longer tested.
+
+### Transitions
+
+```
+                 t >= park_time            el <= el_center            t - hold_start
+                                            + dive_el_margin           >= hold_time
+   ┌──────┐                     ┌──────┐                    ┌──────┐                 ┌──────┐
+   │ 0    │────────────────────>│ 1    │───────────────────>│ 2    │────────────────>│ 3    │
+   │ park │                     │ dive │                    │ hold │                 │ fig8 │
+   └──────┘                     └──────┘                    └──────┘                 └──┬───┘
+                                                                                        │
+                                                              dmin < settled_d_gate     │
+                                                                                        v
+                                        ┌───────┐                                  ┌─────────┐
+                                        │ 5     │<─── l_set >= reelout_l_max ───────│ 4       │
+                                        │ final │<─── l_set >= reelout_l_max ───────│ settled │
+                                        └───────┘        (also directly from 3)     └─────────┘
+```
+
+| from | to | condition | source |
+|:-----|:---|:----------|:-------|
+| 0 park | 1 dive | `t >= fcs.park_time` — the parking time has elapsed. Nothing about the kite's state is checked; the park exists only to let the settling/init transients decay. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
+| 1 dive | 2 hold | `el_deg <= fcs.el_center + fcs.dive_el_margin` — the kite has descended to within `dive_el_margin` (7°) of the pattern-centre elevation. `hold_start` is latched to the current time here. | [simple_reelout.jl:356](../examples/simple_reelout.jl#L356) |
+| 2 hold | 3 fig8 | `t - hold_start >= fcs.hold_time` — the horizontal hold has lasted `hold_time` (0.8 s), so the kite arrives flat rather than still descending. `fig8_start` is latched here; `reelout_delay` counts from it. | [simple_reelout.jl:359](../examples/simple_reelout.jl#L359) |
+| 3 fig8 | 4 settled | `dmin < fcs.settled_d_gate` — the cross-track error to the pattern drops below 5° for the **first** time. Purely a milestone: it changes nothing in how the kite is flown or how the winch behaves; it only marks the start of the window the results section reports `v_app` over. | [simple_reelout.jl:362](../examples/simple_reelout.jl#L362) |
+| 3 or 4 | 5 final | `l_set >= fcs.reelout_l_max` — the length setpoint has reached the pay-out target. | [simple_reelout.jl:367](../examples/simple_reelout.jl#L367) |
+
+Two details of the 3/4 -> 5 transition:
+
+- It is tested **outside** the `elseif` ladder, so it can fire on the *same step*
+  as a 3 -> 4 transition. Pay-out finishing does not wait for settling.
+- It is reachable from phase 3 directly. A run whose tracking never gets inside
+  `settled_d_gate` (so phase 4 never happens) still reaches `final` once the
+  tether is paid out — which is why the results section gates the reel-out
+  numbers on phase 3, not phase 4.
+
+There is **no** transition out of phase 5: the rest of the run is flown at
+`depower_final` with a frozen length setpoint. There is no reel-in phase in this
+script — it is a single pay-out, not a pumping cycle.
+
+### What each phase changes
+
+- **Steering (0 vs 1-5).** In phase 0 the PID is stepped with a zero error and
+  its output discarded, so engagement in phase 1 is bumpless; from phase 1 on the
+  output is applied.
+- **Steering gain (0-2 vs 3-5).** The heading PID's gain is
+  `entry_gain * heading_p` (25 %) during the entry and the full `heading_p` from
+  phase 3. On top of that, the gain is always scaled by `v_app_ref / v_app`,
+  independent of phase.
+- **Course source (0-2 vs 3-5).** With `fig8_pure_course = true`, phases 3+ use
+  pure course feedback; during the entry the feedback angle is blended from
+  heading to course by kite speed.
+- **Commanded course (1-2 vs the rest).** Phases 1 and 2 override the guidance
+  with the open-loop `chi_dive` / `chi_hold`. The entry descent limiter
+  (`entry_chi_max`, weighted by `w_lim`) applies wherever the guidance is far
+  off the path, and is not itself phase-gated.
+- **Depower.** `entry_depower` in phases 1-2, `depower_final` in phase 5,
+  `depower_setpoint` otherwise (0, 3, 4).
+- **Winch.** See below.
+
+## 2. Winch: reel-out gating
+
+The winch is driven by the phase plus two timers. Per step exactly one of three
+branches runs:
+
+| branch | condition | effect |
+|:-------|:----------|:-------|
+| **reel-out** | `phase >= 3` **and** `t - fig8_start >= fcs.reelout_delay` **and** `l_set < fcs.reelout_l_max` | `v_set` from the `kv*sqrt(force)` law (with ramps, below); `l_set` integrates it, clamped at `reelout_l_max`; `rc` is stepped (`on_timer`). |
+| **force-floor guard** | `phase < 3` | `guard_lfc`, a standalone `LowerForceController`, reels **in** (its output is clamped to `<= 0`) if the measured force sags below `rcs.f_low`; only when `guard_lfc.active`. Otherwise `v_set = 0` and `l_set` stays flat. |
+| **frozen** | neither — i.e. phase 3/4 before `reelout_delay` has elapsed, or phase 5 | `v_set = 0`, `l_set` unchanged. |
+
+Note the asymmetry: the guard runs in phases 0-2 only. In the window between
+phase 3 and `reelout_delay` expiring there is no force floor, on the assumption
+that the guidance is already loading the wing by then.
+
+The guard is deliberately **not** `rc`: stepping the full `WinchController`
+through the entry lets its SpeedController integrator wind up while its output is
+ignored, which dumps a saturated `+v_sat` command the moment it is first used
+(measured). A bare `LowerForceController` has no such integrator, and `rc`'s
+soft-start clock stays at 0 until phase 3.
+
+### Reel-out sub-states
+
+Within the reel-out branch, the commanded speed passes through three regimes:
+
+```
+   reelout_delay        reelout_softstart              remaining <= v_cmd * reelout_softstop
+   ──────────────>  ────────────────────────>  ─────────────────────────>  ────────────────>
+      waiting            soft-start ramp             steady (v_cmd = v_raw)     soft-stop
+   v_set = 0          v_cmd = ramp * v_raw          v_cmd = v_raw           linear decel to 0
+                      ramp 0 -> 1, linear                                   over stop_T
+```
+
+- **Soft-start**: `ramp = clamp((t - fig8_start - reelout_delay) / reelout_softstart, 0, 1)`
+  scales the *command* only — `rc`'s internal integrators and force limiters still
+  see the unscaled `v_raw`, so this shapes the engagement transient without
+  lagging the steady-state force regulation.
+- **Soft-stop** latches once, when `remaining <= v_cmd * fcs.reelout_softstop`
+  with `v_cmd > 0` and `reelout_softstop > 0`. At that instant `stop_start = t`,
+  `stop_v_entry = v_cmd`, and `stop_T = 2 * remaining / v_cmd` (a linear ramp's
+  area is `v_entry * T / 2`, so the time is solved exactly, not guessed — it comes
+  out at roughly 2x `reelout_softstop`). From then on
+  `v_set = stop_v_entry * (1 - clamp((t - stop_start)/stop_T, 0, 1))`, reaching 0
+  exactly at `reelout_l_max`. The latch is never cleared, so soft-stop is
+  terminal within the pay-out branch.
+- Both ramps default to `0` in `FC_Settings`, which disables them.
+
+`v_set` is passed to `step!` twice over: integrated into `l_set` (the position
+setpoint) and fed forward as `v_ff`, which removes the `1/winch_pos_kp` = 2 s lag
+the integrate-here/differentiate-there pair would otherwise have.
+
+## 3. WinchController states (`var_12`)
+
+Inside the pay-out branch, `calc_v_set(rc, ...)` runs `WinchControllers.jl`'s own
+three-state controller. Its state is logged in `var_12` and the active limiter's
+force error in `var_13`:
+
+| `var_12` | state | active when |
+|:---------|:------|:------------|
+| 0 | lower force limit | measured force below `f_low` — reels in to restore tension |
+| 1 | speed control | the normal regime: `v_set = kv * sqrt(force)` |
+| 2 | upper force limit | measured force at/above `f_high` — pays out faster to cap the force |
+
+`var_13` is `NaN` in state 1 (no force limiter active). Both are only meaningful
+from phase 3 on, since `rc` is not stepped before that — during phases 0-2 it is
+`guard_lfc` that acts, and its output shows up in `var_10`/`var_11` just like the
+main law's.
+
+The results section reports the time split across these three states over the
+reeling window (`winch_state_pct`).
+
+## 4. Log slots
+
+| slot | quantity |
+|:-----|:---------|
+| `var_10` | tether length setpoint `l_set` [m] |
+| `var_11` | speed setpoint `v_set` [m/s] — the reel-out law from phase 3, or the guard's reel-in before that |
+| `var_12` | `WinchController` state (0/1/2, above) |
+| `var_13` | force error of the active force limiter [N], `NaN` in speed control |
+| `sys_state` | the flight phase (0-5) |
+
+## 5. Latched variables
+
+State the machine carries between steps, all set exactly once:
+
+| variable | set at | used for |
+|:---------|:-------|:---------|
+| `phase` | every transition | everything above |
+| `hold_start` | 1 -> 2 | the `hold_time` timer |
+| `fig8_start` | 2 -> 3 | the `reelout_delay` and `reelout_softstart` timers |
+| `stop_start`, `stop_v_entry`, `stop_T` | soft-stop latch | the linear deceleration |
+| `entry_sign` | first time the descent limiter clips near ±180° | keeping the limited course's sign stable through the wrap |
+| `l_set` | every pay-out/guard step | the position setpoint handed to `step!`, and the 3/4 -> 5 guard |
