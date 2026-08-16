@@ -489,7 +489,11 @@ try
             set_v_act(guard_lfc, reel_out_speed(s))
             set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
             set_force(guard_lfc, winch_force(s))
-            v_guard = get_v_set_out(guard_lfc)
+            # Reel-IN only: guard_lfc's own saturation allows v_sat (reel-out) on
+            # the upper side too, meant for the main `rc` controller it shares a
+            # type with. Before reel-out starts this guard exists to catch a force
+            # SAG, never to pay out, so its output is clamped here.
+            v_guard = min(get_v_set_out(guard_lfc), 0.0)
             on_timer(guard_lfc)
             if guard_lfc.active
                 v_set = v_guard
