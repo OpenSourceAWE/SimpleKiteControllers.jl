@@ -38,17 +38,16 @@ copy of `simple_fig8.jl`'s `fc_settings.yaml` with `compliance: 0` and the
 REEL_OUT keys below, not the shared file (whose `compliance: 0.5` is fig8's
 FORCE-mode tuning) — `system_reelout_150m.yaml`'s `fc_settings:` key names it.
 
-**Two winch controllers, two settings files, neither by the project's
-`wc_settings:` key.** V3Kite's OWN torque loop (`wc` above, `WC_Settings`) still
-reads `data/wc_settings.yaml` the normal way (`WC_Settings(wc_settings(project))`).
-WinchControllers.jl's `WinchController` (`rc`/`rcs`, `WCSettings` — a completely
-different type of the same short name, and NOT V3Kite's) is loaded from this
-package's OWN `data/wc_settings_reelout.yaml` by filename, via
-[`load_yaml_fields!`](@ref) — NOT `WinchControllers.update`, which discovers its
-file via that SAME project key already claimed by V3Kite's file above; calling
-it here would silently leave `rcs` at WinchControllers' package defaults for
-every field the two unrelated schemas happen not to share a name with (which is
-most of them).
+**Two winch controllers, ONE settings file.** Both read the same `WCSettings`
+object (`wc`, and `rcs` which is the same object), loaded from the file the
+project's `wc_settings:` key names. V3Kite's torque loop takes the `winch_*`
+fields; WinchControllers.jl's `WinchController` takes `kv`/`f_low`/`f_high`/
+`v_sat`/`t_startup` and the force-limiter gains. Before the 2026-08-16 merge
+(PlanWinchcontrol.md) these were two structs of nearly the same name in two
+packages, needing two files in two schemas — and the second, `wc_settings_reelout.yaml`,
+had to be loaded by HARDCODED NAME because the project key was already claimed
+by the first, so switching projects could not switch the reel-out winch tuning.
+It can now.
 
 # Feasibility
 
@@ -106,7 +105,7 @@ how long after phase 3 the winch waits before it starts paying out, and
 `reelout_softstart`, which ramps the COMMANDED speed (`v_ff` and the `l_set`
 integration together, not the law inside `WinchController`) linearly from 0 to
 the computed `v_set` over that many seconds — `rcs.t_startup`
-(`data/wc_settings_reelout.yaml`) does not do this, see the comment on that key.
+(`data/wc_settings.yaml`) does not do this, see the comment on that key.
 `reelout_softstop` is the OTHER end of pay-out: once the remaining distance
 would finish within that many seconds at the current rate, `v_set` decelerates
 LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
@@ -117,7 +116,7 @@ a hard stop leaves the POSITION loop to correct.
 
 WinchControllers.jl's OWN tuning — `kv`, `f_low`, `f_high`, `v_sat`,
 `t_startup`, `mode`, and every LowerForceController/UpperForceController gain
-that used to be invisible package defaults — is `data/wc_settings_reelout.yaml`
+that used to be invisible package defaults — is `data/wc_settings.yaml`
 now, not here; see that file's header comment.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
@@ -159,6 +158,8 @@ toc("Loaded packages in: ")
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+# V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
+include(joinpath(@__DIR__, "winch_adapter.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
@@ -207,8 +208,15 @@ fcs.compliance >= 0 ||
 fcs.compliance == 0 ||
     error("REEL_OUT needs compliance = 0 (POSITION mode) — REEL_OUT and V3Kite's own \
            FORCE mode both drive the winch and only one can hold the drum at a time.")
-wc = WC_Settings(wc_settings(project))   # POSITION-mode gains; step! still takes set_length
-wfc = nothing                            # no FORCE-mode winch; warm-up settles at constant length
+# ONE settings object for BOTH winch loops, and BOTH are ours now: V3Kite's
+# `step!` takes a torque. Since the 2026-08-16 merge `WCSettings` carries the
+# POSITION-mode torque gains (`winch_*`, which `wpc` below reads) AND
+# WinchControllers.jl's speed-controller tuning (`kv`, `f_low`, ... which `rc`
+# reads). `dt` is the file's one placeholder; the plant's timestep wins.
+dt0 = 1 / project_set.sample_freq
+wc = load_wc_settings(wc_settings(project); dt = dt0)
+rcs = wc                                 # same object, two controllers read it
+wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
 # back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
@@ -220,20 +228,17 @@ wfc = nothing                            # no FORCE-mode winch; warm-up settles 
 s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, wc, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
-    sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
+    system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
+    sim_time = SIM_TIME, warmup_time = fcs.warmup_time,
+    # The warm-up relaxes at constant length, against the same loop the run uses.
+    warmup_torque = (m, l) -> winch_torque!(wpc, m, l))
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # REEL_OUT controller: built fresh here so its soft-start ramp (t_startup) begins
-# the moment reel-out actually starts (phase 3), not at t = 0. `WinchControllers.update`
-# is NOT called: it discovers its file via the project's `wc_settings:` key, which
-# already names V3Kite's OWN `WC_Settings` file (`data/wc_settings.yaml`) — a
-# silent collision between two unrelated schemas sharing one filename slot.
-# `load_yaml_fields!` (reflective, no WinchControllers dependency in `src/`) loads
-# this package's OWN `data/wc_settings_reelout.yaml` instead, by name, not by
-# project lookup. `dt` there is a placeholder — it is always this run's actual
-# timestep, set again right after the load.
-rcs = load_yaml_fields!(WCSettings(dt = s.dt), "wc_settings_reelout.yaml", "wc_settings")
+# the moment reel-out actually starts (phase 3), not at t = 0. `rcs` is `wc`, the
+# object loaded above from the project's `wc_settings:` file — the two winches
+# used to need two files in two schemas, and since the merge they share one.
+# The file's `dt` is a placeholder; the plant's own timestep is the real one.
 rcs.dt = s.dt
 rc = WinchController(rcs)
 @info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %.0f m.",
@@ -504,9 +509,10 @@ try
         # never the binding constraint, and tightening it to 4 only made the drum
         # lag the `t_startup` ramp harder — the engagement ring grew from 0.88 to
         # 0.98 m/s and the peak force rose slightly. See Plan.md.
-        step!(s; rel_depower, rel_steering, set_length = l_set, v_ff = v_set,
-              speed_limit = rcs.v_sat, acceleration_limit = rcs.max_acc,
-              vsm_interval = fcs.vsm_interval)
+        step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
+              set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set,
+                                         speed_limit = rcs.v_sat,
+                                         acceleration_limit = rcs.max_acc))
 
         # Report the overspeed rather than the opaque solver abort it causes later.
         if Float64(s.sys_state.v_app) > fcs.v_app_abort

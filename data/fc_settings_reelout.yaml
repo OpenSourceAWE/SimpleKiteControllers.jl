@@ -38,7 +38,7 @@ fc_settings:
 
   # --- REEL_OUT winch -----------------------------------------------------
   # kv/f_low/f_high/v_sat/t_startup and everything else WinchControllers.jl's
-  # own WinchController tunes are in wc_settings_reelout.yaml now, not here —
+  # own WinchController tunes are in wc_settings.yaml now, not here —
   # that is WinchControllers.jl's OWN schema (its `WCSettings`), distinct from
   # this file's `FC_Settings` schema. The REEL_OUT keys below are this
   # package's OWN script-level logic in simple_reelout.jl (the l_set

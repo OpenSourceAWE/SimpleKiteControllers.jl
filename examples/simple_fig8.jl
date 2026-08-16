@@ -170,6 +170,8 @@ toc("Loaded packages in: ")
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+# V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
+include(joinpath(@__DIR__, "winch_adapter.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
@@ -197,8 +199,9 @@ log_name = basename(project_set.log_file)
 
 # Decided BEFORE init: the warm-up must relax against the winch the loop commands.
 fcs.compliance >= 0 || error("compliance must be >= 0, got $(fcs.compliance)")
-# Passed to init in both modes; force mode simply never asks it for a torque.
-wc = WC_Settings(wc_settings(project))
+# Both winch loops are the CALLER's now: V3Kite's `step!` takes a torque.
+wcs = load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq)
+wpc = nothing
 wfc = nothing
 if fcs.compliance > 0
     # winch_force_gains returns plain numbers; the controller object is V3Kite's.
@@ -208,6 +211,7 @@ if fcs.compliance > 0
                    fcs.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
 else
     # Perfectly stiff: the position feed-forward cancels the measured load exactly.
+    wpc = WinchPosController(wcs; dt = 1 / project_set.sample_freq)
     @info "Winch: POSITION mode at compliance = 0 — constant unstretched length."
 end
 
@@ -221,8 +225,11 @@ end
 s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, wc, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
-    sim_time = SIM_TIME, warmup_time = fcs.warmup_time, warmup_wfc = wfc)
+    system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
+    sim_time = SIM_TIME, warmup_time = fcs.warmup_time,
+    # The warm-up must relax against the winch the loop will command.
+    warmup_torque = isnothing(wfc) ? (m, l) -> winch_torque!(wpc, m, l) :
+                                     (m, l) -> winch_force_hold!(wfc, m, l))
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
@@ -375,11 +382,12 @@ try
 
         # Force mode pays out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
-            step!(s; rel_depower, rel_steering, set_length = l0,
+            step!(s; rel_depower, rel_steering,
+                  set_torque = winch_torque!(wpc, s, l0),
                   vsm_interval = fcs.vsm_interval)
         else
             step!(s; rel_depower, rel_steering,
-                  set_torque = winch_force_torque!(wfc, s, l0),
+                  set_torque = winch_force_hold!(wfc, s, l0),
                   vsm_interval = fcs.vsm_interval)
         end
 

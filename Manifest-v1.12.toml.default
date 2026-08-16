@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.6"
+julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "18b7428b5cc815fd6626ef539a39796de26d1cd4"
+project_hash = "4eb77445a5adfd08ae501bba2e10f0d7a6600ef4"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5970c86505ae9c07bf5bc521ef2bbbb3849e8b7b"
@@ -349,9 +349,9 @@ version = "0.4.6"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
-git-tree-sha1 = "962834c22b66e32aa10f7611c08c8ca4e20749a9"
+git-tree-sha1 = "970758a3d591a2a5c2a907c53f2e2f8c1b1d3537"
 uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
-version = "0.7.8"
+version = "0.7.9"
 
 [[deps.CodecZstd]]
 deps = ["TranscodingStreams", "Zstd_jll"]
@@ -431,7 +431,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.3.0+1"
+version = "1.3.1+2"
 
 [[deps.CompositeTypes]]
 git-tree-sha1 = "bce26c3dab336582805503bed209faab1c279768"
@@ -813,9 +813,9 @@ version = "2.2.9"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "e6c4a6407a949e79a9d3f249bf49e6987c80e01f"
+git-tree-sha1 = "f4d39eee89f1e58c26bf447f1d4156c0125d6838"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.8.2+0"
+version = "2.8.3+0"
 
 [[deps.ExprTools]]
 git-tree-sha1 = "d2e49e7efd29719d6f28b891b0e0e159daa9d2b4"
@@ -1165,9 +1165,9 @@ version = "2.1.2+0"
 
 [[deps.HTTP]]
 deps = ["Base64", "CodecZlib", "Dates", "EnumX", "PrecompileTools", "Random", "Reseau", "SHA", "URIs", "UUIDs", "Zlib_jll"]
-git-tree-sha1 = "0a58fbbdee93d132a2fb1159b7f5e1b5c2465e71"
+git-tree-sha1 = "d6e390d1515836237b837fb7b6fca7ba1d752db6"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "2.6.4"
+version = "2.6.5"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
@@ -1461,6 +1461,8 @@ version = "0.11.13"
 [[deps.KiteViewers]]
 deps = ["FileIO", "GLMakie", "GeometryBasics", "Joysticks", "KiteUtils", "LinearAlgebra", "Parameters", "Pkg", "PrecompileTools", "Printf", "Reexport", "Rotations", "StaticArrays", "StructArrays", "Timers"]
 git-tree-sha1 = "ba3472753e0fda3b2436936ad12c763c9fd660b7"
+repo-rev = "main"
+repo-url = "https://github.com/OpenSourceAWE/KiteViewers.jl.git"
 uuid = "2e593061-95e7-45e4-95f4-df0491f2e601"
 version = "0.6.0"
 
@@ -2139,7 +2141,7 @@ version = "5.0.11+0"
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
-version = "3.5.4+0"
+version = "3.5.6+0"
 
 [[deps.OpenSpecFun_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
@@ -2674,9 +2676,9 @@ version = "2.0.4"
 
 [[deps.SciMLOperators]]
 deps = ["Accessors", "Adapt", "ArrayInterface", "DocStringExtensions", "LinearAlgebra", "SciMLPublic"]
-git-tree-sha1 = "54333a8ba01ff383643b44d5a97a4bc2c07d4d2f"
+git-tree-sha1 = "144473d0a737d9c1e1bf2dc5ea824dc1be864f33"
 uuid = "c0aeaf25-5076-4817-a8d5-81caf7dfa961"
-version = "1.26.1"
+version = "1.27.0"
 
     [deps.SciMLOperators.extensions]
     SciMLOperatorsLoopVectorizationExt = "LoopVectorization"
@@ -3226,8 +3228,8 @@ version = "1.28.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "REPL", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "UnPack", "VortexStepMethod", "YAML"]
-git-tree-sha1 = "662c4dcf83df332211b9a3c1f23f7328e9ccf4ec"
-repo-rev = "v1.1.1"
+git-tree-sha1 = "5cd03cde03fee6e118c24d082cb47096f9702b49"
+repo-rev = "feed_forward"
 repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
 version = "1.1.1"
@@ -3270,10 +3272,10 @@ uuid = "e3aaa7dc-3e4b-44e0-be63-ffb868ccd7c1"
 version = "0.1.3"
 
 [[deps.WinchControllers]]
-deps = ["DocStringExtensions", "FiniteDiff", "KiteUtils", "LinearAlgebra", "NLsolve", "Parameters", "Pkg", "StaticArrays", "Statistics", "StructTypes", "Timers", "WinchModels", "YAML"]
-git-tree-sha1 = "c816ab80ec1518676f66261e79374f1e59c27efd"
+deps = ["DiscretePIDs", "DocStringExtensions", "FiniteDiff", "KiteUtils", "LinearAlgebra", "NLsolve", "Parameters", "Pkg", "StaticArrays", "Statistics", "StructTypes", "Timers", "WinchModels", "YAML"]
+git-tree-sha1 = "d3733f89a7460a9c2f71d7ca0baf02cd7358a41b"
 uuid = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
-version = "0.5.6"
+version = "0.6.0"
 
 [[deps.WinchModels]]
 deps = ["DiscretePIDs", "KiteUtils", "Parameters"]

@@ -12,9 +12,10 @@ Everything here is a TUNING parameter of one run. The PLANT the run is flown
 against — including the wind speed (`v_wind`), the length of the run
 (`sim_time`) and the timestep it is integrated with (`sample_freq`) — is the
 system project resolved by
-[`project_file`](@ref), i.e. `data/settings_fig8_200m.yaml`. The POSITION-mode
-winch gains are `data/wc_settings.yaml` (V3Kite's `WC_Settings` struct, this
-package's file) and the geometry is the model's own; the
+[`project_file`](@ref), i.e. `data/settings_fig8_200m.yaml`. Both winches' gains
+are `data/wc_settings.yaml` (one `WCSettings` struct since the 2026-08-16 merge:
+V3Kite's POSITION-mode torque gains and WinchControllers.jl's speed-controller
+tuning, this package's file) and the geometry is the model's own; the
 FORCE-mode winch parameters are here (`winch_*` below), because how compliant the
 winch is during a figure-eight is a choice of the run rather than a property of
 the model. [`winch_force_gains`](@ref) applies the `compliance` scaling to them;
@@ -110,7 +111,7 @@ Add new findings there, not here.
     transient only and does not lag the steady-state force regulation the way
     filtering the law itself would (`docs/fig8_tuning_log.md`, "Lagging the
     square-root law is CLOSED"). Distinct from WinchControllers.jl's OWN
-    `WCSettings.t_startup` (`data/wc_settings_reelout.yaml`), which only holds
+    `WCSettings.t_startup` (`data/wc_settings.yaml`), which only holds
     ITS force limiters in reset for a while and does not ramp anything — see
     that file's comment on the key.
     """
@@ -342,9 +343,11 @@ key errors, a key the file omits leaves `obj`'s existing value (its struct
 default, for a freshly constructed `obj`) untouched.
 
 Purely reflective (`hasfield`/`setfield!`/`fieldtype` on `typeof(obj)`), so it
-works on any mutable struct — [`FC_Settings`](@ref) is built on it, and so is
-`examples/simple_reelout.jl`'s loader for WinchControllers.jl's OWN `WCSettings`,
-without `src/` needing to depend on that package for it.
+works on any mutable struct without `src/` depending on the struct's package.
+[`FC_Settings`](@ref) is built on it. It also loaded WinchControllers.jl's
+`WCSettings` in `examples/simple_reelout.jl` until the 2026-08-16 winch merge
+gave that struct a single file reached through the project's `wc_settings:` key
+(PlanWinchcontrol.md), which is V3Kite's `WC_Settings(filename)`'s job now.
 """
 function load_yaml_fields!(obj, filename::AbstractString, section::AbstractString;
                             path = skc_data_path())
