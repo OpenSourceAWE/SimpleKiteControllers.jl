@@ -36,15 +36,16 @@ fc_settings:
   winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
   winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
-  # --- REEL_OUT winch ---------------------------------------------------------
-  reelout_kv:         0.0408   # v_set = reelout_kv * sqrt(force)                  [-]
-  reelout_f_low:      350.0    # Below: LowerForceController reels in, not the law  [N]
-  reelout_f_high:     7600.0   # Upper limit; keep below the plant's max_force      [N]
-  reelout_v_max:      8.0      # Reel-out speed limit                             [m/s]
+  # --- REEL_OUT winch -----------------------------------------------------
+  # kv/f_low/f_high/v_sat/t_startup and everything else WinchControllers.jl's
+  # own WinchController tunes are in wc_settings_reelout.yaml now, not here —
+  # that is WinchControllers.jl's OWN schema (its `WCSettings`), distinct from
+  # this file's `FC_Settings` schema. The REEL_OUT keys below are this
+  # package's OWN script-level logic in simple_reelout.jl (the l_set
+  # trajectory and phase 5), not WinchControllers.jl fields.
   reelout_l_max:      350.0    # Tether length at which reel-out stops              [m]
   depower_final:      0.328    # Flown from phase 5 (final), once l_max is reached; tuned
                                 # to hold ~3458 N, the pay-out mean force — see the log    [-]
-  reelout_t_startup:  0.25     # Force limiters held in reset this long; does NOT ramp v_set [s]
   reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
   reelout_softstop:   0.0      # Linear decel trigger at the OTHER end; being tuned
                                 # against the power undershoot — see the log        [s]
