@@ -27,7 +27,7 @@ export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
 export winch_state_pct
 
 # Flight-controller settings
-export FC_Settings, winch_force_gains, project_file, fc_settings
+export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid

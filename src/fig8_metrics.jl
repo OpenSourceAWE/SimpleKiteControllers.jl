@@ -245,7 +245,7 @@ of its samples in each of WinchControllers.jl's three states (logged to `var_12`
 by `examples/simple_reelout.jl`): `lower_force_pct` (state 0, the
 `LowerForceController` reeling IN to keep the tether taut), `speed_pct` (state 1,
 the `v_set = kv*sqrt(force)` law itself) and `upper_force_pct` (state 2, the
-`UpperForceController` capping the force at `reelout_f_high`).
+`UpperForceController` capping the force at `WCSettings.f_high`).
 
 Scored over the same window as [`reelout_power`](@ref) — the samples where the
 length setpoint was still growing — because `var_12` only means anything while
@@ -398,6 +398,13 @@ sits in half the wind window — both are close to the path at every instant. Th
 extra criteria require the mean per-lobe azimuth reach on BOTH sides, and the
 elevation span, to be at least `min_span_frac` of what was commanded. They are
 skipped (and the pass count drops accordingly) when the geometry is not given.
+
+Pass `require_final = true` (default `false`) to also check that `sys_state`
+reaches `5` (phase "final") somewhere in the log — `examples/simple_reelout.jl`
+only, whose entry state machine has that phase; a plain `simple_fig8.jl` run's
+`sys_state` never goes past `4` and would fail this check every time, hence the
+default off. Checks that pay-out actually finished (`l_set` reached
+`reelout_l_max`) within the run, not just that the pattern was tracked well.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,
@@ -406,7 +413,7 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             lap_frac = 0.5, min_excursion = deg2rad(5.0),
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
-                            v_steering = 0.2)
+                            v_steering = 0.2, require_final::Bool = false)
     m = fig8_metrics(sl; t_start, settle_time, settle_d_threshold, hf_window,
                      lap_frac, min_excursion,
                      az_center, az_amplitude, el_height, v_steering)
@@ -458,6 +465,9 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
         push!(checks,
               ("elevation span > $(round(min_span_frac * el_height, digits=1))°",
                m.el_span >= min_span_frac * el_height))
+    end
+    if require_final
+        push!(checks, ("phase 5 (final) reached", any(==(5), Int.(sl.sys_state))))
     end
     failed = [name for (name, ok) in checks if !ok]
     if isempty(failed)

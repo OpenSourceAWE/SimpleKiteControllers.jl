@@ -38,6 +38,18 @@ copy of `simple_fig8.jl`'s `fc_settings.yaml` with `compliance: 0` and the
 REEL_OUT keys below, not the shared file (whose `compliance: 0.5` is fig8's
 FORCE-mode tuning) — `system_reelout_150m.yaml`'s `fc_settings:` key names it.
 
+**Two winch controllers, two settings files, neither by the project's
+`wc_settings:` key.** V3Kite's OWN torque loop (`wc` above, `WC_Settings`) still
+reads `data/wc_settings.yaml` the normal way (`WC_Settings(wc_settings(project))`).
+WinchControllers.jl's `WinchController` (`rc`/`rcs`, `WCSettings` — a completely
+different type of the same short name, and NOT V3Kite's) is loaded from this
+package's OWN `data/wc_settings_reelout.yaml` by filename, via
+[`load_yaml_fields!`](@ref) — NOT `WinchControllers.update`, which discovers its
+file via that SAME project key already claimed by V3Kite's file above; calling
+it here would silently leave `rcs` at WinchControllers' package defaults for
+every field the two unrelated schemas happen not to share a name with (which is
+most of them).
+
 # Feasibility
 
 `check_pattern_feasible` is printed at both `l_tether` (the START of the run,
@@ -58,9 +70,17 @@ through `var_09` are as in `simple_fig8.jl`):
 | slot     | quantity                                          |
 |:---------|:---------------------------------------------------|
 | `var_10` | tether length setpoint `l_set` [m]                |
-| `var_11` | REEL_OUT speed setpoint `v_set` [m/s]             |
+| `var_11` | speed setpoint `v_set` [m/s] — REEL_OUT's law from phase 3, or the standalone force-floor guard's reel-IN before that |
 | `var_12` | WinchController state (0 lower-force, 1 speed, 2 upper-force) |
 | `var_13` | force error of the active force limiter [N], NaN in speed control |
+
+`var_12`/`var_13` only mean anything from phase 3 on, when `rc` (the full
+`WinchController`) is actually stepped. Before that, `l_set` is otherwise held
+at the settled length, but the dive can sag tether force well below `rcs.f_low`
+(measured: ~50 N) — a SEPARATE, standalone `LowerForceController` (`guard_lfc`,
+deliberately not `rc`, see its construction comment) monitors force throughout
+phases 0-2 and reels in when needed, logged into `var_10`/`var_11` same as the
+main reel-out law.
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
 1 dive, 2 hold, 3 fig8, 4 settled), plus a fifth phase this script adds: 5 final,
@@ -81,14 +101,12 @@ one `f8_a`/`f8_b` pair per `include`; `OUTPUT_PATH` and `RUN_ARCHIVE` are read a
 cleared the same way, and let those parallel runs keep their logs apart and skip
 the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
 value left over from a sweep must never change an interactive run. The
-REEL_OUT-specific fields
-are `reelout_kv`, `reelout_f_low`, `reelout_f_high`, `reelout_v_max`,
-`reelout_t_startup` (all feed WinchControllers.jl's `WCSettings`),
-`reelout_l_max`, the stop length, `reelout_delay`, how long after phase 3 the
-winch waits before it starts paying out, and `reelout_softstart`, which ramps
-the COMMANDED speed (`v_ff` and the `l_set` integration together, not the law
-inside `WinchController`) linearly from 0 to the computed `v_set` over that
-many seconds — `reelout_t_startup` does not do this, see its own docstring.
+REEL_OUT-specific fields are `reelout_l_max`, the stop length, `reelout_delay`,
+how long after phase 3 the winch waits before it starts paying out, and
+`reelout_softstart`, which ramps the COMMANDED speed (`v_ff` and the `l_set`
+integration together, not the law inside `WinchController`) linearly from 0 to
+the computed `v_set` over that many seconds — `rcs.t_startup`
+(`data/wc_settings_reelout.yaml`) does not do this, see the comment on that key.
 `reelout_softstop` is the OTHER end of pay-out: once the remaining distance
 would finish within that many seconds at the current rate, `v_set` decelerates
 LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
@@ -96,6 +114,11 @@ speed already being flown — avoiding the reel-in transient (a power undershoot
 a hard stop leaves the POSITION loop to correct.
 `depower_final` is flown once phase 5 (final) is reached; its own docstring in
 `src/fc_settings.jl` has the tuned value and where it came from.
+
+WinchControllers.jl's OWN tuning — `kv`, `f_low`, `f_high`, `v_sat`,
+`t_startup`, `mode`, and every LowerForceController/UpperForceController gain
+that used to be invisible package defaults — is `data/wc_settings_reelout.yaml`
+now, not here; see that file's header comment.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
@@ -116,7 +139,9 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
-    get_state, get_f_err
+    get_state, get_f_err, wcsLowerForceLimit,
+    LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
+    set_tracking, set_force, get_v_set_out, calc_vro
 using DiscretePIDs: set_K!
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
@@ -184,8 +209,6 @@ fcs.compliance == 0 ||
            FORCE mode both drive the winch and only one can hold the drum at a time.")
 wc = WC_Settings(wc_settings(project))   # POSITION-mode gains; step! still takes set_length
 wfc = nothing                            # no FORCE-mode winch; warm-up settles at constant length
-@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %.0f m.",
-               fcs.reelout_kv, fcs.reelout_l_max)
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
 # back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
@@ -202,17 +225,33 @@ s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # REEL_OUT controller: built fresh here so its soft-start ramp (t_startup) begins
-# the moment reel-out actually starts (phase 3), not at t = 0. `update(rcs)` is
-# NOT called: it would read this package's wc_settings.yaml, which is in V3Kite's
-# WC_Settings schema, not WinchControllers'. The tuning comes from fcs instead.
-rcs = WCSettings(dt = s.dt)
-rcs.mode = "reelout"
-rcs.kv = fcs.reelout_kv
-rcs.f_low = fcs.reelout_f_low
-rcs.f_high = fcs.reelout_f_high
-rcs.v_sat = fcs.reelout_v_max
-rcs.t_startup = fcs.reelout_t_startup
+# the moment reel-out actually starts (phase 3), not at t = 0. `WinchControllers.update`
+# is NOT called: it discovers its file via the project's `wc_settings:` key, which
+# already names V3Kite's OWN `WC_Settings` file (`data/wc_settings.yaml`) — a
+# silent collision between two unrelated schemas sharing one filename slot.
+# `load_yaml_fields!` (reflective, no WinchControllers dependency in `src/`) loads
+# this package's OWN `data/wc_settings_reelout.yaml` instead, by name, not by
+# project lookup. `dt` there is a placeholder — it is always this run's actual
+# timestep, set again right after the load.
+rcs = load_yaml_fields!(WCSettings(dt = s.dt), "wc_settings_reelout.yaml", "wc_settings")
+rcs.dt = s.dt
 rc = WinchController(rcs)
+@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %.0f m.",
+               rcs.kv, fcs.reelout_l_max)
+
+# Standalone force-floor guard for phases 0-2 (park/dive/hold) — deliberately
+# NOT `rc`. `WinchController`'s own SpeedController is ACTIVE (its integrator
+# accumulating v_set_in - v_act = kv*sqrt(force) - v_act) whenever the force
+# limiters are off, i.e. essentially the whole entry, since nothing before
+# phase 3 is meant to move the drum. Left running "live" while its output is
+# ignored, that integrator winds up over tens of seconds and dumps a large,
+# stale command once something changes — MEASURED: v_reelout spiking to
+# +8 m/s (`rcs.v_sat`, saturated) instead of the intended reel-IN, once `rc`
+# was stepped throughout the entry to fix the force floor below. A bare
+# `LowerForceController` has no SpeedController and no mixer to wind up, so
+# the guard uses one of those instead; `rc` itself stays untouched (and its
+# soft-start clock at 0) until phase 3, exactly as before this guard existed.
+guard_lfc = LowerForceController(rcs)
 
 # Length setpoint: starts at the tether length after settling and warm-up, and
 # grows from the first step of phase 3 onward until it reaches `reelout_l_max`.
@@ -432,6 +471,25 @@ try
                 stop_v_entry * (1 - clamp((t - stop_start) / stop_T, 0.0, 1.0))
             global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
+        elseif phase < 3
+            # Force floor BEFORE reel-out starts. `l_set` is otherwise held flat
+            # at the settled length here, but the dive can sag tether force well
+            # below `rcs.f_low` (measured: ~50 N at t ~ 5.2 s, entry_depower
+            # unloading the wing) with nothing to catch it. `guard_lfc` (built
+            # above, deliberately NOT `rc` — see the comment there) is stepped
+            # by hand through the same setters `calc_v_set` uses internally.
+            set_reset(guard_lfc, false)
+            set_f_set(guard_lfc, rcs.f_low)
+            set_v_sw(guard_lfc, calc_vro(rcs, rcs.f_low) * 1.05)
+            set_v_act(guard_lfc, reel_out_speed(s))
+            set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
+            set_force(guard_lfc, winch_force(s))
+            v_guard = get_v_set_out(guard_lfc)
+            on_timer(guard_lfc)
+            if guard_lfc.active
+                v_set = v_guard
+                global l_set = l_set + v_set * s.dt
+            end
         end
 
         # `v_ff = v_set`: the winch's outer P loop is told the speed being
@@ -447,7 +505,7 @@ try
         # lag the `t_startup` ramp harder — the engagement ring grew from 0.88 to
         # 0.98 m/s and the peak force rose slightly. See Plan.md.
         step!(s; rel_depower, rel_steering, set_length = l_set, v_ff = v_set,
-              speed_limit = fcs.reelout_v_max, acceleration_limit = rcs.max_acc,
+              speed_limit = rcs.v_sat, acceleration_limit = rcs.max_acc,
               vsm_interval = fcs.vsm_interval)
 
         # Report the overspeed rather than the opaque solver abort it causes later.
@@ -529,10 +587,12 @@ end
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
+# require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
+# (which never goes past 4) — checks pay-out actually finished within the run.
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = 0.0,
                    az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
-                   min_span_frac = fcs.min_span_frac)
+                   min_span_frac = fcs.min_span_frac, require_final = true)
 
 summary = OrderedDict{String, Any}()
 run_time = Dates.now()
@@ -670,7 +730,7 @@ else
         "lower_force_pct" => (round(ws.lower_force_pct; digits = 1),
             "% in the LowerForceController, reeling in (state 0)"),
         "upper_force_pct" => (round(ws.upper_force_pct; digits = 1),
-            "% in the UpperForceController, force capped at reelout_f_high (state 2)"),
+            "% in the UpperForceController, force capped at f_high (state 2)"),
         "n_samples" => (ws.n, "sample count in the reeling window"))
 end
 

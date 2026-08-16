@@ -1,31 +1,24 @@
-# Simulation settings of the figure-of-eight run, named by system_fig8_150m.yaml
-# next to it and loaded into a KiteUtils `Settings` by the kite model. Started as
-# a copy of V3Kite's data/settings_reelout.yaml and is read INSTEAD of it, so the
-# plant a run is flown against — wind, tether, KCU, winch, solver — can be varied
-# without editing the model.
-#
-# The length of a run and its timestep live HERE: `sim_time` and `sample_freq`
-# below are what `init` falls back to, and the loop then takes both from the
-# model. `sample_freq` is not a tuning knob — `step!` holds the VSM aero load
-# frozen inside the DAE between updates, and below ~60 Hz that explicit coupling
-# develops a growing 2*dt oscillation at maximum dynamic pressure.
+# Simulation settings of the reel-out run, named by system_reelout_150m.yaml next
+# to it and loaded into a KiteUtils `Settings` by the kite model. A copy of
+# settings_fig8_150m.yaml with a longer sim_time: the run starts at 150 m and
+# pays out to fc_settings.yaml's reelout_l_max (250 m by default) once the
+# pattern is established, on top of the usual ~40 s entry. Start at 150 s and
+# lengthen if a run is still paying out at the end — see Plan.md.
 #
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
-# POSITION-mode winch gains are wc_settings.yaml, and the geometry,
-# polars and VSM settings are loaded by V3Kite from its own data directory and
-# never pass through this file. The wind speed `v_wind` and the initial tether
-# length (`l_tethers`) below are read from HERE alone — fc_settings.yaml has
-# neither field; the example passes both to `init` from this file.
+# POSITION-mode winch gains are wc_settings.yaml (unused by simple_reelout.jl,
+# which flies REEL_OUT instead), and the geometry, polars and VSM settings are
+# loaded by V3Kite from its own data directory and never pass through this file.
 system:
-  log_file: 'fig8_150m' # filename without extension; use / as path delimiter, even on Windows
+  log_file: 'reelout_150m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
-  sim_time: 100.0 # simulation time; ~43 s per lap plus the descent  [sim only]
+  sim_time: 125.0 # simulation time; entry (~40 s) + pay-out + laps at final length [sim only]
   sample_freq: 90 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81
 
 initial:
-  l_tethers: [150.0] # initial tether length       [m]
+  l_tethers: [175.0] # initial tether length       [m]
   v_reel_outs: [0]   # initial reel out speed    [m/s]
   elevations: [73]   # initial elevation angle   [deg]
 
@@ -64,22 +57,22 @@ tether:
 
 winch:
   winch_model: 'TorqueControlledMachine' # or AsynchMachine
-  max_force: 4000 # maximal (nominal) tether force; short overload allowed [N]
+  max_force: 8000 # maximal (nominal) tether force; short overload allowed [N]
   v_ro_max: 8.0          # maximal reel-out speed                        [m/s]
   v_ro_min: -8.0         # minimal reel-out speed (=max reel-in speed)   [m/s]
   drum_radius: 0.1615    # radius of the drum                              [m]
   max_acc: 4.0           # maximal acceleration of the winch            [m/s²]
   gear_ratio: 6.2        # gear ratio of the winch                         [-]
-  inertia_total: 0.204 # total inertia, as seen from the motor/generator [kgm²]
-  f_coulomb: 122.0       # coulomb friction                                [N]
-  c_vf: 30.6             # coefficient for the viscous friction         [Ns/m]
+  inertia_total: 0.408 # total inertia, as seen from the motor/generator [kgm²]
+  f_coulomb: 244.0       # coulomb friction                                [N]
+  c_vf: 61.2             # coefficient for the viscous friction         [Ns/m]
   p_speed: 1.0           # proportional gain of the winch speed controller [-]
   i_speed: 0.1           # integral gain of the winch speed controller     [-]
 
 environment:
-  v_wind: 5.0        # wind speed at reference height         [m/s]
+  v_wind: 6.0        # wind speed at reference height         [m/s]
   upwind_dir: -90.0  # upwind direction                       [deg]
-  wind_vec: [5.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
+  wind_vec: [6.0, 0.0, 0.0] # wind vector at ref height (ENU) [m/s]
   use_wind_vec: true # use wind_vec instead of v_wind/upwind_dir
   temp_ref: 15.0     # temperature at reference height         [°C]
   height_gnd: 0.0    # height of groundstation above see level  [m]

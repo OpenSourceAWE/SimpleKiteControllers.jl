@@ -27,7 +27,7 @@ but never ranked (`data/optimization.yaml` holds both limits):
 
   - **The upper force controller must never engage.** Its share of the reel-out
     window is `reelout.winch_state.upper_force_pct` in the run summary. A shape
-    that pulls harder than `reelout_f_high` has its power set by the force cap,
+    that pulls harder than `f_high` (`data/wc_settings_reelout.yaml`) has its power set by the force cap,
     so what would be ranked is the limiter, not the shape.
   - **`pct_time_within_2pct_of_peak` ≤ 5 %.** The share of the settled window the
     steering command spends within 2 % of its own peak, i.e. clamped against

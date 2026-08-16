@@ -84,21 +84,6 @@ Add new findings there, not here.
     winch_force_min = 100.0
 
     # ---- REEL_OUT winch; mutually exclusive with `compliance > 0` ----------- #
-    """
-    Proportional factor of WinchControllers.jl's REEL_OUT law,
-    `v_set = reelout_kv * sqrt(force)` (its `WCSettings.kv`). Used by
-    `examples/simple_reelout.jl` only.
-    """
-    reelout_kv = 0.06
-    """
-    Lower force limit [N] (`WCSettings.f_low`): below it the
-    LowerForceController reels in rather than holding the square-root law.
-    """
-    reelout_f_low = 350.0
-    "Upper force limit [N] (`WCSettings.f_high`), keep below the plant's `max_force`"
-    reelout_f_high = 3800.0
-    "Reel-out speed limit [m/s] (`WCSettings.v_sat`), also passed as `step!`'s `speed_limit`"
-    reelout_v_max = 8.0
     "Tether length [m] at which reel-out stops and the run holds the final length"
     reelout_l_max = 250.0
     """
@@ -114,26 +99,20 @@ Add new findings there, not here.
     """
     depower_final = 0.328
     """
-    Time [s] `WinchControllers.jl`'s lower/upper force limiters (`WCSettings.t_startup`)
-    are held in reset after reel-out engages, so they cannot activate before the
-    force measurement has settled. It does NOT ramp `v_set` or the commanded
-    speed — see [`reelout_softstart`](@ref) for that. While the winch stays in
-    speed-control state throughout engagement (the usual case), this has no
-    observable effect at all; `WinchControllers`' own default is 0.25 s.
-    """
-    reelout_t_startup = 0.25
-    """
     Soft-start time [s]: the commanded reel-out speed (both `v_ff` and the
     `l_set` integration, i.e. the actual pay-out rate) is ramped linearly from
-    `0` to WinchControllers.jl's `v_set = reelout_kv * sqrt(force)` over this
-    many seconds, counted from the moment reel-out engages (`reelout_delay`
-    after phase 3). `0` disables the ramp (the command jumps straight to the
-    computed value, the pre-2026-08-15 behaviour). Only the value USED is
-    scaled — the winch controller's own internal state (integrators, force
-    limiters) still sees the true, unscaled law throughout, so this shapes the
-    ENGAGEMENT transient only and does not lag the steady-state force
-    regulation the way filtering the law itself would (`docs/fig8_tuning_log.md`,
-    "Lagging the square-root law is CLOSED").
+    `0` to WinchControllers.jl's `v_set = kv * sqrt(force)` over this many
+    seconds, counted from the moment reel-out engages (`reelout_delay` after
+    phase 3). `0` disables the ramp (the command jumps straight to the computed
+    value, the pre-2026-08-15 behaviour). Only the value USED is scaled — the
+    winch controller's own internal state (integrators, force limiters) still
+    sees the true, unscaled law throughout, so this shapes the ENGAGEMENT
+    transient only and does not lag the steady-state force regulation the way
+    filtering the law itself would (`docs/fig8_tuning_log.md`, "Lagging the
+    square-root law is CLOSED"). Distinct from WinchControllers.jl's OWN
+    `WCSettings.t_startup` (`data/wc_settings_reelout.yaml`), which only holds
+    ITS force limiters in reset for a while and does not ramp anything — see
+    that file's comment on the key.
     """
     reelout_softstart = 0.0
     """
@@ -347,19 +326,38 @@ as-is.
 
 The file must have a top-level `fc_settings:` mapping whose keys are the field
 names of `FC_Settings`; any missing key falls back to the struct default, and an
-unknown key is an error.
+unknown key is an error. Built on [`load_yaml_fields!`](@ref).
 """
 function FC_Settings(filename::String; path = skc_data_path())
+    load_yaml_fields!(FC_Settings(), filename, "fc_settings"; path)
+end
+
+"""
+    load_yaml_fields!(obj, filename, section; path = skc_data_path()) -> obj
+
+Set every field `section` (a top-level key in the YAML file `filename`) names
+on the mutable struct `obj`, converting each value to the field's declared
+type; `filename` is resolved under `path` unless already absolute. An unknown
+key errors, a key the file omits leaves `obj`'s existing value (its struct
+default, for a freshly constructed `obj`) untouched.
+
+Purely reflective (`hasfield`/`setfield!`/`fieldtype` on `typeof(obj)`), so it
+works on any mutable struct — [`FC_Settings`](@ref) is built on it, and so is
+`examples/simple_reelout.jl`'s loader for WinchControllers.jl's OWN `WCSettings`,
+without `src/` needing to depend on that package for it.
+"""
+function load_yaml_fields!(obj, filename::AbstractString, section::AbstractString;
+                            path = skc_data_path())
     dict = YAML.load_file(isabspath(filename) ? filename :
-                          joinpath(path, filename))["fc_settings"]
-    fcs = FC_Settings()
+                          joinpath(path, filename))[section]
+    T = typeof(obj)
     for (key, value) in dict
         sym = Symbol(key)
-        hasfield(FC_Settings, sym) ||
-            error("Unknown key \"$key\" in $filename — not a field of FC_Settings.")
-        setfield!(fcs, sym, convert(fieldtype(FC_Settings, sym), value))
+        hasfield(T, sym) ||
+            error("Unknown key \"$key\" in $filename — not a field of $T.")
+        setfield!(obj, sym, convert(fieldtype(T, sym), value))
     end
-    return fcs
+    return obj
 end
 
 """
