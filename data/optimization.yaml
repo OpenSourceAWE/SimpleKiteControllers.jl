@@ -10,7 +10,7 @@
 # simple_reelout.jl run would. Only f8_a and f8_b are overridden per run, so the
 # sweep compares SHAPES and nothing else.
 optimization:
-    max_processes: 6       # simulations run in parallel, one per worker process
+    max_processes: 12       # simulations run in parallel, one per worker process
     # 19 is the FEASIBILITY floor, not a guess: at 18 and below the pattern is
     # tighter than the kite can turn at every height in this range (margins 0.96
     # down to 0.46), so there is nothing below it to sweep. See the margin map in
