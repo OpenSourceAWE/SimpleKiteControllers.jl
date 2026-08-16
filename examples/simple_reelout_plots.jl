@@ -17,12 +17,16 @@ for everything else, which is unchanged here.
 Plus two figures that script has no counterpart for.
 
 `path_3d` draws the flown trajectory in the ENU world frame with GLMakie's
-`Axis3` (raw Makie, not MakieControlPlots, which has no 3D plot), coloured by
-time so the entry phases and the figure-of-eights can be told apart, with the
+`Axis3` (raw Makie, not MakieControlPlots, which has no 3D plot), with the
 ground track underneath it and the straight line to the ground station at the
-origin for depth. The kite position itself is NOT a logged field: it is
-reconstructed here from the logged particle positions exactly as V3Kite's
-`pos_kite` does.
+origin for depth. The curve is coloured by the measured mechanical winch power
+`P_mech = F_tether * v_ro` [kW], so it shows WHERE in the pattern the energy is
+made — signed, so the entry phase's reel-in is the dark end of the colorbar and
+the reeling-out figure-of-eights the bright one. The loops flown after reel-out
+reaches `reelout_l_max` are dark again for the OTHER reason: `v_ro` is zero
+there, so the phase-5 pattern carries no mechanical power at all. The kite position itself is NOT a
+logged field: it is reconstructed here from the logged particle positions
+exactly as V3Kite's `pos_kite` does.
 
 `power` shows the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
@@ -134,7 +138,12 @@ if "path_3d" in plots
     x_kite = Float64.(cop(sl.X[rng]))
     y_kite = Float64.(cop(sl.Y[rng]))
     z_kite = Float64.(cop(sl.Z[rng]))
-    t_kite = Float64.(sl.time[rng])
+    # Mechanical winch power, the same product the `power` figure below plots and
+    # recomputed here so the two blocks stay independent of each other's
+    # selection. Sign included: the entry phase's reel-IN (the force-floor guard)
+    # is negative, and the colorbar's 0 tick separates the two.
+    p_kite = Float64.(getindex.(sl.winch_force[rng], 1) .*
+                      getindex.(sl.v_reelout[rng], 1)) ./ 1000
     fig3 = Figure(size = (1000, 780))
     # `aspect = :data` keeps the three axes on one scale, so the pattern is not
     # stretched by the tether length dominating the x range.
@@ -157,7 +166,7 @@ if "path_3d" in plots
         color = (:black, 0.5), linewidth = 1, linestyle = :dash,
         label = L"\mathrm{tether~(straight)}")
     path = lines!(ax3, x_kite, y_kite, z_kite;
-        color = t_kite, colormap = :viridis, linewidth = 2)
+        color = p_kite, colormap = :viridis, linewidth = 2)
     scatter!(ax3, [x_kite[1]], [y_kite[1]], [z_kite[1]];
         color = :green, markersize = 14, label = L"\mathrm{start}")
     scatter!(ax3, [x_kite[end]], [y_kite[end]], [z_kite[end]];
@@ -165,7 +174,7 @@ if "path_3d" in plots
     scatter!(ax3, [0.0], [0.0], [0.0];
         color = :black, marker = :rect, markersize = 12,
         label = L"\mathrm{ground~station}")
-    Colorbar(fig3[1, 2], path; label = L"\mathrm{time}~[\mathrm{s}]",
+    Colorbar(fig3[1, 2], path; label = L"P_{\mathrm{mech}}~[\mathrm{kW}]",
         labelsize = 18)
     axislegend(ax3; position = :rt, labelsize = 16)
     # Same window handling as MakieControlPlots' figures: a named GLMakie
