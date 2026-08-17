@@ -64,10 +64,11 @@ that is neither.
 ### Optional bypass on the pattern
 
 Path following is a course problem, so from phase 3 (transition and figure eight)
-onwards the speed schedule can be bypassed and the course fed back at any speed:
+onwards the speed schedule can be bypassed (`fig8_pure_course`) and the course fed
+back at any speed:
 
 $$
-w_\chi = 1 \quad \text{if } \mathtt{fig8\_pure\_course} \wedge \text{phase} \ge 3
+w_\chi = 1 \quad \text{if bypass enabled} \wedge \text{phase} \ge 3
 \tag{3}
 $$
 
