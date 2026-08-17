@@ -66,7 +66,7 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
 VIEWER_INTERVAL = 3     # draw every n-th logged row
 REPLAY_TIME_LAPSE = 3.0 # 1 = realtime, N = N times faster
-RECORD_VIDEO = true     # true: write output/<log_file>.mp4 instead of the automatic replay
+RECORD_VIDEO = false     # true: write output/<log_file>.mp4 instead of the automatic replay
 VIDEO_MAX_FPS = 60       # frames above this are dropped, at the same playback speed
 VIDEO_SIZE = (1820, 1024) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
