@@ -114,10 +114,8 @@ AWETrim client described above.
 - [docs/reelout_state_machine.md](docs/reelout_state_machine.md) — the flight phases and winch
   states of `examples/simple_reelout.jl`, with the transition conditions
 - [docs/fig8_tuning_log.md](docs/fig8_tuning_log.md) — the dated record of the parameter
-  experiments behind the shipped tuning, including which levers turned out to be dead ends
-- [docs/sysimage_notes.md](docs/sysimage_notes.md) and
-  [docs/ScratchUsage.md](docs/ScratchUsage.md) — startup cost and where the generated model and
-  settling caches land
+  experiments behind the shipped tuning, including which levers turned out to be dead ends and
+  [docs/ScratchUsage.md](docs/ScratchUsage.md) — startup cost and where the generated model and settling caches land
 - [docs/TrajectoryOptimization.md](docs/TrajectoryOptimization.md) — notes on the trajectory
   optimization test cases
 
