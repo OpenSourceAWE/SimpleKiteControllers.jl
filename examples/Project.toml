@@ -32,14 +32,14 @@ WinchControllers = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {rev = "feed_forward", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
+V3Kite = {rev = "v1.2.0", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
 
 [compat]
 KiteViewers = "0.6"
 MakieControlPlots = "0.1.12"
 RuntimeGeneratedFunctions = "0.5.24"
 SymbolicAWEModels = "~0.13"
-V3Kite = "1.1.1"
+V3Kite = "1.2.0"
 WinchControllers = "0.6"
 
 [extras]
