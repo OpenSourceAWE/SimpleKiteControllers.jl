@@ -9,7 +9,7 @@ This package provides:
 
 Planned:
 - a controller for flying circles
-- a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as their is sufficient wind
+- a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as there is sufficient wind
 
 ## This package provides
 - the figure-of-eight path-following guidance: the types `FigureEightController` and
@@ -73,15 +73,53 @@ This function will show the following menu:
 
 ```text
 Choose example to run or `q` to quit: 
- > select_project.jl     - choose which system project (150m/200m/300m) to fly
-   select_sim_time.jl    - choose the simulation time (default or a specific value)
-   select_plots.jl       - choose which figures to show (pattern/3d path/time series/aerodynamics)
-   simple_fig8.jl        - fly the figure-of-eight pattern (minutes!)
-   simple_fig8_plots.jl  - plot the last logged run of active project
-   optimize_path.jl      - Julia client for the AWETrim reelout flight-path optimizer
+ > select_turbulence.jl    - choose the turbulence level init() applies (default or 0.0…1.0)
+   select_project.jl       - choose which system project (150m/200m/300m) to fly
+   select_sim_time.jl      - choose the simulation time (default or a specific value)
+   select_plots.jl         - choose figures: pattern/3d path/time series/power/aerodynamics
+   simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)
+   simple_fig8_live.jl     - the same run, shown live in the 3D viewer (minutes!)
+   simple_fig8_plots.jl    - plot the last logged run of active project
+   simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)
+   simple_reelout_plots.jl - plot the last logged reel-out run
+   simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer
+   optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)
+   optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer
+   export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv
    quit
 ```
-The first three entries allow you to change the simulation settings. The script `simple_fig8.jl` runs the simulation and displays the results. The script `simple_fig8_plots.jl` allows you to analyse the results of simulations you run in the past. 
+The menu shows ten entries at a time and scrolls; the four `select_*` entries change the
+simulation settings, which are persisted to `data/gui.yaml` and read fresh by every run
+rather than cached in a REPL global.
+
+The runs themselves come in two families. `simple_fig8.jl` flies the pattern at constant
+tether length and plots the results when it is done; `simple_fig8_live.jl` is the same
+run shown in the 3D viewer while it flies, and `simple_fig8_plots.jl` re-plots a log that
+is already on disk. `simple_reelout.jl` flies the same entry and pattern but reels the
+tether out under load until `reelout_l_max`, with `simple_reelout_plots.jl` and
+`simple_reelout_play.jl` for its logs. Both families write an Arrow log to `output/`,
+named after the active project's `log_file` setting.
+
+`optimize_fig8.jl` sweeps the pattern shape by driving `simple_reelout.jl` in parallel
+worker processes — hours, not minutes, and resumable. `optimize_path.jl` is the separate
+AWETrim client described above.
+
+## Documentation
+
+- [docs/control_algorithm.md](docs/control_algorithm.md) — how the controller works, from the
+  optimal trajectory through path following and the steering set point to the reel-out speed,
+  plus what is and is not verified by the test suite
+- [docs/thesis.md](docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
+  from the reference formulation
+- [docs/reelout_state_machine.md](docs/reelout_state_machine.md) — the flight phases and winch
+  states of `examples/simple_reelout.jl`, with the transition conditions
+- [docs/fig8_tuning_log.md](docs/fig8_tuning_log.md) — the dated record of the parameter
+  experiments behind the shipped tuning, including which levers turned out to be dead ends
+- [docs/sysimage_notes.md](docs/sysimage_notes.md) and
+  [docs/ScratchUsage.md](docs/ScratchUsage.md) — startup cost and where the generated model and
+  settling caches land
+- [docs/TrajectoryOptimization.md](docs/TrajectoryOptimization.md) — notes on the trajectory
+  optimization test cases
 
 ## TODO
 - add examples for using the parking controller
