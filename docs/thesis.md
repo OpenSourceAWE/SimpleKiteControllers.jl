@@ -46,11 +46,12 @@ $\omega$-schedule would wrongly fall back to heading there.
 
 ### Course sign convention
 
-The course taken from `SysState` is corrected by $\pi$ before it enters (1):
+The course taken from `SysState` is corrected by $\pi$ before it enters (1), in
+[`calc_steering`](../src/course_controller.jl):
 
 ```julia
-course = wrap_to_pi(Float64(s.sys_state.course) + pi)
-fb     = heading + w_course * wrap_to_pi(course - heading)
+course_shifted = wrap2pi(course + ccs.course_offset)   # course_offset defaults to π
+psi_prime = heading + w_course * wrap2pi(course_shifted - heading)
 ```
 
 The raw tangent-frame course has its zero pointing *away* from zenith, whereas

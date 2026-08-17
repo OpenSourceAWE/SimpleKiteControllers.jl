@@ -15,6 +15,10 @@ Planned:
 - the figure-of-eight path-following guidance: the types `FigureEightController` and
   `FigureEightSettings` and the functions `figure_eight_path`, `calc_attractor`,
   `navigate_fig8`, `set_path_center!`, `path_tangent`
+- the figure-of-eight inner loop: the types `CourseController` and
+  `CourseControllerSettings`, driven by `calc_steering` and `set_phase!` — the
+  heading/course PID, entry state machine and `rel_depower`, shared by all three
+  `examples/simple_fig8*.jl` scripts
 - the curvature feasibility check `check_pattern_feasible` (with `min_turn_radius`,
   `path_min_radius`, `path_radius_profile`) — a pattern tighter than the kite's minimum
   turn radius cannot be tracked at any PID tuning, so this is worth running before a
@@ -81,9 +85,6 @@ The first three entries allow you to change the simulation settings. The script 
 
 ## TODO
 - add examples for using the parking controller
-- the figure-of-eight path follower ([Fernandes_2022](https://www.mdpi.com/1996-1073/15/4/1390))
-  is implemented, but the entry state machine, the winch force mode and the heading PID
-  still live in `examples/simple_fig8.jl` rather than in a controller type
 
 ## Related
 A fully working set of flight path controllers and planners can be found here: [KiteControllers.jl](https://github.com/aenarete/KiteControllers.jl)

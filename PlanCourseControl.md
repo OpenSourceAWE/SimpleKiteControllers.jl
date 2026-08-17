@@ -95,7 +95,7 @@ Naming: `CourseController` (the draft's title) rather than `HeadingController` �
 tracks a course; the *heading* only appears inside ψ'. Reusing `calc_steering` by
 dispatch keeps one verb for "angles in, `rel_steering` out" across both controllers.
 
-### Decision 3 — fuse ψ' inside the controller (recommended), not outside
+### Decision 3 — fuse ψ' inside the controller (decided: yes), not outside
 
 Taking `psi_prime` ready-made, as the draft proposes, is the smaller interface, but it
 leaves in the scripts exactly the four lines that carry the documented divergence bug:
@@ -115,11 +115,7 @@ has its zero pointing away from zenith; 0 for a source already in the bearing
 convention". That is one constant of a frame convention, not a kite-model dependency,
 and it stops the correction being copy-pasted three times.
 
-*If you prefer the draft's narrower interface:* pass `psi_prime` and keep `course_offset`
-and the blend in the scripts. Everything else in this plan is unchanged; only the
-`ψ'` testset drops out.
-
-### Decision 4 — the entry state machine moves too (recommended)
+### Decision 4 — the entry state machine moves too (decided: yes)
 
 The limiter and the gain schedule are phase-dependent, so a controller that maps only
 `(chi_set, ψ') → rel_steering` cannot reproduce what is flown. Either the phase comes in
@@ -266,6 +262,15 @@ number and not just as a green suite.
 A metric that moves means the move changed behaviour; find out which of the substitutions
 did it before continuing. Do not re-tune anything in this plan.
 
+**"Bit-identical" in practice, confirmed at stage 1 (2026-08-17):** `wrap_to_pi`
+(V3Kite) and `wrap2pi` (KiteUtils) agree to ~1e-16 per call, not exactly — different
+boundary handling at the ±π edge — and that noise floor gets amplified over ~9000
+closed-loop steps into ~1% differences in PEAK/EXTREME metrics (max cross-track
+error, worst-lobe reach) while RMS/mean/laps/elevation/force and every pass/fail
+criterion land identically. Confirmed as the expected bar for every later stage: same
+criteria pass, RMS/mean/laps/elevation/force exact, peaks within ~1%. A LARGER move,
+or one that changes RMS/mean/laps/criteria, is a real regression and must be run down.
+
 ## Out of scope
 
 - **NDI convergence with `ParkingController`.** Both controllers solve the same problem
@@ -278,11 +283,8 @@ did it before continuing. Do not re-tune anything in this plan.
 - **`FigureEightController`**, which keeps its current interface; the course controller
   receives `dmin` and `tangent` as plain numbers, so the two stay independently testable.
 
-## Open questions
+## Open questions — resolved 2026-08-17
 
-1. Decision 3 — fuse ψ' inside (recommended) or take it as an input, as the draft has it?
-2. Decision 4 — move the state machine (recommended) or pass the phase in?
-3. Should `rel_depower` really come out of the course controller? It is phase-driven, so
-   it falls out naturally, but "course controller" then also commands the depower tape.
-   The alternative is exposing `phase` and letting the scripts keep their own two-line
-   `rel_depower` ternary.
+1. Decision 3 — fuse ψ' inside the controller. **Yes.**
+2. Decision 4 — move the state machine into the controller. **Yes.**
+3. `rel_depower` comes out of the course controller as a second return value. **Yes.**

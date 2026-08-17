@@ -12,6 +12,9 @@ using Printf: @printf, @sprintf
 export ParkingController, ParkingControllerSettings
 export linearize, calc_steering, navigate
 
+# Figure-of-eight inner-loop (course) controller
+export CourseController, CourseControllerSettings, set_phase!
+
 # Figure-of-eight guidance
 export FigureEightSettings, FigureEightController
 export figure_eight_path, calc_attractor, navigate_fig8, set_path_center!
@@ -58,6 +61,8 @@ include("turn_rate_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")
 include("fc_settings.jl")
+# After fc_settings.jl: the FC_Settings constructor is defined with the type it constructs.
+include("course_controller.jl")
 # After fc_settings.jl: OptSettings is loaded the same way and documents itself
 # against FC_Settings, whose fields the sweep overrides.
 include("optimization.jl")

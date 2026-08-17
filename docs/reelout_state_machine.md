@@ -3,10 +3,13 @@
 Reference for the phases of `examples/simple_reelout.jl` and the conditions that
 move between them. There are **two** state machines running side by side:
 
-1. The **flight phase** (`phase`, logged as `sys_state.sys_state`), which
-   sequences the entry manoeuvre and decides what steering gain, depower and
-   winch behaviour is in force. Phases 0-4 are shared with `simple_fig8.jl`;
-   phase 5 is this script's addition.
+1. The **flight phase** (`phase`, logged as `sys_state.sys_state`), sequencing
+   the entry manoeuvre and deciding what steering gain, depower and winch
+   behaviour is in force. Phases 0-4 live in
+   [`src/course_controller.jl`](../src/course_controller.jl)'s `CourseController`
+   (PlanCourseControl.md, 2026-08-17) and are shared with `simple_fig8.jl` and
+   `simple_fig8_live.jl`, which never advance past 4; phase 5 is winch-triggered
+   and stays this script's business, applied through `set_phase!(cc, 5)`.
 2. The **winch state**, which is partly the same `phase` (it gates *whether* the
    winch reels out) and partly `WinchControllers.jl`'s own three-state controller
    (logged as `var_12`), which decides *how fast*.
@@ -42,16 +45,19 @@ guard is no longer tested.
 
 | from | to | condition | source |
 |:-----|:---|:----------|:-------|
-| 0 park | 1 dive | `t >= fcs.park_time` — the parking time has elapsed. Nothing about the kite's state is checked; the park exists only to let the settling/init transients decay. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
-| 1 dive | 2 hold | `el_deg <= fcs.el_center + fcs.dive_el_margin` — the kite has descended to within `dive_el_margin` (7°) of the pattern-centre elevation. `hold_start` is latched to the current time here. | [simple_reelout.jl:356](../examples/simple_reelout.jl#L356) |
-| 2 hold | 3 transition | `t - hold_start >= fcs.hold_time` — the horizontal hold has lasted `hold_time` (0.8 s), so the kite arrives flat rather than still descending. `transition_start` is latched here; `reelout_delay` counts from it. | [simple_reelout.jl:359](../examples/simple_reelout.jl#L359) |
-| 3 transition | 4 fig8 | `dmin < fcs.fig8_d_gate` — the cross-track error to the pattern drops below 5° for the **first** time. Purely a milestone: it changes nothing in how the kite is flown or how the winch behaves; it only marks the start of the window the results section reports `v_app` over. | [simple_reelout.jl:362](../examples/simple_reelout.jl#L362) |
-| 3 or 4 | 5 final | `l_set >= fcs.reelout_l_max` — the length setpoint has reached the reel-out target. | [simple_reelout.jl:367](../examples/simple_reelout.jl#L367) |
+| 0 park | 1 dive | `t >= ccs.park_time` — the parking time has elapsed. Nothing about the kite's state is checked; the park exists only to let the settling/init transients decay. | [course_controller.jl:208](../src/course_controller.jl#L208) |
+| 1 dive | 2 hold | `elevation <= ccs.el_center + ccs.dive_el_margin` — the kite has descended to within `dive_el_margin` (7°) of the pattern-centre elevation. `hold_start` is latched to the current time here. | [course_controller.jl:210](../src/course_controller.jl#L210) |
+| 2 hold | 3 transition | `t - hold_start >= ccs.hold_time` — the horizontal hold has lasted `hold_time` (0.8 s), so the kite arrives flat rather than still descending. This script separately latches its own `transition_start` on the same edge (comparing the phase `calc_steering` returns against the phase before the call); `reelout_delay` counts from it. | [course_controller.jl:213](../src/course_controller.jl#L213), [simple_reelout.jl:351](../examples/simple_reelout.jl#L351) |
+| 3 transition | 4 fig8 | `dmin < ccs.fig8_d_gate` — the cross-track error to the pattern drops below 5° for the **first** time. Purely a milestone: it changes nothing in how the kite is flown or how the winch behaves; it only marks the start of the window the results section reports `v_app` over. | [course_controller.jl:215](../src/course_controller.jl#L215) |
+| 3 or 4 | 5 final | `l_set >= fcs.reelout_l_max` — the length setpoint has reached the reel-out target. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
 
 Two details of the 3/4 -> 5 transition:
 
-- It is tested **outside** the `elseif` ladder, so it can fire on the *same step*
-  as a 3 -> 4 transition. Reel-out finishing does not wait for settling.
+- It is applied by this script, **after** `calc_steering` returns, via
+  `set_phase!(cc, 5)` — which can fire on the *same step* as a 3 -> 4 transition
+  the ladder inside `calc_steering` just made, since the script also overrides
+  the just-returned `rel_depower` to `depower_final` in that case. Reel-out
+  finishing does not wait for settling.
 - It is reachable from phase 3 directly. A run whose tracking never gets inside
   `fig8_d_gate` (so phase 4 never happens) still reaches `final` once the
   tether is reeled out — which is why the results section gates the reel-out
@@ -159,13 +165,16 @@ reeling window (`winch_state_pct`).
 
 ## 5. Latched variables
 
-State the machine carries between steps, all set exactly once:
+State the machine carries between steps, all set exactly once. `cc.phase`,
+`cc.hold_start` and `cc.entry_sign` live on the `CourseController` (shared with
+`simple_fig8.jl`/`simple_fig8_live.jl`); the rest are this script's own, since
+reel-out itself is out of `CourseController`'s scope:
 
 | variable | set at | used for |
 |:---------|:-------|:---------|
-| `phase` | every transition | everything above |
-| `hold_start` | 1 -> 2 | the `hold_time` timer |
-| `transition_start` | 2 -> 3 | the `reelout_delay` and `reelout_softstart` timers |
+| `cc.phase` | every transition, plus `set_phase!(cc, 5)` here | everything above |
+| `cc.hold_start` | 1 -> 2 | the `hold_time` timer |
+| `transition_start` | 2 -> 3 (detected here by comparing `cc.phase` before/after the `calc_steering` call) | the `reelout_delay` and `reelout_softstart` timers |
 | `stop_start`, `stop_v_entry`, `stop_T` | soft-stop latch | the linear deceleration |
-| `entry_sign` | first time the descent limiter clips near ±180° | keeping the limited course's sign stable through the wrap |
+| `cc.entry_sign` | first time the descent limiter clips near ±180° | keeping the limited course's sign stable through the wrap |
 | `l_set` | every reel-out/guard step | the position setpoint handed to `step!`, and the 3/4 -> 5 guard |

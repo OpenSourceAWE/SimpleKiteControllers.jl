@@ -103,19 +103,25 @@ that caps the commanded steepness while the kite is far off the path, blended in
 
 ## 3. Steering set point from position and desired course
 
-The inner loop turns the commanded course into `rel_steering ∈ [-max_steering, max_steering]`.
+The inner loop turns the commanded course into `rel_steering ∈ [-max_steering, max_steering]`,
+plus the entry state machine and `rel_depower` alongside it — all in
+[`src/course_controller.jl`](../src/course_controller.jl)'s `CourseController`/`calc_steering`,
+called once per step from `examples/simple_fig8.jl`, `simple_fig8_live.jl` and
+`simple_reelout.jl` alike (PlanCourseControl.md, 2026-08-17: lifted out of the three scripts,
+which had carried it as a byte-identical copy each).
 
 **The feedback angle** is not simply the heading. At low kite speed the heading is the meaningful
 quantity, at high speed the course is, and the two differ by the V3's ~13° drift angle. The
 controller blends them by kite speed between `v_kite_heading` and `v_kite_course`
 (`fig8_pure_course` forces pure course from phase 3 on). `SysState.course` needs
-`wrap_to_pi(course + pi)` first — its raw zero points away from zenith, and feeding it unshifted
-is positive feedback that diverges the run. The error is then `wrap_to_pi(fb - chi_cmd)`, formed
-here because `DiscretePIDs` does not wrap, and handed to the PID against a zero reference.
+`course_offset` (π by default) added first — its raw zero points away from zenith, and feeding it
+unshifted is positive feedback that diverges the run. The error is then `wrap2pi(psi_prime -
+chi_cmd)`, formed here because `DiscretePIDs` does not wrap, and handed to the PID against a zero
+reference.
 
-**The PID** (`create_heading_pid`, V3Kite) is a PD controller by default — `heading_i` is `false`
-— with a filtered derivative (`heading_d_n`; the `DiscretePIDs` default of 10 rings) and output
-limits at `±max_steering`. Its gain is scheduled twice:
+**The PID** (built directly from `DiscretePID`; no kite-model dependency) is a PD controller by
+default — `heading_i` is `false` — with a filtered derivative (`heading_d_n`; the `DiscretePIDs`
+default of 10 rings) and output limits at `±max_steering`. Its gain is scheduled twice:
 
 - by **apparent wind**, `K = heading_p · v_app_ref/v_app`. The plant's turn rate is
   `ψ̇ ≈ c1·v_a·u_s`, so the loop gain is constant only if `K ∝ 1/v_app`. Only the product
@@ -216,6 +222,13 @@ below plus regression runs against the full nonlinear model.
 - **Guidance** — [`test/test_fig8_controller.jl`](../test/test_fig8_controller.jl) covers both
   crossing guards directly (`branch_disambiguation`, `search_window_continuity`), which are the
   failure modes that flip the commanded course, plus `turn_radius_feasibility`.
+- **Inner loop (course controller)** —
+  [`test/test_course_controller.jl`](../test/test_course_controller.jl) pins the traps that used
+  to live only in comments across three copies: bumpless park engagement, the `1/v_app` and
+  `entry_gain` gain schedule, the `±max_steering` clamp, the wrapped error at the ±180° cut, the
+  ψ' blend's endpoints and `course_offset`, the descent limiter's gate/blend/latch, the ladder's
+  phase transitions (including `set_phase!`'s "never backwards" and same-step-as-3→4 promotion to
+  5), and the unnegated `rel_steering` sign convention — plus a hand-checked numeric fixture.
 - **Closed loop against the nonlinear model** — V3Kite's `test/test_parking_ripple.jl` flies 600
   steps and gates the detrended AoA ripple RMS at 1.5× a measured 0.0064° baseline, reporting the
   spectral peak as well, so a lightly damped mode coming back is visible as a frequency and not

@@ -48,5 +48,6 @@ using Test
 
     # Pure geometry: no simulation and no kite model, so this runs in under a second.
     include("test_fig8_controller.jl")
+    include("test_course_controller.jl")
 end
 nothing

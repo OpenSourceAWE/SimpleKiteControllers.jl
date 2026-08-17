@@ -11,10 +11,11 @@ the section "The live viewer" is what the two files differ by, and a diff agains
 `simple_fig8.jl` should show nothing else.
 
 The kite starts parked at ~73° and reaches the pattern through a four-phase
-entry (park -> dive -> hold -> transition). Once engaged, the L0
-attractor guidance (`src/figure_eight_controller.jl`) commands a course and a PID
-(as in V3Kite's `simple_sinus.jl` / `simple_auto_parking.jl`) tracks it with the
-steering tape.
+entry (park -> dive -> hold -> transition). Once engaged, the L0 attractor
+guidance (`src/figure_eight_controller.jl`) commands a course and the inner
+loop (`src/course_controller.jl`'s `CourseController`) tracks it with the
+steering tape — that file also owns the entry state machine and `rel_depower`;
+this script calls it once per step and applies what it returns.
 
 # The live viewer
 
@@ -131,20 +132,17 @@ Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 
 `bearing` carries `chi_cmd`, the course the loop actually tracks, so
 `course - bearing` is the path-following error; the unmodified guidance course
-is kept in `var_05`. The feedback angle the PID regulates is heading at low
-kite speed and course at high (`v_kite_heading`/`v_kite_course`, scheduled on
-`|vel_kite|`), so `var_06` equals `heading - bearing` at low speed and
-`course - bearing` at high. In FIG8 mode that schedule is bypassed and the
-course is fed back at any speed (`fig8_pure_course`), so `var_08` is 1
-throughout phase 3 and the schedule governs the entry only.
+is kept in `var_05`. `var_06`/`var_08` are `CourseController`'s regulated error
+and heading/course blend weight — see that file's `calc_steering` docstring for
+the feedback-angle fusion and gain schedule behind them.
 
-The `sys_state` field carries the ENTRY STATE MACHINE (0 park, 1 dive, 2 hold,
-3 transition), using the same codes as the reference controller's log so both can
-be read with the same scripts, plus a fourth state added here: 4 (fig8), which
-phase 3 advances to the first time the cross-track error drops below
-`fig8_d_gate`. Control is unaffected — 3 and 4 are flown identically — it
-only marks when the pattern was first tracked closely. `simple_fig8_plots.jl`
-draws it as the bottom panel of the time-series figure.
+The `sys_state` field carries `CourseController`'s ENTRY STATE MACHINE (0 park,
+1 dive, 2 hold, 3 transition, 4 fig8 — this script never reaches 5, which is
+`simple_reelout.jl`'s winch-triggered addition), using the same codes as the
+reference controller's log so both can be read with the same scripts. Control
+is unaffected by the 3 -> 4 step — both are flown identically — it only marks
+when the pattern was first tracked closely. `simple_fig8_plots.jl` draws it as
+the bottom panel of the time-series figure.
 
 # Parameters
 
@@ -222,7 +220,6 @@ end
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
-using DiscretePIDs: set_K!
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm
@@ -371,17 +368,7 @@ else
                    fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
 end
 
-# N is the derivative filter's maximum gain; the DiscretePIDs default of 10 rings.
-heading_pid = create_heading_pid(;
-    K = fcs.heading_p, Ti = fcs.heading_i, Td = fcs.heading_d, N = fcs.heading_d_n,
-    dt = s.dt, umin = -fcs.max_steering, umax = fcs.max_steering)
-
-entry_sign = 0              # latched sign of the entry descent limiter (0 = unset)
-
-# 0 = park, 1 = dive, 2 = hold, 3 = transition (figure-eight guidance engaged), 4 = fig8
-# (phase 3 with cross-track error below fig8_d_gate for the first time).
-phase = 0
-hold_start = NaN            # [s] time the hold began
+cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
 
 # ==================== LIVE VIEWER ======================== #
 
@@ -439,73 +426,19 @@ try
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))
 
-        # Entry state machine: advances on elevation and time, never backwards.
-        local el_deg = rad2deg(Float64(s.sys_state.elevation))
-        if phase == 0 && t >= fcs.park_time
-            global phase = 1
-        elseif phase == 1 && el_deg <= fcs.el_center + fcs.dive_el_margin
-            global phase = 2
-            global hold_start = t
-        elseif phase == 2 && t - hold_start >= fcs.hold_time
-            global phase = 3
-        elseif phase == 3 && dmin < fcs.fig8_d_gate
-            global phase = 4
-        end
-
-        # Entry descent limiter, active only while the kite is far off the path.
+        # Entry state machine, descent limiter, open-loop entry override, feedback
+        # fusion, PID and rel_depower: see CourseController.
         heading = Float64(s.sys_state.heading)
-        chi_cmd = chi_set
-        # 1 = fully limited, 0 = raw guidance, linear over entry_d_blend above the gate.
-        w_lim = fcs.entry_d_blend > 0 ?
-                clamp((dmin - fcs.entry_d_gate) / fcs.entry_d_blend, 0.0, 1.0) :
-                (dmin > fcs.entry_d_gate ? 1.0 : 0.0)
-        if w_lim > 0 && abs(chi_set) > deg2rad(fcs.entry_chi_max)
-            # Only the STEEPNESS is limited; near the ±180° cut the sign is noise.
-            tang = path_tangent(fec)
-            entry_sign == 0 && (global entry_sign = tang >= 0 ? 1 : -1)
-            sgn = abs(chi_set) < pi - deg2rad(fcs.entry_cut_margin) ?
-                  (chi_set >= 0 ? 1 : -1) : entry_sign
-            chi_lim = sgn * deg2rad(fcs.entry_chi_max)
-            # Wrapped difference: a plain convex combination sweeps the long way at ±180°.
-            chi_cmd = wrap_to_pi(chi_set + w_lim * wrap_to_pi(chi_lim - chi_set))
-        end
-
-        # Open-loop entry: overrides the guidance for the dive and the hold.
-        if phase == 1
-            chi_cmd = deg2rad(fcs.chi_dive)
-        elseif phase == 2
-            chi_cmd = deg2rad(fcs.chi_hold)
-        end
-
-        # Feedback angle: heading at low kite speed, course at high (see FC_Settings).
         local v_kite = norm(s.sys_state.vel_kite)
-        w_course = if fcs.fig8_pure_course && phase >= 3
-            1.0
-        else
-            clamp((v_kite - fcs.v_kite_heading) /
-                  (fcs.v_kite_course - fcs.v_kite_heading), 0.0, 1.0)
-        end
-        # +π: the raw tangent-frame course has its zero pointing AWAY from zenith.
-        course = wrap_to_pi(Float64(s.sys_state.course) + pi)
-        fb = heading + w_course * wrap_to_pi(course - heading)
-
-        # DiscretePID does not wrap, so the error is formed here against a zero reference.
-        err = wrap_to_pi(fb - chi_cmd)
-        # Turn rate ~ u_s * v_app, so K ~ 1/v_app, on APPARENT wind: that is the plant gain.
-        v_app = max(Float64(s.sys_state.v_app), fcs.v_app_min)
-        K_phase = phase >= 3 ? fcs.heading_p : fcs.entry_gain * fcs.heading_p
-        set_K!(heading_pid, K_phase * fcs.v_app_ref / v_app, 0.0, err)
-        # Park: zero steering, but the PID is still stepped so engagement is bumpless.
-        rel_steering = if phase == 0
-            heading_pid(0.0, 0.0, 0.0)
-            0.0
-        else
-            heading_pid(0.0, err, 0.0)
-        end
-
-        # entry_depower during the dive and hold, depower_setpoint elsewhere.
-        rel_depower = (phase == 1 || phase == 2) ? fcs.entry_depower :
-                                                   fcs.depower_setpoint
+        local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
+            Float64(s.sys_state.course);
+            t, elevation = Float64(s.sys_state.elevation),
+            v_kite, v_app = Float64(s.sys_state.v_app),
+            dmin, tangent = path_tangent(fec))
+        chi_cmd = cc.chi_cmd
+        w_lim = cc.w_lim
+        w_course = cc.w_course
+        err = cc.err
 
         # Force mode reels out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
