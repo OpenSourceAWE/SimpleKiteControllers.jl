@@ -6,12 +6,12 @@ This controller is controlling $\psi'$, a linear combination of heading and cour
 defined as:
 
 $$
-\psi' = \psi + w_\chi \cdot \mathrm{wrap}_\pi(\chi - \psi)
+\psi' = \psi + w_\chi \cdot {\mathrm{wrap}}_\pi(\chi - \psi)
 \tag{1}
 $$
 
 where $\psi$ is the heading, $\chi$ the course, and
-$\mathrm{wrap}_\pi(\cdot)$ maps an angle onto $[-\pi, \pi)$. The wrapping is
+${\mathrm{wrap}}_\pi(\cdot)$ maps an angle onto $[-\pi, \pi)$. The wrapping is
 not cosmetic: a plain convex combination $(1-w_\chi)\psi + w_\chi\chi$ would sweep
 the long way round whenever the two angles straddle the $\pm\pi$ branch cut.
 Written this way, $\psi'$ is a pure heading signal at $w_\chi = 0$, a pure course
@@ -22,7 +22,7 @@ between.
 
 Unlike the reference formulation below, the weight is **not** scheduled on the
 angular velocity in the small-earth projection, but directly on the kite speed
-$v_k = \lVert \mathbf{v}_\mathrm{kite} \rVert$:
+$v_k = \lVert {\mathbf{v}}_\mathrm{kite} \rVert$:
 
 $$
 w_\chi = \mathrm{clamp}\left(
@@ -85,7 +85,7 @@ $\psi'$ is the *regulated* variable, not the setpoint: the heading PID is driven
 by the wrapped error against the commanded course $\chi_\mathrm{cmd}$,
 
 $$
-e = \mathrm{wrap}_\pi(\psi' - \chi_\mathrm{cmd})
+e = {\mathrm{wrap}}_\pi(\psi' - \chi_\mathrm{cmd})
 \tag{4}
 $$
 
@@ -113,7 +113,7 @@ The two remaining differences from the reference are deliberate:
 
 | | Reference (6.16/6.17) | This package |
 |---|---|---|
-| Scheduling variable | angular velocity $\omega$ in the small earth projection | kite speed $\lVert\mathbf{v}_\mathrm{kite}\rVert$ |
+| Scheduling variable | angular velocity $\omega$ in the small earth projection | kite speed $\lVert{\mathbf{v}}_\mathrm{kite}\rVert$ |
 | Weight limit | $k_\chi \le 0.85$ | $w_\chi \le 1$ |
 | Interpolation | nlerp via $\mathrm{atan2}$ | slerp via wrapped difference |
 
