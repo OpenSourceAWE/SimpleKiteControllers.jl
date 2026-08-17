@@ -6,12 +6,12 @@ This controller is controlling $\psi'$, a linear combination of heading and cour
 defined as:
 
 $$
-\psi' = \psi + w_\chi \cdot \operatorname{wrap}_\pi(\chi - \psi)
+\psi' = \psi + w_\chi \cdot \mathrm{wrap}_\pi(\chi - \psi)
 \tag{1}
 $$
 
 where $\psi$ is the heading, $\chi$ the course, and
-$\operatorname{wrap}_\pi(\cdot)$ maps an angle onto $[-\pi, \pi)$. The wrapping is
+$\mathrm{wrap}_\pi(\cdot)$ maps an angle onto $[-\pi, \pi)$. The wrapping is
 not cosmetic: a plain convex combination $(1-w_\chi)\psi + w_\chi\chi$ would sweep
 the long way round whenever the two angles straddle the $\pm\pi$ branch cut.
 Written this way, $\psi'$ is a pure heading signal at $w_\chi = 0$, a pure course
@@ -25,7 +25,7 @@ angular velocity in the small-earth projection, but directly on the kite speed
 $v_k = \lVert \mathbf{v}_\mathrm{kite} \rVert$:
 
 $$
-w_\chi = \operatorname{clamp}\left(
+w_\chi = \mathrm{clamp}\left(
   \frac{v_k - v_{k,\psi}}{v_{k,\chi} - v_{k,\psi}},\ 0,\ 1 \right)
 \tag{2}
 $$
@@ -85,7 +85,7 @@ $\psi'$ is the *regulated* variable, not the setpoint: the heading PID is driven
 by the wrapped error against the commanded course $\chi_\mathrm{cmd}$,
 
 $$
-e = \operatorname{wrap}_\pi(\psi' - \chi_\mathrm{cmd})
+e = \mathrm{wrap}_\pi(\psi' - \chi_\mathrm{cmd})
 \tag{4}
 $$
 
@@ -99,7 +99,7 @@ In the logs, $w_\chi$ is recorded as `var_08` (0 = heading, 1 = course) and $e$ 
 
 ### Relation to the reference formulation
 
-The form given in (1) and the $\operatorname{atan2}$ fusion of (6.17) below are
+The form given in (1) and the $\mathrm{atan2}$ fusion of (6.17) below are
 two different interpolations between the same two angles: (6.17) normalises the
 convex combination of the two unit vectors (an *nlerp*), whereas (1) interpolates
 the angle itself (a *slerp*). They agree exactly at $w_\chi \in \{0, 0.5, 1\}$ and
@@ -115,7 +115,7 @@ The two remaining differences from the reference are deliberate:
 |---|---|---|
 | Scheduling variable | angular velocity $\omega$ in the small earth projection | kite speed $\lVert\mathbf{v}_\mathrm{kite}\rVert$ |
 | Weight limit | $k_\chi \le 0.85$ | $w_\chi \le 1$ |
-| Interpolation | nlerp via $\operatorname{atan2}$ | slerp via wrapped difference |
+| Interpolation | nlerp via $\mathrm{atan2}$ | slerp via wrapped difference |
 
 The $0.85$ cap exists in the reference to stop the kite getting too slow when
 flying figures of eight at very high elevation. It is not carried over here: the
@@ -149,7 +149,7 @@ $$
 \begin{aligned}
 x &= \sin\psi\,(1 - k_\chi) + \sin\chi\, k_\chi \\
 y &= \cos\psi\,(1 - k_\chi) + \cos\chi\, k_\chi \\
-\psi' &= \operatorname{atan2}(x, y)
+\psi' &= \mathrm{atan2}(x, y)
 \end{aligned}
 \tag{6.17}
 $$
