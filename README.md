@@ -5,6 +5,7 @@
 ## Introduction
 This package provides:
 - a path following figure of eight controller
+- a reel-out controller that produces power by reeling out and flying figures of eight
 - a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as there is sufficient wind
 - a client for the [AWETrim](https://github.com/awegroup/AWETrim) reelout flight-path optimizer
 
