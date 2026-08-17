@@ -54,7 +54,7 @@ end
 """
     winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
                   v_ff=0.0, speed_limit=Inf,
-                  acceleration_limit=winch_acc_limit(s.set)) -> torque
+                  acceleration_limit=winch_acc_limit(s.set.max_acc)) -> torque
 
 Run WinchControllers.jl's cascaded length loop against `s` and return the winch
 torque [N·m] for `step!`'s `set_torque`. Replaces the `set_length` keyword
@@ -68,7 +68,7 @@ it from a length error at a cost of `1/kp_pos` of lag.
 """
 function winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
                        v_ff = 0.0, speed_limit = Inf,
-                       acceleration_limit = winch_acc_limit(s.set))
+                       acceleration_limit = winch_acc_limit(s.set.max_acc))
     r, G, friction = drum_params(s)
     return winch_position_torque!(wpc, set_length, unstretched_length(s),
                                   reel_out_speed(s), winch_force(s),
