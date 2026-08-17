@@ -1,6 +1,6 @@
 # Combining heading and course
 
-## What is actually used as psi_prime
+## What is actually used as `psi_prime`
 
 This controller is controlling $\psi'$, a linear combination of heading and course
 defined as:
