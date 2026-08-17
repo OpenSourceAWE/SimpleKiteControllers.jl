@@ -5,11 +5,11 @@
 ## Introduction
 This package provides:
 - a path following figure of eight controller
+- a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as there is sufficient wind
 - a client for the [AWETrim](https://github.com/awegroup/AWETrim) reelout flight-path optimizer
 
 Planned:
 - a controller for flying circles
-- a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as there is sufficient wind
 
 ## This package provides
 - the figure-of-eight path-following guidance: the types `FigureEightController` and
@@ -30,9 +30,11 @@ Planned:
 - `FC_Settings`, every tuning parameter of a figure-of-eight run, loaded from
   `data/fc_settings.yaml`
 - the types `ParkingController` and `ParkingControllerSettings` and the functions
-  `linearize`, `calc_steering`, `navigate` — the NDI/turn-rate building blocks for the
-  planned parking controller; unit-tested, but not yet driven end-to-end in an example
-  (see TODO)
+  `linearize`, `calc_steering`, `navigate` — the NDI/turn-rate building blocks for a
+  parking controller; unit-tested, but not yet driven end-to-end in an example (see TODO).
+  `examples/simple_auto_parking.jl` demonstrates the parking behaviour itself — nose held
+  into the wind at a constant tether length — with a simpler gain-scheduled heading PID
+  instead, on top of V3Kite.jl
 
 ## Examples
 
@@ -83,6 +85,8 @@ Choose example to run or `q` to quit:
    simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)
    simple_reelout_plots.jl - plot the last logged reel-out run
    simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer
+   simple_auto_parking.jl  - fly heading-stabilized parking of the V3 kite
+   simple_auto_parking_plots.jl - plot the last logged parking run
    optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)
    optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer
    export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv
@@ -104,6 +108,13 @@ named after the active project's `log_file` setting.
 worker processes — hours, not minutes, and resumable. `optimize_path.jl` is the separate
 AWETrim client described above.
 
+`examples/simple_auto_parking.jl` flies the attitude-stabilized parking maneuver: the wing
+is settled at a fixed depower setting and held at a constant tether length while a
+gain-scheduled heading PID regulates the heading to zero, so the kite does not drift away
+from straight-up parking. It logs to `output/tmp_auto_parking.arrow` and prints the heading
+regulation RMS error and the AoA ripple metrics; `examples/simple_auto_parking_plots.jl`
+re-plots that log without re-simulating.
+
 ## Documentation
 
 - [docs/control_algorithm.md](docs/control_algorithm.md) — how the controller works, from the
@@ -120,7 +131,8 @@ AWETrim client described above.
   optimization test cases
 
 ## TODO
-- add examples for using the parking controller
+- drive the NDI-based `ParkingController`/`ParkingControllerSettings` end-to-end in an
+  example, as an alternative to the heading-PID parking in `simple_auto_parking.jl`
 
 ## Related
 A fully working set of flight path controllers and planners can be found here: [KiteControllers.jl](https://github.com/aenarete/KiteControllers.jl)
