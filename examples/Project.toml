@@ -36,7 +36,7 @@ V3Kite = {rev = "v1.2.0", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
 
 [compat]
 KiteViewers = "0.6"
-MakieControlPlots = "0.1.12"
+MakieControlPlots = "0.1.14"
 RuntimeGeneratedFunctions = "0.5.24"
 SymbolicAWEModels = "~0.13"
 V3Kite = "1.2.0"
