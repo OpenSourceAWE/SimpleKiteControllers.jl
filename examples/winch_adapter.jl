@@ -22,7 +22,7 @@
 #     step!(s; rel_depower, set_torque = winch_torque!(wpc, s, l0))
 
 using WinchControllers: WCSettings, WinchPosController, WinchForceController,
-    winch_position_torque!, winch_force_torque!
+    winch_position_torque!, winch_force_torque!, winch_acc_limit
 
 """
     load_wc_settings(filename; dt) -> WCSettings
