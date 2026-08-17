@@ -81,6 +81,11 @@ deliberately not `rc`, see its construction comment) monitors force throughout
 phases 0-2 and reels in when needed, logged into `var_10`/`var_11` same as the
 main reel-out law.
 
+Not a `var_XX` slot: `fig_8`, `SysState`'s live lap count, as in `simple_fig8.jl`
+but gated on `phase >= 4` rather than `== 4` — a fast reel-out can jump straight
+from phase 3 to 5 without ever touching 4, and the counter must still start.
+`cycle` (the pumping-cycle number) is left at its default: no reel-in phase here.
+
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
 1 dive, 2 hold, 3 transition, 4 fig8), plus a fifth phase this script adds: 5 final,
 entered from either 3 or 4 the moment `l_set` reaches `fcs.reelout_l_max`. Reel-out
@@ -323,6 +328,14 @@ stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
+# fig_8 (SysState field, live lap count): 0 before phase >= 4, 1 at first entry,
+# +1 per full traversal of the reference path after. Named apart from the
+# post-run `fig8` (phase-4 index list, below) which reuses that name.
+fig8_n = 0
+fig8_idx_prev = fec.last_idx
+fig8_idx_progress = 0.0
+n_path = length(fec.az_path)
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -360,6 +373,24 @@ try
         w_lim = cc.w_lim
         w_course = cc.w_course
         err = cc.err
+
+        # fig_8: jumps to 1 the instant phase first reaches >= 4 (a direct 3->5
+        # reel-out finish can skip 4 entirely), then +1 per full traversal of the
+        # reference path, unwrapped so a single lap never double-counts across
+        # the index's `mod1` wrap.
+        if phase >= 4
+            if fig8_n == 0
+                global fig8_n = 1
+                global fig8_idx_prev = fec.last_idx
+            else
+                delta = fec.last_idx - fig8_idx_prev
+                delta < -(n_path ÷ 2) && (delta += n_path)
+                delta > n_path ÷ 2 && (delta -= n_path)
+                global fig8_idx_progress += delta
+                global fig8_idx_prev = fec.last_idx
+                global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)
+            end
+        end
 
         # REEL_OUT: `reelout_delay` seconds after phase 3 (guidance engaged), not
         # at phase 4 (fig8), and only while l_set has not yet hit
@@ -474,6 +505,7 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        s.sys_state.fig_8 = Int16(fig8_n)      # live lap count
         s.sys_state.var_10 = l_set             # tether length setpoint [m]
         s.sys_state.var_11 = v_set             # REEL_OUT speed setpoint [m/s]
         s.sys_state.var_12 = get_state(rc)     # WinchController state (0/1/2)

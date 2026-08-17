@@ -17,8 +17,7 @@ this script calls it once per step and applies what it returns.
 The guidance, its settings, the run metrics and the turn-rate table are this
 package (`src/`). Everything that touches the kite — the model, the simulation
 loop, both winch modes, the discarded warm-up and the span-mean AoA — is V3Kite,
-used through its public API. Nothing here reaches into a `V3KITE` itself, which
-is what keeps this package free of a kite-model dependency.
+used through its public API. 
 
 The CONDITIONS the model is run under come from here too: `project_file` returns
 this package's `data/system_fig8_200m.yaml`, so the simulation settings it names
@@ -62,6 +61,11 @@ Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 | `var_07` | entry descent limiter weight (0 = raw guidance, 1 = fully limited) |
 | `var_08` | course/heading blend weight (0 = heading, 1 = course) |
 | `var_09` | span-mean geometric AoA [deg]             |
+
+Not a `var_XX` slot: `fig_8` (0 before phase 4, 1 at first entry, +1 per lap
+after) carries the live lap count, `SysState`'s field of that name. `cycle`
+(the pumping-cycle number) is left at its default — this script has no
+reel-in phase to count cycles over.
 
 `bearing` carries `chi_cmd`, the course the loop actually tracks, so
 `course - bearing` is the path-following error; the unmodified guidance course
@@ -284,6 +288,18 @@ end
 
 cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
 
+# Live lap counter, logged to SysState's `fig_8`: 0 before the pattern is
+# tracked, 1 at first entry into phase 4, then +1 each time `fec.last_idx` has
+# advanced one full lemniscate (`n_path` points) since then — the guidance's
+# own path parametrization, not a re-derived azimuth threshold. Refs, not plain
+# variables: the top-level `for` below is a soft scope, so a plain variable
+# reassigned only inside a conditional would rebind to a fresh, unassigned
+# local every iteration instead of carrying its value forward.
+fig8 = Ref(0)
+idx_prev = Ref(fec.last_idx)
+idx_progress = Ref(0.0)
+n_path = length(fec.az_path)
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -312,6 +328,23 @@ try
         w_lim = cc.w_lim
         w_course = cc.w_course
         err = cc.err
+
+        # fig8: jumps to 1 the instant phase 4 is first reached, then +1 per
+        # full traversal of the reference path, unwrapped so a single lap
+        # never double-counts across the index's `mod1` wrap.
+        if phase == 4
+            if fig8[] == 0
+                fig8[] = 1
+                idx_prev[] = fec.last_idx
+            else
+                delta = fec.last_idx - idx_prev[]
+                delta < -(n_path ÷ 2) && (delta += n_path)
+                delta > n_path ÷ 2 && (delta -= n_path)
+                idx_progress[] += delta
+                idx_prev[] = fec.last_idx
+                fig8[] = 1 + floor(Int, idx_progress[] / n_path)
+            end
+        end
 
         # Force mode reels out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
@@ -348,6 +381,7 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        s.sys_state.fig_8 = Int16(fig8[])      # live lap count
         # Not filled anywhere in the model chain: without this the log and the viewer read 0.
         s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd
     end

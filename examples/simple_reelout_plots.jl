@@ -5,14 +5,16 @@
 Plotting for simple_reelout.jl results.
 
 A copy of `simple_fig8_plots.jl` with the time-series figure's tether-length
-panel changed from a flat `l0` line to the actual REEL_OUT setpoint (`var_10`),
-and two panels added: reel-out speed (measured `v_reelout` vs the setpoint
-`var_11`) and the commanded depower `u_d` (`var_14`, `rel_depower` — filled by
-`step!` itself, since `SysState` has no `set_depower` field) — worth watching
-here because `depower_final` steps it up once phase 5 (final) begins. Distinct
-from the bottom panel's ENTRY state machine (0 park … 4 fig8, plus 5 final
-once reel-out reaches `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring
-for everything else, which is unchanged here.
+panel changed from a flat `l0` line to the actual flown length against `fig_8`
+(the live lap count) on a secondary right-hand y-axis — `plotx`'s twin-axis
+form, triggered by a 2-element `ylabels` entry. Two panels added: reel-out
+speed (measured `v_reelout` vs the setpoint `var_11`) and the commanded
+depower `u_d` (`var_14`, `rel_depower` — filled by `step!` itself, since
+`SysState` has no `set_depower` field) — worth watching here because
+`depower_final` steps it up once phase 5 (final) begins. The bottom panel is
+the ENTRY state machine (0 park … 4 fig8, plus 5 final once reel-out reaches
+`reelout_l_max`). See `simple_fig8_plots.jl`'s docstring for everything else,
+which is unchanged here.
 
 Plus two figures that script has no counterpart for.
 
@@ -188,12 +190,12 @@ if "time_series" in plots
     @info "Plotting the time series..."
     # `getindex` because l_tether/v_reelout are one entry per tether and the V3 has one.
     l_tether = getindex.(sl.l_tether[rng], 1)
-    l_set = Float64.(sl.var_10[rng])          # REEL_OUT setpoint, not flat like simple_fig8
     v_reelout = getindex.(sl.v_reelout[rng], 1)
     v_set = Float64.(sl.var_11[rng])
     u_d = Float64.(sl.var_14[rng])            # commanded rel_depower, filled by step! itself
     # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
     state = Float64.(sl.sys_state[rng])
+    fig8 = Float64.(sl.fig_8[rng])
     p2 = plotx(
         sl.time[rng],
         sl.var_01[rng],
@@ -203,7 +205,7 @@ if "time_series" in plots
         [err_course, err_heading, Float64.(sl.var_06[rng])],
         (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
         getindex.(sl.winch_force[rng], 1),
-        [l_tether, l_set],
+        [l_tether, fig8],
         [v_reelout, v_set],
         u_d,
         state;
@@ -217,7 +219,7 @@ if "time_series" in plots
             L"\Delta\chi~[°]",
             L"u_{\mathrm{s}}~[\%]",
             L"F_{\mathrm{tether}}~[\mathrm{N}]",
-            L"l_{\mathrm{tether}}~[\mathrm{m}]",
+            [L"l_{\mathrm{tether}}~[\mathrm{m}]", L"\mathrm{cycle}~[-]"],
             L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
             L"u_{\mathrm{d}}~[-]",
             L"\mathrm{state}~[-]",
@@ -230,7 +232,7 @@ if "time_series" in plots
              L"\psi' - \psi'_{\mathrm{set}}"],
             [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
             nothing,
-            [L"l_{\mathrm{tether}}", L"l_{\mathrm{set}}"],
+            [L"l_{\mathrm{tether}}", L"\mathrm{cycle}"],
             [L"v_{\mathrm{ro}}", L"v_{\mathrm{set}}"],
             nothing,
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.

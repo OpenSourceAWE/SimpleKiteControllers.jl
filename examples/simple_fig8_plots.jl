@@ -13,10 +13,13 @@ three figures:
 2. a stacked time series: cross-track error, elevation with the pattern centre,
    heading and course vs the commanded course, the course-tracking error,
    steering command vs the KCU's tape-lagged value, tether force, and tether
-   length against its setpoint. The bottom panel is the entry state machine
-   (`sys_state`: 0 park, 1 dive, 2 hold, 3 transition, 4 fig8), which dates every
-   feature above it — an anomaly in phase 1-2 is the open-loop entry, one in
-   phase 3-4 is the path controller, and they are not diagnosed the same way;
+   length (constant here — no setpoint line, unlike `simple_reelout_plots.jl`).
+   The second-to-last panel is the entry state
+   machine (`sys_state`: 0 park, 1 dive, 2 hold, 3 transition, 4 fig8), which
+   dates every feature above it — an anomaly in phase 1-2 is the open-loop
+   entry, one in phase 3-4 is the path controller, and they are not diagnosed
+   the same way; the bottom panel is `fig_8`, `SysState`'s live lap count (0
+   before phase 4, 1 at first entry, +1 per completed lap after);
 3. an aerodynamics figure: angle of attack and lift-to-drag ratio, over the
    apparent wind speed and the kite speed `|vel_kite|`.
 
@@ -133,9 +136,9 @@ if "time_series" in plots
     @info "Plotting the time series..."
     # `getindex` because l_tether is one entry per tether and the V3 has one.
     l_tether = getindex.(sl.l_tether[rng], 1)
-    l_set = fill(Float64(sl.l_tether[1][1]), length(rng))
     # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
     state = Float64.(sl.sys_state[rng])
+    fig8 = Float64.(sl.fig_8[rng])
     p2 = plotx(
         sl.time[rng],
         sl.var_01[rng],
@@ -145,8 +148,9 @@ if "time_series" in plots
         [err_course, err_heading, Float64.(sl.var_06[rng])],
         (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
         getindex.(sl.winch_force[rng], 1),
-        [l_tether, l_set],
-        state;
+        l_tether,
+        state,
+        fig8;
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
         legendsize = 16,
@@ -159,6 +163,7 @@ if "time_series" in plots
             L"F_{\mathrm{tether}}~[\mathrm{N}]",
             L"l_{\mathrm{tether}}~[\mathrm{m}]",
             L"\mathrm{state}~[-]",
+            L"\mathrm{cycle}~[-]",
         ],
         labels = [
             nothing,
@@ -168,9 +173,10 @@ if "time_series" in plots
              L"\psi' - \psi'_{\mathrm{set}}"],
             [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
             nothing,
-            [L"l_{\mathrm{tether}}", L"l_{0}"],
+            nothing,
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
             L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8}",
+            nothing,
         ],
         fig = fig_name * " – time series",
     )
