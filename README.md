@@ -5,7 +5,7 @@
 ## Introduction
 This package provides:
 - a path following figure of eight controller
-- a client for the AWETrim reelout flight-path optimizer
+- a client for the [AWETrim](https://github.com/awegroup/AWETrim) reelout flight-path optimizer
 
 Planned:
 - a controller for flying circles
