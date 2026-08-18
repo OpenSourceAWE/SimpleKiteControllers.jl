@@ -479,6 +479,124 @@ _make_test_controller(; kwargs...) =
         @test_throws ErrorException winch_force_gains(fcs)
     end
 
+    @testset "pattern_height" begin
+        fec = _make_test_controller(el_center = 20.0)
+        el_min = minimum(fec.el_path)
+        # Straight-tether relation, and the lowest point is the lowest elevation.
+        @test path_min_height(fec, 200.0) ≈ 200.0 * sind(el_min)
+        # A path specified in (azimuth, elevation) rises as the tether grows, so the
+        # SHORTEST tether is the worst case.
+        @test path_min_height(fec, 150.0) < path_min_height(fec, 350.0)
+        @test path_min_height(fec, 2 * 150.0) ≈ 2 * path_min_height(fec, 150.0)
+
+        floor_m = path_min_height(fec, 200.0)
+        @test check_pattern_height(fec, 200.0, floor_m - 1; prn = false).ok
+        @test !check_pattern_height(fec, 200.0, floor_m + 1; prn = false).ok
+        res = check_pattern_height(fec, 200.0, 50.0; prn = false)
+        @test res.elevation ≈ el_min
+        @test res.height ≈ path_min_height(fec, 200.0)
+        @test res.min_height == 50.0
+    end
+
+    @testset "prepare_path_and_blend" begin
+        src = _make_test_controller()
+        n = 180
+        az, el = prepare_path(src.az_path, src.el_path; resample = n,
+                              up_loops = src.fes.up_loops)
+        @test length(az) == n
+        # Canonical form: index 1 is the azimuth extreme, whatever the input's
+        # starting point, and the traversal direction is the requested one.
+        @test argmax(az) == 1
+        # Rotating the input gives the same curve back, but only up to the SAMPLING
+        # GRID: `resample_path` measures arc length from the first input point, and
+        # the alignment then picks the nearest sample to the azimuth extreme, so the
+        # two runs can sit up to half a sample apart in phase. That is the accuracy
+        # a blend inherits, and half a spacing here is ~0.3°.
+        rot = 57
+        az2, el2 = prepare_path(circshift(src.az_path, rot), circshift(src.el_path, rot);
+                                resample = n, up_loops = src.fes.up_loops)
+        @test maximum(abs.(az2 .- az)) < 0.5
+        @test maximum(abs.(el2 .- el)) < 0.5
+        # Same curve reversed comes back identical once oriented and aligned.
+        az3, el3 = prepare_path(reverse(src.az_path), reverse(src.el_path);
+                                resample = n, up_loops = src.fes.up_loops)
+        @test maximum(abs.(az3 .- az)) < 0.5
+        for up in (false, true)
+            a, e = prepare_path(src.az_path, src.el_path; resample = n, up_loops = up)
+            m = length(a)
+            @test (e[mod1(argmax(a) + 1, m)] - e[argmax(a)] > 0) == up
+        end
+
+        # Blending: the endpoints are the inputs, the middle is halfway.
+        bz, be = prepare_path(src.az_path, 5.0 .+ src.el_path; resample = n,
+                              up_loops = src.fes.up_loops)
+        @test blend_paths(az, el, bz, be, 0.0)[1] ≈ az
+        @test blend_paths(az, el, bz, be, 1.0)[2] ≈ be
+        @test blend_paths(az, el, bz, be, 0.5)[2] ≈ 0.5 .* (el .+ be)
+        # w is clamped, so a blend cannot overshoot past the target.
+        @test blend_paths(az, el, bz, be, 2.0)[2] ≈ be
+        @test_throws ArgumentError blend_paths(az, el, bz[1:end-1], be[1:end-1], 0.5)
+    end
+
+    @testset "path_queries_on_bare_vectors" begin
+        # The checks are about a PATH, not about a controller: stage 4 validates a
+        # candidate before there is a controller holding it.
+        fec = _make_test_controller()
+        az, el = fec.az_path, fec.el_path
+        @test path_min_radius(az, el) ≈ path_min_radius(fec)
+        @test path_radius_profile(az, el) ≈ path_radius_profile(fec)
+        @test path_min_height(az, el, 200.0) ≈ path_min_height(fec, 200.0)
+        @test check_pattern_feasible(az, el, 200.0, 0.3; prn = false).margin ≈
+              check_pattern_feasible(fec, 200.0, 0.3; prn = false).margin
+        @test check_pattern_height(az, el, 200.0, 40.0; prn = false).height ≈
+              check_pattern_height(fec, 200.0, 40.0; prn = false).height
+    end
+
+    @testset "traj_opt_settings" begin
+        tos = TrajOptSettings("traj_opt.yaml")
+        # The shipped file loads, and its guess is NOT the reel-out pattern: those
+        # 20°/11°-at-18° values do not converge at 150 m and 6 m/s (2026-08-18).
+        @test tos.base_url == "http://127.0.0.1:8000"
+        @test tos.guess_a == 30.0
+        @test tos.guess_b == 12.0
+        @test tos.guess_el_center == 26.0
+        @test tos.guess_points == 361
+        @test tos.resample_points == 361
+        # 0.9, not the struct's 1.0: the optimizer currently returns paths right at
+        # the V3's curvature limit (0.93 at 150 m, 1.01 at 200 m, measured).
+        @test tos.min_feasibility_margin == 0.9
+        # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
+        # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
+        @test tos.min_height == 40.0
+        # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
+        # carries whatever the last experiment needed.
+        @test !TrajOptSettings().reopt_enabled
+        @test tos.reopt_every_n_laps == 2
+        @test tos.max_reopt == 4
+        @test tos.path_blend_time == 4.0
+        # The gate reads the reference path, the criterion scores the flown one, and
+        # ~3° of undershoot was measured twice on 2026-08-18.
+        @test tos.candidate_elevation_margin == 3.0
+        @test tos.detect_simple_bounds
+
+        mktempdir() do dir
+            good = joinpath(dir, "t.yaml")
+            write(good, "traj_opt:\n    guess_a: 25.0\n")
+            t2 = TrajOptSettings(good)
+            @test t2.guess_a == 25.0          # given
+            @test t2.guess_b == 12.0          # and the default for the rest
+            bad = joinpath(dir, "b.yaml")
+            write(bad, "traj_opt:\n    guess_with_a_typo: 1.0\n")
+            @test_throws ErrorException TrajOptSettings(bad)
+            tiny = joinpath(dir, "s.yaml")
+            write(tiny, "traj_opt:\n    guess_points: 4\n")
+            @test_throws ErrorException TrajOptSettings(tiny)
+            neg = joinpath(dir, "n.yaml")
+            write(neg, "traj_opt:\n    candidate_elevation_margin: -1.0\n")
+            @test_throws ErrorException TrajOptSettings(neg)
+        end
+    end
+
     @testset "project_file" begin
         p = project_file()
         @test isabspath(p)

@@ -243,6 +243,49 @@ function resample_path(az, el, n::Integer)
 end
 
 """
+    prepare_path(az, el; resample = 0, up_loops = true) -> (az, el)
+
+Bring a closed path into the canonical form two paths must share before they can
+be interpolated point by point: `resample` points equidistant in arc length
+([`resample_path`](@ref)), traversed in the `up_loops` direction, and rotated so
+that index 1 is the point of maximum azimuth.
+
+The rotation is what makes index `i` of one path the counterpart of index `i` of
+the other. Without it, two paths resampled from different starting points are
+blended across a phase offset, which sweeps the reference around the pattern
+instead of morphing it. The azimuth extreme is used as the anchor because it is
+the same landmark [`_path_geometry`](@ref) decides the traversal direction on.
+"""
+function prepare_path(az, el; resample = 0, up_loops = true)
+    if resample > 0
+        az, el = resample_path(az, el, resample)
+    end
+    az, el, _, _ = _path_geometry(az, el, up_loops)
+    shift = argmax(az) - 1
+    shift == 0 && return az, el
+    return circshift(az, -shift), circshift(el, -shift)
+end
+
+"""
+    blend_paths(az0, el0, az1, el1, w) -> (az, el)
+
+Point-by-point interpolation between two closed paths, `w = 0` giving the first
+and `w = 1` the second. Both must be in the canonical form of
+[`prepare_path`](@ref) and of the same length; interpolating paths that are not
+aligned produces a curve that resembles neither.
+
+Used to swap a re-optimized path in gradually: installing one in a single step is
+a step in the cross-track error, and the guidance answers a step with steering.
+"""
+function blend_paths(az0, el0, az1, el1, w)
+    length(az0) == length(az1) == length(el0) == length(el1) ||
+        throw(ArgumentError("blended paths must have the same length, got \
+                             $(length(az0)) and $(length(az1))"))
+    v = clamp(w, 0.0, 1.0)
+    return (1 - v) .* az0 .+ v .* az1, (1 - v) .* el0 .+ v .* el1
+end
+
+"""
     set_path!(fec::FigureEightController, az, el; resample = 0,
               up_loops = fec.fes.up_loops)
 
@@ -465,8 +508,10 @@ Computed in true spherical geometry rather than the flat-sky
 the pattern spans tens of degrees, where the two differ materially (~15% at
 `el_center = 60°`).
 """
-function path_radius_profile(fec::FigureEightController)
-    az = fec.az_path; el = fec.el_path
+path_radius_profile(fec::FigureEightController) =
+    path_radius_profile(fec.az_path, fec.el_path)
+
+function path_radius_profile(az::AbstractVector, el::AbstractVector)
     n = length(az)
     p = [SVector(cosd(el[i]) * cosd(az[i]),
                  cosd(el[i]) * sind(az[i]),
@@ -500,7 +545,59 @@ tip (where the radius is `B²/(A·cos(el_center))`) but the upper shoulder of ea
 lobe, where the `cos(elevation)` compression of the azimuth axis bends the path
 hardest. Use [`path_radius_profile`](@ref) to see where.
 """
-path_min_radius(fec::FigureEightController) = minimum(path_radius_profile(fec))
+path_min_radius(fec::FigureEightController) = path_min_radius(fec.az_path, fec.el_path)
+path_min_radius(az::AbstractVector, el::AbstractVector) =
+    minimum(path_radius_profile(az, el))
+
+"""
+    path_min_height(fec::FigureEightController, l_tether) -> Float64
+
+Height above ground [m] of the lowest point of the reference path, flown at
+tether radius `l_tether`: `l_tether * sin(elevation_min)`, the straight-tether
+relation. Real tether sag puts the kite slightly lower, so this is an upper
+bound on the clearance.
+
+The SHORTEST tether is the worst case, the same way it is for
+[`check_pattern_feasible`](@ref) — a path specified in (azimuth, elevation) rises
+as the tether grows.
+"""
+path_min_height(fec::FigureEightController, l_tether) =
+    path_min_height(fec.az_path, fec.el_path, l_tether)
+path_min_height(az::AbstractVector, el::AbstractVector, l_tether) =
+    l_tether * sind(minimum(el))
+
+"""
+    check_pattern_height(fec, l_tether, min_height; prn = true)
+
+Compare the reference path's lowest point with a ground-clearance floor
+[`path_min_height`](@ref). Returns `(; ok, height, elevation, min_height)`, with
+`elevation` the path's lowest elevation [deg] and `height` its height [m] at
+`l_tether`.
+
+A clearance floor is not the same criterion as an elevation floor, and the two
+scale opposite ways: at a short tether a fixed height needs a high elevation, at a
+long one it permits a very low one. An externally optimized path makes the
+difference concrete — AWETrim constrains height (50 m by default) and not
+elevation at all, but it takes its clearance partly from reeling OUT within the
+lap, so the same curve installed at the anchor radius and flown at constant length
+can sit well below the floor it was designed under.
+"""
+check_pattern_height(fec::FigureEightController, args...; kwargs...) =
+    check_pattern_height(fec.az_path, fec.el_path, args...; kwargs...)
+
+function check_pattern_height(az::AbstractVector, el::AbstractVector, l_tether,
+                              min_height; prn = true)
+    elevation = minimum(el)
+    height = path_min_height(az, el, l_tether)
+    ok = height >= min_height
+    if prn
+        @info @sprintf(
+            "Pattern clearance: lowest point %.1f m at elevation %.1f° (L=%.0f m), floor %.0f m%s",
+            height, elevation, l_tether, min_height,
+            ok ? "" : "  ** TOO LOW **")
+    end
+    return (; ok, height, elevation, min_height)
+end
 
 """
     check_pattern_feasible(fec, l_tether, max_steering; c1=V3_TURN_RATE_C1, prn=true)
@@ -513,9 +610,12 @@ must also correct cross-track error while turning, which costs authority).
 Pass the `c1` matching the `body_damping` in use — see
 [`turn_rate_coeffs`](@ref); the default is `init`'s default damping.
 """
-function check_pattern_feasible(fec::FigureEightController, l_tether,
+check_pattern_feasible(fec::FigureEightController, args...; kwargs...) =
+    check_pattern_feasible(fec.az_path, fec.el_path, args...; kwargs...)
+
+function check_pattern_feasible(az::AbstractVector, el::AbstractVector, l_tether,
                                 max_steering; c1 = V3_TURN_RATE_C1, prn = true)
-    path_radius = path_min_radius(fec)
+    path_radius = path_min_radius(az, el)
     kite_radius = min_turn_radius(l_tether, max_steering; c1)
     margin = path_radius / kite_radius
     feasible = margin >= 1.0

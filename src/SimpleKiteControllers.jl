@@ -18,9 +18,10 @@ export CourseController, CourseControllerSettings, set_phase!
 # Figure-of-eight guidance
 export FigureEightSettings, FigureEightController
 export figure_eight_path, calc_attractor, navigate_fig8, set_path_center!
-export set_path!, resample_path
+export set_path!, resample_path, prepare_path, blend_paths
 export path_tangent
 export min_turn_radius, path_min_radius, path_radius_profile, check_pattern_feasible
+export path_min_height, check_pattern_height
 
 # Turn-rate-law lookup table
 export V3_TURN_RATE_COEFFS, turn_rate_coeffs, V3_TURN_RATE_C1, V3_TURN_RATE_C2
@@ -32,6 +33,9 @@ export winch_state_pct
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
+
+# Externally optimized flight path (examples/simple_opt_fig8.jl)
+export TrajOptSettings
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
@@ -67,6 +71,8 @@ include("course_controller.jl")
 # After fc_settings.jl: OptSettings is loaded the same way and documents itself
 # against FC_Settings, whose fields the sweep overrides.
 include("optimization.jl")
+# After fc_settings.jl too: TrajOptSettings is loaded through load_yaml_fields!.
+include("traj_opt_settings.jl")
 
 function __init__()
     reload_turn_rate_table!()

@@ -74,7 +74,11 @@ if !(@isdefined(fcs) && fcs isa FC_Settings)
 end
 plots = selected_plots()
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
-log_name = basename(Settings(project).log_file)
+# A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
+# `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
+# project keep separate logs and can be plotted against each other.
+log_name = (@isdefined(LOG_NAME) && LOG_NAME isa AbstractString) ? LOG_NAME :
+           basename(Settings(project).log_file)
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
@@ -95,8 +99,13 @@ v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
 
 # From the LAST row, so a log whose centre moved still overlays where it ended up.
 el_c_end = Float64(sl.var_04[end])
-ref_az, ref_el = figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d,
-                                   0.0, el_c_end, 0.0, 361)
+# `REF_PATH` carries the flown curve of an optimized run; `fcs.f8_*` then describe
+# the initial guess, not the reference.
+ref_az, ref_el = if @isdefined(REF_PATH) && REF_PATH isa Tuple
+    REF_PATH
+else
+    figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d, 0.0, el_c_end, 0.0, 361)
+end
 
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
 unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))

@@ -45,8 +45,16 @@ fc_settings:
   # trajectory and phase 5), not WinchControllers.jl fields. Reel-out stops on
   # TWO independent criteria, reelout_l_max and n_fig_eight — whichever fires
   # first.
-  reelout_l_max:      350.0    # Tether length at which reel-out stops              [m]
-  n_fig_eight:        4        # Laps after which reel-out stops; 0 = length only [-]
+  # 380 since 2026-08-18. NOTE for the optimized-path runs: AWETrim's own
+  # DEFAULT_LIMITS["distance_radial"] is (100, 360) m and its pattern reels out
+  # ~35 m within a lap, so a re-optimization request above ~325 m of anchor length
+  # is infeasible by construction and comes back as a failed solve. Reaching
+  # further out means more of the window is past that ceiling.
+  reelout_l_max:      380.0    # Tether length at which reel-out stops              [m]
+  # 0 since 2026-08-18: the optimized path flies faster laps than the lemniscate,
+  # so a lap limit stopped the two runs at different tether lengths and made their
+  # power and energy incomparable. Length is now the only criterion for both.
+  n_fig_eight:        0        # Laps after which reel-out stops; 0 = length only [-]
   depower_final:      0.328    # Flown from phase 5 (final), once l_max is reached; tuned
                                 # to hold ~3458 N, the reel-out mean force — see the log   [-]
   reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
@@ -112,5 +120,13 @@ fc_settings:
   # --- guards and metrics ---------------------------------------------------
   v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]
-  min_elevation:      10.0     # Floor criterion over the WHOLE run               [deg]
+  # 6.5 since 2026-08-18, down from 10: an externally optimized path descends lower
+  # than the lemniscate does, because AWETrim constrains HEIGHT (>= 50 m) and not
+  # elevation, and a fixed height is an ever smaller angle as the tether grows.
+  # Also the gate simple_opt_reelout.jl applies to a re-optimized path BEFORE
+  # installing it, so it bounds what is flown and not only what is scored — and the
+  # kite flies BELOW its reference near the lobe tips (measured 3.0° of undershoot
+  # on 2026-08-18: reference minimum 10.0°, flown 7.0°), so the gate is the more
+  # permissive of the two uses.
+  min_elevation:       6.5     # Floor criterion over the WHOLE run               [deg]
   min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]

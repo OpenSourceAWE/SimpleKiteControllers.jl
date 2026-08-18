@@ -1,0 +1,14 @@
+# System project of the reel-out run, resolved by `project_file` to THIS
+# package's data/ instead of the kite model's, so the run's conditions (wind,
+# tether, winch, KCU, solver) can be varied here without editing V3Kite.
+# `sim_settings` resolves relative to this file; `wc_settings` is a bare name
+# resolved under the active data path, which the example points here too — it
+# names the POSITION-mode file, unused by simple_reelout.jl (see wc_settings.yaml).
+# `fc_settings` is read the same way, by this package's own `fc_settings`
+# function (analogous to `KiteUtils.wc_settings`); it names its OWN file
+# (fc_settings_reelout.yaml, not fig8's fc_settings.yaml) because REEL_OUT needs
+# `compliance: 0`, unlike the figure-eight runs' default of 0.5.
+system:
+    sim_settings: "settings_reelout_180m.yaml"
+    wc_settings: "wc_settings.yaml"
+    fc_settings: "fc_settings_reelout.yaml"

@@ -624,6 +624,337 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## Stage 4 with the elevation gate, 180 -> 380 m (2026-08-18)
+
+Same run with `min_elevation: 6.5` (down from 10), `reelout_l_max: 380` and the
+candidate elevation gate in place. **All 8 criteria passed**, 9088 W over an 83.7 s
+reeling window, 761.0 kJ, stopped on length at 380 m.
+
+| | this run | reopt at 350 m | no reopt, 350 m | lemniscate, 350 m |
+|:--|--:|--:|--:|--:|
+| reel-out to | 380 m | 350 m | 350 m | 350 m |
+| mean power | 9088 W | 9052 W | 9002 W | 8993 W |
+| energy | 761.0 kJ | 648.9 kJ | 646.4 kJ | 646.0 kJ |
+| RMS d | 1.59° | 1.75° | 1.31° | 1.27° |
+| peak steering (time at peak) | 0.320 (8 %) | 0.320 (9 %) | 0.320 (5 %) | 0.271 (0 %) |
+| tape rate-limited | 10 % | 10 % | 7 % | 0 % |
+| min elevation | 7.3° | 7.0° | 11.1° | 11.4° |
+| criteria | all 8 | FAILED | all 8 | all 8 |
+
+**Only the first two columns share a tether range**, and only the last three share
+one with each other. `reelout_l_max` moved with this run, so its 9088 W and 761 kJ
+are not comparable with anything above them; a lemniscate run at 180 -> 380 m is
+needed before the power is worth reading.
+
+**The `distance_radial` ceiling is confirmed.** One path installed at t = 90.1 s
+and L = 316 m (margin 1.22, clearance 55.1 m); the second request, at L = 380 m,
+failed — exactly as the (100, 360) m bound predicts once ~35 m of in-lap reel-out
+is added. Re-optimization is usable up to ~325 m of anchor length on this
+configuration and not beyond, so a longer reel-out window does not buy more
+re-anchoring, only more wasted solves.
+
+**The run passes because the floor was moved to meet it.** The installed path's own
+minimum is 10.0° (55.1 m of height at 316 m of tether) and the kite flew 7.3° —
+2.7° of undershoot, against 3.0° measured on the previous run. The gate compares
+the REFERENCE minimum with `min_elevation`, so at 6.5 it will admit a path that
+flies near 4°. The undershoot is the quantity that needs the margin, and it is
+reproducible enough (3.0°, 2.7°) to be budgeted rather than discovered.
+
+**Steering is still fully spent**: 8 % of the settled window on the clamp and 10 %
+rate-limited, against 0 % and 0 % for the lemniscate. Three configurations of the
+optimized path in a row have cost the entire actuator margin for a power
+difference inside noise.
+
+## Stage 4 re-optimization: FAILED a criterion, and why (2026-08-18)
+
+`simple_opt_reelout.jl` on the 180 m project with `reopt_enabled: true`. It
+harvested 9052 W against 9002 W without reopt and 8993 W for the lemniscate, and
+it **failed a success criterion**: `min elevation > 10.0° (whole run)`, reaching
+7.0°. The power number is the least interesting thing in the run.
+
+| | reopt on | reopt off | lemniscate |
+|:--|--:|--:|--:|
+| mean reel-out power | 9052 W | 9002 W | 8993 W |
+| RMS d | 1.75° | 1.31° | 1.27° |
+| peak steering (time at peak) | 0.320 (**9 %**) | 0.320 (5 %) | 0.271 (0 %) |
+| tape rate-limited | **10 %** | 7 % | 0 % |
+| min elevation, whole run | **7.0°** | 11.1° | 11.4° |
+| criteria | **FAILED** | all 8 | all 8 |
+
+**The clearance floor does not imply the elevation floor, and this is where it
+bit.** One path was installed, at t = 90.6 s and L = 318 m, and it passed every
+gate: curvature margin 1.23, clearance 55.3 m against the 40 m floor. At 318 m of
+tether, 55 m of height is 10.0° of elevation — the gate was satisfied by a path
+that sits on this repo's own elevation limit, and tracking error took the run
+below it. The two floors scale opposite ways and one cannot stand in for the
+other. Fixed: candidates and the pre-flight path are now both checked against
+`fcs.min_elevation`, which costs nothing and is the criterion the run is scored on
+anyway.
+
+**Re-anchoring did not buy back steering margin — it spent more.** 9 % of the
+window on the clamp and 10 % rate-limited, against 5 % and 7 % without reopt, and
+RMS d up from 1.31° to 1.75°. The re-optimized path is anchored to a longer tether
+and is correspondingly lower and tighter in the part of the window where it was
+installed.
+
+**The second request failed, and the reason is a bound, not the weather.** At
+t = 140.8 s the run asked for a path at L = 350 m. AWETrim's
+`DEFAULT_LIMITS["distance_radial"]` is (100, 360) m and its pattern reels out
+~35 m within a lap, so a 350 m anchor needs 385 m and is infeasible by
+construction. Re-optimization has a usable ceiling around 325 m of anchor length
+on this configuration; asking above it wastes a solve.
+
+**A reply collected from `/trajectory` is coarser than one from `/step`.** The
+installed path had 99 points against the initial 360: the dense table is served at
+the server's `n_points` (default 100), while the blocking `/step` reply echoes the
+guess length. Harmless for guidance at ~1° spacing, but it is why
+`traj_opt.path.points` changes mid-run, and the summary now reports the initial and
+final counts separately (as it does for the pre-flight clearance, which was being
+recomputed from whatever path `fec` held at the end).
+
+## Optimized path vs lemniscate, like for like (2026-08-18)
+
+The comparison the three runs before this one could not make: same project
+(`system_reelout_180m.yaml`), same 180 -> 350 m, same `length` stop criterion,
+same reeling window to the tenth of a second. Only the reference path differs.
+Both passed all 8 criteria. `output/reelout_180m_opt.yaml` and
+`output/reelout_180m.yaml`.
+
+| | optimized | lemniscate |
+|:--|--:|--:|
+| mean reel-out power | 9002 W | 8993 W |
+| energy | 646.4 kJ | 646.0 kJ |
+| reeling window | 71.8 s | 71.8 s |
+| mean force | 3674 N | 3672 N |
+| RMS d | 1.31° | 1.27° |
+| peak steering (time at peak) | **0.320 (5 %)** | 0.271 (0 %) |
+| tape rate-limited | **7 %** | 0 % |
+| laps | 7.0 | 6.0 |
+| min elevation, whole run | 11.1° | 11.4° |
+
+**The two paths harvest the same power: +0.1 %.** Not "about the same" — 9002
+against 8993 W, and 646.4 against 646.0 kJ, which is well inside run-to-run
+variation. The externally optimized path adds nothing measurable here.
+
+**It costs the whole steering margin to fly.** The command sits ON `max_steering`
+for 5 % of the settled window and the tape is rate-limited 7 % of the time,
+against 0 % and 0 % for the lemniscate. Same power, no headroom left for a gust.
+
+**Why the tie, and it is not a coincidence.** Reel-out power on this plant is
+`F * v_ro` with `v_ro = kv*sqrt(F)`, so it is set almost entirely by the mean
+tether force — and both paths pull 3673 N to within 2 N. The force comes from the
+wind, the depower and the tether length, none of which the path shape moves much.
+The shape sweep of 2026-08-15 already said this from the other direction: the
+whole f8_a 19..30 x f8_b 8..12 grid spanned +4.8 % of mean power, and width was
+the only axis with any effect. A path optimizer working on shape alone is
+optimizing a weak lever on this system.
+
+That is a statement about THIS configuration, not about the optimizer: fixed
+depower, one winch law, one wind. The levers it holds that the lemniscate does not
+— the depower profile it optimizes per node, and the radial schedule this repo
+currently discards — are untested. Stage 4, and applying `input_depower`, are
+where a difference would have to come from.
+
+## Optimized path from 180 m, stopping on length (2026-08-18)
+
+`simple_opt_reelout.jl` on the new `system_reelout_180m.yaml`, with
+`n_fig_eight: 0` so reel-out stops on length like the lemniscate baseline.
+All 8 criteria passed. `output/reelout_180m_opt.yaml`.
+
+| | optimized, 180 m | optimized, 150 m | lemniscate, 150 m |
+|:--|--:|--:|--:|
+| mean reel-out power | 9002 W | 8742 W | 9058 W |
+| energy | 646.4 kJ | 594.4 kJ | 759.0 kJ |
+| reeled | 180 -> 350 m | 150 -> 308.9 m | 150 -> 350 m |
+| stop criterion | length | laps | length |
+| predicted / ratio | 6538 W / 1.38 | 6080 W / 1.44 | — |
+| RMS d | 1.31° | 1.22° | 1.24° |
+| peak steering (time at peak) | 0.320 (5 %) | 0.320 (2 %) | 0.291 (0 %) |
+| tape rate-limited | 7 % | 5 % | 1 % |
+| curvature margin at the start | 0.96 | 0.94 | — |
+| flown clearance | 42.0 m | 43.0 m | — |
+
+**The optimized path still does not beat the lemniscate.** 9002 W against 9058 W
+is a tie, and the tie is on the optimized path's own terms: starting at 180 m
+skips the lowest, least productive 30 m of tether that the lemniscate run had to
+fly through, so if anything the comparison now flatters it. Three runs in, the
+optimizer's path has not produced more power than the hand-tuned eight in this
+simulation.
+
+**It costs steering margin to fly.** The command sits ON `max_steering` for 5 % of
+the settled window and the KCU tape is rate-limited 7 % of the time, against 0 %
+and 1 % for the lemniscate — worse than the 150 m run's 2 %/5 %, even though the
+curvature margin improved from 0.94 to 0.96. Tracking still holds (RMS d 1.31°),
+but there is no authority left for a gust, which is exactly the side condition
+`optimize_fig8.jl` rejects a shape for.
+
+**The clearance choice is visible in the log.** Flown minimum 42.0 m, against a
+path minimum of 42.6 m at the anchor (tracking error takes the kite slightly below
+its own reference) and AWETrim's own 50 m floor. The kite really does fly ~8 m
+below the floor the path was designed under; that is the known cost of installing
+the angles and discarding the radial profile, and `min_height: 40.0` is the
+deliberate acknowledgement of it, not an oversight.
+
+**What is still missing for a fair comparison**: a LEMNISCATE run from 180 m.
+Every optimized-vs-lemniscate number above spans different tether ranges. One run
+of `simple_reelout.jl` on `system_reelout_180m.yaml` closes that gap.
+
+## Height floor: no starting length clears AWETrim's 50 m (2026-08-18)
+
+The optimizer constrains HEIGHT, `DEFAULT_LIMITS["height"] = (50, 400)` m applied
+to `pattern.z(distance_radial, s)`; its elevation bound is `(0, 160°)`, i.e. none.
+The bound is active — the returned paths sit ON it to the centimetre. But it is
+reached at the END of a lap's reel-out, and this repo installs the reply as a
+curve in (azimuth, elevation) with the radial profile discarded, so the clearance
+we actually get at the anchor radius is `50 * r0/r_low`:
+
+| anchor r0 | r over one lap | lowest elevation | z at r_low | z at the anchor |
+|--:|--:|--:|--:|--:|
+| 150 m | 150.0 -> 184.3 m | 16.11° | 50.00 m | 41.6 m |
+| 180 m | 180.0 -> 215.1 m | 13.69° | 50.00 m | 42.6 m |
+
+A lap reels out ~35 m whatever the anchor is, so `r0/r_low` barely moves and the
+anchor-radius clearance is ~42 m at any starting length. **Moving the start length
+cannot fix this** — 180 m was tried for exactly that reason and did not.
+
+What the run actually does is climb through 50 m within the first lap, because it
+is reeling out: the flown minimum of the 150 m run was 43.0 m, at 152.9 m of
+tether, not the 29.4 m of the constant-length run. So `min_height` in
+`data/traj_opt.yaml` is 40.0, describing the anchor radius, and every summary
+carries `traj_opt.clearance.flown_min_m` as the number that matters. The real fix
+is to stop discarding `distance_radial`/`speed_radial` (stage 4).
+
+Two other things the 180 m anchor moved, worth having on record: the curvature
+margin improves to 0.96 from 0.94 (still below 1), and the predicted power rises
+to 6538 W from 6080 W.
+
+## Externally optimized path — first REEL-OUT (2026-08-18)
+
+First run of `examples/simple_opt_reelout.jl`, `system_reelout_150m.yaml`, against
+the lemniscate run of the same project from 05:12. Both reeled out; all 8 criteria
+passed in both. Summaries: `output/reelout_150m_opt.yaml` and
+`output/reelout_150m.yaml`.
+
+| | optimized | lemniscate |
+|:--|--:|--:|
+| mean reel-out power | 8742 W | 9058 W |
+| energy over the window | 594.4 kJ | 759.0 kJ |
+| reeling window | 68.0 s | 83.8 s |
+| tether at stop | 308.9 m | 350.0 m |
+| stop criterion | laps | length |
+| RMS d | 1.22° | 1.24° |
+| mean force (reeling) | 3624 N | 3692 N |
+| peak steering | **0.320 (clamped, 2 %)** | 0.291 (0 %) |
+| tape rate-limited | 5 % | 1 % |
+| min elevation | 13.7° | 10.5° |
+
+**The optimizer's 6080 W and the run's 8742 W are not the same quantity**, and
+`GET /trajectory` says by exactly how much. Its 6080 W is one cycle of 16.08 s
+over `distance_radial` 150.0 -> 184.3 m: the optimizer reels out WITHIN the
+pattern and prices that one lap. The run reeled 150 -> 308.9 m over 68 s through
+an EXPLOG profile that strengthens with height, so its mean is taken over a window
+that spends most of its time on a much longer tether in much more wind. The 1.44x
+is the difference between those two windows, not a model error. Nothing here
+validates or refutes the optimizer; the comparison that would is stage 4, where
+the path is re-optimized for the length being flown.
+
+**The optimizer constrains HEIGHT, not elevation, and the constraint is active.**
+`DEFAULT_LIMITS["height"] = (50, 400)` m in AWETrim's `utils/defaults.py`, applied
+to `pattern.z(distance_radial, s)` in `timeseries/phase_parametrized.py`. Its
+elevation bound is `(0, 160°)`, i.e. no floor at all. The returned path's minimum
+height is 50.00 m to the centimetre — it sits ON the bound. The 16.11° minimum
+elevation that comes with it is a CONSEQUENCE, reached at r = 180.3 m rather than
+at the 150 m anchor, so it cannot be read as an elevation the optimizer chose.
+Two things follow. This repo's `min_elevation = 10°` criterion and the
+optimizer's floor are different quantities that scale opposite ways: at 150 m the
+50 m floor forces elevation up, while at 350 m it permits 8.2°, below our own
+criterion.
+
+**The two steering limits are not comparable as written.** AWETrim's
+`input_steering = ±0.35` is a steering-line differential in METRES — it enters
+the model as `roll = input_steering * k_steering` with `k_steering` fitted from
+the CS polynomial, and `steering_delta_limit` bounds the same quantity as "the
+maximum |delta| [m] of the rigid-segment bridle-steering triangle". This repo's
+`max_steering = 0.32` is the dimensionless `u_s` the KCU takes. Under V3Kite's
+calibration (`L_left = 1.6 - 1.4*u_s`, i.e. 1.4 m of tape per unit `u_s` per
+side) ±0.35 m is roughly `u_s` 0.25, which would make the optimizer's bound
+TIGHTER than the controller's rather than looser — but AWETrim's bridle-triangle
+geometry is not V3Kite's tape calibration, so treat that as an estimate until the
+conversion is confirmed. What remains solid about the 0.94 curvature margin is
+the other half: the optimizer uses its own steering-to-roll model, not the V3's
+identified turn-rate law `1/(L*c1*u_s)`, so nothing in the solve knows the radius
+this kite can actually fly.
+
+**Against the lemniscate, the optimized path did not win** — 8742 W against
+9058 W, and 594 kJ against 759 kJ. That comparison is confounded too, and in a way
+worth fixing before reading anything into it: the two runs stopped for DIFFERENT
+reasons. `n_fig_eight = 4` fires on lap count, and the optimized pattern flies
+faster laps, so it stopped 41 m short of `reelout_l_max` while the lemniscate ran
+to the full 350 m. The late, long-tether part of the window is the high-power
+part, so the lemniscate's mean is flattered by the extra 15 s and its energy by
+the extra 41 m. Set `n_fig_eight: 0` on both runs to compare them on the same
+distance.
+
+**The early laps are at the curvature limit, and now it shows in the actuator.**
+`margin_start` is 0.94 at 150 m against 2.18 at 350 m. The steering command
+touches `max_steering` exactly (0.320, 2 % of the settled window within 2 % of
+peak) and the KCU tape is rate-limited 5 % of the time, against 0 % and 1 % for
+the lemniscate. Tracking is nevertheless as good as the lemniscate's — RMS d 1.22°
+against 1.24° — because the margin improves as the tether grows, unlike the
+constant-length run of the entry above, where the same path never left margin 0.93
+and RMS d was 2.55°. Same path, same controller: the difference is the tether.
+
+## Externally optimized path — first flight (2026-08-18)
+
+First run of `examples/simple_opt_fig8.jl`: the AWETrim optimizer's power-optimal
+reel-out path, flown at CONSTANT 150 m under `system_reelout_150m.yaml` (6 m/s at
+6 m, EXPLOG, `kv = 0.0408`, `f_high = 7600`). It flies. Against the lemniscate
+baseline of the same project (`output/reelout_150m.yaml`, 05:12), which is a
+REEL-OUT run 150 -> 350 m and therefore not a like-for-like comparison:
+
+| | optimized, L = 150 m fixed | lemniscate, 150 -> 350 m |
+|:--|--:|--:|
+| RMS d | 2.55° | 1.24° |
+| max d | 5.02° | 4.97° |
+| laps | 13 in 119.6 s (9.2 s/lap) | 6.5 |
+| mean tether force | 9008 N | 3735 N |
+| mean `v_app` (phase 4) | 33.8 m/s | 22.0 m/s |
+| min elevation | 11.3° | 10.5° |
+| peak steering | 0.263 (1 % near peak) | 0.291 (0 %) |
+
+Three things to take from it.
+
+**Tracking is curvature-limited, not steering-limited or tuning-limited.** The
+steering command peaks at 0.263 of the `max_steering` 0.32 and sits within 2 % of
+its own peak only 1 % of the time, so there is authority left; RMS d is
+nevertheless twice the lemniscate's. The optimized path comes back at
+`check_pattern_feasible` **margin 0.93** at 150 m (tightest path radius 3.9°
+against the kite's 4.2°) — it is slightly tighter than the V3 can turn, and the
+tracking error is the geometry saying so. The same path measures 2.18 at 350 m,
+because the minimum ANGULAR turn radius is `1/(L*c1*u_s)` and a longer tether
+turns tighter on the sphere. `data/traj_opt.yaml` therefore ships
+`min_feasibility_margin: 0.9`; raise it to 1.0 once the optimizer can be given a
+curvature constraint.
+
+**The 9 kN is the test rig, not the path.** `max_force` is 8000 N nominal and
+`f_high` 7600 N, so a mean of 9008 N would pin the UpperForceController for the
+whole window — the very side condition `optimize_fig8.jl` rejects a shape for.
+But the optimizer sized this path for a winch reeling out at `kv*sqrt(F)`, i.e.
+~3.9 m/s at that force, and constant length removes exactly that relief. The
+number is expected here and is the argument for stage 3, not evidence against the
+path.
+
+**The pattern is low, fast and asymmetric.** Centre elevation 22.4°, flown extent
+azimuth -23.9°…+24.1° and elevation 11.3°…28.7°, laps every 9.2 s against the
+lemniscate's ~18 s. The returned curve is asymmetric (-19.5°…+21.6° as
+optimized), which is what makes the azimuth-handedness question in
+`PlanOptFig8.md` both testable and worth settling before stage 3.
+
+The optimizer predicted 6080 W of mean reel-out power for this path. That number
+has not been measured yet — it cannot be, at constant length; the lemniscate
+baseline harvested 9058 W while reeling 150 -> 350 m, which is a different
+question. Stage 3 is what compares them.
+
 ## ENTRY_CHI_MAX (entry descent limiter)
 
 Why the limiter exists (2026-07-26, first run): without it the kite dove

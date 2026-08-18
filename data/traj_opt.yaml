@@ -1,0 +1,97 @@
+# Settings of a run flown along an EXTERNALLY optimized path
+# (examples/simple_opt_fig8.jl): where the AWETrim optimizer is, the initial
+# guess the solve starts from, the solver knobs the API exposes, and what is done
+# with the path that comes back. Read into SimpleKiteControllers'
+# `TrajOptSettings`; every key below is a field of that struct and an unknown key
+# is an error.
+#
+# The CONDITIONS are deliberately not here. The wind comes from the system
+# project's settings file (v_wind, upwind_dir, profile_law, alpha, z0 at h_ref =
+# 6 m) and the winch law from its wc_settings (kv, f_low, f_high) — the same
+# files the plant is built from, so the path cannot be optimized for a wind the
+# kite does not fly in.
+#
+# The GUESS is not a formality, and that is why it lives here instead of reusing
+# fc_settings.yaml's f8_a/f8_b/el_center: those size the lemniscate the other
+# runs actually fly, while here it only seeds the solve. Measured 2026-08-18 at
+# 150 m and 6 m/s: the reel-out pattern (20°/11° at 18°) does not converge, while
+# 30°/12° and 20°/11°-at-26° both do, and reach the same 6080 W optimum; the
+# server's own parametric guess converges to a different one worth 1431 W. The
+# problem is multi-modal, so changing these numbers changes the answer, not just
+# the run time. The run never retries with a different guess on its own.
+traj_opt:
+    base_url: "http://127.0.0.1:8000"  # address of the AWETrim server
+    autostart_server: true   # start one with bin/run_server when none answers
+    name: "simple_opt_fig8"  # name the optimization is registered under
+
+    # --- Initial guess ---------------------------------------------------- #
+    guess_a:          30.0   # width of the guess; azimuth spans ±guess_a    [deg]
+    guess_b:          12.0   # height of the guess, peak to peak             [deg]
+    guess_c:           0.0   # size of the right part                        [deg]
+    guess_d:           0.0   # asymmetry factor                                [-]
+    guess_el_center:  26.0   # centre elevation of the guess                 [deg]
+    guess_points:      361   # points sent; the reply has as many              [-]
+
+    # --- Solver knobs ----------------------------------------------------- #
+    # input_depower is the optimizer's u_p, NOT the run's depower_setpoint: the
+    # conversion is unresolved (docs/TrajectoryOptimization.md) and the optimizer
+    # varies this one anyway, so it is reported and not applied.
+    input_depower:     1.6   # depower setpoint the solve starts from          [-]
+    reg_weight:        1.0   # regularization weight                           [-]
+    detect_simple_bounds: true   # IPOPT flag
+
+    # --- What is flown ---------------------------------------------------- #
+    # An UPPER bound: a coarser reply keeps its own resolution, since upsampling a
+    # polyline makes the curvature check read far tighter than the curve is.
+    resample_points:   361   # points the path is resampled to                 [-]
+    # Curvature margin the returned path must have at the length it is flown at
+    # (path radius / the kite's minimum turn radius); 0.0 flies whatever came
+    # back. The worst case is the SHORTEST tether: the kite's minimum ANGULAR
+    # turn radius is 1/(L*c1*u_s), so a longer tether turns tighter on the sphere.
+    # Below 1.0 the path is tighter than the kite can turn at all. 0.9, not 1.0,
+    # because the optimizer currently returns paths right at the limit — measured
+    # 2026-08-18: margin 0.93 at 150 m / 6 m/s and 1.01 at 200 m / 5 m/s, while
+    # the same 150 m path reaches 2.18 once the tether is at 350 m. Raise it to
+    # 1.0 once the pattern is not curvature-limited any more.
+    min_feasibility_margin: 0.9
+    # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
+    # any reel-out; 0.0 disables.
+    #
+    # 40, not AWETrim's own 50 (DEFAULT_LIMITS["height"]), and the gap is structural
+    # rather than a safety margin being traded away. The optimizer constrains HEIGHT
+    # and not elevation, and it reaches its 50 m floor at the END of a lap's
+    # reel-out: measured 2026-08-18, an r0 = 150 m path touches 50.00 m at r = 180 m
+    # and an r0 = 180 m path touches it at r = 215 m. Installed as (azimuth,
+    # elevation) and flown at the anchor, both are ~42 m up — 50 * r0/r_low, with
+    # r_low - r0 the ~35 m one lap reels out whatever the anchor is. So no starting
+    # length clears 50 here; the run climbs through it within the first lap instead,
+    # and the flown minimum is what matters (43.0 m on the 150 m run). That number is
+    # in every summary as traj_opt.clearance.flown_min_m — watch it, not this.
+    #
+    # The real fix is to stop discarding the optimizer's radial profile (stage 4).
+    min_height: 40.0
+
+    # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
+    # The path is anchored to ONE radius and the run walks away from it; each
+    # re-optimization re-anchors it to the length actually being flown. Requests go
+    # out on a lap boundary, non-blocking (POST /step with wait=false, then poll
+    # /status), so the simulation never stalls in a 7-13 s solve. A new path is
+    # checked for curvature and clearance at the CURRENT length before it is
+    # installed, and blended in over path_blend_time; one that fails is dropped and
+    # the run keeps flying the path it has.
+    reopt_enabled: true     # off by default: a run is reproducible without a server
+    reopt_every_n_laps: 2    # laps between requests; never two solves at once   [-]
+    max_reopt: 4             # bound on re-optimizations per run                 [-]
+    path_blend_time: 4.0     # seconds over which the new path replaces the old  [s]
+    reopt_poll_interval: 0.5 # simulated seconds between /status polls           [s]
+
+    # Extra elevation a path must clear above fc_settings*.yaml's min_elevation
+    # before it is flown; 0.0 gates on min_elevation alone.
+    #
+    # The gate reads the REFERENCE path's lowest point while the criterion scores
+    # the FLOWN one, and the kite flies below its reference near the lobe tips,
+    # where the steering is already on the clamp. Measured twice on 2026-08-18:
+    # reference 10.0° -> flown 7.0°, and reference 10.0° -> flown 7.3°. 3.0 covers
+    # both. Without it the gate admits paths that break the criterion it exists to
+    # protect, which is exactly how the first stage-4 run failed.
+    candidate_elevation_margin: 3.0

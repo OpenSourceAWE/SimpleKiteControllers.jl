@@ -28,8 +28,11 @@ Five gaps, none of them in the HTTP call:
    this run.
 3. **One path, two tether lengths.** The optimizer anchors the pattern to a single
    radius (`length`), and a reel-out run walks 150 m -> `reelout_l_max` = 350 m.
-   The path that is optimal at 150 m is not optimal at 350 m, and its curvature
-   margin only ever gets worse as the tether grows.
+   The path that is optimal at 150 m is not optimal at 350 m. Curvature is the
+   other way round and in the run's favour: the kite's minimum ANGULAR turn radius
+   is `1/(L·c1·u_s)`, so a longer tether turns tighter on the sphere and the
+   margin improves — the START of the run is the worst case, as
+   `docs/control_algorithm.md` already says.
 4. **Entry and metrics are parameterized on the lemniscate.** `CourseController`
    dives to `fcs.el_center` and `fig8_metrics` scores against `f8_a`/`f8_b`.
    Neither exists for an optimized curve; both have to be derived from the path
@@ -196,6 +199,8 @@ In [src/figure_eight_controller.jl](src/figure_eight_controller.jl):
 
 ## Step 4 — Stage 1: fly an optimized path at constant length
 
+**Status: implemented and flown successfully 2026-08-18** (`examples/simple_opt_fig8.jl`).
+
 `examples/simple_opt_fig8.jl`, first version, built from `simple_fig8.jl`:
 request one path, install it before the run, fly it, plot it. No winch coupling,
 no re-optimization. This exists to prove Step 3 against the real plant for the
@@ -205,6 +210,12 @@ Acceptance: the run completes, `dmin` settles to the same order as a lemniscate
 run, and the pattern plot shows the flown track on the optimizer's curve.
 
 ## Step 5 — Stage 2: the conditions come from the run, not from the script
+
+**Status: implemented 2026-08-18, inside step 4.** The mapping table, the two
+pre-flight checks and the `downloops` assertion all landed with
+`simple_opt_fig8.jl` rather than as a second pass — stage 1 needed a request
+built from the run's own files to be worth flying at all. Stage 1 flew
+successfully on 2026-08-18.
 
 The request is built from the same files the plant is built from.
 
@@ -223,15 +234,27 @@ Two checks before anything is flown, both cheap and both failure modes that cost
 run otherwise:
 
 - **Feasibility.** Run [`check_pattern_feasible`](src/figure_eight_controller.jl#L408)
-  on the returned path at the tether length it will be flown at — the LONGEST
-  one, `fcs.reelout_l_max`, not the starting one, since the margin shrinks as the
-  tether grows. The optimizer knows nothing about the V3's turn-rate law, so a
+  on the returned path at the STARTING tether length, which is the worst case:
+  the kite's minimum angular turn radius is `1/(L·c1·u_s)`, so a longer tether
+  turns tighter on the sphere. (Same rule `optimize_fig8.jl` already applies to
+  its grid.) The optimizer knows nothing about the V3's turn-rate law, so a
   path tighter than `1/(L*c1*u_s)` is a perfectly plausible thing for it to
   return. Refuse to fly below margin 1.0 and say what would have to change.
+
+  **Measured 2026-08-18**: the optimized paths come back right at the V3's
+  curvature limit. `system_fig8_200m.yaml` (5 m/s, 200 m): tightest path radius
+  3.2° against the kite's 3.2°, **margin 1.01**. `system_reelout_150m.yaml`
+  (6 m/s, 150 m): 3.9° against 4.2°, **margin 0.93** — the kite cannot quite fly
+  it. The same path at `reelout_l_max` = 350 m has margin 2.18, so stage 3 is
+  comfortable once the tether is out; it is the first laps that are tight.
+  Expect to need either a curvature constraint on the optimizer side or a lower
+  `body_damping`/higher `max_steering` before the entry is clean.
 - **Winch stiffness.** `kv = 0.0408` gives `0.0408*sqrt(7600)` = 3.6 m/s at
   maximum force. `optimize_path.jl`'s own header warns that a too-stiff winch
   (its example: 1.8 m/s at max force) makes the problem infeasible and the server
-  replies **422**. This may well be the first thing that happens. Catch 422
+  replies **422**. Measured 2026-08-18: it does NOT happen at the 200 m
+  conditions — the solve converges and predicts 3328 W — so this is a risk to
+  handle, not the expected outcome. Catch 422
   specifically, print the solver message, and — since the reel-out speed the
   optimizer wants is roughly a third of the wind speed — say which of `kv`,
   `f_high` or the wind is the binding one rather than showing a bare HTTP error.
@@ -240,6 +263,11 @@ Also: assert `spline.downloops == !fcs.up_loops` from `GET /trajectory` and abor
 on a mismatch (Decisions above).
 
 ## Step 6 — Stage 3: reel out along the optimized path
+
+**Status: implemented and flown 2026-08-18** (`examples/simple_opt_reelout.jl`).
+Predicted 6080 W, measured 8742 W — but the two are not the same quantity, and
+against the lemniscate the optimized path did not win. See the dated entry in
+`docs/fig8_tuning_log.md`.
 
 Now on `simple_reelout.jl`. The winch, the entry state machine, the four-phase
 descent and the log slots are untouched; only the path source changes. Two things
@@ -259,6 +287,9 @@ predicted `metrics.avg_power_W` next to the measured
 of the exercise, and a large gap is the finding.
 
 ## Step 7 — Stage 4: re-optimize during reel-out
+
+**Status: implemented 2026-08-18** (`reopt_*` in `data/traj_opt.yaml`, off by
+default). Not yet flown.
 
 The pattern is anchored to `length`, and the run doubles it. Re-optimize on a lap
 boundary (the run already counts laps via `fig8_idx_progress`), which is where a
@@ -281,15 +312,30 @@ path swap is cheapest.
 
 ## Settings
 
+**Status: implemented 2026-08-18**, pulled forward from step 5 the moment the
+guess turned out to decide the answer (see the open questions).
+
 One new YAML file, `data/traj_opt.yaml`, loaded through a `@with_kw` struct
 `TrajOptSettings` in `src/traj_opt_settings.jl` — same construction as
 [`OptSettings`](src/optimization.jl) (which serves `optimize_fig8.jl` and equally
-never touches a kite), with the file's header comment block as its docstring.
-Fields: `base_url`, `name`, `n_points`, `resample_points`, `request_timeout_s`,
-`autostart_server`, `input_depower`, `reg_weight`, `detect_simple_bounds`,
-`reopt_enabled`, `reopt_every_n_laps`, `max_reopt`, `path_blend_time`,
-`min_feasibility_margin`. No tunable is typed into the script — the repo
-convention, and the reason `optimize_path.jl`'s hardcoded constants are gap #2.
+never touches a kite), with the file's header comment block as its docstring. No
+tunable is typed into the script — the repo convention, and the reason
+`optimize_path.jl`'s hardcoded constants are gap #2.
+
+Fields built: `base_url`, `autostart_server`, `name`; the guess
+(`guess_a`/`guess_b`/`guess_c`/`guess_d`/`guess_el_center`/`guess_points`); the
+solver knobs (`input_depower`, `reg_weight`, `detect_simple_bounds`); and what is
+done with the reply (`resample_points`, `min_feasibility_margin`).
+
+**The guess gets its own fields rather than reusing `fcs.f8_*`.** In the other
+runs those size the lemniscate that is FLOWN; here it only seeds the solve, and
+the two roles pull apart — the reel-out pattern makes the solve diverge while a
+wider or higher eight converges. Sharing them would mean tuning the flown pattern
+for the solver's benefit.
+
+The re-optimization keys (`reopt_enabled`, `reopt_every_n_laps`, `max_reopt`,
+`path_blend_time`) are deliberately NOT in the file yet: nothing reads them until
+stage 4, and a config key that does nothing is worse than a missing one.
 
 ## Open questions
 
@@ -311,11 +357,24 @@ convention, and the reason `optimize_path.jl`'s hardcoded constants are gap #2.
   one-sided initial guess and check which way the returned path leans. A sign
   error here mirrors the pattern, which for a symmetric lemniscate is invisible
   and for an optimized (asymmetric) path is not.
-- **Point count.** `InitRequest.n_points` defaults to 100 and is capped at 1000,
-  while `optimize_path.jl` sends a 1000-point guess and its header says the reply
-  has as many points as were sent. Determine which governs the reply length, once,
-  and pin it in `data/traj_opt.yaml` — Step 3's resampling makes the answer
-  harmless, but not knowing it makes the request non-reproducible.
+- **Which optimum, and whether it is reached at all.** Measured 2026-08-18 at
+  L = 150 m and 6 m/s (`system_reelout_150m.yaml`): the solve is guess-dependent
+  in BOTH senses. The reel-out lemniscate (`f8_a` 20°, `f8_b` 11°, `el_center`
+  18°) gives an IPOPT non-convergence (HTTP 422), while 30°/12° at 18°, or
+  20°/11° at 26°, converge — all three to the same 6080 W path spanning
+  16.1°…28.7° of elevation. The server's OWN parametric guess (lissajous default)
+  also fails; asking for its `initial_guess` lemniscate converges to a different,
+  much flatter optimum worth 1431 W. So the problem is multi-modal at these
+  conditions, a factor of four apart, and the initial guess is a choice about the
+  answer rather than a formality. Consequences: the guess parameters belong in
+  `data/traj_opt.yaml` as the optimizer's own, not shared with the lemniscate
+  runs' `fc_settings*.yaml`; the run must never silently retry with a different
+  guess; and Stage 4's re-optimizations, which warm-start from the path being
+  flown, are the well-conditioned case rather than the risky one.
+- ~~**Point count.**~~ **Answered 2026-08-18 by measurement:** the GUESS governs.
+  A 361-point guess came back as 361 points from both `/init` and `/step`;
+  `InitRequest.n_points` (default 100) does not enter, and the Julia `InitParams`
+  has no field for it anyway. Send the guess at the resolution wanted.
 
 ## Validation
 

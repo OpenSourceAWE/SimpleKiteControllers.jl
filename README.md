@@ -86,8 +86,10 @@ Choose example to run or `q` to quit:
    simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)
    simple_fig8_live.jl     - the same run, shown live in the 3D viewer (minutes!)
    simple_fig8_plots.jl    - plot the last logged run of active project
+   simple_opt_fig8.jl      - fly an externally optimized path at constant length (minutes!)
    simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)
    simple_reelout_plots.jl - plot the last logged reel-out run
+   simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)
    simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer
    simple_auto_parking.jl  - fly heading-stabilized parking of the V3 kite
    simple_auto_parking_plots.jl - plot the last logged parking run
@@ -107,6 +109,16 @@ is already on disk. `simple_reelout.jl` flies the same entry and pattern but ree
 tether out under load until `reelout_l_max`, with `simple_reelout_plots.jl` and
 `simple_reelout_play.jl` for its logs. Both families write an Arrow log to `output/`,
 named after the active project's `log_file` setting.
+
+`simple_opt_fig8.jl` is a third run in the first family: same plant, entry and inner
+loop as `simple_fig8.jl`, but the reference path comes from the AWETrim optimizer instead
+of from the `f8_*` lemniscate parameters — it asks for the power-optimal path under the
+run's own wind and winch, installs it and flies it at constant tether length. It starts
+the server itself if none is running. `simple_opt_reelout.jl` is the same idea with the
+reel-out winch, which is what the path was optimized for: its run summary reports the
+power the optimizer predicted next to the power the run harvested. Both read their
+optimizer settings — server, initial guess, solver knobs — from `data/traj_opt.yaml`, and
+the reel-out one logs to `<log_file>_opt` so the lemniscate run stays as its baseline.
 
 `optimize_fig8.jl` sweeps the pattern shape by driving `simple_reelout.jl` in parallel
 worker processes — hours, not minutes, and resumable. `optimize_path.jl` is the separate

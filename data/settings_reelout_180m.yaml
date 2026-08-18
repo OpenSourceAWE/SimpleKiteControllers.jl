@@ -1,24 +1,36 @@
-# Simulation settings of the reel-out run, named by system_reelout_150m.yaml next
-# to it and loaded into a KiteUtils `Settings` by the kite model. A copy of
-# settings_fig8_150m.yaml with a longer sim_time: the run starts at 150 m and
-# reels out to fc_settings.yaml's reelout_l_max (250 m by default) once the
-# pattern is established, on top of the usual ~40 s entry. Start at 150 s and
-# lengthen if a run is still reeling out at the end — see Plan.md.
+# Simulation settings of the reel-out run STARTING AT 180 m, named by
+# system_reelout_180m.yaml next to it and loaded into a KiteUtils `Settings` by the
+# kite model. A copy of settings_reelout_150m.yaml with a longer starting tether.
+#
+# Why 180 m and not 150 (2026-08-18): an externally optimized path is installed as
+# a curve in (azimuth, elevation), and its height is then l_tether*sin(elevation).
+# AWETrim constrains HEIGHT (>= 50 m) and not elevation, and earns part of that
+# clearance by reeling out WITHIN the lap — the path it returns for a 150 m anchor
+# reaches its lowest elevation at ~180 m of radius. Installed and flown from 150 m
+# the same curve sits ~42 m up, below the floor it was designed under; from 180 m
+# it clears it. See `min_height` in data/traj_opt.yaml and the dated entry in
+# docs/fig8_tuning_log.md.
+#
+# The lemniscate runs work here too — nothing in this file is specific to an
+# optimized path; it is 30 m more tether and the sim_time to reel it out.
 #
 # What is NOT here: the controller's own tuning is fc_settings.yaml, the
 # POSITION-mode winch gains are wc_settings.yaml (unused by simple_reelout.jl,
 # which flies REEL_OUT instead), and the geometry, polars and VSM settings are
 # loaded by V3Kite from its own data directory and never pass through this file.
 system:
-  log_file: 'reelout_150m' # filename without extension; use / as path delimiter, even on Windows
+  log_file: 'reelout_180m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
-  sim_time: 125.0 # simulation time; entry (~40 s) + reel-out + laps at final length [sim only]
+  # 180 -> 350 m is 170 m at the ~2.3 m/s this winch reels, i.e. ~75 s on top of
+  # the ~30 s entry. 150 s leaves room for the soft-start ramp and some laps at
+  # the final length; check `stop_reason` in the run summary if it looks short.
+  sim_time: 150.0 # simulation time; entry (~30 s) + reel-out (~75 s) + laps [sim only]
   sample_freq: 90 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81
 
 initial:
-  l_tethers: [175.0] # initial tether length       [m]
+  l_tethers: [180.0] # initial tether length       [m]
   v_reel_outs: [0]   # initial reel out speed    [m/s]
   elevations: [73]   # initial elevation angle   [deg]
 

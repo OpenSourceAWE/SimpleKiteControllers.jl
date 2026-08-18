@@ -100,8 +100,13 @@ v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
 
 # From the LAST row, so a log whose centre moved still overlays where it ended up.
 el_c_end = Float64(sl.var_04[end])
-ref_az, ref_el = figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d,
-                                   0.0, el_c_end, 0.0, 361)
+# A run that flew an externally optimized curve (simple_opt_fig8.jl) leaves it in
+# `REF_PATH`; `fcs.f8_*` then describe the initial guess, not the reference.
+ref_az, ref_el = if @isdefined(REF_PATH) && REF_PATH isa Tuple
+    REF_PATH
+else
+    figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d, 0.0, el_c_end, 0.0, 361)
+end
 
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
 unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))

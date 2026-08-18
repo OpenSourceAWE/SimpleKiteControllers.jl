@@ -2,144 +2,79 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Figure-of-eight path following of the V3 kite, extended with a REEL_OUT winch: the
-tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
-`simple_fig8.jl` (park -> dive -> hold -> transition), and from the moment the
-guidance engages (phase 3) reels out under WinchControllers.jl's
-`v_set = kv * sqrt(force)` law until `fcs.reelout_l_max` or `fcs.n_fig_eight`
-figures of eight, whichever comes first, then holds that length for the rest of
-the run. Once reel-out stops, a fifth phase (final) takes over:
-the pattern keeps flying, but depower switches from `depower_setpoint` to
-`depower_final`, meant to hold roughly the force reel-out was regulating away.
-No pumping cycle: there is no reel-in phase here.
+Reel out along a path an EXTERNAL OPTIMIZER produced, instead of along a
+lemniscate.
+
+`simple_reelout.jl` with one block added — read that file's docstring for the
+winch, the entry state machine, the log slots and the two stop criteria, all of
+which apply here unchanged. What differs is the reference path: the AWETrim
+optimizer is asked for the power-optimal reel-out path under THIS run's wind and
+winch, and `set_path!` installs it. This is the run
+[`simple_opt_fig8.jl`](simple_opt_fig8.jl) was the rehearsal for — that one flies
+the same path at constant length, which cannot exercise the winch coupling the
+path was optimized for.
+
+# The number this run exists to produce
+
+The optimizer predicts a mean reel-out power for the path it returns. Reeling out
+along it measures one. Both end up in the `traj_opt:` section of the run summary,
+with their ratio: that comparison is the point of the exercise, and a large gap is
+the finding, not a bug to hide. Everything else here is `simple_reelout.jl`.
+
+# Re-optimizing while the tether grows
+
+`reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run stays
+reproducible without a server) re-anchors the path to the length actually being
+flown. A request goes out on a lap boundary every `reopt_every_n_laps`, at most
+`max_reopt` times, and it is NON-BLOCKING: `opt_step(...; wait = false)` queues
+the solve, `/status` is polled every `reopt_poll_interval` of simulated time, and
+the result is collected from `opt_trajectory` when it is there — whose table is in
+RADIANS, unlike the degrees of every struct. A solve is 7-13 s of wall time and
+the loop must not stall in it. While one runs, and after one that fails, the
+server keeps serving the previous path, so "not ready" needs no special case.
+
+A candidate is checked for curvature and clearance AT THE CURRENT LENGTH before it
+is installed; one that fails either is dropped and the run keeps flying what it
+has. What passes is blended in over `path_blend_time` ([`blend_paths`](@ref)),
+because installing a new reference in one step is a step in the cross-track error
+and the guidance answers a step with steering. Both paths go through
+[`prepare_path`](@ref) first — same point count, same traversal direction, same
+starting point — since interpolating two paths that are not aligned sweeps the
+reference around the pattern instead of morphing it. Installing the aligned old
+path re-bases the point indices, so the lap counter is re-based in the same step.
+
+Every solve is recorded in the `traj_opt.reopt` section of the run summary with
+its time, tether length and outcome.
+
+# Why the curvature margin is the entry's problem, not the pattern's
+
+The kite's minimum ANGULAR turn radius is `1/(L*c1*u_s)`, so a longer tether turns
+tighter on the sphere and the margin only ever improves as the run proceeds. The
+START is the worst case, and it is where an optimized path bites: measured
+2026-08-18, the path returned for 150 m has margin 0.93 there and 2.18 by the time
+the tether is at 350 m. `min_feasibility_margin` in `data/traj_opt.yaml` is
+checked at the starting length for exactly that reason, and a run that clears it
+is comfortable for the rest of the window.
 
 # What comes from where
 
-The guidance and its settings are unchanged from `simple_fig8.jl` — see that
-script's docstring for the guidance, the entry state machine and the plant/data
-path conventions, all of which apply here too. What differs is the winch: instead
-of V3Kite's own FORCE/POSITION winch (`fcs.compliance`), this script layers
-WinchControllers.jl's `WinchController` on top of V3Kite's POSITION mode. Each
-step it turns the measured `reel_out_speed(s)`/`winch_force(s)` into a speed
-`v_set`, integrates that into a length setpoint `l_set`, and passes `l_set` to
-`step!`'s `set_length` — the same mechanism the constant-length run uses, just
-with a setpoint that grows. `step!` accepts a length or a torque, never a speed
-directly, which is why the integration happens here rather than inside V3Kite.
-`v_set` itself is ALSO passed, as `step!`'s `v_ff`: V3Kite's position winch is a
-P loop on the length error, so integrating a speed here and differentiating it
-back out there is a first-order lag of `1/winch_pos_kp` = 2 s — measured at 1.16 s
-of delay and 0.49 of the commanded amplitude on the 5.7 s reel-out oscillation
-before `v_ff` existed, plus a standing `v_ro/winch_pos_kp` ≈ 5 m length error.
-Feeding the speed forward leaves the P loop only the error to correct.
-`fcs.compliance` must be `0` (POSITION mode): REEL_OUT and V3Kite's own FORCE mode
-both drive `set_length`/`set_torque`, and only one winch can hold the drum at a
-time — this script errors at startup otherwise, rather than silently picking
-one. That is why `fcs` here is loaded from `data/fc_settings_reelout.yaml`, a
-copy of `simple_fig8.jl`'s `fc_settings.yaml` with `compliance: 0` and the
-REEL_OUT keys below, not the shared file (whose `compliance: 0.5` is fig8's
-FORCE-mode tuning) — `system_reelout_150m.yaml`'s `fc_settings:` key names it.
+The optimizer's own settings — server, initial guess, solver knobs, resampling
+and the margin — are `data/traj_opt.yaml` ([`TrajOptSettings`](@ref)). The
+CONDITIONS are not: the wind comes from the system project's settings file and
+the winch law from its `wc_settings`, through `inflow_from_settings` and
+`winch_from_wc`, so the path is optimized for the ground station that flies it.
+The guess is not a formality — it decides whether the solve converges and which
+of several optima it converges to, so this script never retries with a different
+one behind your back; see `simple_opt_fig8.jl`'s docstring for the measurements.
 
-**Two winch controllers, ONE settings file.** Both read the same `WCSettings`
-object (`wc`, and `rcs` which is the same object), loaded from the file the
-project's `wc_settings:` key names. V3Kite's torque loop takes the `winch_*`
-fields; WinchControllers.jl's `WinchController` takes `kv`/`f_low`/`f_high`/
-`v_sat`/`t_startup` and the force-limiter gains. Before the 2026-08-16 merge
-(PlanWinchcontrol.md) these were two structs of nearly the same name in two
-packages, needing two files in two schemas — and the second, `wc_settings_reelout.yaml`,
-had to be loaded by HARDCODED NAME because the project key was already claimed
-by the first, so switching projects could not switch the reel-out winch tuning.
-It can now.
+`fcs.f8_a`/`f8_b`/`el_center` describe a lemniscate that is NOT flown here. The
+pattern's centre (the dive target, and `var_04`) and its extent (the size criteria
+of `fig8_metrics`) are measured off the installed path instead.
 
-# Feasibility
-
-`check_pattern_feasible` is printed at both `l_tether` (the START of the run,
-before any reel-out — the worst case, since a longer tether only ever shrinks the
-kite's minimum angular turn radius) and `fcs.reelout_l_max` (the end). Measured
-with `fc_settings_reelout.yaml`'s defaults at 150 m the margin is 1.22, growing
-to 1.63 at 200 m and 2.04 at 250 m, so no pattern change is needed to start at
-150 m — see `Plan.md`.
-
-Logs the run to `output/<log_file>.arrow` and `include`s `simple_reelout_plots.jl`
-at the end, exactly like `simple_fig8.jl`. The printed RESULTS summary is also
-written to `output/<log_file>.yaml`, structured the same way and with each value
-commented, for later comparison across runs without re-parsing console output.
-
-Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`; `var_01`
-through `var_09` are as in `simple_fig8.jl`):
-
-| slot     | quantity                                          |
-|:---------|:---------------------------------------------------|
-| `var_10` | tether length setpoint `l_set` [m]                |
-| `var_11` | speed setpoint `v_set` [m/s] — REEL_OUT's law from phase 3, or the standalone force-floor guard's reel-IN before that |
-| `var_12` | WinchController state (0 lower-force, 1 speed, 2 upper-force) |
-| `var_13` | force error of the active force limiter [N], NaN in speed control |
-
-`var_12`/`var_13` only mean anything from phase 3 on, when `rc` (the full
-`WinchController`) is actually stepped. Before that, `l_set` is otherwise held
-at the settled length, but the dive can sag tether force well below `rcs.f_low`
-(measured: ~50 N) — a SEPARATE, standalone `LowerForceController` (`guard_lfc`,
-deliberately not `rc`, see its construction comment) monitors force throughout
-phases 0-2 and reels in when needed, logged into `var_10`/`var_11` same as the
-main reel-out law.
-
-Not a `var_XX` slot: `fig_8`, `SysState`'s live lap count, as in `simple_fig8.jl`
-but gated on `phase >= 4` rather than `== 4` — a fast reel-out can jump straight
-from phase 3 to 5 without ever touching 4, and the counter must still start.
-`cycle` (the pumping-cycle number) is left at its default: no reel-in phase here.
-
-`sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
-1 dive, 2 hold, 3 transition, 4 fig8), plus a fifth phase this script adds: 5 final,
-entered from either 3 or 4 the moment reel-out stops, i.e. `l_set` reaches
-`fcs.reelout_l_max` OR `fcs.n_fig_eight` laps have been flown, whichever fires
-first. Reel-out begins `fcs.reelout_delay` seconds after phase 3 is reached and
-stops at whichever of the two triggers phase 5. Phase 4 still marks the first
-close tracking of the pattern, it just no longer gates the winch, and does not
-gate phase 5 either — a run that never settles still reaches final once
-reel-out is done.
-
-# Parameters
-
-`fcs` works exactly as in `simple_fig8.jl`: rebuilt from `data/fc_settings_reelout.yaml`
-unconditionally on every `include`, so a value is overridden by editing that file,
-not by pre-defining or mutating `fcs` in the REPL. The one exception is
-`FCS_OVERRIDES`, a `Dict{Symbol, Any}` of field => value applied on top of the file
-and then CLEARED, which is how the shape sweep (`examples/optimize_fig8.jl`) flies
-one `f8_a`/`f8_b` pair per `include`; `OUTPUT_PATH` and `RUN_ARCHIVE` are read and
-cleared the same way, and let those parallel runs keep their logs apart and skip
-the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
-value left over from a sweep must never change an interactive run. The
-REEL_OUT-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
-the second, independent stop criterion counted in laps (`0` disables it, its
-own docstring in `src/fc_settings.jl` has the counting details), `reelout_delay`,
-how long after phase 3 the winch waits before it starts reeling out, and
-`reelout_softstart`, which ramps the COMMANDED speed (`v_ff` and the `l_set`
-integration together, not the law inside `WinchController`) linearly from 0 to
-the computed `v_set` over that many seconds — `rcs.t_startup`
-(`data/wc_settings.yaml`) does not do this, see the comment on that key.
-`reelout_softstop` is the OTHER end of reel-out: once the remaining distance
-would finish within that many seconds at the current rate, `v_set` decelerates
-LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
-speed already being flown — avoiding the reel-in transient (a power undershoot)
-a hard stop leaves the POSITION loop to correct. The same soft-stop ramp applies
-when `n_fig_eight` fires first: with no remaining distance to solve a duration
-from, it latches for exactly `2 * reelout_softstop` seconds instead, the same
-nominal duration as the length case.
-`depower_final` is flown once phase 5 (final) is reached; its own docstring in
-`src/fc_settings.jl` has the tuned value and where it came from.
-
-WinchControllers.jl's OWN tuning — `kv`, `f_low`, `f_high`, `v_sat`,
-`t_startup`, `mode`, and every LowerForceController/UpperForceController gain
-that used to be invisible package defaults — is `data/wc_settings.yaml`
-now, not here; see that file's header comment.
-
-The run length and the turbulence level are read from `data/gui.yaml` exactly as
-in `simple_fig8.jl`. The system project is too, but only when the selection is a
-reel-out one: `selected_reelout_project()` (`examples/gui_state.jl`) ignores a
-fig8 selection left over from `simple_fig8.jl` — whose FORCE-mode `fc_settings`
-this script rejects at startup — and flies `system_reelout_150m.yaml` instead, so
-no `select_project()` call is needed in between. Selecting another
-`system_reelout_*.yaml` still switches this script to it (a shorter tether means
-less margin to cover, see Feasibility above).
+Logs to `output/<log_file>_opt.arrow` and `_opt.yaml` — the `_opt` suffix keeps
+the lemniscate run's log and summary intact, so the two are comparable after the
+fact. `REF_PATH` and `LOG_NAME` carry the flown curve and that name to
+`simple_reelout_plots.jl`.
 """
 
 using Pkg
@@ -162,7 +97,7 @@ using Printf
 import Dates
 using OrderedCollections: OrderedDict
 
-@info "simple_reelout.jl: figure-of-eight path following with REEL_OUT of the tether."
+@info "simple_opt_reelout.jl: reeling out along an externally optimized path."
 toc("Loaded packages in: ")
 
 # ==================== USER PARAMETERS ==================== #
@@ -172,11 +107,13 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
+# The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.
+include(joinpath(@__DIR__, "awetrim_client.jl"))
 # Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
-# Cleared for the same reason: a lemniscate run must not plot the optimized
-# reference, or load the `_opt` log, that a simple_opt_reelout.jl run left behind.
+# The reference curve and the log name simple_reelout_plots.jl reads; both set
+# below, once they are known, and cleared here for SHOW_PLOTS's reason.
 REF_PATH = nothing
 LOG_NAME = nothing
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
@@ -186,10 +123,12 @@ DAMPING_PER_STIFFNESS = 0.001
 PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
-@info "simple_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
+@info "simple_opt_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
        turbulence = $TURBULENCE."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+# The optimizer's own settings: server, initial guess, solver knobs, margin.
+tos = TrajOptSettings("traj_opt.yaml")
 
 # Per-run overrides of the settings just loaded, for a SWEEP: read and cleared
 # here like SHOW_PLOTS above, so a leftover value can never silently change the
@@ -215,7 +154,9 @@ output_path = (@isdefined(OUTPUT_PATH) && !isnothing(OUTPUT_PATH)) ? OUTPUT_PATH
               normpath(joinpath(@__DIR__, "..", "output"))
 OUTPUT_PATH = nothing
 mkpath(output_path)
-log_name = basename(project_set.log_file)
+# `_opt`: this run must not overwrite the lemniscate run's log and summary — the
+# two are each other's baseline.
+log_name = basename(project_set.log_file) * "_opt"
 
 # ======================== INIT =========================== #
 
@@ -286,6 +227,126 @@ fec = FigureEightController(FigureEightSettings(;
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
 
+# ================= OPTIMIZED REFERENCE PATH ================== #
+
+# The conditions of THIS run, read off the files the plant was built from. `rcs`
+# is the same WCSettings object the reel-out WinchController is built from, so
+# the optimizer is given the winch law that is actually flown.
+inflow = inflow_from_settings(project_set)
+winch = winch_from_wc(rcs)
+@info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
+                z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N.",
+               inflow.wind_speed, inflow.wind_direction, inflow.profile_law, inflow.z0,
+               winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max)
+
+# The seed, from data/traj_opt.yaml: it decides whether the solve converges and
+# which optimum it converges to. `figure_eight_path` closes the curve itself.
+guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
+                                       tos.guess_d, 0.0, tos.guess_el_center,
+                                       0.0, tos.guess_points)
+@info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
+               tos.guess_a, tos.guess_b, tos.guess_el_center, tos.guess_points)
+
+# Anchored to the STARTING length. The pattern is optimal there and drifts off it
+# as the tether grows; re-optimizing during the run is stage 4, not this script.
+ensure_server(tos.base_url; autostart = tos.autostart_server)
+opt_reply = opt_init(InitParams(; name = tos.name, length = l_set,
+                                winch_params = winch, inflow_conditions = inflow,
+                                trajectory = Trajectory(collect(guess_az), collect(guess_el)),
+                                input_depower = tos.input_depower,
+                                reg_weight = tos.reg_weight,
+                                detect_simple_bounds = tos.detect_simple_bounds);
+                     url = tos.base_url)
+# No automatic retry with a different guess, deliberately: a guess that merely
+# converges is not the same answer, and picking one silently would hide which
+# optimum was flown.
+opt_result = try
+    opt_step(StepParams(l_set, winch, opt_reply.trajectory); url = tos.base_url)
+catch exc
+    exc isa HTTP.StatusError && exc.status == 422 || rethrow()
+    error("""
+          The optimizer returned no path: $(String(copy(exc.response.body)))
+
+          Three candidates, most likely first:
+            * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
+              it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
+              $(tos.guess_b)°, guess_el_center = $(tos.guess_el_center)° of \
+              data/traj_opt.yaml, which seeds the request and nothing else — \
+              widening or raising it changes the guess, not the flown path. \
+              Measured at 150 m and 6 m/s: 20°/11° at 18° does not converge, \
+              30°/12° and 20°/11°-at-26° do.
+            * the winch is too stiff to reel out at the optimum: \
+              kv*sqrt(f_high) = $(round(winch.k_v * sqrt(winch.f_max); digits = 1)) \
+              m/s against $(inflow.wind_speed) m/s of wind at 6 m.
+            * these conditions genuinely have no solution.
+
+          `bin/run_server log` carries the solver's own output.""")
+end
+toc("Received the optimized path in: ")
+
+# Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
+# points onto it concentrates each vertex's turn into one short segment, which
+# makes path_radius_profile report a far tighter pattern than the curve is.
+n_opt = length(opt_result.trajectory.azimuth) - 1
+set_path!(fec, opt_result.trajectory.azimuth, opt_result.trajectory.elevation;
+          resample = min(tos.resample_points, n_opt))
+
+# The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
+# Captured now, not read off `fec` in the RESULTS block: with reopt_enabled the
+# path in `fec` at the end of the run is not the one these describe.
+n_path_initial = length(fec.az_path)
+path_min_h_start = path_min_height(fec, l_tether)
+az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
+el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
+az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
+el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
+
+# set_path! REVERSES a path that does not match up_loops, so a mismatch here is
+# not caught by anything downstream: the kite would fly the optimizer's curve,
+# but backwards, which is not the trajectory that was optimized.
+opt_table = opt_trajectory(; url = tos.base_url)
+opt_downloops = opt_table["spline"]["downloops"]
+opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
+opt_downloops == !fcs.up_loops ||
+    error("The optimizer returned a downloops = $opt_downloops path while this run \
+           flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
+           not fly it reversed.")
+@info @sprintf("Optimized path: %d points, azimuth %.1f°…%.1f°, elevation \
+                %.1f°…%.1f° (centre %.1f°), predicted mean reel-out power %.0f W.",
+               length(fec.az_path), minimum(fec.az_path), maximum(fec.az_path),
+               minimum(fec.el_path), maximum(fec.el_path), el_c_path, opt_power_pred)
+
+# The ELEVATION floor, which is not the clearance floor and does not follow from
+# it: `min_height` is satisfied at ever lower elevations as the tether grows, so a
+# path that clears 50 m at 350 m of tether is at 8.2°. This repo's own criterion is
+# an angle, and `fig8_metrics` fails a run that breaks it.
+#
+# Checked with `candidate_elevation_margin` on top, because this compares the
+# REFERENCE path while the criterion scores the FLOWN one, and the kite flies below
+# its reference near the lobe tips.
+el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+minimum(fec.el_path) >= el_floor ||
+    error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
+                    %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
+                    constrains height and not elevation, so this is not something \
+                    the solve avoids on its own.",
+                   minimum(fec.el_path), fcs.min_elevation,
+                   tos.candidate_elevation_margin, el_floor))
+
+# The clearance floor, checked at the tether length this run flies. Independent of
+# the turn-rate table above, so it runs whether or not `coeffs` was available.
+if tos.min_height > 0
+    clr = check_pattern_height(fec, l_tether, tos.min_height)
+    clr.ok ||
+        error(@sprintf("The optimized path's lowest point is %.1f m above ground at \
+                        L = %.0f m (elevation %.1f°), below the min_height = %.0f m \
+                        of data/traj_opt.yaml. The optimizer's own floor is a HEIGHT \
+                        and it earns part of it by reeling out within the lap, which \
+                        an installed (azimuth, elevation) curve does not. Raise the \
+                        guess elevation, fly a longer tether, or lower min_height.",
+                       clr.height, l_tether, clr.elevation, tos.min_height))
+end
+
 # Never hardcode these: both arguments move them a lot. The lookup key is
 # `body_damping`, the value `init` was given: the damping the model FLIES the
 # pattern with is the floor that decays out of it (0.8x by default), so the one
@@ -322,10 +383,17 @@ else
     # At l_tether (the START, before any reel-out) this is the WORST case: a longer
     # tether only ever shrinks the kite's minimum angular turn radius.
     feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
-    feas_start.feasible ||
-        @warn "Pattern is tighter than the kite's minimum turn radius AT THE START \
-               (l_tether = $l_tether m) — expect curvature-limited tracking during \
-               the entry, not a tuning problem."
+    # A refusal, not a warning: the optimizer knows nothing of the V3's turn-rate
+    # law, so a path the kite cannot turn along is a plausible thing for it to
+    # return, and flying it measures the steering clamp instead of the path.
+    feas_start.margin >= tos.min_feasibility_margin ||
+        error(@sprintf("The optimized path asks for a turn radius of %.1f° where the \
+                        kite manages %.1f° at the STARTING length %.0f m: margin \
+                        %.2f, below min_feasibility_margin = %.2f. Lower \
+                        body_damping, raise max_steering, or lower the margin in \
+                        data/traj_opt.yaml to fly it anyway.",
+                       feas_start.path_radius, feas_start.kite_radius, l_tether,
+                       feas_start.margin, tos.min_feasibility_margin))
     feas_end = check_pattern_feasible(fec, fcs.reelout_l_max, fcs.max_steering; c1)
 
     # Dead-time context for attractor_dist: how long the lead arc takes to fly.
@@ -335,7 +403,10 @@ else
                    fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
 end
 
-cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
+# The dive aims at the pattern centre, which is the OPTIMIZED path's now.
+ccs = CourseControllerSettings(fcs; dt = s.dt)
+ccs.el_center = el_c_path
+cc = CourseController(ccs)
 
 transition_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
 stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
@@ -352,6 +423,24 @@ fig8_n = 0
 fig8_idx_prev = fec.last_idx
 fig8_idx_progress = 0.0
 n_path = length(fec.az_path)
+
+# ---- Re-optimization (stage 4). The path is anchored to ONE radius and the run
+# walks away from it; each re-optimization re-anchors it to the length being
+# flown. Non-blocking on purpose: a solve is 7-13 s of wall time and the loop
+# must not stall in it, so the request is queued (`wait = false`), `/status` is
+# polled, and the result is collected when it is there. While a solve runs, and
+# after one that failed, the server keeps serving the previous path, so "not
+# ready yet" needs no special case here either.
+reopt_pending = false       # a solve is queued on the server
+reopt_n = 0                 # solves completed, accepted or rejected
+reopt_lap = 0.0             # lap count at which the last request went out
+reopt_next_poll = 0.0       # [s] next /status poll
+reopt_t_request = NaN       # [s] when the pending request went out
+reopt_events = NamedTuple[] # one row per solve, for the run summary
+# The blend in progress: two canonical paths of equal length and a start time.
+blend_from = nothing
+blend_to = nothing
+blend_t0 = NaN
 
 toc("Start simulation loop...")
 
@@ -406,6 +495,121 @@ try
                 global fig8_idx_progress += delta
                 global fig8_idx_prev = fec.last_idx
                 global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)
+            end
+        end
+
+        # ---- Re-optimize the path for the length now being flown -------- #
+        if tos.reopt_enabled && phase >= 4
+            l_now = Float64(s.sys_state.l_tether[1])
+
+            # Queue: on a lap boundary, never while a solve or a blend is running,
+            # and never past max_reopt.
+            if !reopt_pending && isnothing(blend_to) && reopt_n < tos.max_reopt &&
+               fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
+                try
+                    opt_step(StepParams(l_now, winch,
+                                        Trajectory([fec.az_path; fec.az_path[1]],
+                                                   [fec.el_path; fec.el_path[1]]));
+                             url = tos.base_url, wait = false)
+                    global reopt_pending = true
+                    global reopt_t_request = t
+                    global reopt_lap = fig8_idx_progress / n_path
+                    global reopt_next_poll = t + tos.reopt_poll_interval
+                    @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
+                                    (lap %.1f, request %d of %d).",
+                                   l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt)
+                catch exc
+                    # A refused request must not take the run with it: the path in
+                    # the air is still the one from /init and is still flyable.
+                    global reopt_n += 1
+                    push!(reopt_events, (; t, l = l_now, status = "request failed",
+                                         detail = first(sprint(showerror, exc), 120)))
+                    @warn "Re-optimization request failed; flying on with the \
+                           current path." exception = exc
+                end
+            end
+
+            # Collect: poll rather than block, and validate before installing.
+            if reopt_pending && t >= reopt_next_poll
+                global reopt_next_poll = t + tos.reopt_poll_interval
+                state = try
+                    opt_status(tos.base_url)["state"]
+                catch exc
+                    @warn "Could not reach the optimizer; will retry." exception = exc
+                    "solving"
+                end
+                if state != "solving"
+                    global reopt_pending = false
+                    global reopt_n += 1
+                    event = (; t, l = l_now, status = state, detail = "")
+                    if state == "converged"
+                        tab = opt_trajectory(; url = tos.base_url)
+                        # /trajectory is in RADIANS, unlike the degrees of the structs.
+                        new_az = rad2deg.(Float64.(tab["table"]["azimuth"]))
+                        new_el = rad2deg.(Float64.(tab["table"]["elevation"]))
+                        npts = min(tos.resample_points, length(new_az) - 1)
+                        cand_az, cand_el = prepare_path(new_az, new_el;
+                            resample = npts, up_loops = fcs.up_loops)
+                        # At the CURRENT length, which is what it will be flown at.
+                        margin = isnothing(coeffs) ? Inf :
+                            check_pattern_feasible(cand_az, cand_el, l_now,
+                                fcs.max_steering; c1, prn = false).margin
+                        clearance = path_min_height(cand_az, cand_el, l_now)
+                        if margin < tos.min_feasibility_margin
+                            event = (; t, l = l_now, status = "rejected",
+                                     detail = @sprintf("curvature margin %.2f", margin))
+                        elseif tos.min_height > 0 && clearance < tos.min_height
+                            event = (; t, l = l_now, status = "rejected",
+                                     detail = @sprintf("clearance %.1f m", clearance))
+                        elseif minimum(cand_el) < el_floor
+                            # The clearance floor does NOT imply this one: at 318 m
+                            # of tether, 50 m of height is 9° of elevation. The
+                            # margin is there because the kite flies BELOW its
+                            # reference — ~3° measured, twice.
+                            event = (; t, l = l_now, status = "rejected",
+                                     detail = @sprintf("descends to %.1f°, below \
+                                                        min_elevation + margin = %.1f°",
+                                                       minimum(cand_el), el_floor))
+                        else
+                            global blend_from = prepare_path(fec.az_path, fec.el_path;
+                                resample = npts, up_loops = fcs.up_loops)
+                            global blend_to = (cand_az, cand_el)
+                            global blend_t0 = t
+                            # Install the aligned OLD path (w = 0, same curve, new
+                            # point indices) and re-base the lap counter on it in
+                            # the same step. `prepare_path` rotates the start point
+                            # to the azimuth extreme, so without this the next
+                            # `fec.last_idx - fig8_idx_prev` reads the re-indexing
+                            # as a fraction of a lap the kite never flew.
+                            set_path!(fec, blend_from[1], blend_from[2];
+                                      up_loops = fcs.up_loops)
+                            global fig8_idx_prev = fec.last_idx
+                            global n_path = length(fec.az_path)
+                            event = (; t, l = l_now, status = "installed",
+                                     detail = @sprintf("margin %.2f, clearance %.1f m, \
+                                                        %.0f W predicted", margin, clearance,
+                                                       Float64(tab["metrics"]["avg_power_W"])))
+                        end
+                    end
+                    push!(reopt_events, event)
+                    @info @sprintf("Re-optimization %d: %s%s (%.1f s after the request).",
+                                   reopt_n, event.status,
+                                   isempty(event.detail) ? "" : " — " * event.detail,
+                                   t - reopt_t_request)
+                end
+            end
+
+            # Blend: a step in the reference is a step in the cross-track error,
+            # and the guidance answers a step with steering.
+            if !isnothing(blend_to)
+                w = (t - blend_t0) / tos.path_blend_time
+                b_az, b_el = blend_paths(blend_from[1], blend_from[2],
+                                         blend_to[1], blend_to[2], w)
+                set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
+                if w >= 1
+                    global blend_from = nothing
+                    global blend_to = nothing
+                end
             end
         end
 
@@ -535,7 +739,7 @@ try
         s.sys_state.var_01 = dmin              # cross-track error [deg]
         s.sys_state.var_02 = az_attr           # attractor azimuth [deg]
         s.sys_state.var_03 = el_attr           # attractor elevation [deg]
-        s.sys_state.var_04 = fcs.el_center     # pattern-centre elevation [deg]
+        s.sys_state.var_04 = el_c_path         # pattern-centre elevation [deg]
         s.sys_state.var_05 = chi_set           # RAW guidance course [rad]
         s.sys_state.var_06 = rad2deg(err)      # REGULATED error [deg]
         # A weight, not a flag: a step here means entry_d_blend is too narrow.
@@ -601,9 +805,11 @@ sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 # require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
 # (which never goes past 4) — checks reel-out actually finished within the run.
+# From the flown path, not from fcs.f8_*. `az_center` is in RADIANS here (it is
+# compared against the logged azimuth), the two extents in degrees.
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = 0.0,
-                   az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
+                   min_elevation = fcs.min_elevation, az_center = deg2rad(az_c_path),
+                   az_amplitude = az_amp_path, el_height = el_height_path,
                    min_span_frac = fcs.min_span_frac, require_final = true)
 
 summary = OrderedDict{String, Any}()
@@ -777,6 +983,81 @@ else
 end
 summary["reelout"] = reelout_summary
 
+# The comparison this script exists for: what the optimizer promised for this path
+# against what reeling out along it delivered. `rp` is `nothing` when the tether
+# never reeled out, and then there is nothing to compare.
+opt_power_meas = isnothing(rp) ? nothing : rp.mean_power
+if !isnothing(opt_power_meas)
+    @printf("  Optimizer predicted %.0f W of mean reel-out power for this path; \
+             the run measured %.0f W (%.2f x).\n",
+            opt_power_pred, opt_power_meas, opt_power_meas / opt_power_pred)
+end
+# A key is omitted rather than written empty when its measurement does not exist:
+# `string(nothing)` would put the bare word `nothing` into the file, which YAML
+# reads back as a string.
+power_block = OrderedDict{String, Any}(
+    "predicted_W" => (round(Int, opt_power_pred),
+        "mean reel-out power the optimizer predicted for this path [W]"))
+if !isnothing(opt_power_meas)
+    power_block["measured_W"] = (round(Int, opt_power_meas),
+        "mean reel-out power the run harvested [W]")
+    power_block["ratio"] = (round(opt_power_meas / opt_power_pred; digits = 2),
+        "measured / predicted")
+end
+feasibility_block = OrderedDict{String, Any}(
+    "min_required" => (tos.min_feasibility_margin,
+        "min_feasibility_margin of data/traj_opt.yaml [-]"))
+if !isnothing(coeffs)
+    feasibility_block["margin_start"] = (round(feas_start.margin; digits = 2),
+        "curvature margin at the starting length, the worst case [-]")
+    feasibility_block["margin_end"] = (round(feas_end.margin; digits = 2),
+        "curvature margin at reelout_l_max [-]")
+end
+summary["traj_opt"] = OrderedDict{String, Any}(
+    "power" => power_block,
+    "guess" => OrderedDict(
+        "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
+        "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
+        "el_center_deg" => (tos.guess_el_center, "centre elevation of the guess [deg]"),
+        "points" => (tos.guess_points, "points the guess was sent with")),
+    "path" => OrderedDict(
+        "points" => (n_path_initial, "points of the path installed before the run"),
+        "points_final" => (length(fec.az_path),
+            "points of the path at the end; differs when reopt installed one"),
+        "az_center_deg" => (round(az_c_path; digits = 1), "centre azimuth of the path [deg]"),
+        "az_amplitude_deg" => (round(az_amp_path; digits = 1), "half-width of the path [deg]"),
+        "el_center_deg" => (round(el_c_path; digits = 1), "centre elevation of the path [deg]"),
+        "el_height_deg" => (round(el_height_path; digits = 1),
+            "elevation span of the path, peak to peak [deg]"),
+        "downloops" => (opt_downloops, "traversal direction the optimizer solved for")),
+    "feasibility" => feasibility_block,
+    "reopt" => OrderedDict(
+        "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
+        "requests" => (reopt_n, "solves that completed, accepted or rejected"),
+        "installed" => (count(e -> e.status == "installed", reopt_events),
+            "new paths actually flown"),
+        "events" => OrderedDict(
+            @sprintf("t_%05.1f_s", e.t) =>
+                (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
+                 @sprintf("at L = %.0f m", e.l))
+            for e in reopt_events)),
+    "clearance" => OrderedDict(
+        "path_min_m" => (round(path_min_h_start; digits = 1),
+            "lowest point of the PRE-FLIGHT path at the starting length [m]"),
+        "flown_min_m" => (round(minimum(first(lt) * sin(el)
+                                        for (lt, el) in zip(sl.l_tether, sl.elevation));
+                                digits = 1),
+            "lowest point the kite actually reached over the run [m]"),
+        "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]")),
+    "inflow" => OrderedDict(
+        "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"),
+        "wind_direction_deg" => (inflow.wind_direction, "direction the wind comes from [deg]"),
+        "profile_law" => (inflow.profile_law, "0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4-6=CUSTOM_*")),
+    "winch" => OrderedDict(
+        "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
+        "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
+        "f_max_N" => (winch.f_max, "maximum winch force sent [N]")))
+
 # Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
 if t_sim > 0
     steps = round(Int, t_sim / s.dt)
@@ -835,6 +1116,10 @@ else
 end
 
 if show_plots
+    # The flown curve and this run's log name, so the plots draw the optimized
+    # path and load the _opt log instead of the lemniscate run's.
+    REF_PATH = (fec.az_path, fec.el_path)
+    LOG_NAME = log_name
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
 else
     @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
