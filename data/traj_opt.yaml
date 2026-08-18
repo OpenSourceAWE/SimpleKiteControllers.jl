@@ -100,7 +100,7 @@ traj_opt:
     # bought with real turn authority, so it is a rejection-rate knob, not a safety
     # one. Raising it back only helps once the optimizer is told about the V3's
     # turn-rate law — its own steering bound is what sets the 11 m radius.
-    min_feasibility_margin: 0.8
+    min_feasibility_margin: 0.75
     # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
     # any reel-out; 0.0 disables.
     #
