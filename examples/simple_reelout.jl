@@ -403,6 +403,8 @@ try
                 delta = fec.last_idx - fig8_idx_prev
                 delta < -(n_path ÷ 2) && (delta += n_path)
                 delta > n_path ÷ 2 && (delta -= n_path)
+                # A step moves Q by a fraction of a point; a jump is Q changing branch.
+                abs(delta) > n_path ÷ 8 && (delta = 0)
                 global fig8_idx_progress += delta
                 global fig8_idx_prev = fec.last_idx
                 global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)

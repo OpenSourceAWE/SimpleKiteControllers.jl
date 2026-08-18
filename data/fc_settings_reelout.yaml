@@ -103,7 +103,7 @@ fc_settings:
   f8_c:               0.0      # Size of the right part                           [deg]
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
-  attractor_dist:     10.0     # Arc distance Q -> attractor                      [deg]
+  attractor_dist:      8.0     # Arc distance Q -> attractor                      [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
   # --- heading/course PID ---------------------------------------------------

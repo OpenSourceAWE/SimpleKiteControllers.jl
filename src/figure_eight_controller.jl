@@ -72,6 +72,20 @@ cross-track error the search goes global again, so a kite genuinely off-path is
 not trapped. `branch_tol` and `min_speed` govern the second, weaker guard —
 disambiguating near-equal candidates by the current flight direction. See
 [`calc_attractor`](@ref).
+
+`search_window` is an absolute arc, and a path much smaller than twice it would
+leave no window at all: an optimized pattern at a long tether measures a few tens
+of degrees of arc in total, where a 45° half-width spans the whole curve and the
+continuity guard silently becomes a global search.
+`search_window_max_frac` caps the half-width at that fraction of the path's own
+arc length, so the guard scales down with the pattern instead of switching off.
+A window can also go stale — after a path is installed, or after an excursion
+that ended within `reacquire_dist` — and `reacquire_margin` is the second exit:
+Q leaves the window when the best point on the whole path is that much closer
+than the best inside it. Both searches are restricted to points aligned with
+the flight direction (see [`calc_attractor`](@ref)): near the crossing the
+nearest point of all is often the reverse branch, and taking it flips the
+commanded course by ~180°.
 """
 @with_kw mutable struct FigureEightSettings @deftype Float64
     dt
@@ -89,7 +103,9 @@ disambiguating near-equal candidates by the current flight direction. See
     min_speed = 1.0            # minimum angular speed to trust the course estimate [deg/s]
     course_tau = 0.5           # low-pass on the course estimate [s]
     search_window = 45.0       # arc half-width of the local Q search [deg]
+    search_window_max_frac = 0.125 # cap on that half-width, as a fraction of the path [-]
     reacquire_dist = 25.0      # cross-track error above which the search goes global [deg]
+    reacquire_margin = 3.0     # how much better the global best may be before Q jumps [deg]
 end
 
 """
@@ -376,14 +392,23 @@ arc ahead of Q along the path, and the cross-track error.
 Near the self-intersection of the figure-of-eight two path branches are (almost)
 equally close. Two mechanisms keep Q on the right one:
 
+0. **Flight direction, as a filter** (`min_speed`): once the course estimate is
+   trusted, only points whose tangent is within 90° of it can be Q at all. Index
+   distance alone cannot separate the branches — at the crossing they come within
+   a few tens of points of each other on a small path — but their tangents are
+   ~180° apart there. Nothing qualifying leaves the plain nearest point.
 1. **Continuity** (`search_window`): Q is searched only within a window of arc
    around the previous Q, so it advances along the path instead of teleporting
    to the far branch. This is the primary guard; without it the commanded course
    flips by ~180° at every crossing of the self-intersection. The window is
    dropped beyond `reacquire_dist` from the path, so a genuinely off-path kite
-   re-acquires globally.
+   re-acquires globally, and its half-width is capped at `search_window_max_frac`
+   of the path's arc length, so a small pattern keeps a window rather than losing
+   the guard to a window wider than the curve.
 2. **Flight direction** (`branch_tol`): among the remaining near-equal
    candidates, the branch whose tangent needs the smaller heading change wins.
+   It only ever sees the far branch when the search is global — inside a window
+   the far branch is not a candidate at all.
 """
 function calc_attractor(fec::FigureEightController, azimuth, elevation)
     fes = fec.fes
@@ -398,25 +423,58 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
     use_window = fec.has_prev && fes.search_window > 0 && total_len > 0 &&
                  dists[fec.last_idx] <= fes.reacquire_dist
     idxs = if use_window
-        half = max(1, round(Int, n * fes.search_window / total_len))
+        # Capped: on a small path the raw window spans the curve and stops guarding.
+        half = clamp(round(Int, n * fes.search_window / total_len), 1,
+                     max(1, round(Int, n * fes.search_window_max_frac)))
         half >= n ÷ 2 ? (1:n) : (fec.last_idx - half):(fec.last_idx + half)
     else
         1:n
     end
 
+    # Q must sit where the kite is actually going: at the crossing the nearest
+    # point of all can belong to the branch traversed the other way.
+    trust = fec.has_prev && fec.speed >= fes.min_speed
+    aligned(i) = !trust || abs(wrap2pi(fec.tangent[i] - fec.course)) <= pi / 2
+
     dmin = Inf
     imin = fec.last_idx
+    d_any = Inf
+    i_any = fec.last_idx
     for j in idxs
         i = mod1(j, n)
-        if dists[i] < dmin
+        if dists[i] < d_any
+            d_any = dists[i]
+            i_any = i
+        end
+        if dists[i] < dmin && aligned(i)
             dmin = dists[i]
             imin = i
         end
     end
+    if isinf(dmin)
+        dmin = d_any
+        imin = i_any
+    end
+    if use_window
+        d_global = Inf
+        i_global = imin
+        for i in 1:n
+            (dists[i] < d_global && aligned(i)) || continue
+            d_global = dists[i]
+            i_global = i
+        end
+        if dmin > d_global + fes.reacquire_margin
+            idxs = 1:n
+            dmin = d_global
+            imin = i_global
+        end
+    end
     iq = imin
-    if fec.has_prev && fec.speed >= fes.min_speed
+    if trust
         # Of the local minima within branch_tol, take the smallest steering effort.
-        best = Inf
+        # The bar starts at Q's own effort: a candidate must be better ALIGNED to
+        # take it, not merely be a local minimum.
+        best = abs(wrap2pi(fec.tangent[iq] - fec.course))
         for j in idxs
             i = mod1(j, n)
             d = dists[i]

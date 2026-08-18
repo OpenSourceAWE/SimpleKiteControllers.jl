@@ -624,6 +624,171 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## ATTRACTOR_DIST 10 -> 8 on the reel-out settings (2026-08-18)
+
+The overrun below said the lead was too long for the pattern the reel-out ends
+on. Flown at 8.0 deg (`fc_settings_reelout.yaml`), everything else equal, 150 ->
+380 m, 6 m/s, no turbulence:
+
+| | 10.0 deg | 8.0 deg |
+|---|---|---|
+| RMS d | 2.08 deg | **1.40 deg** |
+| mean / max d | 1.80 / 5.43 deg | 1.18 / 4.99 deg |
+| laps | 6.0 | 7.0 |
+| min elevation, whole run | 5.3 deg | 7.1 deg |
+| steering within 2 % of peak | 13 % | 8 % |
+| tape rate-limited | 17 % | 10 % |
+| chatter (`hf_std_steering`) | 0.0214 | **0.0056** |
+| criteria | FAILED min elevation > 6.5 deg | **all 8 passed** |
+| measured power | 8491 W (0.98 x) | 8508 W (0.98 x) |
+
+The overrun is gone with it: the kite never comes closer to its attractor than
+1.54 deg (was 0.20 deg, i.e. through it), no sample under 1 deg, the largest
+single-step change in `chi_set` is 30 deg (was a 180 deg swing), and no
+saturated sample anywhere in phase 4+ flips sign. Around 134 s `u_s` now walks
+32 -> 29 -> 22 -> 16 -> 11 -> 7 % with the attractor 5.8-9.5 deg away.
+
+Power is unchanged, so the 30 % of cross-track error this bought is free. Note
+the lead was NOT the whole story of the entry below — 8 deg is still a fifth of
+the 40.5 deg pattern the run ends on — but at 8 deg the tracking is tight enough
+(1.4 deg RMS against a 4.8 deg tall pattern) that the reference and the position
+no longer disagree at the scale of the pattern.
+
+## `u_s` saturates at the crossing because the kite overruns its attractor (2026-08-18)
+
+With Q finally stable (see the entry below), the 18:16 run still saturates `u_s`
+for ~0.6 s at 134.1 s. It is NOT a branch flip any more: Q's index rises
+monotonically 208 -> 272 across the event and the cross-track error stays at
+3.3-3.6 deg. What collapses is the distance from the KITE to its attractor:
+2.52 -> 1.50 -> 0.75 -> 0.21 deg at 134.17 s. The kite flies THROUGH the point it
+is steering at, so the great-circle bearing to it swings 180 deg (`chi_set` -103
+-> -178 -> +102), the regulated error reads ~180 deg and the command pins to
+`max_steering`, then flips sign as the attractor passes.
+
+The geometry behind it, at 381 m of tether:
+
+- The path is 17.8 deg wide, 4.8 deg tall, 40.5 deg of arc. At 150 m it was
+  +/-19.7 deg wide and 12.4 deg tall — the optimized pattern shrinks ~2.5x in
+  angle as the tether triples, because it keeps its PHYSICAL size.
+- `attractor_dist` is 10 deg, i.e. a QUARTER of the whole pattern. The path
+  rounds the left lobe tip in less arc than that, so the point 10 deg ahead of Q
+  sits spatially on top of the kite.
+- The kite is 3.4 deg below its reference on a pattern 4.8 deg tall (2.08 deg RMS
+  over the run). Its leftward pass along the upper branch therefore coincides
+  with where the lower branch runs — the reference and the position are
+  inconsistent at the scale of one pattern height, and no closest-point guidance
+  is well behaved there.
+
+Three law changes were tried and all made it worse, scored by total |chi_set|
+rotation over 126-140 s of that run (current law: 594 deg):
+
+| lead rule | rotation | worst single step |
+|---|---|---|
+| arc 10 deg ahead of Q (current) | 594 deg | 42 deg |
+| arc capped at 15 % / 10 % / 6 % of the path | 684 / 861 / 1105 | 165 deg |
+| L1 circle, first point 10 deg from the kite | 832 deg | 103 deg |
+| blend to the tangent at Q below 2/3/5 deg | 678 / 639 / 590 | 107 deg |
+
+So this is not a Q-selection bug and not fixable by another guard. It is the
+pattern being small: the levers are a shorter `attractor_dist` at long tether,
+a pattern that stays larger in angle (shorter reel-out, or a guess/objective that
+does not shrink it), or tighter tracking. All three need a re-fly to judge — the
+table above is an OPEN-LOOP replay, scoring alternatives on a trajectory the
+current law produced.
+
+## The Q continuity window was never active — `search_window` vs a small path (2026-08-18)
+
+The `cycle` trace of the 150 m reel-out run rings at the end: 8 -> 9 -> 8 at
+134.4 s and again 9 -> 8 at 136.7 s, held for 2.7 s. Not the kite. `fig8_n`
+integrates the step-to-step change of `fec.last_idx`, and Q was hopping between
+the two branches of the crossing — the logged `dmin` (`var_01`) alternates
+between the two local minima, 0.05-0.6 deg on the branch the kite is on and
+3.2-3.4 deg on the far one, and the index between ~230 and ~120. That is 110
+points, under the `n_path/2` unwrap threshold, so the counter took it for flight
+progress worth 0.3 of a lap.
+
+The cause is that `search_window` is an ABSOLUTE arc, 45 deg, and
+`calc_attractor` fell back to a global search whenever the half-width reached
+`n/2`:
+
+    half = round(Int, n * search_window / total_len)
+    half >= n / 2 ? (1:n) : window
+
+That triggers for every path shorter than 2 * 45 = 90 deg of arc. The optimized
+pattern at 343 m measures 41.5 deg in total, the shipped lemniscate (A = 30,
+B = 12) about 90, and the test controller (A = 10, B = 5) 37 — so the continuity
+guard has been off in every configuration this repo flies, and only `branch_tol`
+(3 deg, comparable to the branch separation on a pattern this small) was
+deciding which branch Q sat on. The share of samples where the logged `dmin`
+exceeds 2 deg climbs through the run as the pattern shrinks in angle: 9 % at
+40-50 s, 38 % at 100-110 s, 69 % at 130-140 s.
+
+Fixed in three places:
+
+- `search_window_max_frac` (0.125) caps the half-width at that fraction of the
+  path's own arc length, so the window scales with the pattern instead of
+  switching off. The far branch is then not a candidate at all.
+- `reacquire_margin` (3 deg) is the second exit from the window, needed once the
+  window actually bites: Q leaves it when the best point on the whole path is
+  that much closer than the best inside it. Without it a window that went stale
+  at a path install, or after an excursion that ended within `reacquire_dist`,
+  locks Q to the wrong stretch — three tests covered exactly that and had been
+  passing only because the search was global.
+- The lap counter in `simple_reelout.jl` / `simple_opt_reelout.jl` drops any
+  `|delta| > n_path/8`: one step moves Q by ~0.3 points, so a jump is Q changing
+  branch, never flight.
+
+Replaying the flown trajectory of the last 30 s through both versions: branch
+hops (index jump > 45) fall from 6 to 1, and the samples where Q sits more than
+1.5 deg worse than the true nearest point from 5 % to 2 %. The mean true
+cross-track error over that window is 1.88 deg, so on a 41.5 deg path the
+branches really are near-equidistant there — the residual ambiguity is the
+pattern being small, not the guard. `branch_tol` was left at 3.0: inside a
+window it has nothing to disambiguate, and it still governs the genuinely global
+searches.
+
+Re-flown at 17:40 the same day: the counter runs 0 -> 8 monotonically, no drop
+anywhere in the run, and all 7 re-optimizations installed (shares 17/13/13/14/14/
+14/15 %, measured 8495 W against 9098 W predicted).
+
+That run then showed what the margin rule costs when it fires: at 133.7 s and
+138.6 s, `u_s` steps to `max_steering` and stays there. Q jumped 123 points to
+the branch the kite was physically nearest but which is traversed the OTHER way,
+so `chi_set` flipped by ~156 deg (-94 -> +62), the regulated error read -139 deg
+and the command saturated. The kite had been tracking its own branch happily at
+3.4 deg of cross-track error while the reverse branch lay 0.4 deg away — on a
+41.5 deg path near the crossing, "nearest" and "the branch I am flying" are
+different questions. `branch_tol` could not rescue it: at 3.40 vs 0.41 the old
+candidate missed `dmin + branch_tol` by 0.01 deg.
+
+So the reacquire is now gated on flight direction — only points whose tangent is
+within 90 deg of the filtered course qualify, once `min_speed` says the course
+estimate is worth trusting. Replaying that run's last 10 s: both 123-point flips
+disappear. What is left at those two instants is Q sliding forward along its own
+branch to the window edge, 45 points, worth 13-15 deg of commanded course instead
+of 156.
+
+Gating only the RE-ACQUIRE was not enough — the 18:00 run still saturated `u_s`
+at 134.1 s. Two more things had to be direction-aware:
+
+- The WINDOW walks. On the path installed at 125.3 s the two branches are ~65
+  points apart at the crossing, so a +/-45-point window reaches the reverse
+  branch in two steps of sliding to its own edge (Q went 148 -> 193 -> 213). An
+  index window cannot separate branches that are close in index; their tangents
+  are what differ, by 166 deg here. So the 90 deg alignment test is now a FILTER
+  on the whole Q search — windowed and global alike — with the plain nearest
+  point as the fallback when nothing qualifies.
+- The `branch_tol` tie-break started its search at `best = Inf`, so ANY local
+  minimum within tolerance replaced Q, however badly aligned: the reverse branch
+  at 0.37 deg beat the aligned Q at 3.21 deg simply by being a local minimum
+  (the aligned Q, sitting at the window edge, was not one). The bar now starts at
+  Q's own steering effort, so a candidate must be better ALIGNED to take it.
+
+With all three, replaying 126-140 s of that run: no branch flip, the largest
+single-step course change falls from ~170 deg to 43 deg, and what remains is Q
+sliding 27-30 points forward along its own branch with the cross-track error
+continuous across it (3.65 -> 3.21 deg).
+
 ## IPOPT 422 at 180 m: isolated failure pockets in tether length (2026-08-18)
 
 `simple_opt_fig8.jl` on the 180 m project threw `optimization infeasible or not
