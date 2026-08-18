@@ -26,11 +26,21 @@ the finding, not a bug to hide. Everything else here is `simple_reelout.jl`.
 `reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run stays
 reproducible without a server) re-anchors the path to the length actually being
 flown. A request goes out on a lap boundary every `reopt_every_n_laps`, at most
-`max_reopt` times: `opt_step(...; wait = false)` queues the solve, `/status` is
-polled every `reopt_poll_interval`, and the result is collected from
+`max_reopt` times, and it repeats the STARTUP solve at the current length: `/init`
+with the parametric guess of `traj_opt.yaml`, then `opt_step(...; wait = false)`.
+`/status` is polled every `reopt_poll_interval` and the result collected from
 `opt_trajectory` — whose table is in RADIANS, unlike the degrees of every struct.
 While one runs, and after one that fails, the server keeps serving the previous
 path, so "not ready" needs no special case.
+
+The flown path is deliberately NOT fed back as the seed. It is an (azimuth,
+elevation) curve optimized for a much shorter radius, so it degrades as a starting
+point the further the run walks from its anchor, and the solve escapes to
+near-zenith where `C_beta` jams on its 0.9 rad bound, tension collapses to ~1 kN
+and the winch law cannot be met. Measured 2026-08-18: re-optimizations seeded that
+way fail repeatedly from ~210 m out, while the guess converges at 182, 200, 246,
+278, 282, 286 and 317 m — 282 m being one that failed from the flown path and
+solves to 9014 W from the guess.
 
 `reopt_blocking` decides what the loop does during the 7-13 s solve. `true`
 (default) holds the loop at the request until `/status` leaves `"solving"`, so the
@@ -57,15 +67,28 @@ path re-bases the point indices, so the lap counter is re-based in the same step
 Every solve is recorded in the `traj_opt.reopt` section of the run summary with
 its time, tether length and outcome.
 
-# Why the curvature margin is the entry's problem, not the pattern's
+# Why the curvature margin is checked where it is
 
-The kite's minimum ANGULAR turn radius is `1/(L*c1*u_s)`, so a longer tether turns
-tighter on the sphere and the margin only ever improves as the run proceeds. The
-START is the worst case, and it is where an optimized path bites: measured
-2026-08-18, the path returned for 150 m has margin 0.93 there and 2.18 by the time
-the tether is at 350 m. `min_feasibility_margin` in `data/traj_opt.yaml` is
-checked at the starting length for exactly that reason, and a run that clears it
-is comfortable for the rest of the window.
+For ONE path flown all the way out, the start is the worst case. The kite's
+minimum ANGULAR turn radius is `1/(L*c1*u_s)`, so a fixed (azimuth, elevation)
+curve only ever gets easier to fly: measured 2026-08-18, the path returned for
+150 m has margin 0.93 there and 2.18 by the time the tether is at 350 m. That is
+why the startup check runs at the starting length.
+
+With `reopt_enabled` that reasoning does NOT carry over, and the start is not the
+worst case — every re-optimization is. Cancel the `L` in the angular radius and
+the kite's minimum PHYSICAL turn radius is `1/(c1*u_s)`, INDEPENDENT of tether
+length: 11.35 m at `c1 = 0.2752`, `u_s = 0.32`. The optimizer returns a pattern
+whose tightest physical radius is 11.0-11.5 m at every length (measured
+2026-08-18 at 182, 200 and 246 m), because its own `input_steering` (±0.35) and
+`input_steering_rate` (±0.29) bounds are binding in every solve and maximum power
+wants the tightest loops they allow. Two near-equal constants, so the margin sits
+at ~1.0 at EVERY length and a solve landing at 0.85 or 1.01 is which optimum the
+seed reached, not how long the tether is.
+
+So a candidate is checked at the CURRENT length, every time, and rejections are
+the normal case rather than a fault. The optimizer knows nothing of the V3's
+turn-rate law; the real fix is to give it one, not to move the gate.
 
 # What comes from where
 
@@ -323,13 +346,6 @@ opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
 # installs appends to this; `path_blend_time` makes the swap gradual, but 4 s of
 # blend against a ~100 s reeling window is inside the rounding.
 pred_timeline = [(t = 0.0, power = opt_power_pred)]
-# The curve a re-optimization is SEEDED with, kept at the optimizer's own
-# resolution. Not `fec.az_path`: what is flown is resampled to `n_path` so the lap
-# counter never sees a point count change, and re-sending that upsampled copy puts
-# IPOPT in a bad basin — measured 2026-08-18, a 100-point reply upsampled to 360 and
-# fed back fails at 280 m where the same path at native resolution solves to 9101 W.
-seed_az = copy(fec.az_path)
-seed_el = copy(fec.el_path)
 opt_downloops == !fcs.up_loops ||
     error("The optimizer returned a downloops = $opt_downloops path while this run \
            flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
@@ -537,9 +553,29 @@ try
             if !reopt_pending && isnothing(blend_to) && reopt_n < tos.max_reopt &&
                fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
                 try
-                    opt_step(StepParams(l_now, winch,
-                                        Trajectory([seed_az; seed_az[1]],
-                                                   [seed_el; seed_el[1]]));
+                    # RE-INIT at the current length and seed from the parametric
+                    # guess, exactly as the startup solve does — do NOT feed the
+                    # flown path back. That path is in (azimuth, elevation) and was
+                    # optimized for a much shorter radius, so the further the run
+                    # walks from its anchor the worse a starting point it is, and
+                    # the solve escapes to near-zenith: measured 2026-08-18 at
+                    # 282 m, C_beta jams on its 0.9 rad bound at ~50° of elevation
+                    # where tension collapses to ~1 kN and the winch law cannot be
+                    # met. The same 282 m solves to 9014 W from the guess.
+                    guess_az_r, guess_el_r =
+                        figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
+                                          tos.guess_d, 0.0, tos.guess_el_center,
+                                          0.0, tos.guess_points)
+                    reopt_reply = opt_init(InitParams(; name = tos.name, length = l_now,
+                                                      winch_params = winch,
+                                                      inflow_conditions = inflow,
+                                                      trajectory = Trajectory(collect(guess_az_r),
+                                                                              collect(guess_el_r)),
+                                                      input_depower = tos.input_depower,
+                                                      reg_weight = tos.reg_weight,
+                                                      detect_simple_bounds = tos.detect_simple_bounds);
+                                           url = tos.base_url)
+                    opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
                              url = tos.base_url, wait = false)
                     global reopt_pending = true
                     global reopt_t_request = t
@@ -662,9 +698,6 @@ try
                             global n_path = n_path_new
                             new_pred = Float64(tab["metrics"]["avg_power_W"])
                             push!(pred_timeline, (t = t, power = new_pred))
-                            # Native resolution, as sent: see `seed_az` above.
-                            global seed_az = copy(chk_az)
-                            global seed_el = copy(chk_el)
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f, clearance %.1f m, \
                                                         %.0f W predicted", margin, clearance,
@@ -1128,7 +1161,8 @@ feasibility_block = OrderedDict{String, Any}(
         "min_feasibility_margin of data/traj_opt.yaml [-]"))
 if !isnothing(coeffs)
     feasibility_block["margin_start"] = (round(feas_start.margin; digits = 2),
-        "curvature margin at the starting length, the worst case [-]")
+        "curvature margin at the starting length; the worst case only when one \
+         path is flown throughout — see the docstring [-]")
     feasibility_block["margin_end"] = (round(feas_end.margin; digits = 2),
         "curvature margin at reelout_l_max [-]")
 end

@@ -669,6 +669,41 @@ first.
 Every optimizer figure recorded elsewhere in this log was measured at 150 m or at
 exactly 180.0 m, where 26 and 22 agree, so none of them shift.
 
+## The curvature margin does not improve with tether length under reopt (2026-08-18)
+
+`simple_opt_reelout.jl` and `traj_opt.yaml` both said the shortest tether is the worst
+case for the curvature margin, so the startup check at the starting length settles it
+for the whole run. That is true for ONE path flown throughout - the 150 m path measures
+0.93 at its anchor and 2.18 at 350 m - and **false once `reopt_enabled` is on**.
+
+Cancel the `L` in the kite's minimum angular turn radius `1/(L*c1*u_s)` and its minimum
+PHYSICAL turn radius is `1/(c1*u_s)`, **independent of tether length**: 11.35 m at
+`c1 = 0.2752`, `u_s = 0.32`. Solving fresh from the guess at three lengths:
+
+| L | margin | path radius | kite radius | path radius [m] |
+| --- | --- | --- | --- | --- |
+| 182 m | 0.97 | 3.47 deg | 3.57 deg | 11.0 |
+| 200 m | 1.01 | 3.28 deg | 3.25 deg | 11.5 |
+| 246 m | 1.01 | 2.66 deg | 2.64 deg | 11.4 |
+
+The angular radius nearly halves; the physical one does not move. The optimizer returns
+a pattern of 11.0-11.5 m physical turn radius at every length because its own
+`input_steering` (+/-0.35) and `input_steering_rate` (+/-0.29) bounds are binding in
+every constraint report, and maximum power wants the tightest loops they allow. Two
+near-equal constants against each other, so the margin sits at ~1.0 whatever the
+length.
+
+Consequence: a re-optimization landing at 0.85 rather than 0.98 is which optimum the
+seed reached, not a trend with tether length, and with `min_feasibility_margin: 0.9`
+roughly half of them are rejected by design. The rejections and the occasional
+degenerate reply (margin 0.00 at 246 m) are the optimizer working at a curvature limit
+it does not know about - not bugs in the gate.
+
+The lever is the optimizer's steering bound, not the margin: raising
+`min_feasibility_margin` towards 1.0 only stops anything installing. Ground clearance
+behaves the same way, for the same reason - the flown minimum measured 42.8, 43.1 and
+44.0 m at those three lengths instead of rising with the tether.
+
 ## The optimizer's tether is 10 mm; ours is 4 mm (2026-08-18)
 
 **This supersedes the depower-offset explanation in the entry below.** AWETrim's

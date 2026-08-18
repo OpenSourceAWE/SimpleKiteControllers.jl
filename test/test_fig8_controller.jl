@@ -566,9 +566,11 @@ _make_test_controller(; kwargs...) =
         @test tos.guess_el_center == 22.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
-        # 0.9, not the struct's 1.0: the optimizer currently returns paths right at
-        # the V3's curvature limit (0.93 at 150 m, 1.01 at 200 m, measured).
-        @test tos.min_feasibility_margin == 0.9
+        # Below the struct's 1.0: the optimizer returns paths right at the V3's
+        # curvature limit at EVERY length, not just the shortest (11.0-11.5 m of
+        # physical turn radius against the kite's 11.35 m, measured 2026-08-18), so
+        # at 1.0 almost nothing installs.
+        @test tos.min_feasibility_margin == 0.8
         # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
         # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
         @test tos.min_height == 40.0
