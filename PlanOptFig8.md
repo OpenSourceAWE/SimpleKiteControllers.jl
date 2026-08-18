@@ -117,12 +117,20 @@ a server that was not there.
 
 ## Step 2 — `examples/awetrim_client.jl`
 
+**Status: implemented 2026-08-18.**
+
 Lift the structs and transport out of `optimize_path.jl` unchanged
 (`InflowConditions`, `WinchParams`, `Trajectory`, `InitParams`, `StepParams`, the
-`StructTypes` declarations, `post`/`get_json`, `init`, `step`, `status`) and add:
+`StructTypes` declarations, `post`/`get_json`) and add:
 
-- `ensure_server(url)` — Step 1.
-- `trajectory_table(url)` — `GET /trajectory`. Worth having: it returns far more
+- **`opt_init` / `opt_step` / `opt_status`, not `init`/`step`/`status`.** The
+  endpoint functions had to be renamed after all: a script that flies an
+  optimized path also does `using V3Kite`, whose exported `init` builds the kite
+  model, and a second `init` in `Main` is not a shadow but an error ("function
+  V3Kite.init must be explicitly imported to be extended"). `optimize_path.jl`
+  only got away with it by never loading V3Kite.
+- `ensure_server(url)`, `server_running(url)`, `stop_server(url)` — Step 1.
+- `opt_trajectory(; resimulate)` — `GET /trajectory`. Worth having: it returns far more
   than the closed curve, namely the dense per-node table `t, s, azimuth,
   elevation, azimuth_dot, elevation_dot, distance_radial, speed_radial, s_dot,
   tension_tether_ground, input_steering, input_depower`, plus `spline.downloops`
@@ -133,7 +141,8 @@ Lift the structs and transport out of `optimize_path.jl` unchanged
   Step 5's mapping, as functions so the example cannot drift from the YAML.
 
 `optimize_path.jl` then becomes `include("awetrim_client.jl")` plus its demo,
-and keeps its current behaviour.
+and keeps its current behaviour — with `ensure_server()` in front of it, so the
+demo no longer fails with a connection error when the server is down.
 
 ## Step 3 — let the guidance hold an arbitrary closed path (`src/`)
 
