@@ -147,7 +147,10 @@ if "time_series" in plots
     p2 = plotx(
         sl.time[rng],
         sl.var_01[rng],
-        [el_deg, Float64.(sl.var_04[rng])],
+        # var_03, the ATTRACTOR's elevation — what the guidance is steering at, so
+        # this panel reads as demanded vs actual. var_04 is the pattern centre, a
+        # constant, which said nothing about tracking.
+        [el_deg, Float64.(sl.var_03[rng])],
         [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
          rad2deg.(onto(chi_u, chi, chiset))],
         [err_course, err_heading, Float64.(sl.var_06[rng])],
@@ -172,7 +175,7 @@ if "time_series" in plots
         ],
         labels = [
             nothing,
-            [L"\mathrm{kite}", L"\mathrm{pattern~centre}"],
+            [L"\mathrm{kite}", L"\mathrm{attractor}"],
             [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
             [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
              L"\psi' - \psi'_{\mathrm{set}}"],
