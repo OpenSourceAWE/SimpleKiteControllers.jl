@@ -31,7 +31,7 @@ guess = Trajectory(20.0 .* sin.(s), 22.0 .+ 8.0 .* sin.(2 .* s))
 # k_v example: v = k_v*sqrt(F) -> at 8400 N this winch reels ~10 m/s.
 # Too-stiff values (e.g. 0.02 -> ~1.8 m/s at max force) make the optimization
 # infeasible and the server replies 422.
-winch = WinchParams("reelout", 0.11, 1000.0, 8400.0)
+winch = WinchParams("reelout", 0.04, 1000.0, 8400.0)
 
 # 5.2 m/s at 6 m height, wind from the west, logarithmic profile
 # (~8 m/s at 100 m with this roughness).
