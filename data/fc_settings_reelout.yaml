@@ -36,7 +36,7 @@ fc_settings:
   # length buys. The ceiling is 0.278 at 150 m and 0.282 at 180 m. Only a fixed
   # shape escapes it - the 20/11 lemniscate simple_reelout.jl flies has radius
   # 4.73 deg at any length, so its ceiling is 0.315 at 150 m and 0.353 at 180 m.
-  depower_setpoint:   0.275    # Depower held on the pattern                        [-]
+  depower_setpoint:   0.274    # Depower held on the pattern                        [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]
   warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
