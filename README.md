@@ -62,10 +62,13 @@ Optionally you can also install the flight path optimizer with the command:
 ```
 ./bin/install_awetrim
 ```
-and start it in a second terminal window:
+and start it in the background:
 ```
-./bin/run_server
+./bin/run_server start     # stop, restart, status and log are the other subcommands
 ```
+`start` returns once the server answers, and it survives the terminal it was
+started from. Without a subcommand `./bin/run_server` runs it in the foreground
+in a second terminal window, as before.
 
 Then, from a Julia REPL in this repository:
 

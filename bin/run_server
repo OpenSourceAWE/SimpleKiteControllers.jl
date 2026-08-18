@@ -1,9 +1,202 @@
 #!/bin/bash
 # Copyright (c) 2025, 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
+#
+# Start, stop and inspect the AWETrim reelout-optimization REST server, which
+# examples/optimize_path.jl and the optimized-path runs talk to. The server
+# itself lives in the sibling checkout ../AWETrim (bin/install_awetrim creates
+# it); this script only manages the process.
+#
+# Usage: bin/run_server [args]              foreground, Ctrl-C to stop
+#        bin/run_server start [args]        detached, waits until it answers
+#        bin/run_server stop
+#        bin/run_server restart [args]
+#        bin/run_server status              exit 0 only if it answers /health
+#        bin/run_server log                 follow the log of a detached server
+#
+# `args` are passed to AWETrim's own script (--port, --host, ...).
+#
+# The no-argument form is unchanged: it execs the foreground server, so an
+# existing "start it in a second terminal" habit keeps working.
+#
+# State of a detached server goes into output/ (gitignored): awetrim_server.pid,
+# awetrim_server.url and awetrim_server.log. The URL is recorded because a
+# server started on a non-default port must still be stoppable and probeable
+# without repeating the flags.
+#
+# The recorded PID is the python process itself, not a wrapper: AWETrim's
+# bin/run_server ends in `exec`, so the PID does not change when it hands over.
+#
+# NOT a systemd unit. One would survive a reboot, but it needs a unit file with
+# absolute paths baked in, `loginctl enable-linger` on a headless machine and a
+# `systemctl --user daemon-reload` after every edit — three machine-specific
+# things for a dev tool tied to one checkout. Write one by hand if the server
+# should come up at boot.
+set -euo pipefail
 
-if [[ $(basename $(pwd)) == "bin" ]]; then
+if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
 fi
 
-../AWETrim/bin/run_server "$@"
+AWETRIM=../AWETrim
+SERVER="$AWETRIM/bin/run_server"
+OUTPUT=output
+PID_FILE="$OUTPUT/awetrim_server.pid"
+URL_FILE="$OUTPUT/awetrim_server.url"
+LOG_FILE="$OUTPUT/awetrim_server.log"
+START_TIMEOUT=120   # [s] until /health answers; a cold start imports CasADi
+STOP_TIMEOUT=10     # [s] after SIGTERM, before SIGKILL
+
+check_installed() {
+    if [[ ! -x $SERVER ]]; then
+        echo "ERROR: $SERVER not found." >&2
+        echo "Install the optimizer first:  bin/install_awetrim" >&2
+        exit 1
+    fi
+}
+
+# The URL to probe, from the flags of THIS invocation. --host 0.0.0.0 is an
+# address to listen on, not one to connect to, so it is probed via loopback.
+url_from_args() {
+    local host=127.0.0.1 port=8000 prev=""
+    for arg in "$@"; do
+        case $prev in
+            --host) host=$arg ;;
+            --port) port=$arg ;;
+        esac
+        case $arg in
+            --host=*) host=${arg#--host=} ;;
+            --port=*) port=${arg#--port=} ;;
+        esac
+        prev=$arg
+    done
+    [[ $host == 0.0.0.0 || $host == "::" ]] && host=127.0.0.1
+    echo "http://$host:$port"
+}
+
+server_url() {
+    if [[ -s $URL_FILE ]]; then cat "$URL_FILE"; else echo "http://127.0.0.1:8000"; fi
+}
+
+# PID of the running server, empty if there is none. Clears a stale PID file so
+# `start` after a crash is not refused by a process that is long gone.
+server_pid() {
+    local pid
+    [[ -f $PID_FILE ]] || return 0
+    pid=$(<"$PID_FILE")
+    if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then
+        echo "$pid"
+    else
+        rm -f "$PID_FILE" "$URL_FILE"
+    fi
+}
+
+# Answering /health, not merely alive: a process still importing CasADi is not
+# a server yet, and a `start` that returns before that hands the caller a
+# connection refused.
+healthy() {
+    curl -fsS --max-time 2 "$(server_url)/health" >/dev/null 2>&1
+}
+
+do_start() {
+    check_installed
+    local pid
+    pid=$(server_pid)
+    if [[ -n $pid ]]; then
+        echo "Already running (pid $pid) at $(server_url)."
+        healthy || echo "  ... but it does not answer /health yet; bin/run_server log"
+        return 0
+    fi
+
+    mkdir -p "$OUTPUT"
+    url_from_args "$@" > "$URL_FILE"
+    echo "Starting the AWETrim server at $(server_url), logging to $LOG_FILE ..."
+    {
+        echo
+        echo "=== $(date '+%Y-%m-%d %H:%M:%S')  bin/run_server start $*"
+    } >> "$LOG_FILE"
+    # nohup, so closing the terminal that started it does not take it down.
+    nohup "$SERVER" "$@" >> "$LOG_FILE" 2>&1 &
+    pid=$!
+    echo "$pid" > "$PID_FILE"
+    disown "$pid" 2>/dev/null || true
+
+    local waited=0
+    while (( waited < START_TIMEOUT )); do
+        if healthy; then
+            echo "Server is up (pid $pid) after ${waited}s. Docs: $(server_url)/docs"
+            return 0
+        fi
+        if ! kill -0 "$pid" 2>/dev/null; then
+            echo "ERROR: the server exited during startup. Last lines of $LOG_FILE:" >&2
+            tail -n 20 "$LOG_FILE" >&2
+            rm -f "$PID_FILE" "$URL_FILE"
+            exit 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    echo "ERROR: no answer from $(server_url)/health after ${START_TIMEOUT}s." >&2
+    echo "It is still running as pid $pid; see $LOG_FILE, or bin/run_server stop." >&2
+    exit 1
+}
+
+do_stop() {
+    local pid waited=0
+    pid=$(server_pid)
+    if [[ -z $pid ]]; then
+        echo "No server running (nothing to stop)."
+        return 0
+    fi
+    echo "Stopping the AWETrim server (pid $pid) ..."
+    kill "$pid" 2>/dev/null || true
+    while (( waited < STOP_TIMEOUT )) && kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "It ignored SIGTERM for ${STOP_TIMEOUT}s; sending SIGKILL."
+        kill -9 "$pid" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -f "$PID_FILE" "$URL_FILE"
+    echo "Stopped."
+}
+
+do_status() {
+    local pid
+    pid=$(server_pid)
+    if [[ -z $pid ]]; then
+        # A server started in the foreground, or by somebody else, has no PID
+        # file here but is just as usable — so probe before reporting "down".
+        if healthy; then
+            echo "A server answers at $(server_url), but was not started by bin/run_server start."
+            return 0
+        fi
+        echo "Not running."
+        return 1
+    fi
+    if healthy; then
+        echo "Running (pid $pid) at $(server_url), /health ok."
+        return 0
+    fi
+    echo "Process $pid is alive but $(server_url)/health does not answer (still starting, or wedged)."
+    return 1
+}
+
+case ${1-} in
+    start)   shift; do_start "$@" ;;
+    stop)    do_stop ;;
+    restart) shift; do_stop; do_start "$@" ;;
+    status)  do_status ;;
+    log)
+        [[ -f $LOG_FILE ]] || { echo "No $LOG_FILE yet." >&2; exit 1; }
+        tail -f "$LOG_FILE"
+        ;;
+    *)
+        # Foreground, as before: exec, so Ctrl-C and the exit status pass straight
+        # through and no PID file is written for a server this shell owns anyway.
+        check_installed
+        exec "$SERVER" "$@"
+        ;;
+esac
