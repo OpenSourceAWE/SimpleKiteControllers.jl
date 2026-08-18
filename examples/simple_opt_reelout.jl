@@ -67,6 +67,54 @@ path re-bases the point indices, so the lap counter is re-based in the same step
 Every solve is recorded in the `traj_opt.reopt` section of the run summary with
 its time, tether length and outcome.
 
+# Learning the elevation bias
+
+The kite tracks BELOW the path it is given, in every segment of every run measured
+so far: 1-2 deg, and 3.5 deg at 380 m. `fcs.el_bias_gain` (`0` = off) closes that
+by learning. Once per completed lap the mean signed elevation error is taken, the
+correction moves by that fraction of it (clamped to `fcs.el_bias_max`), and every
+path installed afterwards is RAISED by the correction — so what is flown converges
+on the curve the optimizer solved for, which is also the curve its power number
+was computed for.
+
+`fcs.el_offset_final` lifts the path by a further fixed amount once reel-out ends,
+which is a setpoint move rather than an error: there is no reel-out power left to
+trade for height then, and height is clearance. It cancels out of the learning —
+the sag is measured against the path in the air and the update closes on the
+optimizer's curve PLUS this offset — so the two compose instead of fighting. The
+lift starts at the STOP LATCH, where the winch begins decelerating, not at the
+phase 4 -> 5 transition: measured 2026-08-18, the run's lowest point falls between
+the two, and at the transition the 4 s blend and the climb after it are still
+ahead. With `reelout_softstop` at 0 there is no latch before phase 5 at all, so
+`fcs.el_offset_lead` anticipates the end instead — the lift goes in once the length
+left is under `v_reelout * el_offset_lead`. Whichever fires first latches it, and
+it is never cleared.
+
+State 5 gets its own gain (`fcs.el_bias_gain_final`): the sag deepens once the
+winch stops and there is a lap or two left to learn in. A correction only reaches
+the kite through an install, and phase 5 usually has none left — `max_reopt` is
+spent by then — so a lap whose correction moved installs the DIFFERENCE on the
+path in the air through the same blend, gated on the curvature margin at the
+current length. A fresh candidate is raised by the whole correction, the path in
+the air by what has changed since it was installed; both end up at the optimizer's
+curve plus the correction.
+
+The error that is fed back is the one against the OPTIMIZER's curve, i.e. the
+measured sag plus the correction already in the flown path. Closing on the sag
+itself does not converge and is what the first version did (measured 2026-08-18):
+the kite drops below whatever path it is given, so raising the reference raises
+the kite with it and leaves the sag unchanged, and the correction integrates to
+the clamp in 7 laps while the flown curve sails past the optimizer's. The sag
+therefore stays in the cross-track error by construction — the correction moves
+WHERE the pattern is flown, not how well.
+
+The correction is applied before the three gates, which have to score the curve
+that will actually be flown, and it rides on the same blend as the install, so it
+never enters as a step. A whole lap is averaged on purpose: the error's SHAPE
+cancels there and only its offset survives, and the shape is the part the kite
+cannot follow anyway — it is bounded by turn authority at the tight shoulder, not
+by the reference. Recorded per lap in `traj_opt.el_bias` of the run summary.
+
 # Why the curvature margin is checked where it is
 
 For ONE path flown all the way out, the start is the worst case. The kite's
@@ -463,6 +511,20 @@ fig8_idx_prev = fec.last_idx
 fig8_idx_progress = 0.0
 n_path = length(fec.az_path)
 
+# Elevation bias (`fcs.el_bias_gain`): the kite tracks BELOW the path it is given,
+# by 1-2° and up to 3.5° at 380 m, in every segment of every run measured so far.
+# One update per lap from the mean signed elevation error, added to the path a
+# re-optimization installs afterwards, so what is FLOWN is the curve the optimizer
+# solved for rather than a curve 2° under it.
+el_bias = 0.0               # [deg] learnt correction
+el_applied = 0.0            # [deg] shift the path in the air actually carries
+lift_on = false             # `el_offset_final` latched in; never cleared once set
+el_lap_skip = false         # skip the learning update for the lap the lift landed in
+el_shift_warned = false     # a held-back shift warns once, then retries in silence
+el_bias_sum = 0.0           # [deg] running sum of the error over the current lap
+el_bias_n = 0               # samples in that sum
+el_bias_events = NamedTuple[]
+
 # ---- Re-optimization (stage 4). The path is anchored to ONE radius and the run
 # walks away from it; each re-optimization re-anchors it to the length being
 # flown. The request is queued (`wait = false`), `/status` is polled, and the
@@ -526,6 +588,31 @@ try
         w_course = cc.w_course
         err = cc.err
 
+        # What the flown path's elevation should be shifted by: the learnt sag
+        # correction, plus the fixed lift `el_offset_final`. The lift is a setpoint
+        # move, not an error, so it cancels out of `err_opt`. It starts at the
+        # reel-out STOP LATCH rather than at phase 5, which is `path_blend_time`
+        # plus a climb later — the kite's lowest point of the whole run is in that
+        # gap. `stop_start` stays NaN when `reelout_softstop` is 0, hence phase 5
+        # as the fallback.
+        if !lift_on && phase >= 4
+            v_ro_now = Float64(s.sys_state.v_reelout[1])
+            if !isnan(stop_start) || phase >= 5 ||
+               (fcs.el_offset_lead > 0 && v_ro_now > 0 &&
+                fcs.reelout_l_max - l_set <= v_ro_now * fcs.el_offset_lead)
+                global lift_on = true
+                # The lap the lift lands in is a CLIMB towards the new reference,
+                # not a bias: learning from it reads the transient as sag and
+                # over-corrects, then unwinds it the lap after (measured: -1.4 ->
+                # +1.9 deg of error, correction 1.31 -> 2.72 -> 0.83).
+                global el_lap_skip = true
+                @info @sprintf("Elevation lift of %+.2f° starting at t = %.1f s \
+                                (%.1f m of reel-out left, phase %d).",
+                               fcs.el_offset_final, t, fcs.reelout_l_max - l_set, phase)
+            end
+        end
+        el_target = lift_on ? el_bias + fcs.el_offset_final : el_bias
+
         # fig_8: jumps to 1 the instant phase first reaches >= 4 (a direct 3->5
         # reel-out finish can skip 4 entirely), then +1 per full traversal of the
         # reference path, unwrapped so a single lap never double-counts across
@@ -542,7 +629,67 @@ try
                 abs(delta) > n_path ÷ 8 && (delta = 0)
                 global fig8_idx_progress += delta
                 global fig8_idx_prev = fec.last_idx
+                lap_before = fig8_n
                 global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)
+                # One update per completed lap: the mean over a WHOLE lap, so the
+                # shape of the error cancels and only its offset is learnt.
+                if fcs.el_bias_gain > 0 && fig8_n > lap_before && el_bias_n > 0 &&
+                   el_lap_skip
+                    global el_lap_skip = false
+                    global el_bias_sum = 0.0
+                    global el_bias_n = 0
+                    @info @sprintf("Lap %d skipped for learning: the lift landed in it.",
+                                   fig8_n - 1)
+                elseif fcs.el_bias_gain > 0 && fig8_n > lap_before && el_bias_n > 0
+                    # The kite sags below WHATEVER path it is given, so the error
+                    # against the path in the air is the sag and never converges.
+                    # What has to converge is the error against the OPTIMIZER's
+                    # curve, which is the flown path less the correction in it.
+                    err_el = el_bias_sum / el_bias_n
+                    err_opt = err_el + el_bias
+                    # The sag grows once the winch stops, and phase 5 has few laps
+                    # left to learn in, so it gets its own gain.
+                    gain = phase >= 5 ? fcs.el_bias_gain_final : fcs.el_bias_gain
+                    bias_before = el_bias
+                    global el_bias = clamp(el_bias - gain * err_opt,
+                                           -fcs.el_bias_max, fcs.el_bias_max)
+                    push!(el_bias_events,
+                          (; t, lap = fig8_n - 1, err_el, err_opt, bias = el_bias))
+                    @info @sprintf("Elevation bias after lap %d: kite %.2f° under the \
+                                    path it flies, %+.2f° vs the optimizer's; \
+                                    correction now %+.2f°.",
+                                   fig8_n - 1, err_el, err_opt, el_bias)
+                    global el_bias_sum = 0.0
+                    global el_bias_n = 0
+                end
+            end
+            if fcs.el_bias_gain > 0
+                global el_bias_sum += rad2deg(Float64(s.sys_state.elevation)) -
+                                      fec.el_path[fec.last_idx]
+                global el_bias_n += 1
+            end
+
+            # The shift reaches the kite at an install, or — when none is due, which
+            # is every lap of phase 5 once `max_reopt` is spent — as a blend of the
+            # difference onto the path in the air, while the curvature still passes.
+            if abs(el_target - el_applied) > 1e-6 && isnothing(blend_to) && !reopt_pending
+                shifted = fec.el_path .+ (el_target - el_applied)
+                margin = isnothing(coeffs) ? Inf :
+                    check_pattern_feasible(fec.az_path, shifted,
+                        Float64(s.sys_state.l_tether[1]), fcs.max_steering;
+                        c1, prn = false).margin
+                if margin >= tos.min_feasibility_margin
+                    global blend_from = (copy(fec.az_path), copy(fec.el_path))
+                    global blend_to = (copy(fec.az_path), shifted)
+                    global blend_t0 = t
+                    global el_applied = el_target
+                    global el_shift_warned = false
+                elseif !el_shift_warned
+                    global el_shift_warned = true
+                    @warn @sprintf("Elevation shift of %+.2f° held back: the curvature \
+                                    margin would be %.2f. Retrying as the tether grows.",
+                                   el_target - el_applied, margin)
+                end
             end
         end
 
@@ -653,6 +800,11 @@ try
                         # /trajectory is in RADIANS, unlike the degrees of the structs.
                         new_az = rad2deg.(Float64.(tab["table"]["azimuth"]))
                         new_el = rad2deg.(Float64.(tab["table"]["elevation"]))
+                        # Raised BEFORE the gates below, which have to score the
+                        # curve that will be flown: lifting it relieves both height
+                        # gates and compresses the azimuth axis by cos(elevation),
+                        # which the curvature margin must be re-read for.
+                        new_el = new_el .+ el_target
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory
@@ -699,6 +851,9 @@ try
                                 resample = n_path, up_loops = fcs.up_loops)
                             global blend_to = (cand_az, cand_el)
                             global blend_t0 = t
+                            # The candidate carries the whole shift, so the path in
+                            # the air does too the moment it lands.
+                            global el_applied = el_target
                             # Install the aligned OLD path (w = 0, same curve, new
                             # point indices) and re-base the lap counter on it in
                             # the same step. `prepare_path` rotates the start point
@@ -1222,6 +1377,18 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                 (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
                  @sprintf("at L = %.0f m", e.l))
             for e in reopt_events)),
+    "el_bias" => OrderedDict(
+        "gain" => (fcs.el_bias_gain,
+            "per-lap learning gain for the elevation bias; 0 = off"),
+        "final_deg" => (round(el_bias; digits = 2),
+            "elevation correction added to the last installed path [deg]"),
+        "laps" => OrderedDict(
+            @sprintf("lap_%d", e.lap) =>
+                (round(e.err_opt; digits = 2),
+                 @sprintf("mean elevation error vs the OPTIMIZER's curve; sag under \
+                           the flown path %.2f°, correction became %+.2f°",
+                          e.err_el, e.bias))
+            for e in el_bias_events)),
     "clearance" => OrderedDict(
         "path_min_m" => (round(path_min_h_start; digits = 1),
             "lowest point of the PRE-FLIGHT path at the starting length [m]"),

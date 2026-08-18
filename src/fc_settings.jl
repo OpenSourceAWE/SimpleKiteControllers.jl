@@ -215,6 +215,54 @@ Add new findings there, not here.
     through the turn.
     """
     up_loops::Bool = false
+    """
+    Learning gain for the elevation bias, `0` to switch the correction off.
+
+    The kite flies BELOW the path it is given — measured over every segment of
+    every reel-out run, 1-2 deg and up to 3.5 deg at 380 m. Once per lap the mean
+    signed elevation error against the OPTIMIZER's curve is taken (the measured
+    sag plus the correction already in the flown path) and the correction is moved
+    by this fraction of it, so a path installed afterwards is raised by the
+    correction and the kite lands on the curve the optimizer solved for. The sag
+    itself does not shrink: raising the reference raises the kite with it, which
+    is why closing on the sag instead integrates to `el_bias_max`. `1` corrects the whole measured bias in one lap, which fights the
+    re-optimization rewriting the reference in the same lap; 0.5 is a lap of
+    settling per correction. Only `examples/simple_opt_reelout.jl` applies it:
+    the correction rides on a path INSTALL, and that is the only run that has any.
+    """
+    el_bias_gain = 0.0
+    """
+    Learning gain from state 5 (final) on, where the sag deepens as the winch
+    stops and only a lap or two is left to learn in. Defaults to `el_bias_gain`,
+    i.e. no change unless it is set.
+    """
+    el_bias_gain_final = el_bias_gain
+    "Clamp on the learnt elevation correction [deg]; guards a diverging estimate."
+    el_bias_max = 3.0
+    """
+    Extra elevation [deg] the flown path is lifted by once reel-out ends, on top
+    of the learnt correction. A setpoint move, not an error: the kite is asked to
+    fly the pattern higher where height is clearance and there is no reel-out power
+    left to trade for it. It cancels out of the learning, which keeps closing on
+    the optimizer's curve plus this offset.
+
+    It starts at the reel-out STOP LATCH, not at state 5: the run's lowest point
+    falls between the two, and by state 5 the blend and the climb are a further
+    few seconds away.
+    """
+    el_offset_final = 0.0
+    """
+    How long before reel-out ends the lift starts [s], `0` to start it at the end.
+
+    Measured 2026-08-18: with `reelout_softstop` at 0 there IS no stop latch before
+    state 5, and the run's lowest point lands 3.8 s into state 5, inside the blend
+    that is still ramping the lift in. Reel-out has stopped by then, so the lift has
+    to be anticipated instead: it goes in once the length left is under
+    `v_reelout * el_offset_lead`. Once latched it stays, so a fluctuating reel-out
+    speed near the threshold cannot chatter the reference. Costs a little reel-out
+    power for those seconds, since the pattern rises while the tether still pays.
+    """
+    el_offset_lead = 0.0
 
     # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED --------- #
     """

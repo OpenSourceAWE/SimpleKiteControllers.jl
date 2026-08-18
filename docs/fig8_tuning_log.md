@@ -624,6 +624,155 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## Learning the elevation bias: close on the OPTIMIZER's curve, not the sag (2026-08-18)
+
+The kite tracks below the path it is given in every segment of every run: the
+mean over a lap is 0.7 deg at 150 m growing to 1.9 deg at 380 m, and 2-3.5 deg at
+the pattern's extremes. `fcs.el_bias_gain` learns a correction once per lap and
+raises every path installed afterwards by it (`simple_opt_reelout.jl`).
+
+**The first version did not converge.** It fed back the measured sag — the error
+against the path in the air — and the correction integrated to the clamp in seven
+laps while the error never moved:
+
+    lap_1: -0.73 -> +0.36    lap_5: -0.98 -> +1.86
+    lap_2: -0.69 -> +0.71    lap_6: -1.12 -> +2.42
+    lap_3: -0.75 -> +1.08    lap_7: -1.19 -> +3.00  (clamp)
+    lap_4: -0.56 -> +1.37    lap_8: -2.22 -> +3.00
+
+Of course it does not: the kite sags below WHATEVER path it is given, so raising
+the reference raises the kite with it and leaves the sag exactly where it was.
+The quantity that has to converge is the error against the curve the optimizer
+solved for, i.e. the measured sag PLUS the correction already in the flown path.
+One line, and it converges — same run, `el_bias_gain: 0.5`:
+
+    lap  err vs optimizer   sag    correction
+    1        -0.73         -0.73     +0.36
+    2        -0.33         -0.69     +0.53
+    3        -0.22         -0.75     +0.64
+    4        +0.12         -0.52     +0.58
+    5        -0.35         -0.92     +0.75
+    6        -0.34         -1.09     +0.92
+    7        -0.23         -1.15     +1.04
+    8        -0.88         -1.91     +1.48
+
+The correction tracks the sag as the tether grows and the optimizer-relative
+error stays inside ~0.4 deg until the last lap, where the sag jumps by 0.8 deg in
+one lap and the 0.5 gain cannot keep up.
+
+Result against the same run without it (150 -> 380 m, 6 m/s, no turbulence):
+
+| | off | on |
+|---|---|---|
+| min elevation, whole run | 7.1 deg | 8.1 deg |
+| flown vs the OPTIMIZER's curve, last segment | -3.5 / -2.0 deg | -2.3 / -0.4 deg |
+| measured power | 8491 W (0.98 x) | 8501 W (0.99 x) |
+| RMS / mean / max d | 1.52 / 1.28 / 4.99 deg | 1.52 / 1.28 / 4.99 deg |
+| steering at max / rate-limited | 9 % / 10 % | 8 % / 10 % |
+
+The cross-track numbers are unchanged to the digit, and that is the correct
+outcome, not a null result: the sag stays in the error by construction, because
+the error is measured against the path that was commanded. What the correction
+moves is WHERE the pattern is flown. `el_bias_max` had to go to 4.0 for the same
+reason — the correction converges TO the sag, so a 3.0 clamp binds at 380 m.
+
+Worth 1 deg of ground clearance and ~0.1 % of power here. It is worth more where
+the elevation floor is the binding criterion, which it was two runs earlier.
+
+**State 5 needs its own gain, and its own way in.** The sag deepens once the winch
+stops (1.0 -> 1.8 deg over the last lap) and phase 5 has one or two laps to learn
+in, so `el_bias_gain_final: 1.0` against 0.5 for phase 4. That alone would have
+done nothing: a correction only ever reached the kite through a path INSTALL, and
+by phase 5 `max_reopt` is spent — in the run before this one lap 8 learnt +0.44 deg
+and it went nowhere. So a lap whose correction moved now blends the DIFFERENCE
+onto the path in the air, gated on the curvature margin at the current length.
+A fresh candidate takes the whole correction, the path in the air what has changed
+since it was installed.
+
+**A fixed lift on top of it, from state 5 on** (`el_offset_final: 1.5`): once
+reel-out has ended there is no reel-out power left to trade for height, and height
+is clearance. It is a SETPOINT move, not an error — the path becomes
+`optimizer + el_bias + offset` while the learning still closes `err_el + el_bias`
+on the optimizer's curve, so the offset cancels out of the update and the two
+compose instead of fighting. It arrives at the 4->5 transition, which is not a lap
+boundary, so the loop now tracks `el_target` (what the path should carry) against
+`el_applied` (what it does) and blends the difference in whenever they differ and
+nothing else is installing.
+
+Measured in phase 5, after the 4 s blend has landed: the flown pattern sits
+9.8-16.8 deg where the run before it flew 8.1-15.6, i.e. its bottom is now ON the
+optimizer's curve (-0.2 deg) and its top 2.3 deg above. Minimum elevation while
+the lift is in force: 9.8 deg against 8.1. It costs tracking in phase 5 — RMS d
+1.98 -> 2.44 deg there, 1.18 -> 1.25 in phase 4, 1.39 -> 1.58 over the run — part
+transient (the blend plus the climb), part the `cos(elevation)` compression a
+higher pattern pays. Power 8508 W, all 8 criteria pass.
+
+The whole-run minimum elevation barely moves (8.1 -> 8.3 deg) because it is set in
+phase 4, and the dip at the START of phase 5 happens before the lift has blended
+in — measured at t = 128.6 s, 3.8 s INTO phase 5, inside the blend.
+
+**The stop latch is not early enough — and with `reelout_softstop: 0` it does not
+exist.** Triggering the lift on `stop_start` reproduced the previous run bit for
+bit: no soft-stop, no latch, so it fell through to phase 5 exactly as before. With
+reel-out ending abruptly there is nothing earlier to hook onto, so the lift has to
+be ANTICIPATED: `el_offset_lead: 8.0` puts it in once the length left is under
+`v_reelout * el_offset_lead`, ~19 m at 2.4 m/s. One-way latch, so a wobbling
+reel-out speed near the threshold cannot chatter the reference.
+
+**The lead makes the kite CIRCLE in phase 5, and is off again.** Net heading
+rotation over phase 5, seven runs: -0.07 turns in each of the four flown with the
+lift at the phase transition, +1.39, -0.63 and +1.39 in the three flown with
+`el_offset_lead: 8.0`, with a one-sided steering bias (mean u_s +6.1 % against
+0.0). It is NOT turn authority — the circling runs saturate LESS (5.4 % of phase 5
+against 14.6 %), so the kite is being commanded around rather than failing to
+turn. Mechanism unknown; `el_offset_lead` is back to 0 and the confirming run is
+clean (-0.08 turns, mean u_s -0.1 %). The dip it was meant to fix is back with it:
+min elevation 8.3 deg.
+
+**These runs do not repeat.** Two runs with byte-identical settings and identical
+code (20:28 and 20:33) gave RMS d 1.25 vs 1.61 deg and 8 vs 9 laps. The archived
+re-optimization events show the cause: the server answers the same request with
+slightly different paths (margin 1.00 vs 0.99, clearance 45.3 vs 44.8 m at the
+same 216 m), and the run diverges from there. That scatter is the size of most
+single-run effects in this section — the elevation-bias and lift results each held
+over several runs, but any number quoted from ONE run here is indicative only.
+
+**The lap the lift lands in also broke the learner, which is worth recording.** It
+is a CLIMB towards the new reference, and averaging it reads the transient as
+sag:
+
+    lap_7:  err -0.35 -> correction 1.31
+    lap_8:  err -1.40 -> correction 2.72   (the lift lands mid-lap)
+    lap_9:  err +1.88 -> correction 0.83   (unwinds it)
+
+It ended at 0.83 deg against an actual sag of ~1.3. Skipping the learning update
+for the lap the lift landed in fixes it — accumulator reset, no update — and the
+run settles: lap 8 reads -0.39 deg and the correction holds at 1.29.
+
+The run with the skip in place read RMS d 1.25 deg, min elevation 8.6 deg, 8518 W
+at 0.99 x predicted and 0.7-1.4 deg ABOVE the optimizer's curve in phase 5 — the
+lift delivered. Read it against the scatter above, not as a step change: the next
+run with the same code and settings gave 1.61 deg.
+
+Flown pattern against the OPTIMIZER's curve at the end of the run (bottom / top of
+the pattern), same conditions each time:
+
+| | bottom | top |
+|---|---|---|
+| correction off | -3.5 deg | -2.0 deg |
+| gain 0.5 throughout | -2.3 deg | -0.4 deg |
+| 0.5, then 1.0 from state 5 | **-1.4 deg** | **+0.2 deg** |
+
+That last run had its 7th re-optimization FAIL, so nothing was installed after
+118.1 s and the whole phase-5 correction went in through the in-air blend — which
+is the mechanism working, not a confound. RMS d 1.52 -> 1.39 deg, steering at max
+8 % -> 7 %, power flat at 8502 W. One criterion flipped to FAILED: azimuth reach
++13.5 deg against a 13.8 deg threshold, 0.3 deg short — and that threshold is 69 %
+of `f8_a`, i.e. referenced to the PARAMETRIC pattern the run does not fly, so it
+is a weak signal. Still, the flown pattern IS ~0.5 deg narrower than the run
+before it; whether that is the correction or the failed re-optimization needs
+another run to separate.
+
 ## ATTRACTOR_DIST 10 -> 8 on the reel-out settings (2026-08-18)
 
 The overrun below said the lead was too long for the pattern the reel-out ends
