@@ -13,8 +13,10 @@
 #        bin/run_server restart [args]
 #        bin/run_server status              exit 0 only if it answers /health
 #        bin/run_server log                 follow the log of a detached server
+#        bin/run_server --help              this usage text
 #
-# `args` are passed to AWETrim's own script (--port, --host, ...).
+# `args` are passed to AWETrim's own script (--port, --host, ...); the options
+# it accepts are listed by ../AWETrim/bin/run_server --help.
 #
 # The no-argument form is unchanged: it execs the foreground server, so an
 # existing "start it in a second terminal" habit keeps working.
@@ -33,6 +35,10 @@
 # things for a dev tool tied to one checkout. Write one by hand if the server
 # should come up at boot.
 set -euo pipefail
+
+# Resolve our own path before cd'ing away: --help reads the comment block above
+# out of this file, and every other path here is relative to the repo root.
+SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
 if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
@@ -184,7 +190,15 @@ do_status() {
     return 1
 }
 
+# The wrapper's own subcommands are not the server's flags, so --help has to be
+# answered here; passing it on would print AWETrim's argparse usage, which knows
+# nothing about start/stop/restart/status/log.
+usage() {
+    sed -n '5,19p' "$SELF" | sed 's/^# \{0,1\}//'
+}
+
 case ${1-} in
+    -h|--help|help) usage ;;
     start)   shift; do_start "$@" ;;
     stop)    do_stop ;;
     restart) shift; do_stop; do_start "$@" ;;
