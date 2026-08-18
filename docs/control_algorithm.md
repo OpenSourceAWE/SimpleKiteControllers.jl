@@ -164,10 +164,14 @@ Three refinements around the ends of the reel-out window, all in `examples/simpl
 - **Soft-start** ramps the *command* over `reelout_softstart`; the controller's own integrators
   and force limiters still see the unramped value, so the engagement transient is shaped without
   lagging the force regulation.
-- **Soft-stop** latches once the remaining distance would be covered within `reelout_softstop`
-  seconds at the current rate, then decelerates linearly to exactly 0 at `reelout_l_max`. A hard
-  cut leaves the drum's momentum to the position loop, which brakes it with a reel-in transient
-  and a power undershoot. Loosening the acceleration limit instead makes it worse, not better.
+- **Soft-stop** latches once EITHER the remaining distance would be covered within
+  `reelout_softstop` seconds at the current rate, OR `fcs.n_fig_eight` complete figures of eight
+  have been flown — a second, independent stop criterion counted in laps (`n_fig_eight = 0`
+  disables it, leaving `reelout_l_max` the only criterion). Whichever fires first decelerates
+  linearly to exactly 0, landing at `reelout_l_max` for the length criterion or below it for the
+  lap criterion. A hard cut leaves the drum's momentum to the position loop, which brakes it with a
+  reel-in transient and a power undershoot. Loosening the acceleration limit instead makes it
+  worse, not better.
 - **Force floor guard** before reel-out begins: a standalone `LowerForceController`, clamped to
   reel-in only, catches the force sag the dive causes (measured ~50 N). It is deliberately not the
   main controller, whose speed integrator would wind up while its output is ignored and then dump

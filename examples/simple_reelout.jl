@@ -6,8 +6,9 @@ Figure-of-eight path following of the V3 kite, extended with a REEL_OUT winch: t
 tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
 `simple_fig8.jl` (park -> dive -> hold -> transition), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
-`v_set = kv * sqrt(force)` law until `fcs.reelout_l_max`, then holds that length
-for the rest of the run. Once reel-out stops, a fifth phase (final) takes over:
+`v_set = kv * sqrt(force)` law until `fcs.reelout_l_max` or `fcs.n_fig_eight`
+figures of eight, whichever comes first, then holds that length for the rest of
+the run. Once reel-out stops, a fifth phase (final) takes over:
 the pattern keeps flying, but depower switches from `depower_setpoint` to
 `depower_final`, meant to hold roughly the force reel-out was regulating away.
 No pumping cycle: there is no reel-in phase here.
@@ -88,11 +89,13 @@ from phase 3 to 5 without ever touching 4, and the counter must still start.
 
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
 1 dive, 2 hold, 3 transition, 4 fig8), plus a fifth phase this script adds: 5 final,
-entered from either 3 or 4 the moment `l_set` reaches `fcs.reelout_l_max`. Reel-out
-begins `fcs.reelout_delay` seconds after phase 3 is reached and stops at the same
-length that triggers phase 5. Phase 4 still marks the first close tracking of the
-pattern, it just no longer gates the winch, and does not gate phase 5 either — a
-run that never settles still reaches final once reel-out is done.
+entered from either 3 or 4 the moment reel-out stops, i.e. `l_set` reaches
+`fcs.reelout_l_max` OR `fcs.n_fig_eight` laps have been flown, whichever fires
+first. Reel-out begins `fcs.reelout_delay` seconds after phase 3 is reached and
+stops at whichever of the two triggers phase 5. Phase 4 still marks the first
+close tracking of the pattern, it just no longer gates the winch, and does not
+gate phase 5 either — a run that never settles still reaches final once
+reel-out is done.
 
 # Parameters
 
@@ -105,7 +108,9 @@ one `f8_a`/`f8_b` pair per `include`; `OUTPUT_PATH` and `RUN_ARCHIVE` are read a
 cleared the same way, and let those parallel runs keep their logs apart and skip
 the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
 value left over from a sweep must never change an interactive run. The
-REEL_OUT-specific fields are `reelout_l_max`, the stop length, `reelout_delay`,
+REEL_OUT-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
+the second, independent stop criterion counted in laps (`0` disables it, its
+own docstring in `src/fc_settings.jl` has the counting details), `reelout_delay`,
 how long after phase 3 the winch waits before it starts reeling out, and
 `reelout_softstart`, which ramps the COMMANDED speed (`v_ff` and the `l_set`
 integration together, not the law inside `WinchController`) linearly from 0 to
@@ -115,7 +120,10 @@ the computed `v_set` over that many seconds — `rcs.t_startup`
 would finish within that many seconds at the current rate, `v_set` decelerates
 LINEARLY to 0 at `reelout_l_max` instead of stepping there, continuous with the
 speed already being flown — avoiding the reel-in transient (a power undershoot)
-a hard stop leaves the POSITION loop to correct.
+a hard stop leaves the POSITION loop to correct. The same soft-stop ramp applies
+when `n_fig_eight` fires first: with no remaining distance to solve a duration
+from, it latches for exactly `2 * reelout_softstop` seconds instead, the same
+nominal duration as the length case.
 `depower_final` is flown once phase 5 (final) is reached; its own docstring in
 `src/fc_settings.jl` has the tuned value and where it came from.
 
@@ -245,8 +253,11 @@ s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
 # The file's `dt` is a placeholder; the plant's own timestep is the real one.
 rcs.dt = s.dt
 rc = WinchController(rcs)
-@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %.0f m.",
-               rcs.kv, fcs.reelout_l_max)
+stop_criteria = fcs.n_fig_eight > 0 ?
+    @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
+    @sprintf("%.0f m", fcs.reelout_l_max)
+@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %s.",
+               rcs.kv, stop_criteria)
 
 # Standalone force-floor guard for phases 0-2 (park/dive/hold) — deliberately
 # NOT `rc`. `WinchController`'s own SpeedController is ACTIVE (its integrator
@@ -326,6 +337,8 @@ transition_start = NaN            # [s] time phase 3 began; `reelout_delay` coun
 stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
+reelout_done = false        # true once either stop criterion has ended reel-out
+stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 # fig_8 (SysState field, live lap count): 0 before phase >= 4, 1 at first entry,
@@ -364,7 +377,7 @@ try
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Separate from the ladder inside calc_steering so it can fire the SAME
         # step as a 3->4 transition: reel-out finishing does not wait for settling.
-        if phase in (3, 4) && l_set >= fcs.reelout_l_max
+        if phase in (3, 4) && reelout_done
             set_phase!(cc, 5)
             phase = 5
             rel_depower = fcs.depower_final
@@ -398,7 +411,7 @@ try
         # the run is flown exactly like the constant-length example.
         local v_set = 0.0
         if phase >= 3 && t - transition_start >= fcs.reelout_delay &&
-           l_set < fcs.reelout_l_max
+           !reelout_done
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
             # docs/fig8_tuning_log.md.
@@ -435,10 +448,31 @@ try
                 global stop_v_entry = v_cmd
                 global stop_T = 2 * remaining / v_cmd
             end
+            # Second stop criterion: N COMPLETE laps since the counter started at phase 4.
+            # `fig8_idx_progress`, not `fig8_n`, which reads 1 during the first lap.
+            if isnan(stop_start) && fcs.n_fig_eight > 0 &&
+               fig8_idx_progress >= fcs.n_fig_eight * n_path
+                global stop_reason = "laps"
+                if fcs.reelout_softstop > 0 && v_cmd > 0
+                    global stop_start = t
+                    global stop_v_entry = v_cmd
+                    # No remaining distance to solve T from — unlike the reelout_l_max
+                    # latch, the length is the free variable here. Same nominal duration.
+                    global stop_T = 2 * fcs.reelout_softstop
+                else
+                    global reelout_done = true   # hard stop, as reelout_l_max does today
+                end
+            end
             v_set = isnan(stop_start) ? v_cmd :
                 stop_v_entry * (1 - clamp((t - stop_start) / stop_T, 0.0, 1.0))
             global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
+            if l_set >= fcs.reelout_l_max
+                global reelout_done = true
+                isempty(stop_reason) && (global stop_reason = "length")
+            elseif !isnan(stop_start) && stop_reason == "laps" && t - stop_start >= stop_T
+                global reelout_done = true   # the soft-stop ramp has run out
+            end
         elseif phase < 3
             # Force floor BEFORE reel-out starts. `l_set` is otherwise held flat
             # at the settled length here, but the dive can sag tether force well
@@ -659,12 +693,17 @@ else
             "mean v_app deviation from v_app_ref [%]"))
 end
 # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
-@printf("  Tether: %.1f m -> %.1f m (target %.1f m).\n",
-        l_tether, sl.var_10[end], fcs.reelout_l_max)
+# stop_reason is "" when the run ended with reel-out still going.
+reelout_stop_reason = isempty(stop_reason) ? "none" : stop_reason
+@printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
+        l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
 reelout_summary["tether"] = OrderedDict(
     "start_m" => (l_tether, "tether length at run start [m]"),
     "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
-    "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"))
+    "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
+    "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
+    "laps_reeled" => (round(fig8_idx_progress / n_path; digits = 2),
+        "figure-eight laps completed by the time reel-out ended"))
 
 rp = reelout_power(sl)
 if isnothing(rp)

@@ -403,8 +403,9 @@ Pass `require_final = true` (default `false`) to also check that `sys_state`
 reaches `5` (phase "final") somewhere in the log — `examples/simple_reelout.jl`
 only, whose entry state machine has that phase; a plain `simple_fig8.jl` run's
 `sys_state` never goes past `4` and would fail this check every time, hence the
-default off. Checks that reel-out actually finished (`l_set` reached
-`reelout_l_max`) within the run, not just that the pattern was tracked well.
+default off. Checks that reel-out actually FINISHED within the run — by either
+of its two stop criteria, `l_set` reaching `reelout_l_max` or `n_fig_eight` laps
+completed — not just that the pattern was tracked well.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,

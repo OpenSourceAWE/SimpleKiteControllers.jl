@@ -42,8 +42,11 @@ fc_settings:
   # that is WinchControllers.jl's OWN schema (its `WCSettings`), distinct from
   # this file's `FC_Settings` schema. The REEL_OUT keys below are this
   # package's OWN script-level logic in simple_reelout.jl (the l_set
-  # trajectory and phase 5), not WinchControllers.jl fields.
+  # trajectory and phase 5), not WinchControllers.jl fields. Reel-out stops on
+  # TWO independent criteria, reelout_l_max and n_fig_eight — whichever fires
+  # first.
   reelout_l_max:      350.0    # Tether length at which reel-out stops              [m]
+  n_fig_eight:        4        # Laps after which reel-out stops; 0 = length only [-]
   depower_final:      0.328    # Flown from phase 5 (final), once l_max is reached; tuned
                                 # to hold ~3458 N, the reel-out mean force — see the log   [-]
   reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]

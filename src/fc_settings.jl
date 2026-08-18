@@ -88,6 +88,19 @@ Add new findings there, not here.
     "Tether length [m] at which reel-out stops and the run holds the final length"
     reelout_l_max = 250.0
     """
+    Number of complete figures of eight after which reel-out stops [-], the second
+    stop criterion beside [`reelout_l_max`](@ref); whichever is reached first ends
+    reel-out and enters phase 5. `0` disables it, leaving `reelout_l_max` the only
+    criterion (the pre-change behaviour). Counted from the same lap counter the log
+    records as `SysState.fig_8`, which starts at phase 4, so the partial lap flown
+    between reel-out engaging (phase 3 + `reelout_delay`) and the pattern settling
+    is not counted, and a run that never reaches phase 4 never fires this criterion.
+    NOTE that `depower_final` is tuned for the force at a full 150 -> 350 m reel-out;
+    stopping short leaves a different length and a different force, so a lap-limited
+    run may want its own `depower_final`.
+    """
+    n_fig_eight::Int64 = 0
+    """
     Depower flown once `reelout_l_max` is reached (phase 5, "final") [-]. Reel-out
     used to bleed off part of a force excursion by reeling out line instead of
     holding it; once the length is frozen, `step!`'s POSITION loop can only

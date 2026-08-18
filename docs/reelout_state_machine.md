@@ -49,7 +49,7 @@ guard is no longer tested.
 | 1 dive | 2 hold | `elevation <= ccs.el_center + ccs.dive_el_margin` — the kite has descended to within `dive_el_margin` (7°) of the pattern-centre elevation. `hold_start` is latched to the current time here. | [course_controller.jl:210](../src/course_controller.jl#L210) |
 | 2 hold | 3 transition | `t - hold_start >= ccs.hold_time` — the horizontal hold has lasted `hold_time` (0.8 s), so the kite arrives flat rather than still descending. This script separately latches its own `transition_start` on the same edge (comparing the phase `calc_steering` returns against the phase before the call); `reelout_delay` counts from it. | [course_controller.jl:213](../src/course_controller.jl#L213), [simple_reelout.jl:351](../examples/simple_reelout.jl#L351) |
 | 3 transition | 4 fig8 | `dmin < ccs.fig8_d_gate` — the cross-track error to the pattern drops below 5° for the **first** time. Purely a milestone: it changes nothing in how the kite is flown or how the winch behaves; it only marks the start of the window the results section reports `v_app` over. | [course_controller.jl:215](../src/course_controller.jl#L215) |
-| 3 or 4 | 5 final | `l_set >= fcs.reelout_l_max` — the length setpoint has reached the reel-out target. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
+| 3 or 4 | 5 final | `reelout_done` — either `l_set >= fcs.reelout_l_max` (the length setpoint has reached the reel-out target) or `fcs.n_fig_eight` complete laps have been flown, whichever fires first. `n_fig_eight = 0` disables the lap criterion. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
 
 Two details of the 3/4 -> 5 transition:
 
@@ -96,7 +96,7 @@ branches runs:
 
 | branch | condition | effect |
 |:-------|:----------|:-------|
-| **reel-out** | `phase >= 3` **and** `t - transition_start >= fcs.reelout_delay` **and** `l_set < fcs.reelout_l_max` | `v_set` from the `kv*sqrt(force)` law (with ramps, below); `l_set` integrates it, clamped at `reelout_l_max`; `rc` is stepped (`on_timer`). |
+| **reel-out** | `phase >= 3` **and** `t - transition_start >= fcs.reelout_delay` **and** `!reelout_done` | `v_set` from the `kv*sqrt(force)` law (with ramps, below); `l_set` integrates it, clamped at `reelout_l_max`; `rc` is stepped (`on_timer`). |
 | **force-floor guard** | `phase < 3` | `guard_lfc`, a standalone `LowerForceController`, reels **in** (its output is clamped to `<= 0`) if the measured force sags below `rcs.f_low`; only when `guard_lfc.active`. Otherwise `v_set = 0` and `l_set` stays flat. |
 | **frozen** | neither — i.e. phase 3/4 before `reelout_delay` has elapsed, or phase 5 | `v_set = 0`, `l_set` unchanged. |
 
@@ -119,14 +119,26 @@ Within the reel-out branch, the commanded speed passes through three regimes
   scales the *command* only — `rc`'s internal integrators and force limiters still
   see the unscaled `v_raw`, so this shapes the engagement transient without
   lagging the steady-state force regulation.
-- **Soft-stop** latches once, when `remaining <= v_cmd * fcs.reelout_softstop`
-  with `v_cmd > 0` and `reelout_softstop > 0`. At that instant `stop_start = t`,
-  `stop_v_entry = v_cmd`, and `stop_T = 2 * remaining / v_cmd` (a linear ramp's
-  area is `v_entry * T / 2`, so the time is solved exactly, not guessed — it comes
-  out at roughly 2x `reelout_softstop`). From then on
-  `v_set = stop_v_entry * (1 - clamp((t - stop_start)/stop_T, 0, 1))`, reaching 0
-  exactly at `reelout_l_max`. The latch is never cleared, so soft-stop is
-  terminal within the reel-out branch.
+- **Soft-stop** latches once, on whichever of TWO independent criteria fires
+  first:
+  - **Length**: `remaining <= v_cmd * fcs.reelout_softstop` with `v_cmd > 0` and
+    `reelout_softstop > 0`. At that instant `stop_start = t`,
+    `stop_v_entry = v_cmd`, and `stop_T = 2 * remaining / v_cmd` (a linear ramp's
+    area is `v_entry * T / 2`, so the time is solved exactly, not guessed — it
+    comes out at roughly 2x `reelout_softstop`), landing exactly at
+    `reelout_l_max`.
+  - **Laps**: `fig8_idx_progress >= fcs.n_fig_eight * n_path` (`n_fig_eight = 0`
+    disables this criterion). There is no remaining distance to solve a duration
+    from, so `stop_T = 2 * fcs.reelout_softstop` directly — the same nominal
+    duration as the length case — and the final length lands wherever that puts
+    it, below `reelout_l_max`.
+
+  Either way `v_set = stop_v_entry * (1 - clamp((t - stop_start)/stop_T, 0, 1))`,
+  and `reelout_done` latches true once the ramp runs out (or immediately, as a
+  hard stop, when `reelout_softstop = 0`). `stop_reason` (`"length"` or `"laps"`)
+  records which criterion fired first; if both would land on the same step, the
+  length criterion wins since it is checked first. The latch is never cleared,
+  so soft-stop is terminal within the reel-out branch.
 - Both ramps default to `0` in `FC_Settings`, which disables them.
 
 `v_set` is passed to `step!` twice over: integrated into `l_set` (the position
@@ -176,5 +188,6 @@ reel-out itself is out of `CourseController`'s scope:
 | `cc.hold_start` | 1 -> 2 | the `hold_time` timer |
 | `transition_start` | 2 -> 3 (detected here by comparing `cc.phase` before/after the `calc_steering` call) | the `reelout_delay` and `reelout_softstart` timers |
 | `stop_start`, `stop_v_entry`, `stop_T` | soft-stop latch | the linear deceleration |
+| `reelout_done`, `stop_reason` | whichever stop criterion fires first (length or laps) | the 3/4 -> 5 guard, and reporting why reel-out ended |
 | `cc.entry_sign` | first time the descent limiter clips near ±180° | keeping the limited course's sign stable through the wrap |
 | `l_set` | every reel-out/guard step | the position setpoint handed to `step!`, and the 3/4 -> 5 guard |
