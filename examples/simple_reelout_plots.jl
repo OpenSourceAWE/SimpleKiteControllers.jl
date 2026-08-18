@@ -97,14 +97,21 @@ el_deg = rad2deg.(sl.elevation[rng])
 # Written out rather than `norm.` so this script needs no LinearAlgebra import.
 v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
 
-# From the LAST row, so a log whose centre moved still overlays where it ended up.
-el_c_end = Float64(sl.var_04[end])
-# `REF_PATH` carries the flown curve of an optimized run; `fcs.f8_*` then describe
-# the initial guess, not the reference.
-ref_az, ref_el = if @isdefined(REF_PATH) && REF_PATH isa Tuple
+# The reference as it was actually steered at: the logged attractor point, which
+# walks every path the run flew. A static curve is the LAST path only, and under
+# re-optimization a run flies several. From phase 3 on, where the guidance is what
+# steers — before that Q is still switching lobes under a kite that is parked, and
+# the first step's slots are zero because they are written after `step!` runs.
+# `REF_PATH`/`fcs.f8_*` stay as the fallback for a log without those slots.
+live = [i for i in rng if sl.sys_state[i] >= 3 &&
+        !(iszero(sl.var_02[i]) && iszero(sl.var_03[i]))]
+ref_az, ref_el = if !isempty(live)
+    Float64.(sl.var_02[live]), Float64.(sl.var_03[live])
+elseif @isdefined(REF_PATH) && REF_PATH isa Tuple
     REF_PATH
 else
-    figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d, 0.0, el_c_end, 0.0, 361)
+    figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d, 0.0,
+                      Float64(sl.var_04[end]), 0.0, 361)
 end
 
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
@@ -129,7 +136,7 @@ if "pattern" in plots
         [el_deg, ref_el];
         xlabel = L"\mathrm{azimuth}~[°]",
         ylabel = L"\mathrm{elevation}~[°]",
-        legend = [L"\mathrm{flown}", L"\mathrm{reference}"],
+        legend = [L"\mathrm{flown}", L"\mathrm{attractor}"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
     )
     display(p1)
