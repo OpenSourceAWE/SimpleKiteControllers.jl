@@ -624,6 +624,72 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## Phase 5 is flown with 22 % less turn authority than any gate checked (2026-08-18)
+
+The feasibility gate of `simple_opt_reelout.jl` — at startup and at every
+re-optimization install — is evaluated with the `c1` of `depower_setpoint`.
+Phase 5 (final) flies `depower_final`, and `c1` falls steeply over that step:
+`turn_rate_coeffs([0,0,40], 0.275)` gives **0.2752 1/m**, at 0.328 it is
+**0.2133 1/m**, both interpolated — **-22 %**.
+
+The margin is exactly linear in `c1` (`margin = path_radius / kite_radius` and
+`kite_radius = rad2deg(1/(L*c1*u_s))`), so every margin the log quotes is
+**0.775x** that in phase 5, at the same length and on the same path. That
+matters because the flown path is not the startup one: the run of
+2026-08-18_213634 installed its last path AT `reelout_l_max` with margin 1.00,
+i.e. **0.78 in phase 5** — above `min_feasibility_margin = 0.74`, but by 5 %.
+
+**Measured, run 2026-08-18_215919** (150 -> 380 m, 6 m/s, no turbulence, the same
+settings as 2026-08-18_213634): all 8 criteria pass, 8507 W at 0.98 x predicted,
+RMS d 1.58 deg, min elevation 8.4 deg — i.e. unchanged, the diagnostics cost the
+run nothing. The phase-5 margin of the successively installed paths, all read at
+`reelout_l_max` so only the path differs:
+
+| install | L installed at | margin at `l_now` | phase-5 margin at 380 m |
+|---|---|---|---|
+| 1 | 184 m | 0.98 | 1.58 |
+| 2 | 216 m | 0.83 | 1.14 |
+| 3 | 250 m | 0.95 | 1.12 |
+| 4 | 284 m | 1.03 | 1.07 |
+| 5 | 318 m | 1.03 | 0.96 |
+| 6 | 353 m | 1.02 | 0.85 |
+| 7 | 380 m | 0.78 | 0.78 |
+
+The two columns are NOT comparable install by install — the left one is read at
+`l_now`, and early on the length dominates the depower. What the right column
+shows is that the re-optimizer returns a **tighter path every time** as the tether
+grows (and the learnt `el_bias`, +2.20 deg by the end, compresses the azimuth
+axis further), so phase 5 inherits the worst path of the run at the lowest turn
+authority of the run: **0.78, 5 % above the gate**.
+
+Install 7 also shows the depower-aware gate biting for the first time: it landed
+at t = 128.4 s, AFTER the lift latched at 124.7 s, so `phase >= 5` and the gate
+itself used `depower_final`'s `c1` — 0.78, where the old gate scored the same path
+1.00. It passed, but a slightly tighter reply would now be rejected where it used
+to be installed.
+
+What is in the code now (not a new refusal — the run has already made its power
+by then, and rejecting the best-power curve over the last few laps costs more
+than it buys):
+
+- startup prints `c1` at `depower_final`, its change vs the pattern's, and the
+  margin at `reelout_l_max` on the path lifted by `el_offset_final`; it warns if
+  that is below `min_feasibility_margin`.
+- every re-optimization install reports its phase-5 margin next to its own
+  (`margin 0.78 (phase 5: 0.78 at 380 m)`), and warns once per run when it drops
+  below the gate.
+- the two IN-AIR curvature checks (the elevation-shift blend and the
+  re-optimization gate) now use `depower_final`'s `c1` from phase 5 onward, so a
+  shift installed in phase 5 is scored with the authority that will fly it.
+- `traj_opt.feasibility.c1_final` / `margin_final` / `margin_final_flown` in the
+  run summary.
+
+Not addressed: the lift `el_offset_final` compresses the azimuth axis by
+`cos(elevation)`, so it tightens the path a little exactly where the authority
+is lowest; and `el_bias` (learnt, +2.2 deg in that run) is on top of it and is
+unknown at startup, so the startup number is optimistic by whatever the run
+learns.
+
 ## Learning the elevation bias: close on the OPTIMIZER's curve, not the sag (2026-08-18)
 
 The kite tracks below the path it is given in every segment of every run: the
