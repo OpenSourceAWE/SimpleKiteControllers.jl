@@ -12,7 +12,7 @@
 system:
   log_file: 'reelout_150m' # filename without extension; use / as path delimiter, even on Windows
   time_lapse: 1.0 # relative replay speed
-  sim_time: 140.0 # simulation time; entry (~40 s) + reel-out + laps at final length [sim only]
+  sim_time: 150.0 # simulation time; entry (~40 s) + reel-out + laps at final length [sim only]
   sample_freq: 90 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81
