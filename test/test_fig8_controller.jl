@@ -21,6 +21,31 @@ _make_test_controller(; kwargs...) =
                                               attractor_distance = 10.0,
                                               up_loops = false, kwargs...))
 
+"""
+Walk a kite twice around `fec`'s own path, `offset` degrees off it along the local
+normal, and return the largest cyclic index jump Q made between two calls.
+"""
+function _max_q_jump(fec; offset = 0.0)
+    n = length(fec.az_path)
+    max_jump = 0
+    prev = nothing
+    for i in 1:2:(2n)
+        k = mod1(i, n)
+        kn = mod1(k + 1, n)
+        dx = fec.az_path[kn] - fec.az_path[k]
+        dy = fec.el_path[kn] - fec.el_path[k]
+        len = hypot(dx, dy)
+        calc_attractor(fec, fec.az_path[k] - offset * dy / len,
+                       fec.el_path[k] + offset * dx / len)
+        if prev !== nothing
+            jump = abs(fec.last_idx - prev)
+            max_jump = max(max_jump, min(jump, n - jump))   # cyclic distance
+        end
+        prev = fec.last_idx
+    end
+    max_jump
+end
+
 @testset verbose = true "fig8_controller" begin
 
     @testset "path_direction" begin
@@ -55,7 +80,9 @@ _make_test_controller(; kwargs...) =
     end
 
     @testset "branch_disambiguation" begin
-        fec = _make_test_controller()
+        # The guard only ranks candidates the search offers, so this exercises it
+        # with the window off: within a window the far branch is out of reach.
+        fec = _make_test_controller(search_window = 0.0)
         # The self-intersection: both branches pass through it (D = -1 puts it low).
         n = length(fec.az_path)
         crossings = [i for i in 1:n if abs(fec.az_path[i] - fec.fes.az_center) < 0.2]
@@ -67,7 +94,7 @@ _make_test_controller(; kwargs...) =
         picked = Int[]
         for i in (crossings[1], i_b)
             # Pretend we fly along branch i, one small step behind along its tangent.
-            f = _make_test_controller()
+            f = _make_test_controller(search_window = 0.0)
             chi = f.tangent[i]
             step = 0.05  # [deg]
             f.has_prev = true
@@ -183,21 +210,14 @@ _make_test_controller(; kwargs...) =
         # Q must advance along the path, never jump to the far branch.
         fec = _make_test_controller()
         n = length(fec.az_path)
-        # Walk along the path and check Q never makes a large index jump.
-        max_jump = 0
-        prev = nothing
-        for i in 1:2:(2n)
-            k = mod1(i, n)
-            calc_attractor(fec, fec.az_path[k], fec.el_path[k])
-            if prev !== nothing
-                jump = abs(fec.last_idx - prev)
-                jump = min(jump, n - jump)          # cyclic distance
-                max_jump = max(max_jump, jump)
-            end
-            prev = fec.last_idx
-        end
         # Slack allowed, but nothing like the n/2 jump a branch switch produces.
-        @test max_jump < n ÷ 8
+        @test _max_q_jump(fec) < n ÷ 8
+
+        # A path smaller than twice `search_window` must still keep a window:
+        # slightly off the path, an uncapped window lets Q hop the crossing.
+        fec_s = _make_test_controller()
+        @test sum(fec_s.seg_len) < 2 * fec_s.fes.search_window
+        @test _max_q_jump(fec_s; offset = 0.3) < n ÷ 8
 
         # With the window disabled the search is global again.
         fec2 = _make_test_controller(search_window = 0.0)
@@ -569,8 +589,9 @@ _make_test_controller(; kwargs...) =
         # Below the struct's 1.0: the optimizer returns paths right at the V3's
         # curvature limit at EVERY length, not just the shortest (11.0-11.5 m of
         # physical turn radius against the kite's 11.35 m, measured 2026-08-18), so
-        # at 1.0 almost nothing installs.
-        @test tos.min_feasibility_margin == 0.8
+        # at 1.0 almost nothing installs. A rejection-rate knob that moves with
+        # every sweep (0.74 on 2026-08-18), so only the inequality is pinned.
+        @test 0 < tos.min_feasibility_margin < TrajOptSettings().min_feasibility_margin
         # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
         # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
         @test tos.min_height == 40.0
@@ -580,7 +601,10 @@ _make_test_controller(; kwargs...) =
         # 1, not the struct's 2: the shipped file re-anchors every lap, which is
         # what the reel-out window is long enough for.
         @test tos.reopt_every_n_laps == 1
-        @test tos.max_reopt == 4
+        # At least the struct's bound: re-anchoring every lap needs one solve per
+        # lap of the reel-out window, which is more than the default (7 on
+        # 2026-08-18) — the exact count follows the window, so it is not pinned.
+        @test tos.max_reopt >= TrajOptSettings().max_reopt
         @test tos.path_blend_time == 4.0
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
