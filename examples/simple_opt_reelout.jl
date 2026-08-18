@@ -1126,14 +1126,17 @@ if !isnothing(rp)
     opt_power_pred_eff = sum(p.power * p.share for p in pred_shares)
 end
 if !isnothing(opt_power_meas)
-    @printf("  Optimizer predicted %.0f W of mean reel-out power%s; \
-             the run measured %.0f W (%.2f x).\n",
-            opt_power_pred_eff,
-            length(pred_shares) > 1 ?
-                @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
-                         join((@sprintf("%.0f W for %.0f%%", p.power, 100 * p.share)
-                               for p in pred_shares), ", ")) : " for this path",
-            opt_power_meas, opt_power_meas / opt_power_pred_eff)
+    # Built once and repeated as an `@info` after the archive line: this is the
+    # comparison the script exists for, and here it is buried in the results block.
+    global power_summary = @sprintf("Optimizer predicted %.0f W of mean reel-out \
+                                     power%s; the run measured %.0f W (%.2f x).",
+        opt_power_pred_eff,
+        length(pred_shares) > 1 ?
+            @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
+                     join((@sprintf("%.0f W for %.0f%%", p.power, 100 * p.share)
+                           for p in pred_shares), ", ")) : " for this path",
+        opt_power_meas, opt_power_meas / opt_power_pred_eff)
+    println("  ", power_summary)
 end
 # A key is omitted rather than written empty when its measurement does not exist:
 # `string(nothing)` would put the bare word `nothing` into the file, which YAML
@@ -1249,6 +1252,11 @@ open(joinpath(output_path, log_name * ".yaml"), "w") do io
 end
 
 # ==================== ARCHIVE ==================== #
+
+# Repeated here, as the last thing the run says: the results block above is a wall
+# of printf and this is the comparison the script exists for. `@info`, not `printf`,
+# so it lands on the same stream as the archive line it precedes.
+isnothing(opt_power_meas) || @info power_summary
 
 # One timestamped folder per run under output/archives/, so the exact config
 # that produced a log survives even after the next run overwrites output/*.
