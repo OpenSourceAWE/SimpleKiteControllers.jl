@@ -24,7 +24,7 @@ system:
   # 180 -> 350 m is 170 m at the ~2.3 m/s this winch reels, i.e. ~75 s on top of
   # the ~30 s entry. 150 s leaves room for the soft-start ramp and some laps at
   # the final length; check `stop_reason` in the run summary if it looks short.
-  sim_time: 130.0 # simulation time; entry (~30 s) + reel-out (~75 s) + laps [sim only]
+  sim_time: 150.0 # simulation time; entry (~30 s) + reel-out (~75 s) + laps [sim only]
   sample_freq: 90 # sample frequency in Hz; its inverse is the run's timestep
   fixed_font: '' # name or filepath+filename of alternative fixed pitch font
   g_earth: 9.81
