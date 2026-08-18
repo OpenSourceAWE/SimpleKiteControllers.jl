@@ -18,6 +18,7 @@ export CourseController, CourseControllerSettings, set_phase!
 # Figure-of-eight guidance
 export FigureEightSettings, FigureEightController
 export figure_eight_path, calc_attractor, navigate_fig8, set_path_center!
+export set_path!, resample_path
 export path_tangent
 export min_turn_radius, path_min_radius, path_radius_profile, check_pattern_feasible
 

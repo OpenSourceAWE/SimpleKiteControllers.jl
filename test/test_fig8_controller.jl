@@ -11,6 +11,8 @@ using SimpleKiteControllers
 import KiteUtils: wrap2pi
 # Via the package: environments this runs from, like examples/, lack a direct YAML dep.
 import SimpleKiteControllers: YAML
+# The guidance's own metric, for checking a remapped Q landed near the old one.
+import SimpleKiteControllers: _dist as _skc_dist
 
 _make_test_controller(; kwargs...) =
     FigureEightController(FigureEightSettings(; dt = 0.02, A = 10.0, B = 5.0,
@@ -107,6 +109,74 @@ _make_test_controller(; kwargs...) =
         # and the moved path is internally consistent (mirrors "attractor")
         _, _, dmin = calc_attractor(fec, fec.az_path[i0], fec.el_path[i0])
         @test dmin < 1e-9
+    end
+
+    @testset "set_path" begin
+        # An externally supplied path replaces the lemniscate and stays flyable.
+        src = _make_test_controller()
+        fec = _make_test_controller(A = 30.0, B = 12.0, el_center = 25.0)
+        set_path!(fec, src.az_path, src.el_path)
+        @test fec.az_path == src.az_path
+        @test fec.el_path == src.el_path
+        @test fec.seg_len ≈ src.seg_len
+        @test fec.tangent ≈ src.tangent
+        _, _, dmin = calc_attractor(fec, fec.az_path[40], fec.el_path[40])
+        @test dmin < 1e-9
+
+        # A closed path (last point repeats the first) loses the duplicate.
+        n0 = length(src.az_path)
+        fec2 = _make_test_controller()
+        set_path!(fec2, [src.az_path; src.az_path[1]], [src.el_path; src.el_path[1]])
+        @test length(fec2.az_path) == n0
+
+        # The traversal direction is forced to match up_loops, whatever came in.
+        for up in (false, true)
+            fec3 = _make_test_controller()
+            set_path!(fec3, reverse(src.az_path), reverse(src.el_path); up_loops = up)
+            n = length(fec3.az_path)
+            imax = argmax(fec3.az_path)
+            going_up = fec3.el_path[mod1(imax + 1, n)] - fec3.el_path[imax] > 0
+            @test going_up == up
+            @test fec3.fes.up_loops == up
+        end
+
+        # Q is remapped onto the new path, not left pointing at a stale index.
+        fec4 = _make_test_controller()
+        calc_attractor(fec4, fec4.az_path[50], fec4.el_path[50])
+        q_az, q_el = fec4.az_path[fec4.last_idx], fec4.el_path[fec4.last_idx]
+        set_path!(fec4, src.az_path, src.el_path; resample = 120)
+        @test length(fec4.az_path) == 120
+        @test _skc_dist(q_az, q_el, fec4.az_path[fec4.last_idx],
+                        fec4.el_path[fec4.last_idx]) < 1.0
+
+        # A repeated point has no direction; it is rejected rather than flown.
+        bad_az = [src.az_path[1:10]; src.az_path[10]; src.az_path[11:end]]
+        bad_el = [src.el_path[1:10]; src.el_path[10]; src.el_path[11:end]]
+        @test_throws ArgumentError set_path!(_make_test_controller(), bad_az, bad_el)
+        @test_throws ArgumentError set_path!(_make_test_controller(),
+                                             src.az_path, src.el_path[1:end-1])
+    end
+
+    @testset "resample_path" begin
+        src = _make_test_controller()
+        # Equidistant in the guidance's own metric, and still the same curve.
+        az, el = resample_path(src.az_path, src.el_path, 180)
+        @test length(az) == length(el) == 180
+        fec = _make_test_controller()
+        set_path!(fec, az, el)
+        seg = fec.seg_len
+        @test maximum(seg) / minimum(seg) < 1.02
+        @test isapprox(sum(seg), sum(src.seg_len); rtol = 1e-3)
+        # The tightest curvature is a property of the curve, not of its sampling.
+        @test isapprox(path_min_radius(fec), path_min_radius(src); rtol = 0.05)
+        # Upsampling works too, and a non-uniformly sampled input is the point:
+        # take every other point of one lobe and check the result is even again.
+        idx = [1:2:200; 201:length(src.az_path)]
+        az2, el2 = resample_path(src.az_path[idx], src.el_path[idx], 300)
+        fec2 = _make_test_controller()
+        set_path!(fec2, az2, el2)
+        @test maximum(fec2.seg_len) / minimum(fec2.seg_len) < 1.05
+        @test_throws ArgumentError resample_path(src.az_path, src.el_path, 3)
     end
 
     @testset "search_window_continuity" begin

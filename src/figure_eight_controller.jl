@@ -116,18 +116,20 @@ mutable struct FigureEightController
 end
 
 """
-    _build_path(fes::FigureEightSettings, az_center, el_center)
+    _path_geometry(az, el, up_loops)
 
-Discretize the reference lemniscate about `(az_center, el_center)` and return
-`(az, el, seg_len, tangent)`: the cyclic path points [deg], the arc length of
-each segment [deg] and the path direction at each point [rad]. The traversal
-direction is reversed if it does not match `fes.up_loops`.
+Turn a closed curve in (azimuth, elevation) [deg] into what the controller
+holds: `(az, el, seg_len, tangent)`, the cyclic path points [deg], the arc
+length of each segment [deg] and the path direction at each point [rad]. A
+duplicated closing point is dropped and the traversal direction is reversed if
+it does not match `up_loops`.
 """
-function _build_path(fes::FigureEightSettings, az_center, el_center)
-    az, el = figure_eight_path(fes.A, fes.B, fes.C, fes.D,
-                               az_center, el_center, fes.theta,
-                               fes.num_points)
-    az = collect(az); el = collect(el)
+function _path_geometry(az, el, up_loops)
+    az = collect(float.(az)); el = collect(float.(el))
+    length(az) == length(el) ||
+        throw(ArgumentError("azimuth and elevation must have the same length"))
+    length(az) >= 4 ||
+        throw(ArgumentError("a closed path needs at least 4 points, got $(length(az))"))
     # drop the duplicated closing point; the path is treated as cyclic
     if isapprox(az[end], az[1]; atol=1e-9) && isapprox(el[end], el[1]; atol=1e-9)
         pop!(az); pop!(el)
@@ -136,7 +138,7 @@ function _build_path(fes::FigureEightSettings, az_center, el_center)
     # Up- vs down-loops is decided by the forward direction at the right lobe.
     imax = argmax(az)
     going_up = el[mod1(imax + 1, n)] - el[imax] > 0
-    if going_up != fes.up_loops
+    if going_up != up_loops
         reverse!(az); reverse!(el)
     end
     seg_len = zeros(n)
@@ -149,6 +151,19 @@ function _build_path(fes::FigureEightSettings, az_center, el_center)
         tangent[i] = atan(d_az, d_el)
     end
     return az, el, seg_len, tangent
+end
+
+"""
+    _build_path(fes::FigureEightSettings, az_center, el_center)
+
+Discretize the reference lemniscate about `(az_center, el_center)` and hand it
+to [`_path_geometry`](@ref).
+"""
+function _build_path(fes::FigureEightSettings, az_center, el_center)
+    az, el = figure_eight_path(fes.A, fes.B, fes.C, fes.D,
+                               az_center, el_center, fes.theta,
+                               fes.num_points)
+    return _path_geometry(az, el, fes.up_loops)
 end
 
 function FigureEightController(fes::FigureEightSettings)
@@ -173,6 +188,99 @@ function set_path_center!(fec::FigureEightController, az_center, el_center)
     fec.el_path = el
     fec.seg_len = seg_len
     fec.tangent = tangent
+    nothing
+end
+
+"""
+    resample_path(az, el, n) -> (az, el)
+
+Redistribute a closed path over `n` points equidistant in arc length, by linear
+interpolation between the given ones. A duplicated closing point is dropped, and
+the result is cyclic: it does not repeat its first point.
+
+The metric is the guidance's own [`_dist`](@ref), the flat-sky distance with the
+azimuth axis compressed by `cos(elevation)`, since that is the metric
+`attractor_distance` and `search_window` are measured in.
+
+Any path not built here needs this: [`calc_attractor`](@ref) turns
+`search_window` into an index half-width from the mean spacing, and its branch
+disambiguation looks for LOCAL minima of the distance array. Both assume points
+spaced evenly along the path, which a curve sampled evenly in some other
+parameter — a B-spline's `s`, say — is not.
+"""
+function resample_path(az, el, n::Integer)
+    n >= 4 || throw(ArgumentError("resampling needs at least 4 points, got $n"))
+    az = collect(float.(az)); el = collect(float.(el))
+    length(az) == length(el) ||
+        throw(ArgumentError("azimuth and elevation must have the same length"))
+    if length(az) > 1 && _dist(az[1], el[1], az[end], el[end]) < 1e-9
+        pop!(az); pop!(el)
+    end
+    m = length(az)
+    m >= 3 || throw(ArgumentError("a closed path needs at least 3 distinct points"))
+    # cumulative arc length of the closed polyline; s[m + 1] is the full lap
+    s = zeros(m + 1)
+    for i in 1:m
+        j = mod1(i + 1, m)
+        s[i + 1] = s[i] + _dist(az[i], el[i], az[j], el[j])
+    end
+    total = s[end]
+    total > 0 || throw(ArgumentError("the path has zero length"))
+    out_az = zeros(n); out_el = zeros(n)
+    k = 1
+    for q in 1:n
+        target = total * (q - 1) / n
+        while k < m && s[k + 1] <= target
+            k += 1
+        end
+        seg = s[k + 1] - s[k]
+        f = seg > 0 ? (target - s[k]) / seg : 0.0
+        j = mod1(k + 1, m)
+        out_az[q] = az[k] + f * (az[j] - az[k])
+        out_el[q] = el[k] + f * (el[j] - el[k])
+    end
+    return out_az, out_el
+end
+
+"""
+    set_path!(fec::FigureEightController, az, el; resample = 0,
+              up_loops = fec.fes.up_loops)
+
+Install an externally supplied closed path [deg] — from a trajectory optimizer,
+say — in place of the lemniscate. `resample > 0` first redistributes it over that
+many equidistant points ([`resample_path`](@ref)), which any path not built here
+needs; `0` takes the points as given and throws if any of them repeats its
+predecessor.
+
+The shape and center fields of `fes` are NOT updated: they describe the
+lemniscate that is no longer installed, and a later [`set_path_center!`](@ref)
+would rebuild it and discard this path. `up_loops` is, since the traversal
+direction of what was installed is a property of the path.
+
+The course filter keeps running on purpose — it is what disambiguates the two
+branches at the crossing, and resetting it mid-flight loses branch lock for
+`course_tau` seconds — while the closest-point index is remapped to the point of
+the NEW path nearest the old Q, so the local search window stays where the kite
+actually is.
+"""
+function set_path!(fec::FigureEightController, az, el; resample = 0,
+                   up_loops = fec.fes.up_loops)
+    if resample > 0
+        az, el = resample_path(az, el, resample)
+    end
+    new_az, new_el, seg_len, tangent = _path_geometry(az, el, up_loops)
+    all(>(0), seg_len) ||
+        throw(ArgumentError("the path repeats a point ($(count(iszero, seg_len)) \
+                             zero-length segment(s)); resample it"))
+    q_az = fec.az_path[fec.last_idx]
+    q_el = fec.el_path[fec.last_idx]
+    fec.az_path = new_az
+    fec.el_path = new_el
+    fec.seg_len = seg_len
+    fec.tangent = tangent
+    fec.fes.up_loops = up_loops
+    fec.last_idx = argmin(i -> _dist(q_az, q_el, new_az[i], new_el[i]),
+                          eachindex(new_az))
     nothing
 end
 

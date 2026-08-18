@@ -146,6 +146,8 @@ demo no longer fails with a connection error when the server is down.
 
 ## Step 3 — let the guidance hold an arbitrary closed path (`src/`)
 
+**Status: implemented 2026-08-18.** 190 tests pass, the 170 that predate this unchanged — which is what makes the `_path_geometry` extraction behaviour-preserving rather than merely intended to be.
+
 In [src/figure_eight_controller.jl](src/figure_eight_controller.jl):
 
 1. **Extract** the geometry half of `_build_path` into
