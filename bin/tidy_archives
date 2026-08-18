@@ -1,0 +1,79 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# Group output/archives/YYYY-MM-DD_HHMMSS run folders into one subfolder per
+# day: output/archives/YYYY-MM-DD/YYYY-MM-DD_HHMMSS. The run folders keep their
+# names, so this is a pure move — nothing is renamed, merged or deleted, and a
+# folder can be moved back out by hand.
+#
+# The example scripts still write new runs flat at the top level, so this is a
+# tidy-up to re-run now and then rather than a one-off migration. It is
+# idempotent: already-grouped folders are left alone.
+#
+# Anything that is not a YYYY-MM-DD_HHMMSS folder is skipped and reported, so a
+# stray file or a day folder from an earlier run cannot be swallowed.
+#
+# Usage: bin/tidy_archives [-n|--dry-run] [archives-dir]
+#        bin/tidy_archives -n                 preview, change nothing
+#        bin/tidy_archives ../other/archives  a different tree
+set -euo pipefail
+
+if [[ $(basename "$(pwd)") == "bin" ]]; then
+    cd ..
+fi
+
+DRY_RUN=false
+ARCHIVES=output/archives
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--dry-run) DRY_RUN=true; shift ;;
+        -h|--help)    sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -*)           echo "Unknown option: $1" >&2; exit 1 ;;
+        *)            ARCHIVES=$1; shift ;;
+    esac
+done
+
+[[ -d $ARCHIVES ]] || { echo "No such directory: $ARCHIVES" >&2; exit 1; }
+
+moved=0
+skipped=0
+blocked=0
+
+for path in "$ARCHIVES"/*; do
+    [[ -e $path ]] || continue          # empty glob
+    name=$(basename "$path")
+
+    # Only run folders. A day folder (YYYY-MM-DD) fails this too, which is what
+    # keeps a second run of the script from nesting them further.
+    if [[ ! -d $path || ! $name =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})_[0-9]{6}$ ]]; then
+        echo "skip  $name"
+        skipped=$((skipped + 1))
+        continue
+    fi
+
+    day=${BASH_REMATCH[1]}
+    target=$ARCHIVES/$day/$name
+
+    if [[ -e $target ]]; then
+        echo "BLOCKED  $name -> $day/ (target exists)" >&2
+        blocked=$((blocked + 1))
+        continue
+    fi
+
+    echo "move  $name -> $day/"
+    if [[ $DRY_RUN == false ]]; then
+        mkdir -p "$ARCHIVES/$day"
+        mv "$path" "$target"
+    fi
+    moved=$((moved + 1))
+done
+
+if [[ $DRY_RUN == true ]]; then
+    echo "dry run: $moved to move, $skipped skipped, $blocked blocked"
+else
+    echo "moved $moved, skipped $skipped, blocked $blocked"
+fi
+
+[[ $blocked -eq 0 ]] || exit 1
