@@ -575,7 +575,9 @@ _make_test_controller(; kwargs...) =
         # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
         # carries whatever the last experiment needed.
         @test !TrajOptSettings().reopt_enabled
-        @test tos.reopt_every_n_laps == 2
+        # 1, not the struct's 2: the shipped file re-anchors every lap, which is
+        # what the reel-out window is long enough for.
+        @test tos.reopt_every_n_laps == 1
         @test tos.max_reopt == 4
         @test tos.path_blend_time == 4.0
         # The gate reads the reference path, the criterion scores the flown one, and
