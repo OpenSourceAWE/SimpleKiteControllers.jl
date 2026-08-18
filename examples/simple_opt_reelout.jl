@@ -323,6 +323,13 @@ opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
 # installs appends to this; `path_blend_time` makes the swap gradual, but 4 s of
 # blend against a ~100 s reeling window is inside the rounding.
 pred_timeline = [(t = 0.0, power = opt_power_pred)]
+# The curve a re-optimization is SEEDED with, kept at the optimizer's own
+# resolution. Not `fec.az_path`: what is flown is resampled to `n_path` so the lap
+# counter never sees a point count change, and re-sending that upsampled copy puts
+# IPOPT in a bad basin — measured 2026-08-18, a 100-point reply upsampled to 360 and
+# fed back fails at 280 m where the same path at native resolution solves to 9101 W.
+seed_az = copy(fec.az_path)
+seed_el = copy(fec.el_path)
 opt_downloops == !fcs.up_loops ||
     error("The optimizer returned a downloops = $opt_downloops path while this run \
            flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
@@ -458,6 +465,7 @@ reopt_lap = 0.0             # lap count at which the last request went out
 reopt_next_poll = 0.0       # [s] next /status poll
 reopt_t_request = NaN       # [s] when the pending request went out
 reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
+reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
 reopt_events = NamedTuple[] # one row per solve, for the run summary
 # The blend in progress: two canonical paths of equal length and a start time.
 blend_from = nothing
@@ -530,8 +538,8 @@ try
                fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
                 try
                     opt_step(StepParams(l_now, winch,
-                                        Trajectory([fec.az_path; fec.az_path[1]],
-                                                   [fec.el_path; fec.el_path[1]]));
+                                        Trajectory([seed_az; seed_az[1]],
+                                                   [seed_el; seed_el[1]]));
                              url = tos.base_url, wait = false)
                     global reopt_pending = true
                     global reopt_t_request = t
@@ -554,7 +562,8 @@ try
                                end) == "solving"
                             sleep(tos.reopt_poll_interval)
                         end
-                        global reopt_blocked_s += time() - t_block
+                        global reopt_last_solve_s = time() - t_block
+                        global reopt_blocked_s += reopt_last_solve_s
                         # Collect on THIS step: the reply is already on the server.
                         global reopt_next_poll = t
                     end
@@ -653,6 +662,9 @@ try
                             global n_path = n_path_new
                             new_pred = Float64(tab["metrics"]["avg_power_W"])
                             push!(pred_timeline, (t = t, power = new_pred))
+                            # Native resolution, as sent: see `seed_az` above.
+                            global seed_az = copy(chk_az)
+                            global seed_el = copy(chk_el)
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f, clearance %.1f m, \
                                                         %.0f W predicted", margin, clearance,
@@ -660,10 +672,16 @@ try
                         end
                     end
                     push!(reopt_events, event)
-                    @info @sprintf("Re-optimization %d: %s%s (%.1f s after the request).",
+                    # Blocking collects on the SAME step as the request, so the
+                    # simulated gap is 0 by construction; the wall time is the figure
+                    # that means something there.
+                    @info @sprintf("Re-optimization %d: %s%s (%s).",
                                    reopt_n, event.status,
                                    isempty(event.detail) ? "" : " — " * event.detail,
-                                   t - reopt_t_request)
+                                   tos.reopt_blocking ?
+                                       @sprintf("%.1f s of wall time, held", reopt_last_solve_s) :
+                                       @sprintf("%.1f s of sim after the request",
+                                                t - reopt_t_request))
                 end
             end
 

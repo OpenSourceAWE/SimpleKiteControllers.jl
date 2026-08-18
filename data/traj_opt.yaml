@@ -113,7 +113,7 @@ traj_opt:
     # checked for curvature and clearance at the CURRENT length before it is
     # installed, and blended in over path_blend_time; one that fails is dropped and
     # the run keeps flying the path it has.
-    reopt_enabled: true     # off by default: a run is reproducible without a server
+    reopt_enabled: false    # off by default: a run is reproducible without a server
     reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
     max_reopt: 4             # bound on re-optimizations per run                 [-]
     path_blend_time: 4.0     # seconds over which the new path replaces the old  [s]

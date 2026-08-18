@@ -559,7 +559,11 @@ _make_test_controller(; kwargs...) =
         @test tos.base_url == "http://127.0.0.1:8000"
         @test tos.guess_a == 30.0
         @test tos.guess_b == 12.0
-        @test tos.guess_el_center == 26.0
+        # 22, not the 26 that was measured at 150 m: 26 converges at 150.0, 179.0,
+        # 180.0 and 185.0 m but throws IPOPT's iteration limit at 180.00027 and
+        # 181.0, while 22 converges at all six and reaches the same optimum wherever
+        # 26 also worked (2026-08-18). See the YAML header.
+        @test tos.guess_el_center == 22.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # 0.9, not the struct's 1.0: the optimizer currently returns paths right at
