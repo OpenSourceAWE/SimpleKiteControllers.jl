@@ -408,6 +408,16 @@ fcs.el_offset_wing == 0 ||
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
 n_opt = length(opt_result.trajectory.azimuth) - 1
+# Every optimizer answer this run flies, as it arrived — before `el_bias`,
+# `el_offset_final` and `el_offset_wing` are added to it. The pattern plot draws
+# the lot: a run installs a new path per lap and they shrink INWARD and DOWNWARD
+# in angle as the tether grows — measured over a 150 -> 380 m run, azimuth
+# ±19/20° -> ±13°, elevation 16-29° -> 10-17°, since the same physical pattern
+# subtends less angle on a longer tether. The LAST one alone therefore says
+# nothing about what was asked for over the run. Every other curve in that plot
+# carries the pre-distortion.
+opt_paths_raw = [(collect(Float64.(opt_result.trajectory.azimuth)),
+                  collect(Float64.(opt_result.trajectory.elevation)))]
 set_path!(fec, opt_result.trajectory.azimuth,
           opt_result.trajectory.elevation .+ wing_lift.(opt_result.trajectory.azimuth);
           resample = min(tos.resample_points, n_opt))
@@ -976,6 +986,7 @@ try
                         # curve that will be flown: lifting it relieves both height
                         # gates and compresses the azimuth axis by cos(elevation),
                         # which the curvature margin must be re-read for.
+                        cand_raw = (copy(new_az), copy(new_el))
                         new_el = new_el .+ el_target .+ wing_lift.(new_az)
                         # TWO resolutions of the same reply, on purpose.
                         #
@@ -1023,6 +1034,10 @@ try
                             global blend_from = prepare_path(fec.az_path, fec.el_path;
                                 resample = n_path, up_loops = fcs.up_loops)
                             global blend_to = (cand_az, cand_el)
+                            # Here, not before the gates: a REJECTED reply is not
+                            # a path the kite ever flies, and the pattern plot
+                            # draws these as what it flew, undistorted.
+                            push!(opt_paths_raw, cand_raw)
                             global blend_t0 = t
                             # The candidate carries the whole shift, so the path in
                             # the air does too the moment it lands.
@@ -1735,6 +1750,7 @@ if show_plots
     # The flown curve and this run's log name, so the plots draw the optimized
     # path and load the _opt log instead of the lemniscate run's.
     REF_PATH = (fec.az_path, fec.el_path)
+    OPT_PATHS_RAW = opt_paths_raw
     LOG_NAME = log_name
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
 else

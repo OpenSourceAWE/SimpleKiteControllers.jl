@@ -114,6 +114,30 @@ else
                       Float64(sl.var_04[end]), 0.0, 361)
 end
 
+# Every path the optimizer returned that the run went on to fly, BEFORE
+# `el_bias`, `el_offset_final` and `el_offset_wing` were added to it. Every other
+# curve here carries that pre-distortion — the logged attractor included, since it
+# walks the corrected path — so without these there is nothing in the figure to
+# compare the correction against. Set by `simple_opt_reelout.jl`; absent for a
+# lemniscate run or a log replayed on its own.
+#
+# Joined by NaN into ONE series rather than plotted one by one: Makie breaks a
+# line at NaN, so the family draws in a single colour under a single legend entry,
+# the way the flown trajectory's own laps already do. Each loop is closed by
+# repeating its first point, since a reply need not repeat it.
+opt_raw = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
+             !isempty(OPT_PATHS_RAW)
+    oaz = Float64[]; oel = Float64[]
+    for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
+        k > 1 && (push!(oaz, NaN); push!(oel, NaN))
+        append!(oaz, paz); push!(oaz, first(paz))
+        append!(oel, pel); push!(oel, first(pel))
+    end
+    (oaz, oel)
+else
+    nothing
+end
+
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
 unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
 onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
@@ -131,12 +155,20 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 if "pattern" in plots
     @info "Plotting the pattern..."
     project_name = replace(basename(project), ".yaml" => "")
+    # Two curves where the optimizer's own answer is available: what was asked
+    # for and what was flown. The attractor is deliberately NOT drawn there — it
+    # walks the PRE-DISTORTED path (`el_bias`, `el_offset_final`,
+    # `el_offset_wing`), so it sits between the two and reads as a third opinion
+    # about the reference when there is only one. It stays as the reference for a
+    # lemniscate run, which has no optimizer curve to show instead.
     p1 = plotxy(
-        [az_deg, ref_az],
-        [el_deg, ref_el];
+        isnothing(opt_raw) ? [az_deg, ref_az] : [az_deg, opt_raw[1]],
+        isnothing(opt_raw) ? [el_deg, ref_el] : [el_deg, opt_raw[2]];
         xlabel = L"\mathrm{azimuth}~[°]",
         ylabel = L"\mathrm{elevation}~[°]",
-        legend = [L"\mathrm{flown}", L"\mathrm{attractor}"],
+        legend = isnothing(opt_raw) ?
+                 [L"\mathrm{flown}", L"\mathrm{attractor}"] :
+                 [L"\mathrm{flown}", L"\mathrm{optimizer,~uncorrected}"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
     )
     display(p1)
