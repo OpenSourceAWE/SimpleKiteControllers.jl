@@ -79,6 +79,7 @@ traj_opt:
     # An UPPER bound: a coarser reply keeps its own resolution, since upsampling a
     # polyline makes the curvature check read far tighter than the curve is.
     resample_points:   361   # points the path is resampled to                 [-]
+    opt_failure_cache: true  # skip requests recorded as failing; see the docstring
     # Curvature margin the returned path must have at the length it is flown at
     # (path radius / the kite's minimum turn radius); 0.0 flies whatever came
     # back. Below 1.0 the path is tighter than the kite can turn at all.

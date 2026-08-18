@@ -624,6 +624,102 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## Caching failed optimizer requests: 88 s a run, on a run with no visible failures (2026-08-18)
+
+A solve that FAILS costs far more than one that works — 2870 evaluations and 81 s
+against 75 and 1.5 s, and in `reopt_blocking` mode the simulation is frozen for
+every second of it. `examples/awetrim_client.jl` now records each failed request
+in `output/opt_failure_cache.yaml` and refuses to send it again;
+`clear_opt_failures()` forgets them, `opt_failure_cache: false` in
+`data/traj_opt.yaml` disables the whole thing.
+
+**The failures were already there and nothing reported them.** The 150 -> 380 m
+run's summary showed 7 requests, 4 installed, no failures — because
+`reopt_retry_el_offset` recovers from a second guess seed and only the final
+outcome was recorded. The cache made them visible on its first run: the first
+seed (guess el 22 deg) fails at **L = 247.4 m** and **L = 354.2 m**. The retry at
+27 deg converges, so the run looked clean and simply took longer.
+
+Measured over three otherwise identical runs:
+
+| | blocked_s | note |
+|---|---|---|
+| failures attempted | 157.9 s | both seeds sent, first fails |
+| both cached | 70.4 s | first seed never sent |
+| both cached | 68.9 s | repeat |
+
+**88 s of held simulation per run, on a run that reported no failures at all**,
+with a bit-identical result (8519 W, all 8 criteria, same install margins).
+
+Two things this exposed. The summary's `reopt.events` dict was keyed by simulated
+time alone, and a blocking solve is requested and collected on the SAME step — so
+a skip and the install that follows it collided and the install won silently. That
+is why the first cached run showed no skips at all and looked like the cache had
+not fired; colliding keys now get a `_2` suffix. And the key must stay exact: the
+same evening's 422 entry has 180.0 m converging where 180.00027 m throws, so a
+bucketed length would cache a failure against a length that works. The cost of
+that choice is that a request only ever hits when the run repeats it exactly —
+true here, since these runs are deterministic, but not after a change that moves
+the lap boundaries.
+
+## Lifting the LOBES flattens the sag a rigid shift cannot reach (2026-08-18)
+
+`el_bias` and `el_offset_final` move the whole pattern up together, but the kite
+does not sag uniformly: past 300 m of tether it flies its centre at 14.4 deg and
+its lobes at 13.0 deg, a **1.36 deg droop** the rigid correction can only answer by
+raising everything (which costs reel-out power for elevation the centre did not
+need). `el_offset_wing` adds elevation as a smoothstep function of azimuth — zero
+in the centre, full past `el_offset_wing_az` — baked into every path the run
+installs, including the startup one, BEFORE the feasibility and height gates.
+
+**The ramp width is the whole game, and it is not monotone.** Swept on the real
+150 m optimized path at `el_offset_wing = 1.5`, `el_offset_wing_az = 10`
+(plain margin 0.94):
+
+| blend [deg] | 2 | 4 | 6 | 7-10 | 11 | 12 | 14 |
+|---|---|---|---|---|---|---|---|
+| margin | 0.16 | 0.43 | 0.87 | **0.94** | 0.70 | 0.52 | 0.45 |
+
+A NARROW ramp is a corner, and the corner becomes the tightest point of the whole
+pattern: at blend 4 the minimum radius moves off the lobe (azimuth -18.4 deg,
+4.1 deg) and onto the ramp (azimuth -6.4 deg, **1.86 deg**) — the first attempt at
+this was refused outright by the startup gate at margin 0.31. A WIDE ramp reaches
+into the CROSSING, where the path already turns hardest: blend 12 starts the lift
+at |azimuth| = -2 deg, i.e. inside the centre. The plateau is a ramp that starts
+just outside the crossing and is full by the lobes — keep
+`el_offset_wing_az - el_offset_wing_blend` in 0 … 3 deg.
+
+An earlier version of this measurement, taken on a hand-built lemniscate standing
+in for the flown path, put the plateau at blend 4 and was WRONG in the direction
+that matters. Sweep on the path the run will actually fly; `opt_result` is left in
+`Main` after a startup-gate failure, which is the cheapest way to get it.
+
+**Measured at the plateau** (`el_offset_wing = 1.5`, `az = 10`, `blend = 8`, so the
+lift is 0 inside 2 deg, 0.47 deg at 5, 1.27 deg at 8 and 1.5 deg past 10; against
+the same run with the profile off, both with the in-air gate fixed):
+
+| | off | on |
+|---|---|---|
+| centre-to-lobe droop past 300 m | 1.36 deg | **0.53 deg** |
+| min elevation, whole run | 8.8 deg | **10.0 deg** |
+| RMS d | 1.22 deg | 1.17 deg |
+| steering saturation | 6 % | 4 % |
+| tape rate-limited | 8 % | 6 % |
+| tether force CV | 5.0 % | 5.3 % |
+| mean reel-out power | 8524 W | 8502 W |
+| vs predicted | 0.98 x | 0.99 x |
+| criteria | all 8 | all 8 |
+
+1.2 deg of clearance at the run's lowest point, and a third off the steering
+saturation, for 0.26 % of the power. The curvature margin is untouched at every
+length: 0.94 -> 0.94 at 150 m, 2.39 -> 2.38 at 380 m, 1.86 -> 1.84 at
+`depower_final`.
+
+Not tried: making the profile a function of ELEVATION rather than azimuth (the sag
+is deepest at the bottom of the pattern, which is not exactly the lobes), or
+learning its shape per azimuth bin instead of fixing it. The bins above are the
+data either would start from.
+
 ## The in-air elevation-shift gate measured the SAMPLING, not the curve (2026-08-18)
 
 `simple_opt_reelout.jl` has two ways to get a learnt elevation correction to the

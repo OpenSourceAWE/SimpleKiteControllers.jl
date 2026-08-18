@@ -48,9 +48,10 @@ the 1.5 deg lift lands at the phase 4 -> 5 transition.
 
 ## Open, in the order I would take them
 
-Of the four items this list started with, 1, 2 and 4 are answered and item 5 — added
-below, and the parent of 1 and 2 — is fixed. **Only item 3 is still open.** Read item
-5 first: it invalidates elevation measurements taken before 2026-08-18 22:47.
+Every item this list started with is answered, and item 5 — added below, and the
+parent of 1 and 2 — is fixed. Read item 5 first: it invalidates elevation
+measurements taken before 2026-08-18 22:47. What is left is in "Where to go next"
+at the end.
 
 1. **Why does `el_offset_lead > 0` make the kite circle in phase 5?** — ANSWERED,
    and the premise was wrong on both halves. The lead was **inert**: a 2.5 s lead
@@ -74,8 +75,15 @@ below, and the parent of 1 and 2 — is fixed. **Only item 3 is still open.** Re
    min elevation 8.4 -> 8.8 deg. `reelout_softstop` was never needed for this.
 3. **The sag is not uniform**, so the rigid shift is now the limiting assumption:
    at 380 m the bottom of the pattern is ~2.3 deg low where the top is ~0.4 deg.
-   A per-point correction is only worth trying where the steering is NOT saturated;
-   at the tight shoulder it is bounded by turn authority, not by the reference.
+   — DONE via `el_offset_wing`, a smoothstep lift in azimuth (zero in the centre,
+   +1.5 deg past |azimuth| = 10, ramped over 8 deg). Centre-to-lobe droop past
+   300 m falls 1.36 -> 0.53 deg, the run's lowest point rises 8.8 -> 10.0 deg and
+   steering saturation drops 6 -> 4 %, for 0.26 % of the power and no curvature
+   margin at all (0.94 -> 0.94 at 150 m). The worry about saturated shoulders did
+   not materialise — saturation went DOWN, so the reference, not turn authority,
+   was the binding constraint there. See the tuning-log entry "Lifting the LOBES
+   flattens the sag a rigid shift cannot reach"; the ramp width is the parameter
+   that matters and it is not monotone.
 4. **Turn authority drops 22 % at `depower_final`** (`c1` 0.2752 -> 0.2133 between
    depower 0.275 and 0.328), and the feasibility gate is computed with the phase-4
    `c1`. Phase 5 is therefore flown with a margin nobody checked. — DONE, as
@@ -103,6 +111,26 @@ below, and the parent of 1 and 2 — is fixed. **Only item 3 is still open.** Re
    8507 -> 8524 W, all 8 criteria still passing. Anything measured about `el_bias`,
    `el_offset_lead` or the phase-5 elevation BEFORE that fix was measuring the
    install schedule, not the setting under test — re-run it before trusting it.
+
+## Where to go next
+
+Nothing on the list above is blocking any more. What the evening's measurements
+suggest, in the order I would take it:
+
+1. **Shape the lobe lift on ELEVATION, not azimuth.** The sag is deepest at the
+   BOTTOM of the pattern, which is close to but not the same as the lobes; the
+   azimuth bins in the tuning-log entry are the data to fit. A residual 0.53 deg
+   of droop is left after the azimuth version.
+2. **Learn the profile instead of fixing it.** `el_bias` already learns a scalar
+   per lap from a whole-lap mean; the same update per azimuth bin, with the bins
+   coupled by a smoothness constraint so the reference cannot grow a corner (see
+   what a corner costs in the same entry), is the obvious generalisation.
+3. **Re-measure the 8 s `el_offset_lead` runs.** Their +1.39 turns were recorded
+   under the broken in-air gate and mean nothing now.
+4. **`min_span_frac` interacts with every lift.** A path flown higher is flown
+   narrower, and `el_offset_lead = 2.5` already failed the criterion by
+   hundredths. Whatever raises the pattern next should report the reach margin
+   alongside the elevation it buys.
 
 ## Two traps that cost time in this session
 

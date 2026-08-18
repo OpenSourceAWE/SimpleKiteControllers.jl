@@ -67,6 +67,25 @@ run's numbers from the **archive** it names, not from `output/`: every run overw
 `output/reelout_150m_opt.{arrow,yaml}`, and a run started while you are reading them
 will swap them under you.
 
+### The optimizer's failed-request cache
+
+A failing solve runs to IPOPT's iteration cap (~81 s, against ~1.5 s for one that
+converges) and in `reopt_blocking` mode the simulation is frozen for all of it, so
+`examples/awetrim_client.jl` records every failed request in
+`output/opt_failure_cache.yaml` and does not send it again. Worth ~88 s a run on the
+150 -> 380 m reel-out, whose first guess seed fails at two lengths and is silently
+recovered by `reopt_retry_el_offset`.
+
+```julia
+clear_opt_failures()          # forget them all; or delete the YAML, or drop one entry
+```
+
+Set `opt_failure_cache: false` in `data/traj_opt.yaml` to bypass it — after an
+AWETrim or server upgrade, when what used to fail may not any more. The key covers
+everything the server sees and the tether length is EXACT, because the failures are
+isolated pockets in length (180.0 m converges, 180.00027 m does not), so a request
+only hits the cache when a run repeats it exactly.
+
 Only `simple_opt_reelout.jl` writes the marker; copy its two lines (the `rm` next to
 `mkpath(output_path)` and the `open(RUN_DONE_FILE, "w")` block at the end) into another
 example that needs to be waited on.

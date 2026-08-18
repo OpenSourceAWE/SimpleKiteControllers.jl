@@ -340,13 +340,26 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 # Anchored to the STARTING length. The pattern is optimal there and drifts off it
 # as the tether grows; re-optimizing during the run is stage 4, not this script.
 ensure_server(tos.base_url; autostart = tos.autostart_server)
-opt_reply = opt_init(InitParams(; name = tos.name, length = l_set,
-                                winch_params = winch, inflow_conditions = inflow,
-                                trajectory = Trajectory(collect(guess_az), collect(guess_el)),
-                                input_depower = tos.input_depower,
-                                reg_weight = tos.reg_weight,
-                                detect_simple_bounds = tos.detect_simple_bounds);
-                     url = tos.base_url)
+start_params = InitParams(; name = tos.name, length = l_set,
+                          winch_params = winch, inflow_conditions = inflow,
+                          trajectory = Trajectory(collect(guess_az), collect(guess_el)),
+                          input_depower = tos.input_depower,
+                          reg_weight = tos.reg_weight,
+                          detect_simple_bounds = tos.detect_simple_bounds)
+# Known bad? Then say so in a second rather than in the 80 s the solver needs to
+# reach its iteration cap and fail again. See the cache in awetrim_client.jl for
+# why a recorded failure can be trusted.
+let cached = tos.opt_failure_cache ? opt_failed_before(start_params) : nothing
+    isnothing(cached) ||
+        error(@sprintf("This exact request failed before (%s, recorded %s) and is \
+                        cached as bad, so it was not sent: %s at %.5f m.\n\nRetry it \
+                        with `clear_opt_failures()`, drop its entry from %s, or set \
+                        opt_failure_cache: false in data/traj_opt.yaml.",
+                       get(cached, "reason", "no reason recorded"),
+                       get(cached, "when", "at an unknown time"), tos.name, l_set,
+                       OPT_FAILURE_CACHE))
+end
+opt_reply = opt_init(start_params; url = tos.base_url)
 # No automatic retry with a different guess, deliberately: a guess that merely
 # converges is not the same answer, and picking one silently would hide which
 # optimum was flown.
@@ -354,6 +367,7 @@ opt_result = try
     opt_step(StepParams(l_set, winch, opt_reply.trajectory); url = tos.base_url)
 catch exc
     exc isa HTTP.StatusError && exc.status == 422 || rethrow()
+    tos.opt_failure_cache && record_opt_failure!(start_params, "422 from /step")
     error("""
           The optimizer returned no path: $(String(copy(exc.response.body)))
 
@@ -374,11 +388,28 @@ catch exc
 end
 toc("Received the optimized path in: ")
 
+# The LOBE lift: extra elevation where the sag is deepest, none in the centre.
+# A pure function of azimuth, so it is baked into every path this run installs —
+# the startup one here, each re-optimized reply below — and needs no delta
+# bookkeeping of its own: the azimuths of the path in the air never change
+# between installs, only its elevations do.
+smoothstep(x) = (u = clamp(x, 0.0, 1.0); u * u * (3 - 2u))
+wing_lift(az) = fcs.el_offset_wing == 0 ? 0.0 :
+    fcs.el_offset_wing *
+    smoothstep((abs(az) - (fcs.el_offset_wing_az - fcs.el_offset_wing_blend)) /
+               fcs.el_offset_wing_blend)
+fcs.el_offset_wing == 0 ||
+    @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.1f°, ramped over %.1f°, \
+                    zero inside %.1f°.",
+                   fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
+                   fcs.el_offset_wing_az - fcs.el_offset_wing_blend)
+
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
 n_opt = length(opt_result.trajectory.azimuth) - 1
-set_path!(fec, opt_result.trajectory.azimuth, opt_result.trajectory.elevation;
+set_path!(fec, opt_result.trajectory.azimuth,
+          opt_result.trajectory.elevation .+ wing_lift.(opt_result.trajectory.azimuth);
           resample = min(tos.resample_points, n_opt))
 
 # The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
@@ -842,15 +873,35 @@ try
                             figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
                                               tos.guess_d, 0.0, el_seed,
                                               0.0, tos.guess_points)
-                        reopt_reply = opt_init(InitParams(; name = tos.name, length = l_now,
-                                                          winch_params = winch,
-                                                          inflow_conditions = inflow,
-                                                          trajectory = Trajectory(collect(guess_az_r),
-                                                                                  collect(guess_el_r)),
-                                                          input_depower = tos.input_depower,
-                                                          reg_weight = tos.reg_weight,
-                                                          detect_simple_bounds = tos.detect_simple_bounds);
-                                               url = tos.base_url)
+                        reopt_params = InitParams(; name = tos.name, length = l_now,
+                                                  winch_params = winch,
+                                                  inflow_conditions = inflow,
+                                                  trajectory = Trajectory(collect(guess_az_r),
+                                                                          collect(guess_el_r)),
+                                                  input_depower = tos.input_depower,
+                                                  reg_weight = tos.reg_weight,
+                                                  detect_simple_bounds = tos.detect_simple_bounds)
+                        # A cached failure costs the run nothing but the lap it
+                        # would have re-optimized on: no request goes out, the
+                        # kite keeps the path it has, and `reopt_n` is NOT spent,
+                        # so the budget still buys `max_reopt` real solves.
+                        cached = tos.opt_failure_cache ? opt_failed_before(reopt_params) :
+                                 nothing
+                        if !isnothing(cached)
+                            global reopt_lap = fig8_idx_progress / n_path
+                            push!(reopt_events,
+                                  (; t, l = l_now, status = "skipped",
+                                   detail = @sprintf("cached failure from %s (%s)",
+                                                     get(cached, "when", "an earlier run"),
+                                                     get(cached, "reason", "no reason recorded"))))
+                            @info @sprintf("Re-optimization at L = %.0f m skipped: this \
+                                            exact request is cached as failing (%s). \
+                                            clear_opt_failures() to retry it.",
+                                           l_now, get(cached, "reason", "no reason recorded"))
+                            attempt == length(el_seeds) && break
+                            continue
+                        end
+                        reopt_reply = opt_init(reopt_params; url = tos.base_url)
                         opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
                                  url = tos.base_url, wait = false)
                         global reopt_pending = true
@@ -883,6 +934,10 @@ try
                         failed = (try
                                       opt_status(tos.base_url)["state"]
                                   catch; "failed"; end) == "failed"
+                        failed && tos.opt_failure_cache &&
+                            record_opt_failure!(reopt_params,
+                                                @sprintf("solver failed at L = %.1f m, \
+                                                          guess el %.0f°", l_now, el_seed))
                         (failed && attempt < length(el_seeds)) || break
                         @info @sprintf("  ... failed from guess el %.0f°; retrying \
                                         from %.0f°.", el_seed,
@@ -921,7 +976,7 @@ try
                         # curve that will be flown: lifting it relieves both height
                         # gates and compresses the azimuth axis by cos(elevation),
                         # which the curvature margin must be re-read for.
-                        new_el = new_el .+ el_target
+                        new_el = new_el .+ el_target .+ wing_lift.(new_az)
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory
@@ -1536,11 +1591,22 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "wall time the simulation was frozen waiting for replies [s]"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
-        "events" => OrderedDict(
-            @sprintf("t_%05.1f_s", e.t) =>
-                (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
-                 @sprintf("at L = %.0f m", e.l))
-            for e in reopt_events)),
+        # Keyed by time, but two events CAN share one: a blocking solve is
+        # requested and collected on the same step, so a seed skipped from the
+        # failure cache carries the same `t` as the install that follows it. A
+        # plain comprehension silently keeps the last of them — which hid the
+        # cache's own skips the first time it ran — so collisions get a suffix.
+        "events" => let seen = Dict{String, Int}(), ev = OrderedDict{String, Any}()
+            for e in reopt_events
+                k = @sprintf("t_%05.1f_s", e.t)
+                n = get(seen, k, 0) + 1
+                seen[k] = n
+                ev[n == 1 ? k : "$(k)_$n"] =
+                    (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
+                     @sprintf("at L = %.0f m", e.l))
+            end
+            ev
+        end),
     "el_bias" => OrderedDict(
         "gain" => (fcs.el_bias_gain,
             "per-lap learning gain for the elevation bias; 0 = off"),
@@ -1550,6 +1616,11 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "el_offset_final, the fixed lift added on top of the learnt bias [deg]"),
         "lift_lead_s" => (fcs.el_offset_lead,
             "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
+        "wing_deg" => (fcs.el_offset_wing,
+            "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
+        "wing_az_deg" => (fcs.el_offset_wing_az,
+            "azimuth beyond which that lift is full; it ramps over \
+             el_offset_wing_blend below it [deg]"),
         "lift_t_s" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
             "when the lift actually latched [s]"),
         "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :

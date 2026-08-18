@@ -263,6 +263,58 @@ Add new findings there, not here.
     power for those seconds, since the pattern rises while the tether still pays.
     """
     el_offset_lead = 0.0
+    """
+    Extra elevation added to the path's LOBES only [deg], `0` to add none.
+
+    `el_bias` and `el_offset_final` shift the whole pattern rigidly, but the sag
+    is not uniform: measured at 380 m, the bottom of the pattern tracks ~2.3 deg
+    under its reference where the top is ~0.4 deg under. This adds a lift that is
+    zero in the centre and `el_offset_wing` at `|azimuth| >= el_offset_wing_az`,
+    ramped in over `el_offset_wing_blend` degrees below that.
+
+    The ramp width is not cosmetic, and it is not monotone — see
+    `el_offset_wing_blend`. Both a narrow ramp and a very wide one are refused by
+    the feasibility check; a ramp that starts just outside the crossing is free.
+
+    Applied to every path the run installs, the startup one included, so it is
+    part of the reference the kite is asked to fly rather than a correction the
+    learner has to discover. Its lap mean is absorbed by `el_bias`'s fixed point
+    (the learner converges on the optimizer's curve PLUS this profile's mean), so
+    the two do not fight.
+    """
+    el_offset_wing = 0.0
+    """
+    Azimuth beyond which `el_offset_wing` is applied in full [deg].
+    """
+    el_offset_wing_az = 10.0
+    """
+    Azimuth over which `el_offset_wing` ramps in below `el_offset_wing_az` [deg].
+
+    The lift is zero at `el_offset_wing_az - el_offset_wing_blend` and full at
+    `el_offset_wing_az`, with a smoothstep between, so the reference has no
+    corner.
+
+    This is the parameter to get right, and it is NOT monotone. Measured
+    2026-08-18 by sweeping it on the real 150 m optimized path (`el_offset_wing`
+    1.5 deg, `el_offset_wing_az` 10 deg, plain margin 0.94):
+
+        blend [deg]  2     4     6     7-10    11    12    14
+        margin       0.16  0.43  0.87  0.94    0.70  0.52  0.45
+
+    Both ends fail for their own reason. TOO NARROW and the ramp is a corner: at
+    4 deg the tightest point of the whole pattern moves off the lobe (azimuth
+    -18.4 deg, radius 4.1 deg) and onto the ramp itself (azimuth -6.4 deg, radius
+    1.86 deg). TOO WIDE and the ramp reaches into the CROSSING, where the path
+    already turns hardest — at 12 deg it starts at |azimuth| = 2 deg below the
+    centre... i.e. inside it.
+
+    The plateau is a ramp that starts just outside the crossing and is full by
+    the lobes: with `el_offset_wing_az = 10`, a blend of 8 starts the lift at
+    |azimuth| = 2 deg and costs nothing at all — 0.94 -> 0.94 at 150 m, 2.39 ->
+    2.38 at 380 m, 1.86 -> 1.84 at `depower_final`. Keep
+    `el_offset_wing_az - el_offset_wing_blend` in 0 … 3 deg when tuning either.
+    """
+    el_offset_wing_blend = 8.0
 
     # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED --------- #
     """

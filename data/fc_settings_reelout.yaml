@@ -110,6 +110,9 @@ fc_settings:
   el_bias_max:         4.0     # Clamp on the learnt elevation correction        [deg]
   el_offset_final:     1.5     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      0.0     # How long before the end the lift starts; 0 = at the end [s]
+  el_offset_wing:      1.5     # Extra lift at the LOBES, none in the centre       [deg]
+  el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full          [deg]
+  el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring [deg]
 
   # --- heading/course PID ---------------------------------------------------
   heading_p:          0.1941   # Gain at v_app_ref; only their product is physical   [-]

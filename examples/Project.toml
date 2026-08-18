@@ -28,6 +28,10 @@ SymbolicAWEModels = "9c9a347c-5289-41db-a9b9-25ccc76c3360"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
+# Direct because awetrim_client.jl reads and writes the failed-request cache
+# itself; it arrives anyway through SimpleKiteControllers, so this adds no
+# version to resolve.
+YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 WinchControllers = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
 
 [sources]

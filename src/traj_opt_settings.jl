@@ -82,6 +82,20 @@ multi-modal, so the guess is a choice about the answer.
     """
     resample_points::Int64 = 361
     """
+    Skip optimizer requests that are recorded as having failed before.
+
+    A failing solve is the expensive one — it runs to IPOPT's iteration cap,
+    measured at 81 s against 1.5 s for a converged solve — and in blocking mode
+    the simulation is held for all of it. The failures are reproducible and
+    isolated in tether length, so `examples/awetrim_client.jl` records each one
+    and refuses to send it again; see `OPT_FAILURE_CACHE` there for the file, and
+    `clear_opt_failures()` to forget them.
+
+    Set `false` to send every request regardless — after a server or AWETrim
+    upgrade, say, when what used to fail may not any more.
+    """
+    opt_failure_cache::Bool = true
+    """
     Smallest curvature margin ([`check_pattern_feasible`](@ref), path radius over
     the kite's minimum turn radius) the returned path must have at the tether
     length it is flown at. Below 1.0 the path is tighter than the kite can turn,

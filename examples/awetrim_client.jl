@@ -39,6 +39,9 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using HTTP, JSON3, StructTypes
+using Dates: now, format
+using YAML
+using SimpleKiteControllers: with_file_lock
 
 const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
 "Default server address; every function below takes `url` to override it."
@@ -95,6 +98,125 @@ StructTypes.StructType(::Type{WinchParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{Trajectory}) = StructTypes.Struct()
 StructTypes.StructType(::Type{InitParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{StepParams}) = StructTypes.Struct()
+
+# ---------------------------------------------------------------------------
+# Failed-request cache
+#
+# A solve that FAILS is the expensive one: it runs to IPOPT's iteration cap
+# (measured 2026-08-18 at 180 m: 2870 evaluations, 81 s, "Max Iterations") where a
+# converged one takes 75 evaluations and 1.5 s — and in `reopt_blocking` mode the
+# simulation is held for every second of it. Re-running a script therefore pays
+# the full price again for a request that is already known not to work.
+#
+# Caching them is safe because the failures are NOT flaky. Measured on the same
+# day: two attempts from the menu and one replay of an identical request all
+# failed the same way, and the converged neighbours returned a bit-identical
+# `input_depower`. What varies between runs is which optimum a CONVERGED solve
+# picks, not whether it converges.
+#
+# The key is exact, and deliberately so. The failures are isolated pockets in
+# tether length, not regions: 180.0 m converges where 180.00027 m throws, and
+# 179.0 and 185.0 m converge where 181.0 throws. Bucketing the length would cache
+# a failure against a length that works, which is a worse bug than the cost this
+# saves. Everything else the server sees is in the key too, so a different wind,
+# winch, guess or solver flag is a different request.
+
+"""
+The file recording failed optimizer requests, shared by every script and every
+sweep worker on this machine. Delete it to retry them all.
+"""
+const OPT_FAILURE_CACHE = joinpath(SKC_ROOT, "output", "opt_failure_cache.yaml")
+
+"""
+    opt_request_key(p::InitParams) -> String
+
+Identity of a request as the SERVER sees it: every field of `p` except `name`,
+which is the caller's label for the run and not part of the problem.
+
+`hash` is not stable across Julia versions, so an upgrade invalidates the cache.
+That is a cache MISS — one wasted solve, then the entry is rewritten — never a
+false hit, since a key that does not match is simply not found.
+"""
+function opt_request_key(p::InitParams)
+    h = hash((p.length, p.input_depower, p.reg_weight, p.detect_simple_bounds,
+              p.winch_params.k_v, p.winch_params.f_min, p.winch_params.f_max,
+              p.inflow_conditions.wind_speed, p.inflow_conditions.wind_direction,
+              p.inflow_conditions.profile_law, p.inflow_conditions.z0,
+              p.trajectory.azimuth, p.trajectory.elevation))
+    return string(h; base = 16)
+end
+
+"""
+    opt_failures(; file = OPT_FAILURE_CACHE) -> Dict{String, Any}
+
+Every recorded failure, keyed by [`opt_request_key`](@ref). An absent or
+unreadable file is an empty cache: this must never be the reason a run stops.
+"""
+function opt_failures(; file::AbstractString = OPT_FAILURE_CACHE)
+    isfile(file) || return Dict{String, Any}()
+    try
+        d = YAML.load_file(file)
+        d isa Dict && haskey(d, "entries") && d["entries"] isa Dict ?
+            d["entries"] : Dict{String, Any}()
+    catch exc
+        @warn "Ignoring an unreadable optimizer-failure cache at $file." exception = exc
+        Dict{String, Any}()
+    end
+end
+
+"""
+    opt_failed_before(p::InitParams; file = OPT_FAILURE_CACHE) -> Nothing or Dict
+
+The recorded failure for this exact request, or `nothing` if it has never failed.
+"""
+function opt_failed_before(p::InitParams; file::AbstractString = OPT_FAILURE_CACHE)
+    get(opt_failures(; file), opt_request_key(p), nothing)
+end
+
+"""
+    record_opt_failure!(p::InitParams, reason; file = OPT_FAILURE_CACHE)
+
+Record that this request failed, so no later run repeats it. Under
+`with_file_lock`, so parallel sweep workers cannot lose each other's entries.
+The `length` and the guess elevation are stored next to the key in plain text,
+because a cache nobody can read is a cache nobody trusts.
+"""
+function record_opt_failure!(p::InitParams, reason::AbstractString;
+                             file::AbstractString = OPT_FAILURE_CACHE)
+    mkpath(dirname(file))
+    with_file_lock(file * ".lock") do
+        entries = opt_failures(; file)
+        entries[opt_request_key(p)] = Dict(
+            "length_m" => p.length,
+            "guess_el_center_deg" => round(sum(p.trajectory.elevation) /
+                                           length(p.trajectory.elevation); digits = 2),
+            "wind_speed_m_s" => p.inflow_conditions.wind_speed,
+            "reason" => String(reason),
+            "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
+        open(file, "w") do io
+            println(io, "# Optimizer requests known to fail, written by \
+                         examples/awetrim_client.jl.")
+            println(io, "# They are NOT retried while they are listed here — \
+                         delete this file to retry them all,")
+            println(io, "# or drop a single entry to retry just that one. \
+                         `length_m` is exact on purpose: 180.0 m")
+            println(io, "# converges where 180.00027 m does not.")
+            YAML.write(io, Dict("entries" => entries))
+        end
+    end
+    return nothing
+end
+
+"""
+    clear_opt_failures(; file = OPT_FAILURE_CACHE) -> Bool
+
+Forget every recorded failure. `true` if there was a cache to remove.
+"""
+function clear_opt_failures(; file::AbstractString = OPT_FAILURE_CACHE)
+    had = isfile(file)
+    rm(file; force = true)
+    return had
+end
 
 # ---------------------------------------------------------------------------
 # Transport helpers
