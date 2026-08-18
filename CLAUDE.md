@@ -48,6 +48,29 @@ afterwards, and that is what the ~2x realtime above assumes: with the packages
 precompiled and both caches present the run is fast, the very first one is minutes
 slower. A `body_damping` the settling cache has not seen pays that cost again.
 
+### Waiting for a run to finish
+
+A reel-out run takes ~4-6 min of wall time (150 s of sim at ~1.4x realtime, plus the
+~100 s the blocking re-optimizer holds it), and the `include` returns nothing until it
+is over. Do not wait on it with a guessed `sleep`: `examples/simple_opt_reelout.jl`
+**removes `output/last_run_done.txt` at startup and writes it as the very last thing it
+does**, so its presence means "this run is over" and never "a previous run was". Block
+on the file instead:
+
+```bash
+until [ -f output/last_run_done.txt ]; do sleep 5; done; cat output/last_run_done.txt
+```
+
+It carries the timestamp, the archive directory, the summary path, the pass/fail verdict
+and the measured power — enough to know whether to bother reading further. Read the
+run's numbers from the **archive** it names, not from `output/`: every run overwrites
+`output/reelout_150m_opt.{arrow,yaml}`, and a run started while you are reading them
+will swap them under you.
+
+Only `simple_opt_reelout.jl` writes the marker; copy its two lines (the `rm` next to
+`mkpath(output_path)` and the `open(RUN_DONE_FILE, "w")` block at the end) into another
+example that needs to be waited on.
+
 `init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
 where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
 depot scratchspace for an installed copy — and deserializing any *other* model binary

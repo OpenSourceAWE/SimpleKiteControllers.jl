@@ -624,6 +624,79 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The in-air elevation-shift gate measured the SAMPLING, not the curve (2026-08-18)
+
+`simple_opt_reelout.jl` has two ways to get a learnt elevation correction to the
+kite: the re-optimizer's next reply can carry it (an "install"), or, when no solve
+is due, it is blended onto the path already in the air. **The second one had never
+once succeeded.** Recorded per attempt over a 150 -> 380 m run:
+
+| t [s] | shift | in-air margin | install margin, same reply |
+|---|---|---|---|
+| 48.3 | +0.37° | 0.48 | 0.83 |
+| 61.4 | +0.14° | 0.24 | 0.95 |
+| 89.1 | +0.06° | 0.49 | 1.03 |
+| 122.2 | +1.50° | 0.67 | 0.78 |
+| 140.0 | +1.25° | 0.35 | — (none left) |
+
+Every one below `min_feasibility_margin = 0.74`, while the install gate passed the
+same curves at 0.83 … 1.03.
+
+**The cause is resolution, not curvature.** `/trajectory` answers with a 99-point
+polyline; what is FLOWN is that polyline resampled to `n_path` (360), and
+interpolating extra points onto a polyline concentrates each vertex's turn into one
+short segment — so `path_radius_profile` reads a far tighter pattern than the curve
+is. The install gate already knew this and scores the reply at its own resolution
+(`n_native`); the in-air gate scored `fec.az_path` as flown. The seven curves this
+gate refused, re-scored offline:
+
+| points | margins |
+|---|---|
+| 359 (as flown) | 0.25 … 0.70 |
+| 180 | 0.48 … 1.10 |
+| **98 (the reply's own)** | **0.92 … 1.10** |
+| 60 | 0.84 … 1.12 |
+
+Stable from 98 down; 359 is the outlier. The same effect on a clean lemniscate:
+2.95 at 99 points, 2.87 at 360 sampled from the smooth curve, **0.83** once those 99
+are interpolated up to 360.
+
+The consequence was not cosmetic. It meant `el_bias` reached the kite ONLY at an
+install, so once `max_reopt` was spent the phase-5 learner (`el_bias_gain_final`,
++1.25° in the run above) went nowhere, and `el_offset_lead` could do nothing at all
+unless it happened to fire before an install — which is why a 2.5 s lead was
+provably inert (a lead-2.5 run was BIT-IDENTICAL to a lead-0 run in every logged
+channel) while the 8 s lead of the earlier session did change runs.
+
+**Fixed** by scoring the in-air check at `chk_points` — the resolution of the reply
+the path in the air came from, seeded from the startup path and updated at every
+install. Only the CHECK is downsampled; the flown path keeps `n_path` points, which
+the lap counter depends on. Measured, same settings, `el_offset_lead = 0`:
+
+| | before | after |
+|---|---|---|
+| shifts delivered in air | 0 of 7 | 8 of 8 (margins 1.06 … 1.39) |
+| laps | 7.0 | 8.0 |
+| RMS d | 1.58° | **1.22°** |
+| min elevation, whole run | 8.4° | **8.8°** |
+| steering saturation | 8 % | 6 % |
+| tape rate-limited | 10 % | 8 % |
+| mean reel-out power | 8507 W | 8524 W |
+| criteria | all 8 | all 8 |
+
+Phase 5 is where it shows most: the run's lowest point used to fall 4.9 s into
+phase 5 at 8.45°, inside the blend that was still ramping the lift in. It is now
+10.57°, 23.5 s in — the dip at the phase 4 -> 5 handover is GONE, because the
+correction arrives continuously instead of in one step at the last install.
+
+Two cautions. A path flown higher is flown NARROWER: with `el_offset_lead = 2.5`
+the mean per-lobe azimuth reach landed on 70 % of `A` and failed the size criterion
+by hundredths of a degree (`min_span_frac = 0.7`), where the `lead = 0` run passed.
+And the net unwrapped course over phase 5 moved from -0.04 to -0.53 turns — but
+that number is a DRIFT metric, not a loop detector: the kite still crosses the
+pattern centre 3 times in those 25 s and flies a WIDER phase-5 pattern than before
+(azimuth -12.5…+12.9° against -10.9…+8.5°). Nothing circles.
+
 ## Phase 5 is flown with 22 % less turn authority than any gate checked (2026-08-18)
 
 The feasibility gate of `simple_opt_reelout.jl` — at startup and at every

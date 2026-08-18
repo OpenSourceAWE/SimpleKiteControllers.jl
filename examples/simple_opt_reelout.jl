@@ -236,6 +236,14 @@ output_path = (@isdefined(OUTPUT_PATH) && !isnothing(OUTPUT_PATH)) ? OUTPUT_PATH
               normpath(joinpath(@__DIR__, "..", "output"))
 OUTPUT_PATH = nothing
 mkpath(output_path)
+
+# Finished-run marker for anything watching this script from OUTSIDE the REPL —
+# a sweep, a shell `until [ -f output/last_run_done.txt ]`, an agent. Removed
+# here and written as the very last thing the script does, so its presence means
+# "this run is over", never "a previous run was". It carries the archive path
+# because that, not output/, is where the run's own numbers survive.
+const RUN_DONE_FILE = joinpath(output_path, "last_run_done.txt")
+rm(RUN_DONE_FILE; force = true)
 # `_opt`: this run must not overwrite the lemniscate run's log and summary — the
 # two are each other's baseline.
 log_name = basename(project_set.log_file) * "_opt"
@@ -561,6 +569,13 @@ phase5_margin(az, el) = isnan(c1_final) ? NaN :
 margin5_flown = NaN     # [-] phase-5 margin of the path currently installed
 margin5_warned = false  # one warning per run, not one per install
 
+@info @sprintf("Elevation lift: el_offset_final = %+.2f°, el_offset_lead = %.1f s \
+                (%s), reelout_softstop = %.1f s.",
+               fcs.el_offset_final, fcs.el_offset_lead,
+               fcs.el_offset_lead > 0 ? "anticipates the end of reel-out" :
+                                        "starts at the stop latch / phase 5",
+               fcs.reelout_softstop)
+
 # The dive aims at the pattern centre, which is the OPTIMIZED path's now.
 ccs = CourseControllerSettings(fcs; dt = s.dt)
 ccs.el_center = el_c_path
@@ -581,6 +596,12 @@ fig8_n = 0
 fig8_idx_prev = fec.last_idx
 fig8_idx_progress = 0.0
 n_path = length(fec.az_path)
+# Points the path in the air is WORTH checking at — the resolution of the reply
+# it came from, not the count it is flown at. The startup path is native (the
+# first reply is resampled down, never up); every re-optimization reply is 99
+# points upsampled to `n_path`, and a curvature check on an upsampled polyline
+# measures the sampling. Updated at each install.
+chk_points = n_path
 
 # Elevation bias (`fcs.el_bias_gain`): the kite tracks BELOW the path it is given,
 # by 1-2° and up to 3.5° at 380 m, in every segment of every run measured so far.
@@ -590,8 +611,11 @@ n_path = length(fec.az_path)
 el_bias = 0.0               # [deg] learnt correction
 el_applied = 0.0            # [deg] shift the path in the air actually carries
 lift_on = false             # `el_offset_final` latched in; never cleared once set
+el_shift_events = NamedTuple[]  # in-air shift attempts, one entry per outcome CHANGE
+lift_t = NaN                # [s] when it latched; NaN = never
+lift_remaining = NaN        # [m] of reel-out left at that moment
 el_lap_skip = false         # skip the learning update for the lap the lift landed in
-el_shift_warned = false     # a held-back shift warns once, then retries in silence
+el_shift_warned = false     # a held-back shift warns once; re-armed by the next delivery
 el_bias_sum = 0.0           # [deg] running sum of the error over the current lap
 el_bias_n = 0               # samples in that sum
 el_bias_events = NamedTuple[]
@@ -672,6 +696,8 @@ try
                (fcs.el_offset_lead > 0 && v_ro_now > 0 &&
                 fcs.reelout_l_max - l_set <= v_ro_now * fcs.el_offset_lead)
                 global lift_on = true
+                global lift_t = t
+                global lift_remaining = fcs.reelout_l_max - l_set
                 # The lap the lift lands in is a CLIMB towards the new reference,
                 # not a bias: learning from it reads the transient as sag and
                 # over-corrects, then unwinds it the lap after (measured: -1.4 ->
@@ -745,17 +771,37 @@ try
             # difference onto the path in the air, while the curvature still passes.
             if abs(el_target - el_applied) > 1e-6 && isnothing(blend_to) && !reopt_pending
                 shifted = fec.el_path .+ (el_target - el_applied)
+                # Scored at `chk_points`, the resolution the path in the air came
+                # at, exactly as the install gate scores its own reply — because a
+                # curvature check on an UPSAMPLED polyline measures the sampling,
+                # not the curve. Measured 2026-08-18 on the seven curves this gate
+                # refused during a 150 -> 380 m run: 0.25 … 0.70 at the flown 359
+                # points, 0.92 … 1.10 at the reply's 98, and stable at 60 — while
+                # the install gate scored the same replies 0.83 … 1.03. The 359 is
+                # the outlier. That artefact refused EVERY in-air shift of every run
+                # before this, which left `el_bias` after `max_reopt` spent, and the
+                # whole of `el_offset_lead`, with no way to reach the kite. Only the
+                # CHECK is downsampled; what is flown keeps `n_path` points, which
+                # the lap counter depends on.
+                chk_n = min(chk_points, length(fec.az_path) - 1)
+                shift_az, shift_el = prepare_path(fec.az_path, shifted;
+                                                  resample = chk_n,
+                                                  up_loops = fcs.up_loops)
                 margin = isnothing(coeffs) ? Inf :
-                    check_pattern_feasible(fec.az_path, shifted,
+                    check_pattern_feasible(shift_az, shift_el,
                         Float64(s.sys_state.l_tether[1]), fcs.max_steering;
                         c1 = c1_at(phase), prn = false).margin
                 if margin >= tos.min_feasibility_margin
                     global blend_from = (copy(fec.az_path), copy(fec.el_path))
                     global blend_to = (copy(fec.az_path), shifted)
                     global blend_t0 = t
+                    push!(el_shift_events, (; t, delta = el_target - el_applied,
+                                            margin, status = "blended in"))
                     global el_applied = el_target
                     global el_shift_warned = false
                 elseif !el_shift_warned
+                    push!(el_shift_events, (; t, delta = el_target - el_applied,
+                                            margin, status = "held back"))
                     global el_shift_warned = true
                     @warn @sprintf("Elevation shift of %+.2f° held back: the curvature \
                                     margin would be %.2f. Retrying as the tether grows.",
@@ -895,6 +941,7 @@ try
                         n_native = min(tos.resample_points, length(new_az) - 1)
                         chk_az, chk_el = prepare_path(new_az, new_el;
                             resample = n_native, up_loops = fcs.up_loops)
+                        global chk_points = n_native
                         cand_az, cand_el = prepare_path(new_az, new_el;
                             resample = n_path, up_loops = fcs.up_loops)
                         # At the CURRENT length, which is what it will be flown at.
@@ -924,7 +971,18 @@ try
                             global blend_t0 = t
                             # The candidate carries the whole shift, so the path in
                             # the air does too the moment it lands.
+                            abs(el_target - el_applied) > 1e-6 &&
+                                push!(el_shift_events,
+                                      (; t, delta = el_target - el_applied,
+                                       margin, status = "carried by an install"))
                             global el_applied = el_target
+                            # Arm the in-air warning again: it is one warning per
+                            # SHIFT, not per run. Without this, the first hold-back
+                            # silences every later one — and since the in-air route
+                            # is refused far more often than it passes, that hid the
+                            # lift's own refusal at t = 122.2 s in the runs of
+                            # 2026-08-18.
+                            global el_shift_warned = false
                             # Install the aligned OLD path (w = 0, same curve, new
                             # point indices) and re-base the lap counter on it in
                             # the same step. `prepare_path` rotates the start point
@@ -1488,6 +1546,22 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "per-lap learning gain for the elevation bias; 0 = off"),
         "final_deg" => (round(el_bias; digits = 2),
             "elevation correction added to the last installed path [deg]"),
+        "lift_deg" => (fcs.el_offset_final,
+            "el_offset_final, the fixed lift added on top of the learnt bias [deg]"),
+        "lift_lead_s" => (fcs.el_offset_lead,
+            "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
+        "lift_t_s" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
+            "when the lift actually latched [s]"),
+        "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :
+                               round(lift_remaining; digits = 1),
+            "reel-out left at that moment; > 0 means the lead fired, 0 means \
+             phase 5 did [m]"),
+        "shift_delivery" => OrderedDict(
+            @sprintf("t_%05.1f_s", e.t) =>
+                (e.status,
+                 @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
+                          e.delta, e.margin, tos.min_feasibility_margin))
+            for e in el_shift_events),
         "laps" => OrderedDict(
             @sprintf("lap_%d", e.lap) =>
                 (round(e.err_opt; digits = 2),
@@ -1594,6 +1668,17 @@ if show_plots
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
 else
     @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+end
+
+open(RUN_DONE_FILE, "w") do io
+    println(io, Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS"))
+    println(io, "archive: ", @isdefined(archive_dir) ? archive_dir : "none")
+    println(io, "log: ", joinpath(output_path, log_name * ".yaml"))
+    println(io, "criteria: ", isempty(fig8m.criteria_failed) ?
+                             "all $(fig8m.criteria) passed" :
+                             "FAILED: " * join(fig8m.criteria_failed, ", "))
+    println(io, "power: ", isnothing(opt_power_meas) ? "n/a" :
+                           @sprintf("%.0f W measured", opt_power_meas))
 end
 
 nothing

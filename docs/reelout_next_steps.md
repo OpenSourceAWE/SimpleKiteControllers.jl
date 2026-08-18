@@ -14,13 +14,25 @@ behaviour), the elevation-bias learner and its `traj_opt.el_bias` summary block,
 the `data/fc_settings_reelout.yaml` values (`0.5` / `1.0` / `4.0` / `1.5` / `0.0`)
 and the tuning-log entries.
 
-Uncommitted, from the session of 2026-08-18 (evening), item 4 below:
+Uncommitted, from the session of 2026-08-18 (evening), items 4, 1 and 2 below:
 
-- `examples/simple_opt_reelout.jl` — the phase-5 turn-authority diagnostics
-  (`c1_final`, `c1_at`, `phase5_margin`, the startup print and warning, the
-  per-install `(x.xx at depower_final)` note, `traj_opt.feasibility.c1_final` /
-  `margin_final` / `margin_final_flown`).
-- `docs/fig8_tuning_log.md` — the entry that measures it.
+- `examples/simple_opt_reelout.jl` —
+  1. the phase-5 turn-authority diagnostics (`c1_final`, `c1_at`,
+     `phase5_margin`, the startup print and warning, the per-install
+     `(phase 5: x.xx at 380 m)` note, `traj_opt.feasibility.c1_final` /
+     `margin_final` / `margin_final_flown`);
+  2. **the in-air shift gate fix** (`chk_points`) — the one change that moves the
+     run's numbers, see the tuning-log entry "The in-air elevation-shift gate
+     measured the SAMPLING, not the curve";
+  3. the lift diagnostics (`lift_t_s`, `lift_remaining_m`, `lift_deg`,
+     `lift_lead_s` and the `shift_delivery` block in the summary), plus the fix
+     that re-arms `el_shift_warned` at an install so a held-back shift is not
+     silent for the rest of the run;
+  4. `output/last_run_done.txt`, a finished-run marker written last and removed at
+     startup, so a watcher can block on the run instead of guessing a duration
+     (see CLAUDE.md, "Waiting for a run to finish").
+- `docs/fig8_tuning_log.md` — the entries that measure all of it.
+- `CLAUDE.md` — how to wait for a run.
 
 Tests were last run green (236/236) before the `el_offset_final`/`el_offset_lead`
 edits. Re-run `include("test/runtests.jl")` first thing — nothing since then
@@ -36,20 +48,30 @@ the 1.5 deg lift lands at the phase 4 -> 5 transition.
 
 ## Open, in the order I would take them
 
-1. **Why does `el_offset_lead > 0` make the kite circle in phase 5?** Three runs
-   with an 8 s lead accumulated +1.39, -0.63 and +1.39 turns with a one-sided
-   steering bias; four runs without it sat at -0.07. It is not turn authority —
-   the circling runs saturate LESS (5.4 % of phase 5 against 14.6 %). Next probe: a
-   SHORT lead, 2-3 s, so the step lands inside the deceleration rather than 19 m
-   before it. Circling there too means the lift during reel-out is the problem
-   itself; clean means it is about how much reel-out remains under the step. Needs
-   2-3 runs per setting because of the scatter below.
-2. **The dip at the start of phase 5** is unfixed with the lead off: the run's
-   lowest point is 3.8 s into phase 5, inside the 4 s blend that is still ramping
-   the lift in (min elevation 8.3 deg against 8.7 with the lead). Alternative to a
-   lead: give the lift its own, longer ramp instead of `path_blend_time`, or enable
-   `reelout_softstop` (currently 0.0, marked "being tuned") — the code already
-   latches the lift on `stop_start` when it exists.
+Of the four items this list started with, 1, 2 and 4 are answered and item 5 — added
+below, and the parent of 1 and 2 — is fixed. **Only item 3 is still open.** Read item
+5 first: it invalidates elevation measurements taken before 2026-08-18 22:47.
+
+1. **Why does `el_offset_lead > 0` make the kite circle in phase 5?** — ANSWERED,
+   and the premise was wrong on both halves. The lead was **inert**: a 2.5 s lead
+   latched the lift 2.5 s early (t = 122.2 s, 6.1 m of reel-out left, recorded as
+   `el_bias.lift_t_s`) and produced a run BIT-IDENTICAL to lead 0 in every logged
+   channel, because the lift could only ever reach the kite at a re-optimization
+   install and the same install carried it either way. That is the in-air gate bug
+   (item 5). With the gate fixed the lead is no longer inert but buys nothing:
+   lead 2.5 vs lead 0 differ by less than the criteria margins, and the lead run
+   FAILS the pattern-size criterion where lead 0 passes. **Keep `el_offset_lead`
+   at 0.** Nor was there circling: net course over phase 5 drifts -0.5 turns, but
+   the kite crosses the pattern centre 3 times in those 25 s and flies a wider
+   pattern than the old runs did — "turns" is a drift metric, not a loop detector.
+   The earlier session's +1.39-turn runs were an 8 s lead under the BROKEN gate,
+   where the lift got in via a mid-reel-out install; re-measure them before
+   trusting that number.
+2. **The dip at the start of phase 5** — FIXED as a side effect of item 5. The
+   lowest point was 4.9 s into phase 5 at 8.45 deg, inside the blend still ramping
+   the lift in; it is now 10.57 deg and 23.5 s in, because the correction arrives
+   continuously through the run instead of in one step at the last install. Whole-run
+   min elevation 8.4 -> 8.8 deg. `reelout_softstop` was never needed for this.
 3. **The sag is not uniform**, so the rigid shift is now the limiting assumption:
    at 380 m the bottom of the pattern is ~2.3 deg low where the top is ~0.4 deg.
    A per-point correction is only worth trying where the steering is NOT saturated;
@@ -72,6 +94,15 @@ the 1.5 deg lift lands at the phase 4 -> 5 transition.
    the depower-aware gate scored it 0.78 where the old one said 1.00 — a slightly
    tighter reply would now be rejected where it used to be installed, which is the
    one behaviour change to watch across runs.
+5. **NEW, and the parent of 1 and 2: the in-air shift gate scored the flown path
+   at its own point count**, and a curvature check on an upsampled polyline
+   measures the sampling — 0.25 … 0.70 as flown against 0.92 … 1.10 at the reply's
+   own resolution. Every in-air shift of every run before 2026-08-18 22:47 was
+   refused, so `el_bias` only ever reached the kite at an install and the phase-5
+   learner never did. Fixed (`chk_points`); RMS d 1.58 -> 1.22 deg, 7 -> 8 laps,
+   8507 -> 8524 W, all 8 criteria still passing. Anything measured about `el_bias`,
+   `el_offset_lead` or the phase-5 elevation BEFORE that fix was measuring the
+   install schedule, not the setting under test — re-run it before trusting it.
 
 ## Two traps that cost time in this session
 
