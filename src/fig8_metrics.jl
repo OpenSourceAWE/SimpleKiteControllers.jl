@@ -213,6 +213,9 @@ Also `peak_power` [W], the window's maximum, and `cf_power_ro`, its crest factor
 sizing the generator and grid connection. `mean_force`/`peak_force`/`cf_force_ro`
 [N] are the same triple for the tether force alone, over the same window.
 
+`idx` is the sample indices making up that window, so a caller can score anything
+else over exactly the same samples — `sl.time[rp.idx]` are their timestamps.
+
 Headless, no plotting dependency, so a sweep can call it on every log.
 """
 function reelout_power(sl)
@@ -234,7 +237,7 @@ function reelout_power(sl)
             mean_force, peak_force, cf_force_ro = peak_force / mean_force,
             energy = sum(p) * dt,
             duration = length(reeling) * dt, n = length(reeling),
-            energy_run = sum(p_all) * dt)
+            energy_run = sum(p_all) * dt, idx = reeling)
 end
 
 """

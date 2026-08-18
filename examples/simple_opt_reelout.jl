@@ -26,12 +26,19 @@ the finding, not a bug to hide. Everything else here is `simple_reelout.jl`.
 `reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run stays
 reproducible without a server) re-anchors the path to the length actually being
 flown. A request goes out on a lap boundary every `reopt_every_n_laps`, at most
-`max_reopt` times, and it is NON-BLOCKING: `opt_step(...; wait = false)` queues
-the solve, `/status` is polled every `reopt_poll_interval` of simulated time, and
-the result is collected from `opt_trajectory` when it is there — whose table is in
-RADIANS, unlike the degrees of every struct. A solve is 7-13 s of wall time and
-the loop must not stall in it. While one runs, and after one that fails, the
-server keeps serving the previous path, so "not ready" needs no special case.
+`max_reopt` times: `opt_step(...; wait = false)` queues the solve, `/status` is
+polled every `reopt_poll_interval`, and the result is collected from
+`opt_trajectory` — whose table is in RADIANS, unlike the degrees of every struct.
+While one runs, and after one that fails, the server keeps serving the previous
+path, so "not ready" needs no special case.
+
+`reopt_blocking` decides what the loop does during the 7-13 s solve. `true`
+(default) holds the loop at the request until `/status` leaves `"solving"`, so the
+reply matches the length it was asked for; the frozen wall time is reported as
+`traj_opt.reopt.blocked_s` and excluded from `performance.realtime_factor`.
+`false` flies on instead, which keeps the run realtime-ish but anchors the reply to
+a radius the run has already left — at 2.4 m/s of reel-out, a 10 s solve is ~24 m
+of lag.
 
 A candidate is checked for curvature, clearance and elevation AT THE CURRENT
 LENGTH before it is installed; one that fails any of them is dropped and the run
@@ -311,6 +318,11 @@ el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
 opt_table = opt_trajectory(; url = tos.base_url)
 opt_downloops = opt_table["spline"]["downloops"]
 opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
+# Which path was flown when, so the run can be scored against the prediction of the
+# path ACTUALLY in the air rather than only the first one. A re-optimization that
+# installs appends to this; `path_blend_time` makes the swap gradual, but 4 s of
+# blend against a ~100 s reeling window is inside the rounding.
+pred_timeline = [(t = 0.0, power = opt_power_pred)]
 opt_downloops == !fcs.up_loops ||
     error("The optimizer returned a downloops = $opt_downloops path while this run \
            flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
@@ -430,16 +442,22 @@ n_path = length(fec.az_path)
 
 # ---- Re-optimization (stage 4). The path is anchored to ONE radius and the run
 # walks away from it; each re-optimization re-anchors it to the length being
-# flown. Non-blocking on purpose: a solve is 7-13 s of wall time and the loop
-# must not stall in it, so the request is queued (`wait = false`), `/status` is
-# polled, and the result is collected when it is there. While a solve runs, and
-# after one that failed, the server keeps serving the previous path, so "not
-# ready yet" needs no special case here either.
+# flown. The request is queued (`wait = false`), `/status` is polled, and the
+# result is collected when it is there. While a solve runs, and after one that
+# failed, the server keeps serving the previous path, so "not ready yet" needs no
+# special case here either.
+#
+# `tos.reopt_blocking` decides what the loop does meanwhile. `false` flies on
+# through the 7-13 s solve, so the reply is anchored to a radius the run has
+# already left. `true` freezes the loop at the request, so the reply matches the
+# length it was asked for; the frozen wall time is accumulated in
+# `reopt_blocked_s` and kept out of the realtime figure.
 reopt_pending = false       # a solve is queued on the server
 reopt_n = 0                 # solves completed, accepted or rejected
 reopt_lap = 0.0             # lap count at which the last request went out
 reopt_next_poll = 0.0       # [s] next /status poll
 reopt_t_request = NaN       # [s] when the pending request went out
+reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
 reopt_events = NamedTuple[] # one row per solve, for the run summary
 # The blend in progress: two canonical paths of equal length and a start time.
 blend_from = nothing
@@ -520,8 +538,26 @@ try
                     global reopt_lap = fig8_idx_progress / n_path
                     global reopt_next_poll = t + tos.reopt_poll_interval
                     @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
-                                    (lap %.1f, request %d of %d).",
-                                   l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt)
+                                    (lap %.1f, request %d of %d)%s.",
+                                   l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
+                                   tos.reopt_blocking ? " — holding the simulation" : "")
+                    # Freeze here rather than in the collect branch, so the reply is
+                    # anchored to `l_now` and not to a length the run drifted to.
+                    if tos.reopt_blocking
+                        t_block = time()
+                        while (try
+                                   opt_status(tos.base_url)["state"]
+                               catch exc
+                                   @warn "Could not reach the optimizer while \
+                                          holding; will retry." exception = exc
+                                   "solving"
+                               end) == "solving"
+                            sleep(tos.reopt_poll_interval)
+                        end
+                        global reopt_blocked_s += time() - t_block
+                        # Collect on THIS step: the reply is already on the server.
+                        global reopt_next_poll = t
+                    end
                 catch exc
                     # A refused request must not take the run with it: the path in
                     # the air is still the one from /init and is still flyable.
@@ -615,10 +651,12 @@ try
                             n_path_new = length(fec.az_path)
                             global fig8_idx_progress *= n_path_new / n_path
                             global n_path = n_path_new
+                            new_pred = Float64(tab["metrics"]["avg_power_W"])
+                            push!(pred_timeline, (t = t, power = new_pred))
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f, clearance %.1f m, \
                                                         %.0f W predicted", margin, clearance,
-                                                       Float64(tab["metrics"]["avg_power_W"])))
+                                                       new_pred))
                         end
                     end
                     push!(reopt_events, event)
@@ -1013,26 +1051,59 @@ else
 end
 summary["reelout"] = reelout_summary
 
-# The comparison this script exists for: what the optimizer promised for this path
-# against what reeling out along it delivered. `rp` is `nothing` when the tether
-# never reeled out, and then there is nothing to compare.
+# The comparison this script exists for: what the optimizer promised against what
+# reeling out delivered. `rp` is `nothing` when the tether never reeled out, and
+# then there is nothing to compare.
+#
+# The prediction is a WEIGHTED one whenever a re-optimization installed a path. Each
+# path carries its own `avg_power_W`, and the run flies each for part of the reeling
+# window, so scoring the whole window against the FIRST path's number compares the
+# measurement to a path that was not in the air for some of it. `rp.idx` is that
+# window's samples, so every share below is measured over exactly the samples
+# `measured_W` averages.
 opt_power_meas = isnothing(rp) ? nothing : rp.mean_power
+pred_shares = NamedTuple[]
+opt_power_pred_eff = opt_power_pred
+if !isnothing(rp)
+    t_ro = Float64.(sl.time[rp.idx])
+    # Which timeline entry was current at each reeling sample.
+    which = [findlast(e -> e.t <= tq, pred_timeline) for tq in t_ro]
+    for (k, e) in enumerate(pred_timeline)
+        share = count(==(k), which) / length(which)
+        share > 0 && push!(pred_shares, (; from_s = e.t, power = e.power, share))
+    end
+    opt_power_pred_eff = sum(p.power * p.share for p in pred_shares)
+end
 if !isnothing(opt_power_meas)
-    @printf("  Optimizer predicted %.0f W of mean reel-out power for this path; \
+    @printf("  Optimizer predicted %.0f W of mean reel-out power%s; \
              the run measured %.0f W (%.2f x).\n",
-            opt_power_pred, opt_power_meas, opt_power_meas / opt_power_pred)
+            opt_power_pred_eff,
+            length(pred_shares) > 1 ?
+                @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
+                         join((@sprintf("%.0f W for %.0f%%", p.power, 100 * p.share)
+                               for p in pred_shares), ", ")) : " for this path",
+            opt_power_meas, opt_power_meas / opt_power_pred_eff)
 end
 # A key is omitted rather than written empty when its measurement does not exist:
 # `string(nothing)` would put the bare word `nothing` into the file, which YAML
 # reads back as a string.
 power_block = OrderedDict{String, Any}(
-    "predicted_W" => (round(Int, opt_power_pred),
-        "mean reel-out power the optimizer predicted for this path [W]"))
+    "predicted_W" => (round(Int, opt_power_pred_eff),
+        "predicted mean reel-out power of the paths actually flown, weighted by \
+         their share of the reeling window [W]"),
+    "predicted_initial_W" => (round(Int, opt_power_pred),
+        "predicted mean reel-out power of the path installed before the run [W]"))
+if length(pred_shares) > 1
+    power_block["predicted_paths"] = OrderedDict(
+        @sprintf("t_%05.1f_s", p.from_s) =>
+            (round(Int, p.power), @sprintf("%.0f%% of the reeling window", 100 * p.share))
+        for p in pred_shares)
+end
 if !isnothing(opt_power_meas)
     power_block["measured_W"] = (round(Int, opt_power_meas),
         "mean reel-out power the run harvested [W]")
-    power_block["ratio"] = (round(opt_power_meas / opt_power_pred; digits = 2),
-        "measured / predicted")
+    power_block["ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
+        "measured / predicted, against the weighted prediction")
 end
 feasibility_block = OrderedDict{String, Any}(
     "min_required" => (tos.min_feasibility_margin,
@@ -1064,6 +1135,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
     "reopt" => OrderedDict(
         "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
         "requests" => (reopt_n, "solves that completed, accepted or rejected"),
+        "blocking" => (tos.reopt_blocking,
+            "simulation held while a solve ran"),
+        "blocked_s" => (round(reopt_blocked_s; digits = 1),
+            "wall time the simulation was frozen waiting for replies [s]"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
         "events" => OrderedDict(
@@ -1091,15 +1166,23 @@ summary["traj_opt"] = OrderedDict{String, Any}(
 # Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
 if t_sim > 0
     steps = round(Int, t_sim / s.dt)
-    @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
+    # Rates exclude the frozen time, as in the summary; the raw wall time is still
+    # shown, and the gap between the two is `reopt_blocked_s`.
+    t_run = max(t_wall - reopt_blocked_s, eps())
+    @printf("  Performance: %.1f s sim in %.1f s wall%s = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
-            t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / steps,
+            t_sim, t_wall,
+            reopt_blocked_s > 0 ? @sprintf(" (%.1f s held for re-optimization)",
+                                           reopt_blocked_s) : "",
+            t_sim / t_run, 1000 * t_run / steps,
             steps, s.dt, fcs.vsm_interval)
     summary["performance"] = OrderedDict(
         "sim_time_s" => (round(t_sim; digits = 1), "simulated time [s]"),
         "wall_time_s" => (round(t_wall; digits = 1), "wall-clock time [s]"),
-        "realtime_factor" => (round(t_sim / t_wall; digits = 2), "sim_time / wall_time"),
-        "ms_per_step" => (round(1000 * t_wall / steps; digits = 1), "wall time per step [ms]"),
+        "realtime_factor" => (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
+            "sim_time / wall_time, excluding time frozen for re-optimization"),
+        "ms_per_step" => (round(1000 * (t_wall - reopt_blocked_s) / steps; digits = 1),
+            "wall time per step, excluding time frozen for re-optimization [ms]"),
         "steps" => (steps, "step count"),
         "dt_s" => (s.dt, "simulation timestep [s]"),
         "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))

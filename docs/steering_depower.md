@@ -130,6 +130,81 @@ model bypasses the length entirely and is linear by construction:
 $\alpha_\mathrm{depower} = 100\,(u_p - 0.01\,z)\cdot d$ in rad, with $z$ =
 `depower_zero` and $d$ = `degrees_per_percent_power`.
 
+## A third scale: the AWETrim optimizer
+
+The trajectory optimizer ([docs/TrajectoryOptimization.md](TrajectoryOptimization.md),
+driven by `examples/awetrim_client.jl`) does not take a relative command at all. Its
+`input_depower` **is** $l_\mathrm{dp}$, an absolute power-tape length in metres,
+bounded to `(1.1, 2.3)` m in AWETrim's `src/awetrim/utils/defaults.py`. So the number
+in `data/traj_opt.yaml` is already in the unit the server wants — but it is on a
+*different scale* from V3Kite's.
+
+AWETrim calibrates against the 2019 V3 flight logs
+(`src/awetrim/identification/controls.py`): kcu 22 % is powered at 1.7 m, kcu 30 % is
+depowered at 2.1 m. That is the same 5 m of tape per unit of `rel_depower` as V3Kite,
+with a different zero:
+
+| scale | mapping | `rel_depower` = 0.282 → |
+| --- | --- | --- |
+| V3Kite (`V3_DEPOWER_L0_BASE`) | $l = 0.2 + 5\,u_p$ | **1.61 m** |
+| AWETrim (`ROM_*_INPUT_DEPOWER`) | $l = 0.6 + 5\,u_p$ | **2.01 m** |
+
+The gap is a constant **0.4 m**, because AWETrim's $l_\mathrm{dp}$ is measured off the
+AS/QSM structural baseline of 1.5 m (`AS_POWER_TAPE_BASELINE_LDP_M`) while V3Kite's
+0.2 m base is the tape segment alone. Both claim to be kcu percent, so they cannot
+both be right about the same kite; 0.4 m is 8 kcu-%, roughly a third of the useful
+range. Converting a flown depower into an `input_depower` on V3Kite's base is
+therefore wrong by that much.
+
+### It is not a rescaling that can be applied
+
+Pinning `input_depower` at the flown depower does not simply move the prediction — it
+removes the solution. Measured 2026-08-18 at 150 m and 6 m/s, on the same guess and
+winch as `simple_opt_reelout.jl`, with `input_depower` taken out of
+`optimization_params` so it stays fixed:
+
+| `input_depower` [m] | predicted mean power [W] | mean tether force [N] |
+| --- | --- | --- |
+| 1.44 | 5740 | 2803 |
+| 1.457 (free optimum) | 6080 | 3028 |
+| 1.60 (the seed, pinned) | 4486 | 2463 |
+| 1.80 | 1873 | 1511 |
+| 2.01 (the flown depower) | infeasible, HTTP 422 | — |
+| 2.20 | infeasible, HTTP 422 | — |
+
+The fixed rows are lower bounds rather than a clean sensitivity curve — the problem is
+multi-modal, and with the depower pinned the solve settles on a differently shaped
+optimum (the 1.44 row spans azimuth $-27.5\ldots34.2°$, far wider than the free
+optimum's $-19.5\ldots21.6°$). The trend is unambiguous all the same: the ROM's power
+collapses as the tape is let out.
+
+### The two models agree on sensitivity, and differ by an offset
+
+Flying the same lever on the plant settles what that means. Sweeping
+`depower_setpoint` on the 20°/11° lemniscate at 180 m (`simple_reelout.jl`, same wind
+and winch as the ROM was given) against the ROM's own pinned sweep:
+
+| | slope $\mathrm{d}\ln P / \mathrm{d}u_p$ | at equal power (6538 W) |
+| --- | --- | --- |
+| V3Kite (VSM) | **-15.2** per unit `rel_depower` | $u_p = 0.2915$ |
+| AWETrim (ROM) | **-17.8** per unit `rel_depower` | $u_p = 0.1699$ |
+
+The slopes are within 15 % of each other, so the earlier reading — that the models
+disagree about depower *qualitatively* — was wrong. They respond to depower almost
+identically; they are **offset along the depower axis by 0.12 of `rel_depower`, i.e.
+0.61 m of tape**. The 0.4 m calibration offset above accounts for about two thirds of
+that, leaving ~0.2 m of genuine aerodynamic disagreement.
+
+That is why `input_depower` is left free and a predicted-vs-measured ratio is a
+comparison at two different depower settings — but the fix is a shift, not a rebuild.
+
+**Caveat, measured after the above:** both AWETrim columns here were solved with its
+built-in tether of 10 mm / 970 kg/m³ against this repo's 4 mm / 724 kg/m³. Correcting
+that raises the optimizer's power by 22-25 %, so the 0.61 m equal-power offset is an
+**upper bound** on the depower discrepancy, not the residual. The slope comparison is
+unaffected — it is a shape, not a level. See
+[fig8_tuning_log.md](fig8_tuning_log.md).
+
 ## Why it matters here
 
 This package commands `rel_steering` and only ever sees the plant respond as a turn

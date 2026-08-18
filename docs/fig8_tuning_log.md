@@ -624,6 +624,175 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## IPOPT 422 at 180 m: isolated failure pockets in tether length (2026-08-18)
+
+`simple_opt_fig8.jl` on the 180 m project threw `optimization infeasible or not
+converged (IPOPT failure)` from `/step`. The solve was not flaky: two attempts from
+the menu and one replay of the identical request all converged to a bit-identical
+`input_depower = 1.6585713831168203`.
+
+The server's constraint report says what went wrong. Against a successful 180 m solve:
+
+| | converged | failed |
+| --- | --- | --- |
+| height [m] | 50-76 (binding on the 50 m floor) | 122.7-142.8 |
+| tension [N] | 2543-3897 | 969-1746 |
+| speed_radial [m/s] | 2.01-2.55 | -0.99-1.56 |
+| angle of attack [deg] | binding at 14 | 22.3, VIOLATED |
+| winch-law residual | 1.9e-12 ok | 1.1e-03 INFEASIBLE |
+| solver | 75 evals, 1.5 s, Optimal | 2870 evals, 81 s, Max Iterations |
+
+The solve climbs to 122-143 m of height, where tension collapses to ~1 kN and
+`v = kv*sqrt(F)` cannot be satisfied. It exits on the iteration cap while still
+infeasible, so it is stuck in a bad basin rather than short of budget.
+
+**Two hypotheses were tested and falsified.** It is not a warm start: a 150 m solve
+immediately before still left 180 m failing. It is not AWETrim's `r0` bound of
+`(180, 300)` being active at exactly 180 m: 185 m is interior and converges.
+
+**What it is: isolated pockets in tether length.** At the stock 26 deg guess, 150.0,
+179.0, 180.0 and 185.0 m converge on one smooth branch (6080, 6528, 6538, 6584 W)
+while 180.00027 and 181.0 m throw. The failures are holes in that branch, not a
+region.
+
+`l0 = s.sys_state.l_tether[1]` (`simple_opt_fig8.jl`) is a Float32, which is how
+180.00027 reached the solver at all. Rounding it would have unblocked this run, but
+it is NOT the fix - 181.0 is already a round number and fails.
+
+**The fix is the guess.** `guess_el_center` 26 -> 22 in `data/traj_opt.yaml`:
+22 converges at all six lengths above and returns the same optimum wherever 26 also
+worked (6080 W at 150 m, 6527 vs 6528 at 179 m, 6583 vs 6584 at 185 m). The
+converged patterns sit at 14-24 deg of elevation, so 26 was seeding above the answer.
+Six lengths is a small sample - a new length that throws 422 should move this number
+first.
+
+Every optimizer figure recorded elsewhere in this log was measured at 150 m or at
+exactly 180.0 m, where 26 and 22 agree, so none of them shift.
+
+## The optimizer's tether is 10 mm; ours is 4 mm (2026-08-18)
+
+**This supersedes the depower-offset explanation in the entry below.** AWETrim's
+built-in LEI-V3 system config (`data/LEI-V3-KITE/system.yaml`) declares the tether as
+
+    diameter: 0.010      # m  (10 mm)
+    density: 970.0       # kg/m3  (Dyneema SK78)
+
+against `d_tether: 4.0` mm and `rho_tether: 724.0` in this repo's
+`settings_reelout_*.yaml`. That is 2.5x the diameter - so ~2.5x the tether drag area -
+and 8.4x the mass per metre.
+
+Measured by re-solving with a copy of that config edited to 4 mm / 724 kg/m3, passed
+through `/init`'s `system_config_path` (the copy must sit in `data/LEI-V3-KITE/`,
+since `factory.py` resolves the sibling configs relative to the system file's parent):
+
+| tether | 150 m | 180 m |
+| --- | --- | --- |
+| 10 mm / 970 (default) | 6080 W | 6537 W |
+| 4 mm / 724 (ours) | 7456 W | 8191 W |
+| correction | +22.6 % | +25.3 % |
+
+**Confirmed by re-flying it.** `simple_opt_reelout.jl` at 150 m against the corrected
+optimizer (`output/reelout_150m_opt.yaml`, 13:15): predicted 7457 W, measured 8194 W,
+**ratio 1.10x**, down from 1.45x. The run is otherwise healthy - 5.5 laps, RMS d
+1.22 deg, 150 -> 377.7 m, mean force 3455 N.
+
+That re-run carries two changes, not one, and they split cleanly:
+
+| | old (11:20) | new (13:15) | effect |
+| --- | --- | --- | --- |
+| predicted | 6080 W | 7457 W | +22.6 %, the tether |
+| measured | 8786 W | 8194 W | -6.7 %, depower 0.27 -> 0.275 |
+| ratio | 1.445 | 1.099 | |
+
+In log terms the tether closes 0.204 of the 0.274 that was closed (74 %) and the
+depower nudge the remaining 0.070. `guess_el_center` 26 -> 22 is neutral at 150 m
+(both reach the same optimum) and `reopt_enabled` went false, having installed nothing
+before. So the tether is the dominant term - larger than depower, larger than the aero
+model - and 1.10x is what is left for the depower-axis offset and VSM-vs-quasi-steady
+together.
+
+What survives from the entry below: the depower scales really are offset (0.4 m of
+calibration convention), and the two models really do have similar depower
+sensitivity. What does NOT survive: attributing the bulk of the power gap to that
+offset. The 0.61 m equal-power offset quoted there was measured with the optimizer on
+a 2.5x oversized tether, so it is an upper bound, not the residual.
+
+Reproducing it needs a server-side file, which makes it awkward as a permanent
+setting - `system_config_path` is a path on the SERVER, and the corrected config has
+to live beside AWETrim's own sibling configs. The clean fix is upstream: AWETrim's
+LEI-V3 tether should match the V3 the co-simulation flies, or this repo should ship a
+documented override.
+
+## Predicted 6080 W vs measured 8786 W — not a depower unit bug (2026-08-18)
+
+The 150 m stage-4 run (`output/reelout_150m_opt.yaml`) harvested 8786 W where the
+optimizer predicted 6080 W, a ratio of 1.45. The first suspicion was that
+`traj_opt.yaml`'s `input_depower: 1.6` was being sent in the wrong unit. It is not:
+AWETrim reads that field as `l_dp` in metres (bounds 1.1-2.3 m,
+`src/awetrim/utils/defaults.py`), and 1.6 arrives as 1.6 m. Three checks then closed
+the depower explanation entirely.
+
+**It never reaches the prediction.** `input_depower` is in the server's default
+`optimization_params`, so it is a seed. Re-running the same request returns
+`optimized_parameters.input_depower = 1.457` m and reproduces 6080 W to the watt, on
+the same path (azimuth -19.5..21.6°, elevation 16.1..28.7°).
+
+**The gap is already there at the anchor length.** Binning the flown log by tether
+length gives 8945 W over 150-200 m, 9061 W over 250-300 m and 8826 W over 350-381 m —
+flat. So it is not the kite climbing into stronger wind as the tether grows; the
+mismatch exists at 150 m, where the 6080 W was computed.
+
+**The remaining gap is force, amplified by the winch law.** Both sides obey
+`v = kv*sqrt(F)` (run: `0.0408*sqrt(3623) = 2.456` against 2.46 m/s measured; ROM:
+`0.0408*sqrt(2967) = 2.22` against 2.19). So `P = kv*F^1.5`, and a 1.45x power gap is
+a **1.28x tether-force gap** — V3Kite's VSM makes about 28 % more force on this path
+than AWETrim's quasi-steady ROM. The optimizer's `avg_power_W` is a correct
+time-average, not a node-mean artefact (recomputed from its own table: 6574 W against
+its reported 6571 W; the node-mean would have been 7386 W).
+
+**And correcting the depower would widen the gap, not close it.** The two scales
+differ by a constant 0.4 m ([steering_depower.md](steering_depower.md)), so the run's
+0.27 is 1.95 m on AWETrim's scale, not 1.55. Pinning `input_depower` there is
+infeasible (HTTP 422); pinned at 1.6 the prediction falls to 4486 W and at 1.8 to
+1873 W. The ROM's optimum sits at the powered end and its power collapses as the tape
+is let out, while V3Kite flies the depowered end at 8786 W. The models disagree about
+depower qualitatively, so `input_depower` stays free and the predicted-vs-measured
+ratio in every summary is a comparison at two different depower settings.
+
+**Resolved the same day by a depower sweep on the plant.** Five runs of
+`simple_reelout.jl` on the 20°/11° lemniscate at 180 m (same wind and winch the ROM
+was given; `FCS_OVERRIDES = Dict(:depower_setpoint => d)`, `SHOW_PLOTS`/`RUN_ARCHIVE`
+off, logs to a scratch `OUTPUT_PATH`):
+
+| `depower_setpoint` | power [W] | force [N] | RMS d [deg] | steering sat | min elev [deg] |
+| --- | --- | --- | --- | --- | --- |
+| 0.275 | 8318 | 3489 | 1.21 | 0.1 % | 11.3 |
+| 0.290 | 6684 | 3005 | 1.27 | 0.2 % | 11.0 |
+| 0.300 | 5743 | 2711 | 1.30 | 0.2 % | 10.7 |
+| 0.325 | 3909 | 2090 | 1.57 | 0.5 % | 10.0 |
+| 0.350 | 2654 | 1612 | 2.09 | 8.4 % | 8.9 |
+
+Only the last row is contaminated by the steering clamp; the rest fly clean, so the
+curve is aerodynamic response, not tracking loss. Fitted against the ROM's pinned
+sweep, converted to `rel_depower` on AWETrim's scale:
+
+- V3Kite `dlnP/du_p` = **-15.2**, AWETrim **-17.8** — within 15 %.
+- Equal power (6538 W, the ROM's 180 m optimum) at `u_p` **0.2915** on V3Kite against
+  **0.1699** on the ROM.
+
+So the models do NOT disagree about depower qualitatively, which is what the pinned
+ROM sweep alone suggested. They are offset along the depower axis by 0.12 of
+`rel_depower` = **0.61 m of tape**, of which the 0.4 m calibration offset explains
+about two thirds; the remaining ~0.2 m is genuine VSM-vs-quasi-steady disagreement.
+The 1.28x force gap is that offset, not a separate effect.
+
+Practical consequence: `depower_setpoint` 0.2915 on this lemniscate reproduces the
+optimizer's predicted power. It is NOT installed as the default — the shared
+`fc_settings_reelout.yaml` also feeds `simple_opt_reelout.jl`, whose optimized path
+has a curvature ceiling of 0.282 at 180 m, so anything above that fails the startup
+feasibility gate. 0.275 is the value both scripts can fly; use `FCS_OVERRIDES` to fly
+higher on the lemniscate.
+
 ## `fig_8` jumped 4 -> 13 at a path swap — a unit bug (2026-08-18)
 
 In the stage-4 runs the logged lap counter steps by ~3.6x at the instant a

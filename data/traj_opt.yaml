@@ -19,6 +19,16 @@
 # server's own parametric guess converges to a different one worth 1431 W. The
 # problem is multi-modal, so changing these numbers changes the answer, not just
 # the run time. The run never retries with a different guess on its own.
+#
+# guess_el_center is 22, not the 26 that was measured at 150 m, because 26 leaves
+# ISOLATED FAILURE POCKETS in tether length. Measured 2026-08-18 at 6 m/s: 26
+# converges at 150.0, 179.0, 180.0 and 185.0 m but throws IPOPT's iteration limit
+# at 180.00027 and 181.0 - the solve climbs to 122-143 m of height, where tension
+# collapses to ~1 kN and the winch law cannot be met. 22 converges at all six and
+# returns the SAME optimum wherever 26 also worked (6080 W at 150 m, 6527 vs 6528
+# at 179 m, 6583 vs 6584 at 185 m), so it is a strictly wider basin, not a
+# different answer. Six lengths is not a proof of robustness; if a new length
+# throws 422, this is the first number to move.
 traj_opt:
     base_url: "http://127.0.0.1:8000"  # address of the AWETrim server
     autostart_server: true   # start one with bin/run_server when none answers
@@ -29,14 +39,38 @@ traj_opt:
     guess_b:          12.0   # height of the guess, peak to peak             [deg]
     guess_c:           0.0   # size of the right part                        [deg]
     guess_d:           0.0   # asymmetry factor                                [-]
-    guess_el_center:  26.0   # centre elevation of the guess                 [deg]
+    guess_el_center:  22.0   # centre elevation of the guess                 [deg]
     guess_points:      361   # points sent; the reply has as many              [-]
 
     # --- Solver knobs ----------------------------------------------------- #
-    # input_depower is the optimizer's u_p, NOT the run's depower_setpoint: the
-    # conversion is unresolved (docs/TrajectoryOptimization.md) and the optimizer
-    # varies this one anyway, so it is reported and not applied.
-    input_depower:     1.6   # depower setpoint the solve starts from          [-]
+    # input_depower is the optimizer's u_p = l_dp, an absolute power-tape length in
+    # METRES (server bounds 1.1-2.3), NOT the run's depower_setpoint. It is only a
+    # SEED: the server optimizes it by default, and the solve that produced the
+    # 6080 W above landed on 1.457 m.
+    #
+    # Its scale is not V3Kite's. Both are 5 m of tape per unit of rel_depower, but
+    # AWETrim measures l_dp off a 1.5 m structural baseline and V3Kite off a 0.2 m
+    # tape segment, so l_dp = 0.6 + 5*u_p here against 0.2 + 5*u_p there - a
+    # constant 0.4 m, i.e. 8 kcu-%. The run's depower_setpoint of 0.27 is 1.95 m on
+    # this scale, not the 1.55 m V3Kite's own base would give.
+    #
+    # Do NOT pin it to the flown depower: measured 2026-08-18, the ROM's predicted
+    # power collapses as the tape is let out (4486 W pinned at 1.6, 1873 W at 1.8)
+    # and 2.0 m is infeasible outright. A matching sweep on the plant settled what
+    # that means: the two models respond to depower almost identically (dlnP/du_p
+    # -15.2 on V3Kite against -17.8 here) but are OFFSET by 0.12 of rel_depower,
+    # i.e. 0.61 m of tape - the 0.4 m above is two thirds of it. So a
+    # predicted-vs-measured ratio compares two models at two points on the same
+    # curve, and docs/steering_depower.md has both sweeps. That 0.61 m is an UPPER
+    # bound: it was measured before the tether mismatch below was found.
+    #
+    # The optimizer's built-in tether is 10 mm / 970 kg/m3 against this repo's 4 mm /
+    # 724. Correcting it raises the prediction 22-25 % (6080 -> 7456 W at 150 m,
+    # 6537 -> 8191 W at 180 m), which is the single largest term in the
+    # predicted-vs-measured gap - it turns 1.45x into 1.18x. There is no key here to
+    # fix it: /init's system_config_path is a path on the SERVER. See
+    # docs/fig8_tuning_log.md.
+    input_depower:     1.6   # depower the solve starts from                   [m]
     reg_weight:        1.0   # regularization weight                           [-]
     detect_simple_bounds: true   # IPOPT flag
 
@@ -80,10 +114,17 @@ traj_opt:
     # installed, and blended in over path_blend_time; one that fails is dropped and
     # the run keeps flying the path it has.
     reopt_enabled: true     # off by default: a run is reproducible without a server
-    reopt_every_n_laps: 2    # laps between requests; never two solves at once   [-]
+    reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
     max_reopt: 4             # bound on re-optimizations per run                 [-]
     path_blend_time: 4.0     # seconds over which the new path replaces the old  [s]
-    reopt_poll_interval: 0.5 # simulated seconds between /status polls           [s]
+    reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
+                             # reopt_blocking is false, wall-clock when true    [s]
+    # Halt the loop while a solve runs, instead of flying on through it. A solve is
+    # 7-13 s, over which the tether grows by that times the reel-out speed, so a
+    # non-blocking reply is anchored to a radius the run has already left. Blocking
+    # removes that lag and costs the wall time: the frozen seconds are reported as
+    # traj_opt.reopt.blocked_s and are taken out of performance.realtime_factor.
+    reopt_blocking: true     # freeze the simulation until the reply lands       [-]
 
     # Extra elevation a path must clear above fc_settings*.yaml's min_elevation
     # before it is flown; 0.0 gates on min_elevation alone.
@@ -92,6 +133,5 @@ traj_opt:
     # the FLOWN one, and the kite flies below its reference near the lobe tips,
     # where the steering is already on the clamp. Measured twice on 2026-08-18:
     # reference 10.0° -> flown 7.0°, and reference 10.0° -> flown 7.3°. 3.0 covers
-    # both. Without it the gate admits paths that break the criterion it exists to
-    # protect, which is exactly how the first stage-4 run failed.
+    # both. 
     candidate_elevation_margin: 3.0

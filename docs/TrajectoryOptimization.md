@@ -48,6 +48,13 @@ We should define for V3 what is zero and what is one for rel_depower.
 What is the meaning of these parameters?
 --> Uwe: Check how rel_depower is converted to depower line length in KitePod.jl
 
+**Resolved 2026-08-18** (see [steering_depower.md](steering_depower.md)):
+`input_depower` is `l_dp`, an absolute power-tape length in metres, and both sides
+move 5 m of tape per unit of `rel_depower` — but off different zeros, AWETrim's
+`l_dp = 0.6 + 5*u_p` against V3Kite's `0.2 + 5*u_p`. The 0.4 m offset is 8 kcu-%.
+It is not a rescaling that can simply be applied: pinning `input_depower` at the
+flown depower leaves the solve infeasible.
+
 I think, all parameters needed for the initialization should be part of the `InitParams` struct.
 
 **Which result are we interested in**

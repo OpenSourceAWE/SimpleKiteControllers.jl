@@ -25,7 +25,18 @@ fc_settings:
   # --- simulation conditions ------------------------------------------------
   vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
   compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
-  depower_setpoint:   0.27     # Depower held on the pattern                        [-]
+  # 0.275 is a CEILING, not a tuned optimum. Depowering costs turn authority
+  # (c1 0.2819 -> 0.2687 over 0.27 -> 0.28) and the optimizer's path is
+  # curvature-limited, so 0.278 drops the startup margin to
+  # min_feasibility_margin = 0.9 and simple_opt_reelout.jl refuses to fly.
+  #
+  # A longer starting length does NOT lift this, measured 2026-08-18: the
+  # optimizer returns a TIGHTER path the further out it is anchored (path radius
+  # 3.96 deg at 150 m, 3.37 deg at 180 m), which cancels the margin the extra
+  # length buys. The ceiling is 0.278 at 150 m and 0.282 at 180 m. Only a fixed
+  # shape escapes it - the 20/11 lemniscate simple_reelout.jl flies has radius
+  # 4.73 deg at any length, so its ceiling is 0.315 at 150 m and 0.353 at 180 m.
+  depower_setpoint:   0.275    # Depower held on the pattern                        [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]
   warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]

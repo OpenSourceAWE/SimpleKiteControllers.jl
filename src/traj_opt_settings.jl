@@ -59,10 +59,11 @@ multi-modal, so the guess is a choice about the answer.
 
     # ---- Solver knobs the API exposes ------------------------------------ #
     """
-    Depower setpoint `u_p` the optimizer starts from. NOT the run's
-    `depower_setpoint`: the conversion between the two is unresolved (see
-    `docs/TrajectoryOptimization.md`), and the optimizer varies this one anyway —
-    it is in the server's default `optimization_params`.
+    Power-tape length `l_dp` [m] the optimizer starts from, on ITS scale
+    (`l_dp = 0.6 + 5*u_p`, 0.4 m longer than V3Kite's for the same `rel_depower`).
+    Only a seed: the optimizer varies it, since it is in the server's default
+    `optimization_params`. Pinning it to the flown depower makes the solve
+    infeasible — see `docs/steering_depower.md`.
     """
     input_depower = 1.6
     "Regularization weight of the solve [-]"
@@ -126,11 +127,25 @@ multi-modal, so the guess is a choice about the answer.
     """
     path_blend_time = 4.0
     """
-    Seconds of simulated time between `/status` polls while a solve is running.
-    The solve takes 7-13 s of wall time (measured), so polling faster only adds
-    HTTP round trips to the simulation loop.
+    Seconds between `/status` polls while a solve is running. SIMULATED seconds
+    when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
+    simulated then). The solve takes 7-13 s of wall time (measured), so polling
+    faster only adds HTTP round trips.
     """
     reopt_poll_interval = 0.5
+    """
+    Halt the simulation while a re-optimization runs, instead of flying on and
+    collecting the reply when it lands.
+
+    `false` keeps the run realtime-ish: the kite keeps flying through the 7-13 s
+    solve, so the path arrives anchored to a radius the run has already left, by
+    the reel-out speed times the solve time. `true` freezes the loop at the
+    request, so the reply is anchored to the length it was asked for, at the cost
+    of that wall time. Only the accounting differs, not the physics: the frozen
+    time is reported as `traj_opt.reopt.blocked_s` and taken out of
+    `performance.realtime_factor`.
+    """
+    reopt_blocking::Bool = true
     """
     Extra elevation [deg] a path must clear above `FC_Settings.min_elevation`
     before it is flown.
