@@ -147,6 +147,26 @@ multi-modal, so the guess is a choice about the answer.
     """
     reopt_blocking::Bool = true
     """
+    Elevation offset [deg] added to `guess_el_center` for ONE retry when a
+    re-optimization comes back `"failed"`; `0.0` never retries.
+
+    The optimizer has isolated failure pockets in tether length — measured
+    2026-08-18 at 6 m/s, 240 and 243 m fail from the shipped guess while 246 m
+    solves to 8931 W — and it falls into two bad basins there: the pattern
+    collapses to zero amplitude, or it runs away to the `C_beta` bound. A retry
+    from a different seed usually lands elsewhere.
+
+    This is NOT the startup solve, which never retries on purpose: there a guess
+    that merely converges is a different optimum flown silently. A re-optimization
+    is a candidate that still has to pass the curvature, clearance and elevation
+    gates before it is installed, and a failure just means flying on with the
+    current path — so a second attempt costs one solve and risks nothing.
+
+    Only applies when `reopt_blocking` is true; without the hold there is nothing
+    to retry within.
+    """
+    reopt_retry_el_offset = 2.0
+    """
     Extra elevation [deg] a path must clear above `FC_Settings.min_elevation`
     before it is flown.
 

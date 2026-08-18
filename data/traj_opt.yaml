@@ -18,7 +18,8 @@
 # 30°/12° and 20°/11°-at-26° both do, and reach the same 6080 W optimum; the
 # server's own parametric guess converges to a different one worth 1431 W. The
 # problem is multi-modal, so changing these numbers changes the answer, not just
-# the run time. The run never retries with a different guess on its own.
+# the run time. The STARTUP solve never retries with a different guess on its own;
+# a re-optimization may, once, see reopt_retry_el_offset.
 #
 # guess_el_center is 22, not the 26 that was measured at 150 m, because 26 leaves
 # ISOLATED FAILURE POCKETS in tether length. Measured 2026-08-18 at 6 m/s: 26
@@ -137,6 +138,16 @@ traj_opt:
     # removes that lag and costs the wall time: the frozen seconds are reported as
     # traj_opt.reopt.blocked_s and are taken out of performance.realtime_factor.
     reopt_blocking: true     # freeze the simulation until the reply lands       [-]
+    # Elevation offset added to guess_el_center for ONE retry when a re-optimization
+    # comes back "failed"; 0.0 never retries. The optimizer has isolated failure
+    # pockets in tether length — measured 2026-08-18 at 6 m/s, 240 and 243 m fail
+    # from the shipped guess while 246 m solves to 8931 W — and a different seed
+    # usually lands outside the bad basin. The STARTUP solve still never retries:
+    # there a guess that merely converges is a different optimum flown silently,
+    # while a re-optimization is a candidate that must pass the curvature, clearance
+    # and elevation gates first, and a failure only means flying on. Blocking mode
+    # only; without the hold there is nothing to retry within.
+    reopt_retry_el_offset: 2.0 # guess_el_center offset for one retry           [deg]
 
     # Extra elevation a path must clear above fc_settings*.yaml's min_elevation
     # before it is flown; 0.0 gates on min_elevation alone.

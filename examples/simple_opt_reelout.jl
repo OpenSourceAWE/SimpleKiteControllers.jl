@@ -562,32 +562,43 @@ try
                     # 282 m, C_beta jams on its 0.9 rad bound at ~50° of elevation
                     # where tension collapses to ~1 kN and the winch law cannot be
                     # met. The same 282 m solves to 9014 W from the guess.
-                    guess_az_r, guess_el_r =
-                        figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                          tos.guess_d, 0.0, tos.guess_el_center,
-                                          0.0, tos.guess_points)
-                    reopt_reply = opt_init(InitParams(; name = tos.name, length = l_now,
-                                                      winch_params = winch,
-                                                      inflow_conditions = inflow,
-                                                      trajectory = Trajectory(collect(guess_az_r),
-                                                                              collect(guess_el_r)),
-                                                      input_depower = tos.input_depower,
-                                                      reg_weight = tos.reg_weight,
-                                                      detect_simple_bounds = tos.detect_simple_bounds);
-                                           url = tos.base_url)
-                    opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
-                             url = tos.base_url, wait = false)
-                    global reopt_pending = true
-                    global reopt_t_request = t
-                    global reopt_lap = fig8_idx_progress / n_path
-                    global reopt_next_poll = t + tos.reopt_poll_interval
-                    @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
-                                    (lap %.1f, request %d of %d)%s.",
-                                   l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
-                                   tos.reopt_blocking ? " — holding the simulation" : "")
-                    # Freeze here rather than in the collect branch, so the reply is
-                    # anchored to `l_now` and not to a length the run drifted to.
-                    if tos.reopt_blocking
+                    #
+                    # `reopt_retry_el_offset` adds ONE retry from a shifted guess
+                    # when the first attempt fails, which only the blocking mode can
+                    # do — see its docstring for why a re-optimization may retry
+                    # where the startup solve deliberately may not.
+                    el_seeds = (tos.reopt_blocking && tos.reopt_retry_el_offset != 0) ?
+                        (tos.guess_el_center,
+                         tos.guess_el_center + tos.reopt_retry_el_offset) :
+                        (tos.guess_el_center,)
+                    for (attempt, el_seed) in enumerate(el_seeds)
+                        guess_az_r, guess_el_r =
+                            figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
+                                              tos.guess_d, 0.0, el_seed,
+                                              0.0, tos.guess_points)
+                        reopt_reply = opt_init(InitParams(; name = tos.name, length = l_now,
+                                                          winch_params = winch,
+                                                          inflow_conditions = inflow,
+                                                          trajectory = Trajectory(collect(guess_az_r),
+                                                                                  collect(guess_el_r)),
+                                                          input_depower = tos.input_depower,
+                                                          reg_weight = tos.reg_weight,
+                                                          detect_simple_bounds = tos.detect_simple_bounds);
+                                               url = tos.base_url)
+                        opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
+                                 url = tos.base_url, wait = false)
+                        global reopt_pending = true
+                        global reopt_t_request = t
+                        global reopt_lap = fig8_idx_progress / n_path
+                        global reopt_next_poll = t + tos.reopt_poll_interval
+                        @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
+                                        (lap %.1f, request %d of %d, guess el %.0f°)%s.",
+                                       l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
+                                       el_seed,
+                                       tos.reopt_blocking ? " — holding the simulation" : "")
+                        # Freeze here rather than in the collect branch, so the reply
+                        # is anchored to `l_now` and not to a length the run drifted to.
+                        tos.reopt_blocking || break
                         t_block = time()
                         while (try
                                    opt_status(tos.base_url)["state"]
@@ -602,6 +613,14 @@ try
                         global reopt_blocked_s += reopt_last_solve_s
                         # Collect on THIS step: the reply is already on the server.
                         global reopt_next_poll = t
+                        # Retry only a solver failure, and only while a seed is left.
+                        failed = (try
+                                      opt_status(tos.base_url)["state"]
+                                  catch; "failed"; end) == "failed"
+                        (failed && attempt < length(el_seeds)) || break
+                        @info @sprintf("  ... failed from guess el %.0f°; retrying \
+                                        from %.0f°.", el_seed,
+                                       tos.guess_el_center + tos.reopt_retry_el_offset)
                     end
                 catch exc
                     # A refused request must not take the run with it: the path in
