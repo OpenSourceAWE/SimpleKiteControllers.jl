@@ -624,6 +624,31 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## `fig_8` jumped 4 -> 13 at a path swap — a unit bug (2026-08-18)
+
+In the stage-4 runs the logged lap counter steps by ~3.6x at the instant a
+re-optimized path is installed (t = 90.1 s, 4 -> 13). Not the kite: `fig8_idx_progress`
+counts PATH POINTS, and a path collected from `GET /trajectory` carries the
+server's `n_points` (99) while the one from `/init` carries the guess length
+(360). `fig8_n = 1 + floor(fig8_idx_progress / n_path)` then divided a distance
+accumulated in 360-point units by 99. Fixed by rescaling the accumulator with the
+path, `fig8_idx_progress *= n_path_new / n_path`, in the same step that re-bases
+`fig8_idx_prev`.
+
+Only `SysState.fig_8`, the summary's `laps_reeled` and the `n_fig_eight` stop
+criterion read that accumulator, and `n_fig_eight` is 0, so no run was steered by
+it. `fig8_metrics`' own `laps` counts azimuth crossings and was never affected —
+which is why the 380 m run reported a sane 7.0 laps while the log showed 17.
+
+Then fixed properly, by pinning the FLOWN path to one resolution: a candidate is
+resampled to the run's `n_path` before it is installed, so the point count never
+changes and the rescale above is a no-op guard. That means upsampling 99 -> 360,
+which is why the CHECKS still run at the reply's own resolution — interpolating a
+coarse polyline up concentrates each vertex's turn into one short segment, and a
+curvature check on an upsampled path measures the sampling rather than the curve.
+The guidance is indifferent to the extra points: it walks arc length, and they sit
+on the same curve.
+
 ## Stage 4 with the elevation gate, 180 -> 380 m (2026-08-18)
 
 Same run with `min_elevation: 6.5` (down from 10), `reelout_l_max: 380` and the

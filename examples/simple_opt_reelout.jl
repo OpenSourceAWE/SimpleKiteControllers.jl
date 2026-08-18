@@ -33,9 +33,13 @@ RADIANS, unlike the degrees of every struct. A solve is 7-13 s of wall time and
 the loop must not stall in it. While one runs, and after one that fails, the
 server keeps serving the previous path, so "not ready" needs no special case.
 
-A candidate is checked for curvature and clearance AT THE CURRENT LENGTH before it
-is installed; one that fails either is dropped and the run keeps flying what it
-has. What passes is blended in over `path_blend_time` ([`blend_paths`](@ref)),
+A candidate is checked for curvature, clearance and elevation AT THE CURRENT
+LENGTH before it is installed; one that fails any of them is dropped and the run
+keeps flying what it has. The checks run at the reply's OWN resolution while the
+flown path is resampled to the run's `n_path`, and the split matters both ways:
+`/trajectory` serves fewer points than `/step` echoes, upsampling a coarse
+polyline makes the curvature check read tighter than the curve is, and a flown
+path whose point count changes rescales the lap counter under itself. What passes is blended in over `path_blend_time` ([`blend_paths`](@ref)),
 because installing a new reference in one step is a step in the cross-track error
 and the guidance answers a step with steering. Both paths go through
 [`prepare_path`](@ref) first — same point count, same traversal direction, same
@@ -547,21 +551,39 @@ try
                         # /trajectory is in RADIANS, unlike the degrees of the structs.
                         new_az = rad2deg.(Float64.(tab["table"]["azimuth"]))
                         new_el = rad2deg.(Float64.(tab["table"]["elevation"]))
-                        npts = min(tos.resample_points, length(new_az) - 1)
+                        # TWO resolutions of the same reply, on purpose.
+                        #
+                        # The CHECKS run at the reply's own resolution: /trajectory
+                        # serves the server's n_points (99) where /step echoed the
+                        # guess (360), and interpolating a coarse polyline up
+                        # concentrates each vertex's turn into one short segment,
+                        # which makes path_radius_profile read far tighter than the
+                        # curve is. A curvature check on an upsampled path measures
+                        # the sampling.
+                        #
+                        # What is FLOWN is resampled to the run's own `n_path`, so
+                        # the point count never changes mid-run: `fig8_idx_progress`
+                        # counts points, and a path with a different count silently
+                        # rescales the lap counter. The guidance itself is
+                        # indifferent — it walks arc length, and the extra points sit
+                        # on the same curve.
+                        n_native = min(tos.resample_points, length(new_az) - 1)
+                        chk_az, chk_el = prepare_path(new_az, new_el;
+                            resample = n_native, up_loops = fcs.up_loops)
                         cand_az, cand_el = prepare_path(new_az, new_el;
-                            resample = npts, up_loops = fcs.up_loops)
+                            resample = n_path, up_loops = fcs.up_loops)
                         # At the CURRENT length, which is what it will be flown at.
                         margin = isnothing(coeffs) ? Inf :
-                            check_pattern_feasible(cand_az, cand_el, l_now,
+                            check_pattern_feasible(chk_az, chk_el, l_now,
                                 fcs.max_steering; c1, prn = false).margin
-                        clearance = path_min_height(cand_az, cand_el, l_now)
+                        clearance = path_min_height(chk_az, chk_el, l_now)
                         if margin < tos.min_feasibility_margin
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("curvature margin %.2f", margin))
                         elseif tos.min_height > 0 && clearance < tos.min_height
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("clearance %.1f m", clearance))
-                        elseif minimum(cand_el) < el_floor
+                        elseif minimum(chk_el) < el_floor
                             # The clearance floor does NOT imply this one: at 318 m
                             # of tether, 50 m of height is 9° of elevation. The
                             # margin is there because the kite flies BELOW its
@@ -569,10 +591,10 @@ try
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("descends to %.1f°, below \
                                                         min_elevation + margin = %.1f°",
-                                                       minimum(cand_el), el_floor))
+                                                       minimum(chk_el), el_floor))
                         else
                             global blend_from = prepare_path(fec.az_path, fec.el_path;
-                                resample = npts, up_loops = fcs.up_loops)
+                                resample = n_path, up_loops = fcs.up_loops)
                             global blend_to = (cand_az, cand_el)
                             global blend_t0 = t
                             # Install the aligned OLD path (w = 0, same curve, new
@@ -584,7 +606,15 @@ try
                             set_path!(fec, blend_from[1], blend_from[2];
                                       up_loops = fcs.up_loops)
                             global fig8_idx_prev = fec.last_idx
-                            global n_path = length(fec.az_path)
+                            # A no-op while the path above is resampled to
+                            # `n_path`, and kept as the guard that says why it must
+                            # be: `fig8_idx_progress` counts POINTS, so a path with a
+                            # different count rescales the lap counter under it —
+                            # 4 -> 13 in the run of 2026-08-18, before the flown path
+                            # was pinned to one resolution.
+                            n_path_new = length(fec.az_path)
+                            global fig8_idx_progress *= n_path_new / n_path
+                            global n_path = n_path_new
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f, clearance %.1f m, \
                                                         %.0f W predicted", margin, clearance,
