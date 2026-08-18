@@ -1275,6 +1275,10 @@ if run_archive
         joinpath(skc_data_path(), wc_settings(project)),      # winch gains
         joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
         joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
+        # Without this the archive cannot reproduce its own run: the guess decides
+        # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin
+        # decide what is re-anchored and what is flown.
+        joinpath(skc_data_path(), "traj_opt.yaml"),           # optimizer guess and knobs
     ]
     output_files = [
         joinpath(output_path, log_name * ".arrow"),
