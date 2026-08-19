@@ -186,8 +186,9 @@ DAMPING_PER_STIFFNESS = 0.001
 PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
+WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind
 @info "simple_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
-       turbulence = $TURBULENCE."
+       turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 
@@ -205,6 +206,7 @@ isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
 
 project_set = Settings(project)
+apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
@@ -236,9 +238,9 @@ wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
 # back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
-# The wind speed comes from the same file: it is a plant condition, and passing the
-# project's own value keeps the mean wind and the turbulent field (which init builds
-# for `set.v_wind`) at the same speed.
+# The wind speed comes from the same file unless WIND_SPEED overrides it above: it is
+# a plant condition, and project_set.v_wind keeps the mean wind and the turbulent
+# field (which init builds for it) at the same speed.
 # No cache_path either: V3Kite's default is where its own precompile workload
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
@@ -623,6 +625,7 @@ summary["simulation"] = OrderedDict{String, Any}(
     "script" => (basename(@__FILE__), "script that produced this run"),
     "project" => (PROJECT, "system project flown"),
     "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
+    "wind_speed" => (project_set.v_wind, "mean wind speed in m/s passed to init"),
     "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
     "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
     "hostname" => (gethostname(), "machine the run executed on"),

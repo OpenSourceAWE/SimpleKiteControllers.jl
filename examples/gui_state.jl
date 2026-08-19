@@ -4,14 +4,15 @@
 """
 Read/write access to `data/gui.yaml`, the single state file of the example
 menu: which system project (`system_*.yaml`), simulation time, set of
-plots and turbulence level the example scripts fly/show.
+plots, turbulence level and wind speed the example scripts fly/show.
 
 Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
 [`selected_project`](@ref)/[`selected_sim_time`](@ref)/[`selected_plots`](@ref)
-/[`selected_turbulence`](@ref) fresh on every `include`, so a manual re-include
-always reflects the file on disk rather than a REPL variable left over from an
-earlier run. `select_project()`, `select_sim_time()`, `select_plots()` and
-`select_turbulence()` (`examples/select_*.jl`) are the only writers.
+/[`selected_turbulence`](@ref)/[`selected_windspeed`](@ref) fresh on every
+`include`, so a manual re-include always reflects the file on disk rather than
+a REPL variable left over from an earlier run. `select_project()`,
+`select_sim_time()`, `select_plots()`, `select_turbulence()` and
+`select_windspeed()` (`examples/select_*.jl`) are the only writers.
 
 `default_turbulence` shares the file because V3Kite's
 `get_default_turbulence`/`set_default_turbulence` read and write it there, in
@@ -20,7 +21,8 @@ line-based, so all four keys and the comments survive each other.
 """
 
 using SimpleKiteControllers: skc_data_path
-using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_section
+using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_section,
+                 wind_vec_from_angles
 
 gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
 default_project() = "system_fig8_200m.yaml"
@@ -117,6 +119,19 @@ function selected_plots()
 end
 
 """
+    selected_windspeed() -> Union{Float64, Nothing}
+
+Persisted wind-speed override in m/s at the project's reference height, or
+`nothing` for the `default` choice (the selected project's own `v_wind`).
+Pass `something(selected_windspeed(), project_set.v_wind)` to `init`.
+"""
+function selected_windspeed()
+    value = read_gui_field("wind_speed")
+    (isnothing(value) || value == "default") && return nothing
+    return parse(Float64, value)
+end
+
+"""
     selected_turbulence() -> Union{Float64, String, Nothing}
 
 Persisted turbulence level `init` applies, or the `"default"` keyword when the
@@ -154,3 +169,37 @@ keeping the other entries unchanged.
 """
 set_selected_plots(plots::Vector{String}) =
     write_gui_field("plots", isempty(plots) ? "none" : join(plots, ","))
+
+"""
+    set_selected_windspeed(wind_speed::Union{Real, Nothing})
+
+Persist `wind_speed` (m/s, or `nothing` for `default`) as the current
+selection, keeping the other entries unchanged.
+"""
+set_selected_windspeed(wind_speed::Union{Real, Nothing}) =
+    write_gui_field("wind_speed", isnothing(wind_speed) ? "default" : Float64(wind_speed))
+
+"""
+    apply_windspeed_override!(project_set, wind_speed::Union{Real, Nothing})
+
+Overwrite `project_set`'s wind speed with `wind_speed` [m/s], keeping its
+direction and elevation. A no-op for `nothing` (the `default` choice).
+
+`project_set.v_wind = wind_speed` alone only works when the project has
+`use_wind_vec: false`: `KiteUtils.Settings` re-derives `v_wind` from
+`wind_vec` on every property write when `use_wind_vec` is `true` (all of this
+package's settings files set it), so a plain `v_wind` assignment is silently
+reverted by that same write. Setting `wind_vec` instead — at the project's
+existing `upwind_dir`/`upwind_elevation` — keeps both representations
+consistent regardless of which one is authoritative.
+"""
+function apply_windspeed_override!(project_set, wind_speed::Union{Real, Nothing})
+    isnothing(wind_speed) && return nothing
+    if project_set.use_wind_vec
+        project_set.wind_vec = wind_vec_from_angles(wind_speed,
+            deg2rad(project_set.upwind_dir), deg2rad(project_set.upwind_elevation))
+    else
+        project_set.v_wind = wind_speed
+    end
+    return nothing
+end

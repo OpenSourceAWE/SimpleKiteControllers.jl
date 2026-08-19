@@ -6,11 +6,12 @@ Interactive menu for the example scripts.
 
 The chosen script is `include`d, so it runs exactly as it would by hand: it
 activates `examples/` itself. `select_project()`, `select_sim_time()`,
-`select_plots()` and `select_turbulence()` pick which system project
-(150m/200m/300m), how long a run lasts (the project's own `sim_time`, or a
-specific value in seconds), which figures get shown and how much turbulence
-`init` applies; all four are persisted to `data/gui.yaml` and read fresh on
-every run rather than cached in a `Main` global. Once the model
+`select_plots()`, `select_turbulence()` and `select_windspeed()` pick which
+system project (150m/200m/300m), how long a run lasts (the project's own
+`sim_time`, or a specific value in seconds), which figures get shown, how much
+turbulence `init` applies and the mean wind speed it flies; all five are
+persisted to `data/gui.yaml` and read fresh on every run rather than cached in
+a `Main` global. Once the model
 and settling caches exist, the figure-eight run simulates at about twice
 realtime, so its wall time is roughly half the selected `sim_time`; the first
 run of a fresh cache takes minutes longer. Its plots come up on their own at
@@ -32,6 +33,7 @@ const EXAMPLES_DIR = @__DIR__
 
 const EXAMPLES = [
     "select_turbulence.jl    - choose the turbulence level init() applies (default or 0.0…1.0)" => "select_turbulence.jl",
+    "select_windspeed.jl     - choose the wind speed init() applies (default or a specific m/s)" => "select_windspeed.jl",
     "select_project.jl       - choose which system project (150m/200m/300m) to fly" => "select_project.jl",
     "select_sim_time.jl      - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl         - choose figures: pattern/3d path/time series/power/aerodynamics" => "select_plots.jl",

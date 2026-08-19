@@ -130,6 +130,7 @@ summary["simulation"] = OrderedDict{String, Any}(
     "script" => (run_script, "script that produced this run"),
     "project" => (PROJECT, "system project flown"),
     "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
+    "wind_speed" => (project_set.v_wind, "mean wind speed in m/s passed to init"),
     "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
     "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
     "hostname" => (gethostname(), "machine the run executed on"),

@@ -16,7 +16,7 @@ a run. The plant, the tether length, the wind, the turbulence and the whole
 controller tuning come from the selected system project exactly as they would for
 an interactive run, so the sweep compares SHAPES against one fixed set of
 conditions. Change the conditions and the ranking is about a different question;
-that is what the `project`, `sim_time` and `turbulence` lines of the banner below
+that is what the `project`, `sim_time`, `turbulence` and `wind_speed` lines of the banner below
 are for.
 
 # Objective and side conditions
@@ -164,6 +164,7 @@ $(round(gb(Sys.free_memory()); digits = 1)) GB of $(round(gb(Sys.total_memory())
   project       : $(selected_reelout_project())
   sim_time      : $(something(selected_sim_time(), "project default"))
   turbulence    : $(selected_turbulence())
+  wind_speed    : $(something(selected_windspeed(), "project default"))
   objective     : max mean reel-out power
   pre-flight    : curvature margin >= $(os.min_feasibility_margin) at \
 $(round(Int, l_tether_start)) m (c1 = $(round(c1_sweep; digits = 4)))
