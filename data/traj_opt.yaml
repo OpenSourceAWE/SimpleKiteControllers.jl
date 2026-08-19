@@ -30,6 +30,19 @@
 # at 179 m, 6583 vs 6584 at 185 m), so it is a strictly wider basin, not a
 # different answer. Six lengths is not a proof of robustness; if a new length
 # throws 422, this is the first number to move.
+#
+# 2026-08-19: it was moved, 22 -> 26. Raising wc_settings.yaml's f_high 7600 ->
+# 8000 changes f_max of the optimizer request (winch_from_wc maps f_max = f_high),
+# and at 150.0 m / 9 m/s the 22 seed that converged at f_max = 7600 throws IPOPT's
+# iteration limit at 8000 - a LOOSER force bound, so the feasible set grew and
+# this is the multi-modality above, not an infeasible problem. 26 is the only
+# other seed with recorded convergence at 150 m, so it is the one to try; note
+# that record was taken at 6 m/s and f_max = 7600, not at these conditions. The
+# failure-pocket warning above still stands: 26 is the narrower basin in tether
+# LENGTH, which the run sweeps as it reels out, so re-optimizations are the place
+# to watch (reopt_retry_el_offset gives one retry at +2 deg). If the pockets bite,
+# the alternatives are 24 (untested) or decoupling the optimizer's f_max from
+# f_high so the request stops moving when the controller is retuned.
 traj_opt:
     base_url: "http://127.0.0.1:8000"  # address of the AWETrim server
     autostart_server: true   # start one with bin/run_server when none answers
@@ -40,7 +53,7 @@ traj_opt:
     guess_b:          12.0   # height of the guess, peak to peak             [deg]
     guess_c:           0.0   # size of the right part                        [deg]
     guess_d:           0.0   # asymmetry factor                                [-]
-    guess_el_center:  22.0   # centre elevation of the guess                 [deg]
+    guess_el_center:  26.0   # centre elevation of the guess                 [deg]
     guess_points:      361   # points sent; the reply has as many              [-]
 
     # --- Solver knobs ----------------------------------------------------- #

@@ -57,7 +57,9 @@ tether:
 
 winch:
   winch_model: 'TorqueControlledMachine' # or AsynchMachine
-  max_force: 8000 # maximal (nominal) tether force; short overload allowed [N]
+  max_force: 8400 # maximal (nominal) tether force; short overload allowed [N].
+                  # AWETrim LEI-V3 system.yaml rates BOTH the tether and the
+                  # electric_winch drum at 8400 N; this matches that.
   v_ro_max: 8.0          # maximal reel-out speed                        [m/s]
   v_ro_min: -8.0         # minimal reel-out speed (=max reel-in speed)   [m/s]
   drum_radius: 0.1615    # radius of the drum                              [m]

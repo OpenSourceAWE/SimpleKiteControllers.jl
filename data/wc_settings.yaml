@@ -66,7 +66,7 @@ wc_settings:
   ktf_low:       8.0       # tracking constant, lower force controller          [-]
   f_low:         350.0     # below: LowerForceController reels in, not the law  [N]
   f_reelin:      700.0     # set force during a plain reel-in phase (unused here) [N]
-  f_high:        7600.0    # upper limit; keep below the plant's max_force      [N]
+  f_high:        8000.0    # upper limit; keep below the plant's max_force (8400) [N]
   pf_high:       0.00023040 # P constant of the upper force controller          [-]
   if_high:       0.012     # I constant of the upper force controller           [-]
   df_high:       0.000034  # D constant of the upper force controller           [-]

@@ -11,7 +11,13 @@ form, triggered by a 2-element `ylabels` entry. Two panels added: reel-out
 speed (measured `v_reelout` vs the setpoint `var_11`) and the commanded
 depower `u_d` (`var_14`, `rel_depower` — filled by `step!` itself, since
 `SysState` has no `set_depower` field) — worth watching here because
-`depower_final` steps it up once phase 5 (final) begins. The bottom panel is
+`depower_final` steps it up once phase 5 (final) begins. That `u_d` panel
+carries the WinchController state (`var_12`, 0 lower-force / 1 speed /
+2 upper-force) on a secondary right-hand y-axis, the same twin-axis form as the
+tether-length panel: the two belong together because depower is what decides
+whether the winch ever leaves speed control, and at high wind it does not —
+measured at 9 m/s, 87 % of the reel-out window sat in the upper-force limiter.
+It is blanked before phase 3, where `rc` is not yet stepped. The bottom panel is
 the ENTRY state machine (0 park … 4 fig8, plus 5 final once reel-out reaches
 `reelout_l_max`). See `simple_fig8_plots.jl`'s docstring for everything else,
 which is unchanged here.
@@ -247,6 +253,12 @@ if "time_series" in plots
     v_reelout = getindex.(sl.v_reelout[rng], 1)
     v_set = Float64.(sl.var_11[rng])
     u_d = Float64.(sl.var_14[rng])            # commanded rel_depower, filled by step! itself
+    # WinchController state (0 lower-force, 1 speed, 2 upper-force). Logged every
+    # step, but `rc` is only stepped from phase 3 on, so everything before that is
+    # an unstepped controller's state and says nothing — NaN blanks it rather than
+    # drawing a flat line the eye reads as a measurement. Same window `fig8_metrics`
+    # scores over, for the same reason.
+    wc_state = [sl.sys_state[i] >= 3 ? Float64(sl.var_12[i]) : NaN for i in rng]
     # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
     state = Float64.(sl.sys_state[rng])
     fig8 = Float64.(sl.fig_8[rng])
@@ -264,7 +276,7 @@ if "time_series" in plots
         getindex.(sl.winch_force[rng], 1),
         [l_tether, fig8],
         [v_reelout, v_set],
-        u_d,
+        [u_d, wc_state],
         state;
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
@@ -278,7 +290,7 @@ if "time_series" in plots
             L"F_{\mathrm{tether}}~[\mathrm{N}]",
             [L"l_{\mathrm{tether}}~[\mathrm{m}]", L"\mathrm{cycle}~[-]"],
             L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
-            L"u_{\mathrm{d}}~[-]",
+            [L"u_{\mathrm{d}}~[-]", L"\mathrm{wc~state}~[-]"],
             L"\mathrm{state}~[-]",
         ],
         labels = [
@@ -291,7 +303,8 @@ if "time_series" in plots
             nothing,
             [L"l_{\mathrm{tether}}", L"\mathrm{cycle}"],
             [L"v_{\mathrm{ro}}", L"v_{\mathrm{set}}"],
-            nothing,
+            [L"u_{\mathrm{d}}",
+             L"\mathrm{wc}:~0=f_{\mathrm{low}},~1=v,~2=f_{\mathrm{high}}"],
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
             L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8},~5=\mathrm{final}",
         ],
