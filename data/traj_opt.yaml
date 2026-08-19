@@ -109,12 +109,23 @@ traj_opt:
     # margin sits at ~1.0 whatever the tether length, and 0.85 vs 1.01 is which
     # optimum the seed reached. Measured 2026-08-18 at 182, 200 and 246 m.
     #
-    # Below 1.0 for exactly that reason: at 1.0 almost nothing installs, since the
-    # replies cluster on ~1.0 with seed-dependent scatter. Every 0.1 taken off is
-    # bought with real turn authority, so it is a rejection-rate knob, not a safety
-    # one. Raising it back only helps once the optimizer is told about the V3's
-    # turn-rate law — its own steering bound is what sets the 11 m radius.
-    min_feasibility_margin: 0.74
+    # It was a REJECTION-RATE knob while the replies were whatever the optimizer felt
+    # like: they clustered on ~1.0 with seed-dependent scatter, so at 1.0 almost
+    # nothing installed and every 0.1 taken off was bought with real turn authority.
+    #
+    # 2026-08-20: it is a DIAL now. The request sent to the optimizer is scaled from
+    # this number (see turn_radius_headroom below), the optimizer honours it - asked
+    # 11.86 m at 150 m, delivered 11.91 m - and what the gate then reads at the anchor
+    # is this number times the scaling cushion: 0.74 demanded bought 0.90 flown.
+    # So set it to what the kite should actually fly with, and expect ~1.2x of it at
+    # the startup length and ~1.15x on the re-optimized replies.
+    #
+    # 0.78 for ~0.95 flown, chosen over 0.82 (which would buy 1.00) to keep the
+    # pattern - and with it the power - closer to what the optimizer would pick free.
+    # Below 1.00 the tightest corner still takes all of max_steering, leaving nothing
+    # there for cross-track error; the run says so at startup, with the value that
+    # would buy 1.00 computed from what this one actually bought.
+    min_feasibility_margin: 0.78
     # Extra turn radius asked of the optimizer, as a factor on the margin above.
     # 1.0 asks for exactly what the gate demands, which is NOT enough, and the
     # first use_step run showed why: a reply that CONVERGED with its own constraint
@@ -138,6 +149,19 @@ traj_opt:
     # Same family as min_feasibility_margin: every 0.1 asks for a wider, less
     # powerful pattern, so it is a rejection-rate knob and not a safety one.
     turn_radius_headroom: 1.10
+    # Reel-out per lap assumed for the STARTUP request, in metres; 0.0 assumes none.
+    # Every later request measures that ratio off the previous reply, but the first
+    # one has no reply to measure - and it is where the ratio matters most, since the
+    # same dL is a bigger fraction of a short tether (35 m is 1.23 at 150 m against
+    # 1.09 at 380 m).
+    #
+    # One number works because the lap's reel-out barely depends on the length:
+    # measured 2026-08-20, 33.2 m at 150 m and 35.0 m at 380 m. It IS an assumption
+    # though - it is v_reelout times a lap, so it moves with the wind and the winch.
+    # At 0.0 the startup asks for the headroom alone, which at 150 m bought a path
+    # flown at margin 0.90 against the 0.74 demanded: accepted, but on the steering
+    # clamp in its tightest corner until the first re-optimization replaced it.
+    turn_radius_lap_reelout_m: 30.0
     # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
     # any reel-out; 0.0 disables.
     #

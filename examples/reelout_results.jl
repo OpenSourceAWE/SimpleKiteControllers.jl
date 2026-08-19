@@ -362,7 +362,10 @@ feasibility_block = OrderedDict{String, Any}(
          reel-out ratio, since the optimizer measures the radius up the reel-out \
          while the run flies the curve at the anchor [m]"),
     "turn_radius_scale" => (round(opt_r_scale; digits = 3),
-        "the two corrections together, as sent [-]"))
+        "the two corrections together, as sent [-]"),
+    "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
+        "reel-out per lap ASSUMED for the startup request, the only one with no \
+         reply to measure it off [m]"))
 if !isnothing(coeffs)
     feasibility_block["margin_start"] = (round(feas_start.margin; digits = 2),
         "curvature margin at the starting length; the worst case only when one \

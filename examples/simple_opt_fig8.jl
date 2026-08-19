@@ -197,17 +197,20 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 # through its lap's reel-out — while this run installs the reply as an (azimuth,
 # elevation) curve and flies it at ONE length. There is only this one solve here,
 # so the geometric part cannot be measured off a previous reply the way
-# `simple_opt_reelout.jl` does it; the headroom is all the correction there is.
-opt_r_min = min_turn_radius_request(fcs, tos; scale = tos.turn_radius_headroom)
+# `simple_opt_reelout.jl` does it — it is assumed instead, from
+# `turn_radius_lap_reelout_m` over this run's length.
+opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l0) * tos.turn_radius_headroom
+opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_box = pattern_limits_from(tos)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",
                    isnothing(opt_r_min) ? "unset" :
                        @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
-                                own, x %.2f of headroom)",
-                                opt_r_min, tos.min_feasibility_margin,
-                                tos.turn_radius_headroom),
+                                own, x %.3f for %.0f m of assumed reel-out per lap \
+                                and %.2f of headroom)",
+                                opt_r_min, tos.min_feasibility_margin, opt_r_scale,
+                                tos.turn_radius_lap_reelout_m, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 ensure_server(tos.base_url; autostart = tos.autostart_server)

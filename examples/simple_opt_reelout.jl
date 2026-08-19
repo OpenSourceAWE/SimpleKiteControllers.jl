@@ -458,18 +458,25 @@ ensure_server(tos.base_url; autostart = tos.autostart_server)
 # the same angular curvature is tighter by `L/r`. `opt_r_scale` carries both
 # corrections — `reelout_anchor_ratio` off the last reply for the geometry, and
 # `tos.turn_radius_headroom` for what the GATE adds on top (its finite-difference
-# curvature estimate, the elevation lift). The startup request has no reply to
-# measure yet, so it gets the headroom alone.
-opt_r_scale = tos.turn_radius_headroom
+# curvature estimate, the elevation lift).
+#
+# The startup request has no reply to measure the geometry off, so it ASSUMES it:
+# `turn_radius_lap_reelout_m` over the starting length. That is the largest ratio of
+# the run (35 m is 1.23 at 150 m against 1.09 at 380 m), which is why leaving it at
+# 0 shows up as a startup path flown near its curvature limit.
+opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l_set) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
 opt_box = pattern_limits_from(tos)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",
                    isnothing(opt_r_min) ? "unset" :
                        @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
-                                own, x %.2f of headroom)",
-                                opt_r_min, tos.min_feasibility_margin, opt_r_scale),
+                                own, x %.3f for %.0f m of assumed reel-out per lap \
+                                and %.2f of headroom)",
+                                opt_r_min, tos.min_feasibility_margin, opt_r_scale,
+                                tos.turn_radius_lap_reelout_m, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 start_params = InitParams(; name = tos.name, length = l_set,
@@ -587,10 +594,29 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
+# The turn-rate law the gates read a path against, looked up here because the retry
+# below has to know whether the startup path clears it. `reelout_feasibility.jl`
+# looks it up again and reports it; a cell the table cannot serve costs the retry,
+# not the run, so this one stays quiet.
+coeffs_startup = try
+    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+catch exc
+    exc isa ArgumentError || rethrow()
+    nothing
+end
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
-n_opt = length(opt_result.trajectory.azimuth) - 1
+#
+# A function because the startup path can be installed twice: once from the first
+# solve, once from the corrected re-solve below.
+install_optimized_path!(reply) = begin
+    az = collect(Float64.(reply.trajectory.azimuth))
+    el = collect(Float64.(reply.trajectory.elevation))
+    set_path!(fec, az, el .+ wing_lift(az, el);
+              resample = min(tos.resample_points, length(az) - 1))
+    return (az, el)
+end
 # Every optimizer answer this run flies, as it arrived — before `el_bias`,
 # `el_offset_final` and `el_offset_wing` are added to it. The pattern plot draws
 # the lot: a run installs a new path per lap and they shrink INWARD and DOWNWARD
@@ -599,22 +625,7 @@ n_opt = length(opt_result.trajectory.azimuth) - 1
 # subtends less angle on a longer tether. The LAST one alone therefore says
 # nothing about what was asked for over the run. Every other curve in that plot
 # carries the pre-distortion.
-opt_paths_raw = [(collect(Float64.(opt_result.trajectory.azimuth)),
-                  collect(Float64.(opt_result.trajectory.elevation)))]
-set_path!(fec, opt_result.trajectory.azimuth,
-          opt_result.trajectory.elevation .+
-              wing_lift(opt_result.trajectory.azimuth, opt_result.trajectory.elevation);
-          resample = min(tos.resample_points, n_opt))
-
-# The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
-# Captured now, not read off `fec` in the RESULTS block: with reopt_enabled the
-# path in `fec` at the end of the run is not the one these describe.
-n_path_initial = length(fec.az_path)
-path_min_h_start = path_min_height(fec, l_tether)
-az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
-el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
-az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
-el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
+opt_paths_raw = [install_optimized_path!(opt_result)]
 
 # set_path! REVERSES a path that does not match up_loops, so a mismatch here is
 # not caught by anything downstream: the kite would fly the optimizer's curve,
@@ -630,7 +641,7 @@ opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
 # Guarded, not unconditional: a request that is off (margin 0, or a
 # `body_damping`/`depower` the turn-rate table refuses) stays off, and asking
 # `min_turn_radius_request` again would only repeat its warning once per lap.
-if !isnothing(opt_r_min)
+if opt_r_on
     opt_r_scale = reelout_anchor_ratio(opt_table) * tos.turn_radius_headroom
     opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 end
@@ -643,6 +654,79 @@ isnothing(opt_r_min) ||
                    minimum(Float64.(opt_table["table"]["distance_radial"])),
                    maximum(Float64.(opt_table["table"]["distance_radial"])),
                    tos.turn_radius_headroom)
+
+# ---- One corrected retry of the STARTUP solve -------------------------- #
+# The startup request is the only one that goes out with an ASSUMED reel-out per
+# lap (`turn_radius_lap_reelout_m`); the ratio is now MEASURED, off the reply that
+# just landed. When the assumption was short the installed path is one the run
+# flies below its own gate — measured 2026-08-20 at 150 m: 9.20 m asked for where
+# 11.23 m was right, 11.91 m delivered, and 0.90 of margin at the anchor.
+#
+# So: one warm `/step` at the same length under the corrected radius, and only when
+# the installed path is short of `min_feasibility_margin`. Not a different SEED —
+# the startup deliberately never retries with one of those, since a guess that
+# merely converges is a different optimum flown silently — the same solve under the
+# constraint it should have carried. A retry that fails or comes back no better
+# changes nothing: the first path stays installed and the gates below judge it as
+# they always did.
+if opt_r_on && !isnothing(coeffs_startup)
+    margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+                                            c1 = coeffs_startup.c1, prn = false).margin
+    if margin_startup < tos.min_feasibility_margin
+        @info @sprintf("The startup path is at margin %.2f, below \
+                        min_feasibility_margin = %.2f: re-solving once at L = %.1f m \
+                        under the corrected turn radius (%.2f m, was %.2f m).",
+                       margin_startup, tos.min_feasibility_margin, l_set, opt_r_min,
+                       opt_r_min / opt_r_scale *
+                           (1 + tos.turn_radius_lap_reelout_m / l_set) *
+                           tos.turn_radius_headroom)
+        t_retry = time()
+        try
+            retry_result = opt_step(StepParams(; length = l_set, winch_params = winch,
+                                               min_turn_radius = opt_r_min);
+                                    url = tos.base_url)
+            retry_table = opt_trajectory(; url = tos.base_url)
+            retry_raw = install_optimized_path!(retry_result)
+            margin_retry = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+                                                  c1 = coeffs_startup.c1,
+                                                  prn = false).margin
+            if margin_retry > margin_startup
+                global opt_result = retry_result
+                global opt_table = retry_table
+                global opt_downloops = retry_table["spline"]["downloops"]
+                global opt_power_pred = Float64(retry_table["metrics"]["avg_power_W"])
+                global opt_paths_raw = [retry_raw]
+                global opt_r_scale = reelout_anchor_ratio(retry_table) *
+                                     tos.turn_radius_headroom
+                global opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+                @info @sprintf("Startup re-solve: margin %.2f -> %.2f, predicted power \
+                                %.0f W, %.1f s of wall time.",
+                               margin_startup, margin_retry, opt_power_pred,
+                               time() - t_retry)
+            else
+                install_optimized_path!(opt_result)   # put the first path back
+                @info @sprintf("Startup re-solve gave margin %.2f, no better than \
+                                %.2f — keeping the first path (%.1f s).",
+                               margin_retry, margin_startup, time() - t_retry)
+            end
+        catch exc
+            exc isa HTTP.StatusError && exc.status == 422 || rethrow()
+            @warn "The corrected startup re-solve was refused; flying the first \
+                   path." exception = exc
+        end
+    end
+end
+
+# The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
+# Captured now, not read off `fec` in the RESULTS block: with reopt_enabled the
+# path in `fec` at the end of the run is not the one these describe.
+n_path_initial = length(fec.az_path)
+path_min_h_start = path_min_height(fec, l_tether)
+az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
+el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
+az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
+el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
+
 # Which path was flown when, so the run can be scored against the prediction of the
 # path ACTUALLY in the air rather than only the first one. A re-optimization that
 # installs appends to this; `path_blend_time` makes the swap gradual, but 4 s of
@@ -1016,6 +1100,14 @@ try
                     else
                         (tos.guess_el_center,)
                     end
+                    # Asked for under the turn authority the reply will be JUDGED
+                    # with, which from phase 5 is `depower_final`'s c1 — ~23 % below
+                    # the pattern's. A request made at the pattern's c1 there is
+                    # short by exactly that: measured 2026-08-20, a 12.15 m reply
+                    # answering a 10.37 m request, rejected at margin 0.61.
+                    opt_r_on && (global opt_r_min =
+                        min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                                c1 = c1_at(phase)))
                     for (attempt, el_seed) in enumerate(el_seeds)
                         # Set only on a cold attempt: it is what the failure cache
                         # keys on, and a warm step has no such key.
@@ -1141,20 +1233,15 @@ try
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
-                        # What THIS reply was solved under, before the next request
-                        # is re-derived below.
-                        opt_r_asked = opt_r_min
                         # Re-measure the anchor correction for the NEXT request off
                         # the reply that just landed: the lap's reel-out is a
                         # shrinking fraction of a growing tether, so a factor fixed
-                        # at the startup length over-asks by the end of the run.
-                        # Skipped when the request is off, as at startup.
-                        if !isnothing(opt_r_min)
-                            global opt_r_scale = reelout_anchor_ratio(tab) *
-                                                 tos.turn_radius_headroom
-                            global opt_r_min =
-                                min_turn_radius_request(fcs, tos; scale = opt_r_scale)
-                        end
+                        # at the startup length over-asks by the end of the run. Only
+                        # the SCALE is settled here — the radius itself is derived
+                        # where the request goes out, since it also depends on the
+                        # phase's turn authority.
+                        opt_r_on && (global opt_r_scale = reelout_anchor_ratio(tab) *
+                                                          tos.turn_radius_headroom)
                         # What the optimizer itself measured, in the same metres the
                         # request was made in, next to the radii it measured them at.
                         # The gate below reads the same curve AT THE ANCHOR, so the
@@ -1194,8 +1281,9 @@ try
                         el_mean = mean(el_target)
                         el_dev = el_target .- el_mean
                         n_native = min(tos.resample_points, length(new_az) - 1)
-                        lifted(f) = new_el .+ bias_lift(new_az, el_mean .+ f .* el_dev) .+
-                                    wing_delta
+                        lifted(fs, fw) = new_el .+
+                                         bias_lift(new_az, el_mean .+ fs .* el_dev) .+
+                                         fw .* wing_delta
                         function lifted_margin(e)
                             isnothing(coeffs) && return Inf
                             a, b = prepare_path(new_az, e; resample = n_native,
@@ -1203,17 +1291,31 @@ try
                             check_pattern_feasible(a, b, l_now, fcs.max_steering;
                                                    c1 = c1_at(phase), prn = false).margin
                         end
-                        bias_frac = 1.0
-                        for f in (1.0, 0.75, 0.5, 0.25, 0.0)
-                            bias_frac = f
-                            lifted_margin(lifted(f)) >= tos.min_feasibility_margin && break
+                        # Ration order: the droop SPREAD first, since its mean is
+                        # the correction that matters and costs nothing, then the
+                        # lobe lift — measured 2026-08-20 at 380 m, `el_offset_wing`
+                        # of 1.5° on a 4.7°-tall pattern is worth 0.14 of margin on
+                        # its own (0.95 -> 0.81). Both are the RUN's additions to the
+                        # optimizer's curve; the curve is what the run exists to fly,
+                        # so it is never the thing given up.
+                        bias_frac, wing_frac = 1.0, 1.0
+                        for (fs, fw) in ((1.0, 1.0), (0.75, 1.0), (0.5, 1.0),
+                                         (0.25, 1.0), (0.0, 1.0), (0.0, 0.75),
+                                         (0.0, 0.5), (0.0, 0.25), (0.0, 0.0))
+                            bias_frac, wing_frac = fs, fw
+                            lifted_margin(lifted(fs, fw)) >= tos.min_feasibility_margin &&
+                                break
                         end
-                        new_el = lifted(bias_frac)
-                        bias_frac < 1 && maximum(abs, el_dev) > 1e-6 &&
-                            @info @sprintf("Droop profile held back to %.0f %% of its                                             spread (%.2f° band to band) on the path for                                             L = %.0f m; its %.2f° mean goes in whole.",
-                                           100 * bias_frac,
+                        new_el = lifted(bias_frac, wing_frac)
+                        (bias_frac < 1 || wing_frac < 1) &&
+                            @info @sprintf("Lifts held back on the path for L = %.0f m \
+                                            to fit the curvature gate: droop spread at \
+                                            %.0f %% (%.2f° band to band), lobe lift at \
+                                            %.0f %% of %.2f°. The %.2f° mean of the \
+                                            droop goes in whole.",
+                                           l_now, 100 * bias_frac,
                                            maximum(el_target) - minimum(el_target),
-                                           l_now, el_mean)
+                                           100 * wing_frac, fcs.el_offset_wing, el_mean)
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory
@@ -1251,7 +1353,7 @@ try
                                                                      asked for >= %.2f m)",
                                                                     opt_r_reply, r_span[1],
                                                                     r_span[2],
-                                                                    something(opt_r_asked, 0.0))))
+                                                                    something(opt_r_min, 0.0))))
                         elseif tos.min_height > 0 && clearance < tos.min_height
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("clearance %.1f m", clearance))
@@ -1335,10 +1437,12 @@ try
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f%s%s, clearance %.1f m, \
                                                         %.0f W predicted", margin,
-                                                       bias_frac < 1 ?
+                                                       (bias_frac < 1 || wing_frac < 1) ?
                                                            @sprintf(" (droop spread at \
-                                                                     %.0f %%)",
-                                                                    100 * bias_frac) : "",
+                                                                     %.0f %%, lobe lift \
+                                                                     at %.0f %%)",
+                                                                    100 * bias_frac,
+                                                                    100 * wing_frac) : "",
                                                        isnan(margin5_flown) ? "" :
                                                            @sprintf(" (phase 5: %.2f at %.0f m)",
                                                                     margin5_flown,

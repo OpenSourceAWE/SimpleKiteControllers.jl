@@ -110,10 +110,16 @@ multi-modal, so the guess is a choice about the answer.
     gate together.
 
     What is sent is that number scaled UP, by [`turn_radius_headroom`](@ref) and by
-    the lap's reel-out (10.1 m at the shipped numbers): the optimizer measures the
-    path's radius up its own reel-out while the gate reads the same curve at the
-    anchor, so an unscaled request is one the reply satisfies and the gate still
-    refuses.
+    the lap's reel-out: the optimizer measures the path's radius up its own reel-out
+    while the gate reads the same curve at the anchor, so an unscaled request is one
+    the reply satisfies and the gate still refuses.
+
+    That makes this a DIAL rather than the rejection-rate knob it used to be. The
+    optimizer honours the request — 11.86 m asked at 150 m, 11.91 m delivered,
+    2026-08-20 — so what the gate reads back is this number times the scaling
+    cushion: ~1.2x at the startup length, ~1.15x on the re-optimized replies. Set it
+    to the turn authority the kite should fly with, not to whatever makes replies
+    pass.
     """
     min_feasibility_margin = 1.0
     """
@@ -144,6 +150,28 @@ multi-modal, so the guess is a choice about the answer.
     number to raise.
     """
     turn_radius_headroom = 1.0
+    """
+    Reel-out per lap [m] ASSUMED for the startup request; `0.0` assumes none.
+
+    The turn-radius request has to be scaled by `1 + dL/L`, because the optimizer
+    measures the path's radius up its own reel-out while the run flies the curve at
+    the anchor. Every re-optimization measures that ratio off the previous reply
+    (`reelout_anchor_ratio`); the startup `/init` is the one request with no reply to
+    measure, and it is also where the ratio is LARGEST — the same `dL` is a bigger
+    fraction of a short tether. Measured 2026-08-20, the lap's reel-out is nearly
+    length-independent (33.2 m at 150 m, 35.0 m at 380 m), which is what makes one
+    number usable here: 35 m is 1.23 at 150 m and 1.09 at 380 m, each within a
+    percent of what the reply then measured.
+
+    It is an assumption, so it moves with the wind and the winch — it is `v_reelout`
+    times a lap. Left at `0.0` the startup asks for `turn_radius_headroom` alone,
+    which at 150 m produced a path flown at margin 0.90 against a demanded 0.74:
+    accepted, but on the steering clamp in its tightest corner until the first
+    re-optimization replaced it. A startup solve that lands short is retried once
+    under the MEASURED ratio, so this number decides how often that retry is needed,
+    not whether the run survives without it.
+    """
+    turn_radius_lap_reelout_m = 0.0
     """
     Ground clearance [m] the returned path must have at the tether length it is
     flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
@@ -333,6 +361,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
               "than pattern_elevation_min ($(tos.pattern_elevation_min)).")
     tos.turn_radius_headroom >= 1 ||
         error("turn_radius_headroom must be >= 1, got $(tos.turn_radius_headroom).")
+    tos.turn_radius_lap_reelout_m >= 0 ||
+        error("turn_radius_lap_reelout_m must be >= 0, got "*
+              "$(tos.turn_radius_lap_reelout_m).")
     tos.candidate_elevation_margin >= 0 ||
         error("candidate_elevation_margin must be >= 0, got "*
               "$(tos.candidate_elevation_margin).")

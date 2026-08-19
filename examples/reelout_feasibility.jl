@@ -84,7 +84,32 @@ else
     # c1 must match the damping in use; that is what makes this check meaningful.
     # At l_tether (the START, before any reel-out) this is the WORST case: a longer
     # tether only ever shrinks the kite's minimum angular turn radius.
-    feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
+    # `prn = false` and reported here instead: `check_pattern_feasible` labels a
+    # margin below 1.00 "** PATTERN TOO TIGHT **" on the ABSOLUTE criterion, which
+    # is not the one this run gates on. With the turn radius now REQUESTED, a reply
+    # lands a little above `min_feasibility_margin` by design — 0.74 asked for,
+    # 0.90 flown at 150 m on 2026-08-20 — and reading that as a refusal is exactly
+    # backwards. What below 1.00 does mean is said in full below.
+    feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1,
+                                        prn = false)
+    @info @sprintf("Pattern feasibility at the STARTING length: margin %.2f — path \
+                    radius %.1f°, kite %.1f° at L = %.0f m, u_s = %.3f. %s \
+                    min_feasibility_margin = %.2f.%s",
+                   feas_start.margin, feas_start.path_radius, feas_start.kite_radius,
+                   l_tether, fcs.max_steering,
+                   feas_start.margin >= tos.min_feasibility_margin ? "Clears" :
+                       "BELOW the demanded",
+                   tos.min_feasibility_margin,
+                   feas_start.margin < 1 ?
+                       @sprintf(" Below 1.00 means the tightest corner takes all of \
+                                 max_steering, leaving the guidance nothing there for \
+                                 cross-track error. The lever is \
+                                 min_feasibility_margin itself, since the turn-radius \
+                                 request is scaled from it: %.2f demanded bought %.2f \
+                                 flown here, so ~%.2f would buy 1.00.",
+                                tos.min_feasibility_margin, feas_start.margin,
+                                tos.min_feasibility_margin /
+                                    max(feas_start.margin, 1e-9)) : "")
     # A refusal, not a warning: the optimizer knows nothing of the V3's turn-rate
     # law, so a path the kite cannot turn along is a plausible thing for it to
     # return, and flying it measures the steering clamp instead of the path.
@@ -96,7 +121,11 @@ else
                         data/traj_opt.yaml to fly it anyway.",
                        feas_start.path_radius, feas_start.kite_radius, l_tether,
                        feas_start.margin, tos.min_feasibility_margin))
-    feas_end = check_pattern_feasible(fec, fcs.reelout_l_max, fcs.max_steering; c1)
+    feas_end = check_pattern_feasible(fec, fcs.reelout_l_max, fcs.max_steering; c1,
+                                      prn = false)
+    @info @sprintf("The same path at reelout_l_max = %.0f m: margin %.2f — a fixed \
+                    (azimuth, elevation) curve only gets easier as the tether grows.",
+                   fcs.reelout_l_max, feas_end.margin)
 
     # Both checks above use the PATTERN's depower. Phase 5 flies `depower_final`,
     # and c1 falls steeply with depower (0.2752 -> 0.2133 between 0.275 and 0.328,

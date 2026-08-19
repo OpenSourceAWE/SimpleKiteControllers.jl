@@ -758,11 +758,10 @@ end
         @test tos.guess_el_center == 22.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
-        # Below the struct's 1.0: the optimizer returns paths right at the V3's
-        # curvature limit at EVERY length, not just the shortest (11.0-11.5 m of
-        # physical turn radius against the kite's 11.35 m, measured 2026-08-18), so
-        # at 1.0 almost nothing installs. A rejection-rate knob that moves with
-        # every sweep (0.74 on 2026-08-18), so only the inequality is pinned.
+        # Below the struct's 1.0, but no longer for the old reason: the request is
+        # scaled from this number and the optimizer honours it, so what the gate
+        # reads back is ~1.2x of it (0.78 -> ~0.95 flown, 2026-08-20). It moves with
+        # every sweep, so only the inequality is pinned.
         @test 0 < tos.min_feasibility_margin < TrajOptSettings().min_feasibility_margin
         # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
         # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
@@ -772,6 +771,11 @@ end
         # against 0.74 (2026-08-19). The exact value follows the measurement, so
         # only the inequality is pinned.
         @test tos.turn_radius_headroom > TrajOptSettings().turn_radius_headroom == 1.0
+        # The startup request's assumed reel-out per lap: off by default, and shipped
+        # at what a lap actually reels out here (33.2 m at 150 m, 35.0 m at 380 m,
+        # 2026-08-20) — the ratio is measured from the reply for every later request.
+        @test tos.turn_radius_lap_reelout_m == 35.0
+        @test TrajOptSettings().turn_radius_lap_reelout_m == 0.0
         # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
         # carries whatever the last experiment needed.
         @test !TrajOptSettings().reopt_enabled
@@ -812,6 +816,9 @@ end
             slack = joinpath(dir, "h.yaml")
             write(slack, "traj_opt:\n    turn_radius_headroom: 0.9\n")
             @test_throws ErrorException TrajOptSettings(slack)
+            back = joinpath(dir, "r.yaml")
+            write(back, "traj_opt:\n    turn_radius_lap_reelout_m: -1.0\n")
+            @test_throws ErrorException TrajOptSettings(back)
         end
     end
 

@@ -631,7 +631,7 @@ winch_from_wc(wc; v_max = nothing, p_max = nothing) =
                 p_max = p_max === nothing ? nothing : Float64(p_max))
 
 """
-    min_turn_radius_request(fcs, tos; scale = 1.0) -> Union{Float64, Nothing}
+    min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing) -> Union{Float64, Nothing}
 
 `tos.min_feasibility_margin` in METRES — `margin/(c1*max_steering)`, the kite's own
 physical turning limit scaled by the margin — sent WITH the request so the
@@ -671,14 +671,25 @@ physical ones, with the kite's physical minimum `1/(c1*u_s)` = 11.35 m at
 `c1 = 0.2752`, `u_s = 0.32`. That much IS length-free — what is not is where the
 optimizer measures the path's own radius.
 
-`c1` comes from the identified turn-rate table, which refuses to extrapolate off
-its grid. A `body_damping`/`depower_setpoint` it cannot serve therefore sends no
-constraint and warns, exactly as the feasibility GATE degrades — an off-grid run
-loses the advice, not the run.
+`c1` defaults to the identified turn-rate table at `fcs.depower_setpoint`, which is
+the turn authority the pattern is flown with. PASS THE ONE THE GATE WILL USE: from
+phase 5 the run flies `depower_final`, where c1 is ~23 % lower (0.2133 against
+0.2752), and a request made at the pattern's c1 is then ~23 % short of what the
+reply will be judged against — measured 2026-08-20, a reply of 12.15 m answering a
+10.37 m request and rejected at margin 0.61, which is exactly `0.74 * c1_final/c1`
+of the 0.79 it would have scored in phase 4. `c1_at(phase)` in
+`reelout_feasibility.jl` is that number.
+
+The table refuses to extrapolate off its grid. A `body_damping`/`depower_setpoint`
+it cannot serve therefore sends no constraint and warns, exactly as the feasibility
+GATE degrades — an off-grid run loses the advice, not the run.
 """
-function min_turn_radius_request(fcs, tos; scale = 1.0)
+function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing)
     tos.min_feasibility_margin > 0 || return nothing
     scale >= 0 || error("min_turn_radius_request: scale must be >= 0, got $scale.")
+    if !isnothing(c1) && isfinite(c1) && c1 > 0
+        return scale * tos.min_feasibility_margin / (c1 * fcs.max_steering)
+    end
     coeffs = try
         turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
     catch exc
