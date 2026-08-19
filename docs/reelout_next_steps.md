@@ -62,7 +62,8 @@ at the end.
    (item 5). With the gate fixed the lead is no longer inert but buys nothing:
    lead 2.5 vs lead 0 differ by less than the criteria margins, and the lead run
    FAILS the pattern-size criterion where lead 0 passes. **Keep `el_offset_lead`
-   at 0.** Nor was there circling: net course over phase 5 drifts -0.5 turns, but
+   at 0** — superseded on 2026-08-19 for the 8 s lead only, which does deliver
+   where 2.5 s cannot; see item 3 below. Nor was there circling: net course over phase 5 drifts -0.5 turns, but
    the kite crosses the pattern centre 3 times in those 25 s and flies a wider
    pattern than the old runs did — "turns" is a drift metric, not a loop detector.
    The earlier session's +1.39-turn runs were an 8 s lead under the BROKEN gate,
@@ -164,8 +165,17 @@ suggest, in the order I would take it:
    `traj_opt.el_bias.lap_profiles` band by band — a band whose error does not close
    while its correction climbs is chasing a tracking error no reference can
    fix — then `centre_to_lobe_deg` and the hold-backs in `shift_delivery`.
-3. **Re-measure the 8 s `el_offset_lead` runs.** Their +1.39 turns were recorded
-   under the broken in-air gate and mean nothing now.
+3. **Re-measure the 8 s `el_offset_lead` runs.** — DONE, and the +1.39 turns are
+   withdrawn: they do not reproduce. Two runs each on today's code
+   (2026-08-19_083042/_083528 against _080350/_080918), phase-5 net rotation -0.638
+   turns at lead 8 against -0.642 at lead 0, mean u_s -2.1 % in both, no phase-5
+   saturation in either. The lead is now ON (`el_offset_lead: 8.0`), because it is
+   what gets the 1.5 deg `el_offset_final` past the gate at all: at lead 0 the shift
+   is refused at margin 0.67 and every retry over the remaining 26 s is refused too,
+   so phase 5 flies without it; at lead 8 it blends in at 0.83 six seconds earlier,
+   while `c1_at(phase)` is still the pattern's and not `depower_final`'s 0.775x.
+   Phase-5 minimum elevation 10.31 -> 11.75 deg for -0.13 % power. See the
+   tuning-log entry "The 8 s `el_offset_lead` does not circle".
 4. **`min_span_frac` interacts with every lift.** A path flown higher is flown
    narrower, and `el_offset_lead = 2.5` already failed the criterion by
    hundredths. Whatever raises the pattern next should report the reach margin

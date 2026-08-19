@@ -624,6 +624,43 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The 8 s `el_offset_lead` does not circle — it is what DELIVERS the phase-5 lift (2026-08-19)
+
+The `+1.39 turns` that closed `el_offset_lead` are withdrawn. They were measured
+under the broken in-air shift gate, where the lift could only reach the kite
+through a mid-reel-out install, and they do not reproduce. Re-measured on today's
+code (`el_bias_bins: 5`, everything else as flown), two runs each:
+
+    el_offset_lead   phase-5 turns   mean u_s   phase-5 sat   phase-5 el_min   el_mean
+    0                -0.642          -2.1 %     0 %           10.31 deg        13.68
+    8                -0.638          -2.1 %     0 %           11.75 deg        15.09
+
+Net heading rotation over phase 5 is the SAME to within 0.005 turns, there is no
+one-sided steering bias (the old measurement's tell was +6.1 %), and phase 5 never
+touches the steering clamp in either. Runs 2026-08-19_083042 and _083528 (lead 8,
+bit-identical to each other) against _080350 and _080918 (lead 0).
+
+**What the lead actually buys is the lift itself.** With lead 0 the 1.5 deg
+`el_offset_final` is attempted at t = 123.6 s, scored at margin 0.67 against the
+0.74 required, and REFUSED — and every retry over the remaining 26 s is refused
+too, so phase 5 flies without it. With lead 8 the same 1.5 deg latches at
+t = 115.6 s with 19.7 m of reel-out left and blends in at t = 117.1 s at margin
+0.83. The difference is `c1_at(phase)`: from phase 5 on the in-air gate scores
+with `depower_final`'s `c1`, which is 0.775x the pattern's, and 0.85 x 0.775 = 0.66
+is the 0.67 that was refused. The lead's real function is to get the shift in
+while the kite still HAS the turn authority the gate demands — not to move the
+lift a few seconds earlier for its own sake.
+
+The price is nothing much: power 8642 -> 8631 W (-0.13 %), RMS d 1.25 -> 1.28 deg,
+all 8 criteria in both, `margin_final_flown` 0.87 either way. Whole-run minimum
+elevation only moves 10.3 -> 10.4 deg because it is set in phase 4; what the lift
+raises is phase 5, by 1.44 deg at its lowest point.
+
+`el_offset_lead: 8.0` is the flown value again. Note this is NOT the 2.5 s lead of
+the earlier session, which was measured (post-fix) to buy nothing and to fail the
+pattern-size criterion: 2.5 s is under one lap and lands the shift inside phase 5
+anyway, where the gate has already tightened.
+
 ## The elevation bias LEARNS a profile now, and smoothing it costs shape (2026-08-19)
 
 `el_bias` learnt one number per lap from a whole-lap mean, which is the mean of a

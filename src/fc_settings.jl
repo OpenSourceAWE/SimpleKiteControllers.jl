@@ -303,6 +303,13 @@ Add new findings there, not here.
     `v_reelout * el_offset_lead`. Once latched it stays, so a fluctuating reel-out
     speed near the threshold cannot chatter the reference. Costs a little reel-out
     power for those seconds, since the pattern rises while the tether still pays.
+
+    It also has to be long enough to land the shift BEFORE state 5. From there on
+    the in-air curvature gate scores with `depower_final`'s `c1`, 0.775x the
+    pattern's on the V3, and refuses the same lift it passes a few seconds earlier —
+    measured 2026-08-19, margin 0.83 at a lead of 8 s against 0.67 at a lead of 0,
+    where every retry over the remaining 26 s is refused too and state 5 flies
+    without the lift at all.
     """
     el_offset_lead = 0.0
     """
