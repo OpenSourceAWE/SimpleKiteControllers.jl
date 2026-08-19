@@ -624,6 +624,113 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The lobe lift cannot be keyed on ELEVATION — but its azimuth key needs NORMALIZING (2026-08-19)
+
+`el_offset_wing` raises the lobes over AZIMUTH. The obvious refinement — key it on
+ELEVATION instead, since the kite sags deepest at the bottom of the pattern and
+that is close to but not the same as the lobes — is implemented (`lobe_lift`,
+`el_offset_wing_mode`) and **measured to be unaffordable**. The same measurement
+found the azimuth version losing most of its delivery at a long tether, which is a
+one-line fix and is where the residual droop comes from.
+
+All of it is OFFLINE, on the two real optimizer paths and the archived log of
+2026-08-19_011951 (depower 0.274, `el_offset_wing 1.5 / 10 / 8`). No run has been
+flown with either mode yet.
+
+**Where the kite actually flies low.** Every flown sample past 300 m of tether,
+matched to the nearest point of the attractor trace and measured against the
+pattern's own elevation centre, deepest tenth:
+
+| | |
+|---|---|
+| how deep the kite gets | 5.6 deg below the pattern centre |
+| where, in azimuth | \|az\| 5.6 … 10.3 deg (median 8.0) |
+| the reference point it tracks | 0.73 … 0.96 of a half-span down (median 0.80) |
+| its sag there | -2.9 deg, against -1.0 deg over the whole window |
+
+So the low points DO sit in the bottom fifth of the pattern, which is what the
+elevation key was meant to exploit — and they sit at the lobes at the same time.
+
+**The paths.** `/init` + `/step` at 150 m (the run's own guess and conditions) and
+the 380 m reply the last run left on the server:
+
+| | 150 m | 380 m |
+|---|---|---|
+| azimuth amplitude A | 19.8 deg | **8.7 deg** |
+| elevation half-span | 6.15 deg | **2.39 deg** |
+| curvature margin, no lift | 0.95 | 1.02 |
+| tightest point | \|az\| 18.4, 0.27 half-spans ABOVE the centre | \|az\| 8.6, 0.37 half-spans BELOW it |
+
+**Scored with `check_pattern_feasible` at that length** (`c1` of depower 0.274),
+"bottom" being how far the path's lowest point rose:
+
+| profile | margin @150 m | bottom | margin @380 m | bottom |
+|---|---|---|---|---|
+| none | 0.95 | — | 1.02 | — |
+| azimuth 1.5 deg, 10/8 deg (flown today) | 0.94 | +1.50 | **0.83** | **+0.68** |
+| azimuth 1.5 deg, 0.50/0.40 of A | 0.94 | +1.50 | **1.01** | **+1.50** |
+| azimuth 1.5 deg, 0.60/0.45 of A | — | — | 1.02 | +1.50 |
+| elevation 1.5 deg, depth 0 | 0.50 | +1.50 | 0.05 | +1.50 |
+| elevation 1.0 deg, depth 0 | 0.67 | +1.00 | 0.20 | +1.00 |
+| elevation 0.2 deg, depth 0 | — | — | 0.79 | +0.20 |
+| elevation 0.4 deg, depth 0.4 | — | — | 0.45 | +0.40 |
+
+**Why elevation fails, in one line: the bottom of the pattern IS the lobe.** An
+azimuth-keyed lift is full across the whole lobe, so it TRANSLATES the tightest
+turn of the path vertically and changes no radius. An elevation-keyed one is on
+its ramp exactly where the path is tightest — the 380 m path's minimum radius sits
+0.37 half-spans below the centre — so it squashes the hairpin: 1.73 deg of radius
+at that point becomes 1.35 at 0.2 deg of lift and 0.09 at 1.5 deg, in the same
+place. Pushing the ramp below the tip (`depth` 0.4 … 0.7) does not escape it, and
+narrowing the ramp FOLDS the path, elevation ceasing to rise monotonically along
+it, once `1.5 * lift >= (1 - depth) * half_span` — at 380 m that bound is 1.6 deg
+at `depth = 0` and 0.8 deg at `depth = 0.5`. Nothing in the grid buys clearance
+more cheaply than the azimuth key: 0.2 deg of bottom rise for the same margin the
+azimuth version spends on 0.68.
+
+**The finding that IS worth a run.** `el_offset_wing_az = 10 deg` is a threshold
+fixed in degrees against a pattern that shrinks to +-8.7 deg — so at 380 m the
+lobes never reach the plateau, they sit ON the ramp. That costs both ways: only
+0.68 deg of the 1.5 arrives at the bottom, and the pattern is deformed rather
+than translated, which is where the 19 % of curvature margin goes (1.02 -> 0.83).
+Reading the same two thresholds as FRACTIONS of each path's own amplitude
+(`el_offset_wing_mode: "azimuth_frac"`, `0.5` and `0.4`, i.e. the flown 10/8 at
+150 m) delivers the whole 1.5 deg at 380 m for 0.01 of margin. That is the
+candidate for the residual droop, not the elevation key.
+
+`traj_opt.droop_profile` in the run summary is new for measuring this on a flown
+run: mean depth below the path's elevation centre in five bins of `|azimuth|/A`,
+each with the reference's own depth and the sag there, and
+`centre_to_lobe_deg` as the headline.
+
+**FLOWN, and the fractional key buys nothing** (2026-08-19_072132 against
+2026-08-19_072606, the only difference `azimuth` 10/8 deg vs `azimuth_frac`
+0.5/0.4):
+
+| | azimuth 10/8 | azimuth_frac 0.5/0.4 |
+|---|---|---|
+| laps / RMS d | 8.5 / 1.43 deg | 8.5 / 1.47 deg |
+| min elevation, whole run | 10.1 deg | 10.1 deg |
+| `centre_to_lobe_deg` | 0.70 deg | 0.81 deg |
+| mean reel-out power | 8625 W (1.00 x) | 8629 W (1.00 x) |
+| steering saturation / tape rate-limited | 7 % / 9 % | 7 % / 8 % |
+| phase-5 margin of the last install | 0.83 | 0.84 |
+| criteria | FAILED: azimuth reach +13.8 deg | the same |
+
+**The offline sweep above was run on a path this configuration never flies.** The
+380 m reply it used was left on the server by an earlier session and has an
+azimuth amplitude of 8.7 deg; the paths these runs install measure A = 18.3 deg at
+187 m, 13.9 at 298 m and 12.1 at 380 m. So `az_full = 10 deg` is 0.55 A at the
+start and 0.83 A at the end — inside the pattern the whole way, never walking out
+of it — and normalizing moves the delivered lift by ~0.2 deg over part of the
+lobe, which is what the two runs show. The fractional key is kept because it costs
+nothing and is the right form if a pattern ever does shrink past A ~ 10 deg, but
+`azimuth` 10/8 stays the flown setting.
+
+The lesson is the one this log already carries in another form: sweep on the path
+the run WILL fly. `opt_trajectory` serves whatever the server last solved, which
+is not that path unless the run just produced it.
+
 ## Caching failed optimizer requests: 88 s a run, on a run with no visible failures (2026-08-18)
 
 A solve that FAILS costs far more than one that works — 2870 evaluations and 81 s

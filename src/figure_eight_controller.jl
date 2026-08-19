@@ -302,6 +302,67 @@ function blend_paths(az0, el0, az1, el1, w)
 end
 
 """
+    lobe_lift(az, el; lift = 0.0, mode = "azimuth", az_full = 10.0, az_blend = 8.0,
+              depth = 0.0) -> Vector{Float64}
+
+Per-point elevation lift [deg] to be added to the closed path `(az, el)` [deg]:
+zero in the middle of the pattern and `lift` where the kite sags, so the pattern
+is raised where that buys clearance instead of rigidly.
+
+`mode` selects the coordinate the profile is keyed on:
+
+  * `"azimuth"` — zero inside `|az| = az_full - az_blend`, `lift` beyond
+    `az_full`, smoothstep between, both in DEGREES. Raises the whole lobe, its
+    top included, which is a vertical translation of the part of the path that
+    turns hardest and is why this profile is nearly free.
+  * `"azimuth_frac"` — the same, with `az_full` and `az_blend` read as fractions
+    of the path's OWN azimuth amplitude, so the profile keeps its place on a
+    pattern that shrinks by a third as the tether grows.
+  * `"elevation"` — keyed on the depth below the path's own elevation centre in
+    units of its half-span: zero at `depth` (`0` = the centre, `1` = the path's
+    lowest point), `lift` at the lowest point, smoothstep between. Raises the
+    bottom only.
+
+The elevation profile is a function of the coordinate it displaces, so it
+DEFORMS the pattern rather than translating it, and what it squashes is the
+lobe — the tightest turn of the path lies below the elevation centre, inside any
+ramp aimed at the bottom. It also FOLDS the path, elevation ceasing to increase
+monotonically along the ramp, once `1.5 * lift >= (1 - depth) * half_span`. Both
+are measured in `docs/fig8_tuning_log.md`; the curvature gate refuses the result
+at any lift worth having.
+"""
+function lobe_lift(az, el; lift = 0.0, mode = "azimuth", az_full = 10.0,
+                   az_blend = 8.0, depth = 0.0)
+    length(az) == length(el) ||
+        throw(ArgumentError("azimuth and elevation must have the same length, got \
+                             $(length(az)) and $(length(el))"))
+    out = zeros(Float64, length(az))
+    lift == 0 && return out
+    if mode == "azimuth" || mode == "azimuth_frac"
+        az_blend > 0 || throw(ArgumentError("az_blend must be positive, got $az_blend"))
+        lo, hi = extrema(az)
+        scale = mode == "azimuth_frac" ? 0.5 * (hi - lo) : 1.0
+        scale > 0 || return out
+        az_c = mode == "azimuth_frac" ? 0.5 * (hi + lo) : 0.0
+        out .= lift .* _smoothstep.((abs.(az .- az_c) ./ scale .-
+                                     (az_full - az_blend)) ./ az_blend)
+    elseif mode == "elevation"
+        depth < 1 || throw(ArgumentError("depth must be below 1, got $depth"))
+        lo, hi = extrema(el)
+        hi > lo || return out
+        el_c, half = 0.5 * (hi + lo), 0.5 * (hi - lo)
+        out .= lift .* _smoothstep.(((el_c .- el) ./ half .- depth) ./ (1 - depth))
+    else
+        throw(ArgumentError("unknown lobe-lift mode \"$mode\"; use \"azimuth\", \
+                             \"azimuth_frac\" or \"elevation\""))
+    end
+    return out
+end
+
+"Hermite smoothstep, clamped to `[0, 1]` outside the ramp."
+_smoothstep(x) = (u = clamp(x, 0.0, 1.0); u * u * (3 - 2u))
+
+"""
     set_path!(fec::FigureEightController, az, el; resample = 0,
               up_loops = fec.fes.up_loops)
 

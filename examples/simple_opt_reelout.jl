@@ -164,6 +164,10 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
+# Wall clock of the WHOLE script, package loading included, for
+# `performance.total_wall_time_s`; `tic`/`toc` below time the phases inside it.
+t_script_start = time()
+
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
@@ -359,6 +363,7 @@ let cached = tos.opt_failure_cache ? opt_failed_before(start_params) : nothing
                        get(cached, "when", "at an unknown time"), tos.name, l_set,
                        OPT_FAILURE_CACHE))
 end
+t_solve_start = time()
 opt_reply = opt_init(start_params; url = tos.base_url)
 # No automatic retry with a different guess, deliberately: a guess that merely
 # converges is not the same answer, and picking one silently would hide which
@@ -386,23 +391,49 @@ catch exc
 
           `bin/run_server log` carries the solver's own output.""")
 end
+# The startup solve, which holds the script rather than the loop; the blocking
+# re-optimizations hold the loop and land in `reopt_blocked_s`.
+opt_startup_solve_s = time() - t_solve_start
 toc("Received the optimized path in: ")
 
-# The LOBE lift: extra elevation where the sag is deepest, none in the centre.
-# A pure function of azimuth, so it is baked into every path this run installs —
-# the startup one here, each re-optimized reply below — and needs no delta
-# bookkeeping of its own: the azimuths of the path in the air never change
-# between installs, only its elevations do.
-smoothstep(x) = (u = clamp(x, 0.0, 1.0); u * u * (3 - 2u))
-wing_lift(az) = fcs.el_offset_wing == 0 ? 0.0 :
-    fcs.el_offset_wing *
-    smoothstep((abs(az) - (fcs.el_offset_wing_az - fcs.el_offset_wing_blend)) /
-               fcs.el_offset_wing_blend)
-fcs.el_offset_wing == 0 ||
+# The LOBE lift: extra elevation where the sag is deepest, none in the middle of
+# the pattern. Baked into every path this run installs — the startup one here,
+# each re-optimized reply below — and always evaluated on the reply AS IT
+# ARRIVED, before `el_bias` and `el_offset_final`, so it never compounds with a
+# correction and needs no delta bookkeeping of its own.
+wing_lift(az, el) = lobe_lift(az, el; lift = fcs.el_offset_wing,
+                              mode = fcs.el_offset_wing_mode,
+                              az_full = fcs.el_offset_wing_az,
+                              az_blend = fcs.el_offset_wing_blend,
+                              depth = fcs.el_offset_wing_depth)
+if fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth"
     @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.1f°, ramped over %.1f°, \
                     zero inside %.1f°.",
                    fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
                    fcs.el_offset_wing_az - fcs.el_offset_wing_blend)
+elseif fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth_frac"
+    # In fractions of each path's own amplitude, so the degrees below are the
+    # STARTUP pattern's; they shrink with it at every install, which is the point.
+    amp0 = 0.5 * (maximum(opt_result.trajectory.azimuth) -
+                  minimum(opt_result.trajectory.azimuth))
+    @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.2f of the pattern's own \
+                    amplitude, ramped over %.2f of it — %.1f° and %.1f° on the \
+                    startup path's ±%.1f°.",
+                   fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
+                   fcs.el_offset_wing_az * amp0, fcs.el_offset_wing_blend * amp0, amp0)
+elseif fcs.el_offset_wing != 0
+    # The fold bound of `lobe_lift`, read on the path that is about to be flown:
+    # the pattern shrinks with the tether, so the half-span here is the LOOSEST
+    # this run ever sees and a startup that clears it can still fold at 380 m.
+    half0 = 0.5 * (maximum(opt_result.trajectory.elevation) -
+                   minimum(opt_result.trajectory.elevation))
+    @info @sprintf("Lobe lift: %+.2f° at the bottom of the pattern, ramped in from \
+                    %.2f half-spans below its centre (%.2f° of the %.2f° half-span \
+                    at startup); folds above %.2f° of lift there.",
+                   fcs.el_offset_wing, fcs.el_offset_wing_depth,
+                   fcs.el_offset_wing_depth * half0, half0,
+                   (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
+end
 
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
@@ -419,7 +450,8 @@ n_opt = length(opt_result.trajectory.azimuth) - 1
 opt_paths_raw = [(collect(Float64.(opt_result.trajectory.azimuth)),
                   collect(Float64.(opt_result.trajectory.elevation)))]
 set_path!(fec, opt_result.trajectory.azimuth,
-          opt_result.trajectory.elevation .+ wing_lift.(opt_result.trajectory.azimuth);
+          opt_result.trajectory.elevation .+
+              wing_lift(opt_result.trajectory.azimuth, opt_result.trajectory.elevation);
           resample = min(tos.resample_points, n_opt))
 
 # The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
@@ -661,6 +693,17 @@ el_bias_sum = 0.0           # [deg] running sum of the error over the current la
 el_bias_n = 0               # samples in that sum
 el_bias_events = NamedTuple[]
 
+# Where in the pattern the kite ends up low — the profile a shaped lift is aimed
+# at, and the one thing a whole-lap mean like `el_bias` cannot see. Binned on
+# |azimuth| as a fraction of the path's OWN amplitude and measured against its own
+# elevation centre, so the bins pool over a run whose pattern shrinks by a third
+# in azimuth and a half in elevation as the tether grows.
+n_droop_bins = 5
+droop_n = zeros(Int, n_droop_bins)
+droop_flown = zeros(n_droop_bins)   # [deg] kite below the path's elevation centre
+droop_ref = zeros(n_droop_bins)     # [-] depth of the path at Q, in half-spans
+droop_sag = zeros(n_droop_bins)     # [deg] kite below the path at Q
+
 # ---- Re-optimization (stage 4). The path is anchored to ONE radius and the run
 # walks away from it; each re-optimization re-anchors it to the length being
 # flown. The request is queued (`wait = false`), `/status` is polled, and the
@@ -805,6 +848,22 @@ try
                 global el_bias_sum += rad2deg(Float64(s.sys_state.elevation)) -
                                       fec.el_path[fec.last_idx]
                 global el_bias_n += 1
+            end
+
+            az_lo, az_hi = extrema(fec.az_path)
+            el_lo, el_hi = extrema(fec.el_path)
+            az_amp, el_half = 0.5 * (az_hi - az_lo), 0.5 * (el_hi - el_lo)
+            if az_amp > 0 && el_half > 0
+                el_c = 0.5 * (el_hi + el_lo)
+                el_kite = rad2deg(Float64(s.sys_state.elevation))
+                b = clamp(1 + floor(Int, n_droop_bins *
+                                       abs(fec.az_path[fec.last_idx] -
+                                           0.5 * (az_hi + az_lo)) / az_amp),
+                          1, n_droop_bins)
+                droop_n[b] += 1
+                droop_flown[b] += el_c - el_kite
+                droop_ref[b] += (el_c - fec.el_path[fec.last_idx]) / el_half
+                droop_sag[b] += el_kite - fec.el_path[fec.last_idx]
             end
 
             # The shift reaches the kite at an install, or — when none is due, which
@@ -987,7 +1046,7 @@ try
                         # gates and compresses the azimuth axis by cos(elevation),
                         # which the curvature margin must be re-read for.
                         cand_raw = (copy(new_az), copy(new_el))
-                        new_el = new_el .+ el_target .+ wing_lift.(new_az)
+                        new_el = new_el .+ el_target .+ wing_lift(new_az, new_el)
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory
@@ -1579,6 +1638,9 @@ if !isnothing(feas_final)
              "the same, for the last path the re-optimizer installed — the one \
               phase 5 actually inherited [-]"))
 end
+droop_mean = [droop_n[b] > 0 ? droop_flown[b] / droop_n[b] : NaN
+              for b in 1:n_droop_bins]
+
 summary["traj_opt"] = OrderedDict{String, Any}(
     "power" => power_block,
     "guess" => OrderedDict(
@@ -1633,9 +1695,14 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
         "wing_deg" => (fcs.el_offset_wing,
             "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
+        "wing_mode" => (fcs.el_offset_wing_mode,
+            "el_offset_wing_mode, the coordinate that lift is shaped over"),
         "wing_az_deg" => (fcs.el_offset_wing_az,
-            "azimuth beyond which that lift is full; it ramps over \
+            "azimuth mode: azimuth beyond which that lift is full; it ramps over \
              el_offset_wing_blend below it [deg]"),
+        "wing_depth" => (fcs.el_offset_wing_depth,
+            "elevation mode: depth below the path's elevation centre where the lift \
+             starts, in half-spans; full at its lowest point [-]"),
         "lift_t_s" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
             "when the lift actually latched [s]"),
         "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :
@@ -1655,6 +1722,25 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                            the flown path %.2f°, correction became %+.2f°",
                           e.err_el, e.bias))
             for e in el_bias_events)),
+    "droop_profile" => OrderedDict(
+        vcat(
+            [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ n_droop_bins,
+                      100 * b ÷ n_droop_bins) =>
+                 (droop_n[b] == 0 ? "n/a" : round(droop_mean[b]; digits = 2),
+                  droop_n[b] == 0 ? "no samples in this azimuth band" :
+                  @sprintf("kite below the path's elevation centre [deg], over %d \
+                            samples; the path itself sits %.2f half-spans down there \
+                            and the kite %.2f° under it",
+                           droop_n[b], droop_ref[b] / droop_n[b],
+                           droop_sag[b] / droop_n[b]))
+             for b in 1:n_droop_bins],
+            ["centre_to_lobe_deg" =>
+                 (all(isnan, droop_mean) || isnan(first(droop_mean)) ? "n/a" :
+                  round(maximum(filter(!isnan, droop_mean)) - first(droop_mean);
+                        digits = 2),
+                  "how much deeper the kite flies in its worst azimuth band than in \
+                   the crossing — what a SHAPED lift is aimed at, where el_bias and \
+                   el_offset_final can only move the pattern rigidly [deg]")])),
     "clearance" => OrderedDict(
         "path_min_m" => (round(path_min_h_start; digits = 1),
             "lowest point of the PRE-FLIGHT path at the starting length [m]"),
@@ -1678,6 +1764,11 @@ if t_sim > 0
     # Rates exclude the frozen time, as in the summary; the raw wall time is still
     # shown, and the gap between the two is `reopt_blocked_s`.
     t_run = max(t_wall - reopt_blocked_s, eps())
+    # Everything the script spent waiting for the solver, wherever it fell: the
+    # startup solve holds the script before the loop exists, the blocking
+    # re-optimizations freeze the loop itself.
+    t_opt = opt_startup_solve_s + reopt_blocked_s
+    t_total = time() - t_script_start
     @printf("  Performance: %.1f s sim in %.1f s wall%s = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
             t_sim, t_wall,
@@ -1685,9 +1776,20 @@ if t_sim > 0
                                            reopt_blocked_s) : "",
             t_sim / t_run, 1000 * t_run / steps,
             steps, s.dt, fcs.vsm_interval)
+    @printf("               %.0f s from the first line of the script, %.0f s of it \
+             waiting for the optimizer (%.0f s at startup).\n",
+            t_total, t_opt, opt_startup_solve_s)
     summary["performance"] = OrderedDict(
         "sim_time_s" => (round(t_sim; digits = 1), "simulated time [s]"),
         "wall_time_s" => (round(t_wall; digits = 1), "wall-clock time [s]"),
+        "total_wall_time_s" => (round(t_total; digits = 1),
+            "the whole script: package loading, init, settling, the startup solve \
+             and the run, up to this summary — the archive copy and any plots \
+             follow it [s]"),
+        "optimization_time_s" => (round(t_opt; digits = 1),
+            "wall time waiting for the optimizer: the startup solve \
+             ($(round(opt_startup_solve_s; digits = 1)) s) plus every blocking \
+             re-optimization (traj_opt.reopt.blocked_s) [s]"),
         "realtime_factor" => (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
             "sim_time / wall_time, excluding time frozen for re-optimization"),
         "ms_per_step" => (round(1000 * (t_wall - reopt_blocked_s) / steps; digits = 1),

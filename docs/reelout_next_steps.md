@@ -117,10 +117,26 @@ at the end.
 Nothing on the list above is blocking any more. What the evening's measurements
 suggest, in the order I would take it:
 
-1. **Shape the lobe lift on ELEVATION, not azimuth.** The sag is deepest at the
-   BOTTOM of the pattern, which is close to but not the same as the lobes; the
-   azimuth bins in the tuning-log entry are the data to fit. A residual 0.53 deg
-   of droop is left after the azimuth version.
+1. **Shape the lobe lift on ELEVATION, not azimuth.** — ANSWERED, and the answer
+   is no: the bottom of the pattern IS the lobe, so an elevation-keyed lift ramps
+   through the tightest turn of the path and squashes it where the azimuth key
+   translates it. Built anyway (`lobe_lift`, `el_offset_wing_mode: "elevation"`,
+   `el_offset_wing_depth`, off by default) and swept OFFLINE on the real 150 m and
+   380 m optimizer paths: 1.5 deg of lift takes the 380 m curvature margin from
+   1.02 to 0.05, and even 0.2 deg costs as much margin as the whole azimuth
+   profile does. See the tuning-log entry "The lobe lift cannot be keyed on
+   ELEVATION".
+   The same sweep suggested normalizing the azimuth key by each path's own
+   amplitude (`el_offset_wing_mode: "azimuth_frac"`) would recover a lift that
+   walks out of a shrinking pattern. FLOWN and it does not: 2026-08-19_072132 vs
+   _072606 differ in nothing that matters (min elevation 10.1 deg both, power
+   8625 vs 8629 W, `centre_to_lobe_deg` 0.70 vs 0.81). The premise was wrong —
+   the sweep used a 380 m reply left on the server with A = 8.7 deg, while the
+   paths these runs install never go below A = 12.1 deg, so `az_full = 10 deg`
+   is inside the pattern throughout. `azimuth` 10/8 stays the flown setting; the
+   fractional mode is kept for the day a pattern does shrink that far.
+   `traj_opt.droop_profile` in the run summary is new, and is how the next
+   attempt should be scored.
 2. **Learn the profile instead of fixing it.** `el_bias` already learns a scalar
    per lap from a whole-lap mean; the same update per azimuth bin, with the bins
    coupled by a smoothness constraint so the reference cannot grow a corner (see

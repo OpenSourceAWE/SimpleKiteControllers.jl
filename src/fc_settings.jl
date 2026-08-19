@@ -269,8 +269,9 @@ Add new findings there, not here.
     `el_bias` and `el_offset_final` shift the whole pattern rigidly, but the sag
     is not uniform: measured at 380 m, the bottom of the pattern tracks ~2.3 deg
     under its reference where the top is ~0.4 deg under. This adds a lift that is
-    zero in the centre and `el_offset_wing` at `|azimuth| >= el_offset_wing_az`,
-    ramped in over `el_offset_wing_blend` degrees below that.
+    zero in the middle of the pattern and `el_offset_wing` where it sags, shaped
+    by `el_offset_wing_mode` — over azimuth (`el_offset_wing_az` /
+    `el_offset_wing_blend`) or over elevation (`el_offset_wing_depth`).
 
     The ramp width is not cosmetic, and it is not monotone — see
     `el_offset_wing_blend`. Both a narrow ramp and a very wide one are refused by
@@ -315,6 +316,46 @@ Add new findings there, not here.
     `el_offset_wing_az - el_offset_wing_blend` in 0 … 3 deg when tuning either.
     """
     el_offset_wing_blend = 8.0
+    """
+    Which coordinate `el_offset_wing` is shaped over, and in what units
+    `el_offset_wing_az`/`el_offset_wing_blend` are then read:
+
+      * `"azimuth"` — over `|azimuth|` in degrees. Raises the whole lobe, top and
+        bottom alike, i.e. translates the part of the path that turns hardest,
+        which is why it costs no curvature margin.
+      * `"azimuth_frac"` — the same, with both read as FRACTIONS of the path's own
+        azimuth amplitude, so the profile keeps its place on a pattern that shrinks
+        as the tether grows. Only worth having once a pattern shrinks past the
+        threshold fixed in degrees; on the reel-out flown so far it does not, and
+        the two are indistinguishable (tuning log, 2026-08-19).
+      * `"elevation"` — over the depth below the path's own elevation centre, in
+        half-spans (`el_offset_wing_depth`). Raises the BOTTOM only, which is
+        where the sag is deepest — but it DEFORMS the pattern where the other two
+        translate it, and what it squashes is the lobe. Measured and refused by
+        the curvature gate at every useful lift; see the tuning log before
+        spending a run on it.
+
+    See [`lobe_lift`](@ref).
+    """
+    el_offset_wing_mode::String = "azimuth"
+    """
+    Depth at which the ELEVATION-shaped lift starts, in half-spans of the path's
+    own elevation range: `0` = its centre, `1` = its lowest point, where the lift
+    is always full. Ignored unless `el_offset_wing_mode` is `"elevation"`.
+
+    Normalized rather than in degrees because the pattern shrinks as the tether
+    grows — measured over one 150 -> 380 m run, an elevation half-span of 6.6 deg
+    at 163 m against 3.2 deg at 380 m — so a fixed number of degrees below the
+    centre covers a quarter of the pattern early in the run and three quarters of
+    it at the end, which is the wrong way round.
+
+    Raising it narrows the ramp, and the profile FOLDS the path at
+    `1.5 * el_offset_wing >= (1 - el_offset_wing_depth) * half_span`: at 1.5 deg
+    of lift and the 3.2 deg half-span above, that is `0.3`. The feasibility gate
+    refuses what folds, but it refuses it at startup or at an install, which is a
+    run lost — check the arithmetic before sweeping upwards.
+    """
+    el_offset_wing_depth = 0.0
 
     # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED --------- #
     """
