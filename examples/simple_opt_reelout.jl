@@ -264,8 +264,20 @@ isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
 
 project_set = Settings(project)
+default_v_wind = project_set.v_wind
 apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
+
+# Reel-out speed scales with the wind (more force -> faster reel-out), so a
+# slower override needs proportionally more time to cover the same tether
+# length and a faster one needs less: effective sim_time (the selected value,
+# or the project's own default) scales by default_v_wind / WIND_SPEED.
+# Without an override sim_time is unaffected.
+EFFECTIVE_SIM_TIME = isnothing(WIND_SPEED) ? SIM_TIME :
+                     something(SIM_TIME, project_set.sim_time) * default_v_wind / WIND_SPEED
+isnothing(WIND_SPEED) ||
+    @info "simple_opt_reelout.jl: wind-speed override active, sim_time scaled to \
+           $(round(EFFECTIVE_SIM_TIME; digits = 1)) s."
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 # OUTPUT_PATH redirects them, so that parallel runs of this script (the sweep)
@@ -305,7 +317,8 @@ rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
-# back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
+# back to the project's own value when SIM_TIME is `nothing` (the `default` choice),
+# and is rescaled by EFFECTIVE_SIM_TIME when a wind-speed override is active (above).
 # The wind speed comes from the same file unless WIND_SPEED overrides it above: it is
 # a plant condition, and project_set.v_wind keeps the mean wind, the turbulent field
 # and the optimizer's inflow_from_settings query (below) at the same speed.
@@ -315,7 +328,7 @@ s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
-    sim_time = SIM_TIME, warmup_time = fcs.warmup_time,
+    sim_time = EFFECTIVE_SIM_TIME, warmup_time = fcs.warmup_time,
     # The warm-up relaxes at constant length, against the same loop the run uses.
     warmup_torque = (m, l) -> winch_torque!(wpc, m, l))
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
