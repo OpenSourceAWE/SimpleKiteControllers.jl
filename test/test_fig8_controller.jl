@@ -317,6 +317,70 @@ end
         @test isnan(bare.az_fill_pos)
     end
 
+    @testset "metrics_shrinking_pattern" begin
+        # A run whose REFERENCE shrinks under it — what re-optimization does to a
+        # reel-out: the pattern the optimizer returns is a third narrower and half
+        # as tall by the end. The kite tracks it perfectly the whole way, so the
+        # size criteria must pass; scored against the pattern of lap 1 they do not.
+        A0, B0, el_c, T = 40.0, 15.0, 26.0, 10.0
+        dt = 0.05
+        tt = collect(0.0:dt:60.0)
+        n = length(tt)
+        shrink = [1.0 - 0.7 * t / last(tt) for t in tt]          # 1.0 -> 0.3
+        amp = A0 .* shrink
+        hgt = B0 .* shrink
+        # The commanded pattern also DESCENDS, which is what inflates a span
+        # measured over the whole window rather than per lap.
+        el_centre = [el_c - 10.0 * t / last(tt) for t in tt]
+        az = [deg2rad(amp[i] * sin(2pi * tt[i] / T)) for i in eachindex(tt)]
+        el = [deg2rad(el_centre[i] + 0.5 * hgt[i] * sin(2 * 2pi * tt[i] / T))
+              for i in eachindex(tt)]
+        sl = (; time = tt, azimuth = Float32.(az), elevation = Float32.(el),
+              heading = zeros(Float32, n), var_01 = zeros(Float32, n),
+              set_steering = zeros(Float32, n), steering = zeros(Float32, n),
+              winch_force = [Float32[100, 0, 0, 0] for _ in 1:n])
+
+        pinned = print_fig8_metrics(sl; settle_time = 0.0, az_center = 0.0,
+                                    az_amplitude = A0, el_height = B0,
+                                    min_span_frac = 0.7)
+        commanded = print_fig8_metrics(sl; settle_time = 0.0,
+                                       az_center = zeros(n), az_amplitude = amp,
+                                       el_height = hgt, min_span_frac = 0.7)
+
+        # Against what was commanded: the kite flew every pattern it was given, and
+        # all three size criteria say so.
+        @test isempty(commanded.criteria_failed)
+        @test commanded.az_fill_pos ≈ 1.0 rtol = 0.05
+        @test commanded.az_fill_neg ≈ 1.0 rtol = 0.05
+        @test 0.85 <= commanded.el_fill <= 1.05
+        # The per-lap span is the pattern's own height; the window span is mostly
+        # the descent, which is why pinning it reads as MORE than was commanded.
+        @test commanded.el_span_lap < 0.6 * commanded.el_span
+        # Pinned to the startup B, the same spans are divided by a pattern height
+        # the run left behind, so a kite that flew all of every pattern it was
+        # given scores well under what it managed.
+        @test pinned.el_fill < commanded.el_fill - 0.1
+        # The lap BAND is a fraction of the commanded amplitude too, so one fixed
+        # to the startup pattern stops seeing the crossings of a pattern a third
+        # the size — it does not merely mis-score the late laps, it misses them,
+        # and the reach it reports is then an average over the early ones only.
+        @test commanded.laps == 5.5      # 6 periods in 60 s, minus the first arrival
+        @test pinned.laps < commanded.laps
+        @test commanded.rms_d == pinned.rms_d
+
+        # A constant geometry passed per sample is the scalar case exactly.
+        flat = print_fig8_metrics(sl; settle_time = 0.0, az_center = zeros(n),
+                                  az_amplitude = fill(A0, n), el_height = fill(B0, n),
+                                  min_span_frac = 0.7)
+        @test flat.az_fill_pos ≈ pinned.az_fill_pos rtol = 1e-9
+        @test flat.az_fill_neg ≈ pinned.az_fill_neg rtol = 1e-9
+        @test flat.laps == pinned.laps
+        @test sort(flat.criteria_failed) == sort(pinned.criteria_failed)
+        # A geometry of the wrong length is an error, not a silent mis-scoring.
+        @test_throws ArgumentError fig8_metrics(sl; settle_time = 0.0,
+                                                az_amplitude = amp[1:end-1])
+    end
+
     @testset "turn_rate_coeffs" begin
         # Body damping changes the steering response by 5.6x: keyed on it, never guessed.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31038589289512725

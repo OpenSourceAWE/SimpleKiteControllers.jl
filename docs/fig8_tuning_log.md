@@ -624,7 +624,52 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## Scored against the pattern it was COMMANDED, the size budget changes sign (2026-08-19)
+
+The entry below measured the size budget against `az_amplitude`/`el_height` of the
+STARTUP path, which is what `fig8_metrics` had always been given. That is the
+widest and tallest pattern a reel-out ever flies — every re-optimization returns a
+smaller one, a third narrower and half as tall by 380 m — so the late laps were
+scored against a reach nothing ever asked them to fly. Fixed: `az_center`,
+`az_amplitude` and `el_height` now each take either one number or **one per log
+sample**, and `examples/simple_opt_reelout.jl` records the geometry it installs and
+passes it through. The same flight, rescored (2026-08-19_092659 against _084439,
+identical in every flight number — RMS d 1.28 deg, 8 laps, 8631 W):
+
+    criterion          pinned to the startup path      against what was commanded
+    azimuth reach +    14.14 vs 13.77   +0.36  (+3 %)  15.16 vs 11.13   +4.03  (+36 %)
+    azimuth reach -    15.81 vs 13.77   +2.04  (+15 %) 15.52 vs 11.13   +4.39  (+39 %)
+    elevation span     18.53 vs  8.79   +9.75  (+111 %) 8.02 vs  6.51   +1.52  (+23 %)
+
+**Both halves of the old reading were wrong.** The azimuth reach was not nearly
+exhausted — the kite flies 95-98 % of the width it is given, where the pinned
+score said 71-80 % and failed the run of 2026-08-19_072132 outright. And the
+elevation span was not comfortable at +111 %: that number was the pattern's own
+DESCENT over the run, since a span taken over the whole settled window has its top
+from the first lap and its bottom from the last. Per lap the kite flies 8.0 deg of
+a 9.3 deg pattern, and the elevation span is the criterion with the least room.
+`traj_opt.el_bias` and `lift_budget` were both flattered by this; what a lift
+actually has to spend is 1.5 deg of elevation span, not 0.36 deg of azimuth reach.
+
+**`el_fill` is now measured per lobe-to-lobe excursion, always**, scalar geometry
+included, and `el_span_lap` is reported next to `el_span`: the two together say
+whether the pattern moved. On a fixed pattern flown perfectly they agree exactly.
+
+**The lap COUNT was affected too, and that is the part to watch.** The excursion
+band a crossing must clear is `lap_frac` of the commanded amplitude, so a band
+pinned to the startup pattern eventually exceeds the pattern being flown and stops
+seeing crossings altogether: on a synthetic run shrinking 1.0 -> 0.3 it counts 4.0
+laps where 5.5 were flown. The real reel-out does not shrink far enough to lose
+one (8.0 laps either way), but a longer or windier run would, and a lost lap is a
+lost re-optimization and a lost learning update.
+
 ## The size budget is ONE criterion, and it has 0.3 deg left (2026-08-19)
+
+**Superseded the same day** — every number in this entry is scored against the
+STARTUP pattern, and the entry above shows what changes when they are scored
+against the pattern actually commanded. The conclusion it draws (azimuth reach is
+the binding criterion) is wrong; the block it describes is still what reports the
+trade.
 
 `min_span_frac` interacts with every lift, so the run now reports both halves of
 that trade: `traj_opt.lift_budget` carries the correction the path in the air
@@ -659,13 +704,16 @@ that criterion flipped from FAILED to passed and is a stronger reason to keep it
 than anything in its own entry. And the 8 s lead costs 0.1 deg of elevation span
 out of 9.7 — nothing, on the axis with room.
 
-**The threshold moves under the run.** `az_amplitude` is captured from the STARTUP
-optimizer path and the flown pattern shrinks by a third in azimuth as the tether
-grows, so the requirement is fixed to a pattern the run has outgrown by the end
-while the reach is averaged over the whole settled window. A run that fails this
-criterion by hundredths is therefore not necessarily flying a pattern that is too
-small — it may be flying a pattern the optimizer made smaller. That is the next
-thing to fix if 0.36 deg turns out to gate a lift worth having.
+**The threshold does not move — the pattern does.** `az_amplitude` is captured from
+the STARTUP optimizer path and never updated, while every re-optimization returns a
+pattern narrower in azimuth: a third narrower by 380 m. The requirement therefore
+stays pinned to the WIDEST pattern the run ever flies, and the late laps are scored
+against a reach they were never commanded to fly; the flown number they are
+compared with is a mean over the whole settled window, early wide laps included. A
+run that fails this criterion by hundredths is therefore not necessarily
+under-flying its reference — it may be flying, accurately, a reference the
+optimizer made smaller. That is the next thing to fix if 0.36 deg turns out to gate
+a lift worth having.
 
 ## The 8 s `el_offset_lead` does not circle — it is what DELIVERS the phase-5 lift (2026-08-19)
 

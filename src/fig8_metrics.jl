@@ -32,13 +32,29 @@ The elevation floor is reported both over the settled window and over the
 because a floor breach during the entry transient still counts as a breach.
 
 `az_amplitude`/`el_height` are the REFERENCE path's own `A` and `B` [deg]
-(azimuth spans `±A`, elevation spans `B` peak to peak). Pass them and the metrics
-also report **how much of the commanded pattern was actually flown**:
-`az_reach_pos`/`az_reach_neg` (mean per-lobe azimuth extreme, one value per
-completed excursion to that side) and the fill fractions
-`az_fill_pos`/`az_fill_neg`/`el_fill`. Without them the flown extent is still
-reported, the fractions are `NaN`, and the lap band falls back to its
-self-normalized form. Only the reach distinguishes "tracking the pattern" from
+(azimuth spans `±A`, elevation spans `B` peak to peak), and `az_center` its
+centre [rad]. Pass them and the metrics also report **how much of the commanded
+pattern was actually flown**: `az_reach_pos`/`az_reach_neg` (mean per-lobe
+azimuth extreme, one value per completed excursion to that side) and the fill
+fractions `az_fill_pos`/`az_fill_neg`/`el_fill`. Without them the flown extent is
+still reported, the fractions are `NaN`, and the lap band falls back to its
+self-normalized form.
+
+Each of the three may be a single number or **one number per log sample**, for a
+run whose reference changes under it — a re-optimized reel-out shrinks its own
+pattern by a third in azimuth, so one fixed `A` scores the last laps against a
+reach nothing ever asked them to fly. Per-sample geometry is used where each
+quantity is measured: every lobe extreme against the `A` commanded at the sample
+it was reached, every excursion's elevation span against the mean `B` commanded
+across it, and the lap-detection band against the `A` in force at each sample. A
+constant geometry passed per sample is the scalar case exactly.
+
+`el_fill` is measured on the span of each excursion (`el_span_lap`), not on
+`el_span`, which is the span over the whole settled window: the window takes its
+top from one lap and its bottom from another, so a pattern that descends as the
+tether grows reads as TALLER than anything that was commanded, and a kite that
+misses the top of one lobe is covered by the other. `el_span` is still reported,
+since the two together say whether the pattern moved. Only the reach distinguishes "tracking the pattern" from
 "tracking a piece of it" — cross-track error is measured to the closest point of
 the path and is blind to the size of the eight.
 
@@ -99,50 +115,98 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
     turnrate_hf = hf_std(psi_dot_settled)
 
     az = Float64.(sl.azimuth[settled])
+    # The reference geometry may be one number or one number per LOG SAMPLE: with
+    # re-optimization the commanded pattern shrinks by a third over a run, and a
+    # fill fraction against the pattern of lap 1 scores the last laps against a
+    # reach they were never asked to fly.
+    ref(x, name) = x === nothing ? nothing :
+        x isa AbstractVector ?
+            (length(x) == length(t_all) ? Float64.(x[settled]) :
+             throw(ArgumentError("$name has $(length(x)) entries but the log has \
+                                  $(length(t_all)) samples; pass one per sample \
+                                  or a single number"))) :
+            fill(Float64(x), length(settled))
+    az_c_s = ref(az_center, "az_center")
+    amp_s = ref(az_amplitude, "az_amplitude")
+    hgt_s = ref(el_height, "el_height")
     # The PATTERN's centre when known; the flown mean scores laps a circling kite never flew.
-    az_c = az_center === nothing ? mean(az) : az_center
-    half_range = maximum(abs.(az .- az_c))
-    # Excursion band a crossing must clear; the absolute floor is what stops phantom laps.
-    band = max(lap_frac * (az_amplitude === nothing ? half_range :
-                           deg2rad(az_amplitude)),
-               min_excursion)
+    az_c_s === nothing && (az_c_s = fill(mean(az), length(az)))
+    half_range = maximum(abs.(az .- az_c_s))
     crossings = 0
     side = 0
-    reach_pos = Float64[]
-    reach_neg = Float64[]
+    reach_pos = Tuple{Float64, Int}[]   # (extreme [rad], sample it was reached at)
+    reach_neg = Tuple{Float64, Int}[]
     peak = 0.0                     # signed extreme of the current excursion
-    for a in az
-        off = a - az_c
+    peak_i = 1
+    for (i, a) in enumerate(az)
+        off = a - az_c_s[i]
+        # Excursion band a crossing must clear; the absolute floor is what stops
+        # phantom laps, and it follows the pattern the kite is being given.
+        band = max(lap_frac * (amp_s === nothing ? half_range : deg2rad(amp_s[i])),
+                   min_excursion)
         if off > band && side <= 0
-            side < 0 && push!(reach_neg, -peak)
+            side < 0 && push!(reach_neg, (-peak, peak_i))
             side = 1
             crossings += 1
-            peak = off
+            peak, peak_i = off, i
         elseif off < -band && side >= 0
-            side > 0 && push!(reach_pos, peak)
+            side > 0 && push!(reach_pos, (peak, peak_i))
             side = -1
             crossings += 1
-            peak = off
+            peak, peak_i = off, i
         elseif side > 0
-            peak = max(peak, off)
+            off > peak && ((peak, peak_i) = (off, i))
         elseif side < 0
-            peak = min(peak, off)
+            off < peak && ((peak, peak_i) = (off, i))
         end
     end
     laps = max(0, crossings - 1) / 2   # the first arrival is not yet a crossing
 
     # Mean per-lobe extreme [deg]; `*_worst` is the weakest lobe flown.
-    az_reach_pos = isempty(reach_pos) ? rad2deg(max(maximum(az) - az_c, 0.0)) :
-                   rad2deg(mean(reach_pos))
-    az_reach_neg = isempty(reach_neg) ? rad2deg(max(az_c - minimum(az), 0.0)) :
-                   rad2deg(mean(reach_neg))
-    az_reach_pos_worst = isempty(reach_pos) ? az_reach_pos : rad2deg(minimum(reach_pos))
-    az_reach_neg_worst = isempty(reach_neg) ? az_reach_neg : rad2deg(minimum(reach_neg))
+    az_reach_pos = isempty(reach_pos) ? rad2deg(max(maximum(az .- az_c_s), 0.0)) :
+                   rad2deg(mean(first, reach_pos))
+    az_reach_neg = isempty(reach_neg) ? rad2deg(max(maximum(az_c_s .- az), 0.0)) :
+                   rad2deg(mean(first, reach_neg))
+    az_reach_pos_worst = isempty(reach_pos) ? az_reach_pos :
+                         rad2deg(minimum(first, reach_pos))
+    az_reach_neg_worst = isempty(reach_neg) ? az_reach_neg :
+                         rad2deg(minimum(first, reach_neg))
     el = Float64.(sl.elevation[settled])
     el_span = rad2deg(maximum(el) - minimum(el))
-    az_fill_pos = az_amplitude === nothing ? NaN : az_reach_pos / az_amplitude
-    az_fill_neg = az_amplitude === nothing ? NaN : az_reach_neg / az_amplitude
-    el_fill = el_height === nothing ? NaN : el_span / el_height
+    # Each lobe against the pattern commanded WHERE IT WAS FLOWN. Constant
+    # geometry gives exactly `reach / amplitude` back, since the mean of a ratio
+    # with a fixed denominator is the ratio of the mean.
+    fill_frac(reach, fallback) = amp_s === nothing ? NaN :
+        isempty(reach) ? fallback / mean(amp_s) :
+        mean(rad2deg(p) / amp_s[i] for (p, i) in reach)
+    az_fill_pos = fill_frac(reach_pos, az_reach_pos)
+    az_fill_neg = fill_frac(reach_neg, az_reach_neg)
+    # The elevation span is a WINDOW quantity, so a shrinking pattern inflates it:
+    # the top comes from the first lap and the bottom from the last. Measured per
+    # excursion instead whenever the geometry is given per sample.
+    el_spans = Tuple{Float64, Float64}[]   # (span [deg], B commanded across it)
+    # Lobe extreme to lobe extreme, which is one full up-and-down of the reference;
+    # the partial stretches before the first and after the last are left out, since
+    # a fraction of a lap spans a fraction of the pattern and would read as a kite
+    # flying a smaller one.
+    let bounds = sort!(vcat([i for (_, i) in reach_pos], [i for (_, i) in reach_neg]))
+        for k in 1:(length(bounds) - 1)
+            rng = bounds[k]:bounds[k + 1]
+            # The mean over the segment, not its first sample: the reference
+            # shrinks THROUGH the segment, and the span is a property of all of it.
+            length(rng) > 1 &&
+                push!(el_spans, (rad2deg(maximum(el[rng]) - minimum(el[rng])),
+                                 hgt_s === nothing ? NaN : mean(@view hgt_s[rng])))
+        end
+    end
+    el_span_lap = isempty(el_spans) ? el_span : mean(first, el_spans)
+    # Per excursion, always: a window-wide span takes its top from one lap and its
+    # bottom from another, so a pattern that DESCENDS reads as taller than the one
+    # commanded (129 % of B on a synthetic run that flew every pattern it was
+    # given), and a kite that misses the top of one lobe is covered by the other.
+    el_fill = hgt_s === nothing ? NaN :
+        isempty(el_spans) ? el_span / mean(hgt_s) :
+        mean(sp / b for (sp, b) in el_spans)
 
     # Proxy for the clamp, which is not logged: within 2% of the largest command.
     us = abs.(Float64.(sl.set_steering[settled]))
@@ -168,6 +232,7 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
         az_fill_pos,
         az_fill_neg,
         el_span,
+        el_span_lap,
         el_fill,
         az_amplitude,
         el_height,
@@ -401,6 +466,9 @@ sits in half the wind window — both are close to the path at every instant. Th
 extra criteria require the mean per-lobe azimuth reach on BOTH sides, and the
 elevation span, to be at least `min_span_frac` of what was commanded. They are
 skipped (and the pass count drops accordingly) when the geometry is not given.
+They are scored on the fill fractions, so a geometry passed per log sample (see
+[`fig8_metrics`](@ref)) is checked lap by lap against the pattern in force at the
+time; the degrees in the printed criterion names are then the mean of it.
 
 Pass `require_final = true` (default `false`) to also check that `sys_state`
 reaches `5` (phase "final") somewhere in the log — `examples/simple_reelout.jl`
@@ -435,11 +503,13 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                 m.az_reach_neg, m.az_reach_pos,
                 m.az_reach_neg_worst, m.az_reach_pos_worst, m.el_span)
     else
-        @printf("  extent: azimuth -%.1f°..+%.1f° (%.0f%%/%.0f%% of ±A, worst lobe -%.1f°/+%.1f°), elevation span %.1f° (%.0f%% of B)\n",
+        # The per-lap span, which is what the fill fraction beside it is measured on.
+        el_shown, el_note = (m.el_span_lap, " per lap")
+        @printf("  extent: azimuth -%.1f°..+%.1f° (%.0f%%/%.0f%% of ±A, worst lobe -%.1f°/+%.1f°), elevation span %.1f°%s (%.0f%% of B)\n",
                 m.az_reach_neg, m.az_reach_pos,
                 100 * m.az_fill_neg, 100 * m.az_fill_pos,
                 m.az_reach_neg_worst, m.az_reach_pos_worst,
-                m.el_span, 100 * m.el_fill)
+                el_shown, el_note, 100 * m.el_fill)
     end
     @printf("  tether force: mean=%.0fN std=%.0fN (CV=%.1f%%)\n",
             m.mean_force, m.std_force, 100 * m.cv_force)
@@ -458,17 +528,21 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                                            m.min_elevation_all > min_elevation),
     ]
     # Both sides separately: one "span" check passes on a kite that never crosses over.
+    # Scored on the FILL fractions, which is the same test as comparing degrees
+    # against `min_span_frac * A` for a fixed pattern and the only one that means
+    # anything for a pattern that changes size under the run. The thresholds
+    # printed are then the mean commanded geometry, for reading only.
+    mean_ref(x) = x isa AbstractVector ? mean(Float64.(x)) : Float64(x)
     if az_amplitude !== nothing
+        thr = round(min_span_frac * mean_ref(az_amplitude), digits = 1)
         push!(checks,
-              ("azimuth reach +$(round(min_span_frac * az_amplitude, digits=1))°",
-               m.az_reach_pos >= min_span_frac * az_amplitude),
-              ("azimuth reach -$(round(min_span_frac * az_amplitude, digits=1))°",
-               m.az_reach_neg >= min_span_frac * az_amplitude))
+              ("azimuth reach +$(thr)°", m.az_fill_pos >= min_span_frac),
+              ("azimuth reach -$(thr)°", m.az_fill_neg >= min_span_frac))
     end
     if el_height !== nothing
         push!(checks,
-              ("elevation span > $(round(min_span_frac * el_height, digits=1))°",
-               m.el_span >= min_span_frac * el_height))
+              ("elevation span > $(round(min_span_frac * mean_ref(el_height), digits=1))°",
+               m.el_fill >= min_span_frac))
     end
     if require_final
         push!(checks, ("phase 5 (final) reached", any(==(5), Int.(sl.sys_state))))

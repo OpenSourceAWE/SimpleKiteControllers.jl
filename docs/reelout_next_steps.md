@@ -129,10 +129,10 @@ below are answered too. What is left, in the order I would take it:
   integrates against a tracking error no reference can fix, and it cost two
   installs. Cap a band's departure from the profile's mean, give the bands a lower
   gain than the mean, or put `el_bias_smooth` back to 0.5.
-- **Score the size criteria against the pattern actually commanded** (from item 4).
-  The requirement is pinned to the startup path while the flown pattern shrinks a
-  third, and the positive azimuth reach — the one criterion with no room — is the
-  one that suffers for it.
+- **The elevation SPAN is the tight criterion now** (from item 4). +1.5 deg (+23 %)
+  where the azimuth reach has +36 %, so the next lift has to report what it does to
+  the per-lap span. Raising the pattern narrows it; whether it also flattens it is
+  not measured.
 - **Independent repeats.** Every run in this session was deterministic: the same
   request sequence gets the same paths back, so pairs of runs agree bit for bit.
   That is not the scatter the trap below describes, and it means nothing here has
@@ -206,12 +206,17 @@ The four items as answered:
    POSITIVE side, +0.36 deg (+3 %) — where the negative side has +2.04 and the
    elevation span +9.75 (+111 %). The elevation learner bought ~0.4 deg of that
    margin rather than spending it (it is why the criterion flipped from FAILED to
-   passed), and the 8 s lead cost 0.1 deg of span out of 9.7. Caveat in the
-   tuning-log entry "The size budget is ONE criterion": the requirement is pinned to
-   the STARTUP path's amplitude while the flown pattern shrinks a third over the
-   run, so a failure by hundredths may be the optimizer's pattern shrinking rather
-   than the kite under-flying it — fix that first if 0.36 deg ever gates a lift
-   worth having.
+   passed). Those numbers were scored against the STARTUP pattern, which is the
+   widest and tallest the run ever flies, and rescoring against the pattern actually
+   COMMANDED — `fig8_metrics` now takes the geometry per log sample, and the run
+   records what it installs — changes the answer on both axes (tuning log, "Scored
+   against the pattern it was COMMANDED"): the azimuth reach has +36/+39 % rather
+   than +3, because the kite flies 95-98 % of the width it is given, and the binding
+   criterion is the ELEVATION span with +1.5 deg (+23 %). The old +111 % on that
+   axis was the pattern's descent over the run, not its height. `el_fill` is now
+   measured per lobe-to-lobe excursion (`el_span_lap` beside `el_span`), and the lap
+   band follows the commanded amplitude too — the real run counts the same 8 laps
+   either way, but a pattern shrinking further would have lost crossings.
 
 ## Two traps that cost time in this session
    

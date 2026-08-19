@@ -719,6 +719,16 @@ el_bias_sum = zeros(n_el_bins)  # [deg] running sum of the sag over the current 
 el_bias_prof = zeros(n_el_bins)  # [deg] sum of the correction the path carried there
 el_bias_n = zeros(Int, n_el_bins)  # samples in both sums
 el_bias_events = NamedTuple[]
+
+# The pattern the kite is being ASKED to fly, sampled per step. Every
+# re-optimization returns a smaller one — a third narrower in azimuth and half as
+# tall by 380 m — so the size criteria have to be scored lap by lap against what
+# was commanded there, not against the startup path (`fig8_metrics`, below).
+geom_t = Float64[]
+geom_az_c = Float64[]
+geom_az_amp = Float64[]
+geom_el_h = Float64[]
+
 "The elevation correction as one number per azimuth band, crossing first [deg]."
 prof_str(p) = length(p) == 1 ? @sprintf("%+.2f°", p[1]) :
               string("[", join((@sprintf("%+.2f", v) for v in p), " "),
@@ -1375,6 +1385,12 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        az_lo_g, az_hi_g = extrema(fec.az_path)
+        el_lo_g, el_hi_g = extrema(fec.el_path)
+        push!(geom_t, t)
+        push!(geom_az_c, 0.5 * (az_hi_g + az_lo_g))
+        push!(geom_az_amp, 0.5 * (az_hi_g - az_lo_g))
+        push!(geom_el_h, el_hi_g - el_lo_g)
         s.sys_state.fig_8 = Int16(fig8_n)      # live lap count
         s.sys_state.var_10 = l_set             # tether length setpoint [m]
         s.sys_state.var_11 = v_set             # REEL_OUT speed setpoint [m/s]
@@ -1435,9 +1451,38 @@ sl = syslog.syslog
 # (which never goes past 4) — checks reel-out actually finished within the run.
 # From the flown path, not from fcs.f8_*. `az_center` is in RADIANS here (it is
 # compared against the logged azimuth), the two extents in degrees.
+"""
+    on_log(t_log, t_src, v_src) -> Vector{Float64}
+
+Per-log-sample view of a per-step series, taking the last value recorded at or
+before each log timestamp. Both time vectors must be ascending. Used to hand
+`fig8_metrics` the geometry that was COMMANDED at each sample rather than one
+number for the run, without depending on the logger writing exactly one row per
+step.
+"""
+function on_log(t_log, t_src, v_src)
+    out = zeros(Float64, length(t_log))
+    j = 1
+    for (k, t) in enumerate(t_log)
+        while j < length(t_src) && t_src[j + 1] <= t
+            j += 1
+        end
+        out[k] = v_src[j]
+    end
+    return out
+end
+
+# The size criteria against the pattern actually commanded, lap by lap. The
+# startup path is only the FIRST of them, and it is the widest the run ever flies:
+# scored against it, the last laps are asked for a reach nothing ever commanded.
+t_log = Float64.(sl.time)
+have_geom = !isempty(geom_t)
+az_c_log = have_geom ? deg2rad.(on_log(t_log, geom_t, geom_az_c)) : deg2rad(az_c_path)
+az_amp_log = have_geom ? on_log(t_log, geom_t, geom_az_amp) : az_amp_path
+el_h_log = have_geom ? on_log(t_log, geom_t, geom_el_h) : el_height_path
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = deg2rad(az_c_path),
-                   az_amplitude = az_amp_path, el_height = el_height_path,
+                   min_elevation = fcs.min_elevation, az_center = az_c_log,
+                   az_amplitude = az_amp_log, el_height = el_h_log,
                    min_span_frac = fcs.min_span_frac, require_final = true)
 
 # What every lift costs on the OTHER axis. A pattern raised is a pattern flown
@@ -1445,13 +1490,19 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_
 # 2.5 s el_offset_lead failed the azimuth reach by hundredths of a degree while
 # passing everything else. Reported next to the elevation that lift bought, so a
 # run says both halves of the trade rather than one.
-span_checks = [
-    ("azimuth_reach_pos", fig8m.az_reach_pos, fcs.min_span_frac * az_amp_path),
-    ("azimuth_reach_neg", fig8m.az_reach_neg, fcs.min_span_frac * az_amp_path),
-    ("elevation_span", fig8m.el_span, fcs.min_span_frac * el_height_path)]
-span_margins = [(; name, flown, required, margin = flown - required,
-                 pct = 100 * (flown / required - 1))
-                for (name, flown, required) in span_checks]
+az_amp_mean = have_geom ? mean(az_amp_log) : az_amp_path
+el_h_mean = have_geom ? mean(el_h_log) : el_height_path
+# In FILL fractions, since that is what the criteria are scored on once the
+# commanded pattern moves; the degrees are the same margin read against the mean
+# geometry, for a number that can be compared with a lift.
+span_checks = [("azimuth_reach_pos", fig8m.az_fill_pos, az_amp_mean),
+               ("azimuth_reach_neg", fig8m.az_fill_neg, az_amp_mean),
+               ("elevation_span", fig8m.el_fill, el_h_mean)]
+span_margins = [(; name, fill, flown = fill * ref,
+                 required = fcs.min_span_frac * ref,
+                 margin = (fill - fcs.min_span_frac) * ref,
+                 pct = 100 * (fill / fcs.min_span_frac - 1))
+                for (name, fill, ref) in span_checks]
 span_worst = argmin(m -> m.margin, span_margins)
 i_final = findall(==(5), Int.(sl.sys_state))
 el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_final])))
@@ -1509,8 +1560,13 @@ if fig8m !== nothing
             "worst_lobe_deg" => OrderedDict(
                 "min" => (round(-fig8m.az_reach_neg_worst; digits = 1), "weakest lobe, negative side [deg]"),
                 "max" => (round(fig8m.az_reach_pos_worst; digits = 1), "weakest lobe, positive side [deg]")),
-            "elevation_span_deg" => (round(fig8m.el_span; digits = 1), "flown elevation span [deg]"),
-            "elevation_span_pct_of_b" => (round(Int, 100 * fig8m.el_fill), "flown span as % of the pattern's B")),
+            "elevation_span_deg" => (round(fig8m.el_span; digits = 1),
+                "flown elevation span over the whole settled window — the pattern \
+                 DESCENDS as the tether grows, so this is mostly that descent [deg]"),
+            "elevation_span_lap_deg" => (round(fig8m.el_span_lap; digits = 1),
+                "flown elevation span per lobe, which is the pattern's own height [deg]"),
+            "elevation_span_pct_of_b" => (round(Int, 100 * fig8m.el_fill),
+                "flown span as % of the B commanded where it was flown")),
         "tether_force_N" => OrderedDict(
             "mean" => (round(Int, fig8m.mean_force), "mean tether force, settled window [N]"),
             "std" => (round(Int, fig8m.std_force), "std tether force, settled window [N]"),
@@ -1731,7 +1787,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "points_final" => (length(fec.az_path),
             "points of the path at the end; differs when reopt installed one"),
         "az_center_deg" => (round(az_c_path; digits = 1), "centre azimuth of the path [deg]"),
-        "az_amplitude_deg" => (round(az_amp_path; digits = 1), "half-width of the path [deg]"),
+        "az_amplitude_deg" => (round(az_amp_path; digits = 1),
+            "half-width of the STARTUP path; the criteria are scored against the \
+             pattern commanded at each lap, whose mean is lift_budget's reference [deg]"),
         "el_center_deg" => (round(el_c_path; digits = 1), "centre elevation of the path [deg]"),
         "el_height_deg" => (round(el_height_path; digits = 1),
             "elevation span of the path, peak to peak [deg]"),
@@ -1846,6 +1904,11 @@ summary["traj_opt"] = OrderedDict{String, Any}(
              "delivered_profile_deg" => (n_el_bins == 1 ? "n/a" :
                                          round.(el_applied; digits = 2),
                  "the same, per azimuth band, crossing first [deg]"),
+             "commanded_az_amp_deg" => (round(az_amp_mean; digits = 2),
+                 "mean half-width the run was COMMANDED to fly, against the startup \
+                  path's in traj_opt.path [deg]"),
+             "commanded_el_height_deg" => (round(el_h_mean; digits = 2),
+                 "mean commanded pattern height [deg]"),
              "wing_deg" => (fcs.el_offset_wing,
                  "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
              "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
