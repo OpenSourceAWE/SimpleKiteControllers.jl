@@ -130,6 +130,14 @@ cancels there and only its offset survives, and the shape is the part the kite
 cannot follow anyway — it is bounded by turn authority at the tight shoulder, not
 by the reference. Recorded per lap in `traj_opt.el_bias` of the run summary.
 
+Every lift is paid for on the other axis: a pattern raised is a pattern flown
+narrower, and the pattern-SIZE criteria are what breaks first — the 2.5 s
+`el_offset_lead` failed the azimuth reach by hundredths of a degree while passing
+everything else. `traj_opt.lift_budget` in the summary puts the two halves of that
+trade next to each other: the correction the path in the air actually carries and
+the elevation it bought, against how much room each size criterion has left, with
+`tightest` naming the one the next lift has to spend.
+
 # Why the curvature margin is checked where it is
 
 For ONE path flown all the way out, the start is the worst case. The kite's
@@ -1432,6 +1440,32 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_
                    az_amplitude = az_amp_path, el_height = el_height_path,
                    min_span_frac = fcs.min_span_frac, require_final = true)
 
+# What every lift costs on the OTHER axis. A pattern raised is a pattern flown
+# narrower, and the three size criteria are the first thing a lift breaks — the
+# 2.5 s el_offset_lead failed the azimuth reach by hundredths of a degree while
+# passing everything else. Reported next to the elevation that lift bought, so a
+# run says both halves of the trade rather than one.
+span_checks = [
+    ("azimuth_reach_pos", fig8m.az_reach_pos, fcs.min_span_frac * az_amp_path),
+    ("azimuth_reach_neg", fig8m.az_reach_neg, fcs.min_span_frac * az_amp_path),
+    ("elevation_span", fig8m.el_span, fcs.min_span_frac * el_height_path)]
+span_margins = [(; name, flown, required, margin = flown - required,
+                 pct = 100 * (flown / required - 1))
+                for (name, flown, required) in span_checks]
+span_worst = argmin(m -> m.margin, span_margins)
+i_final = findall(==(5), Int.(sl.sys_state))
+el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_final])))
+# What the path in the air actually carries, not what was asked for: the bias only
+# reaches the kite through an install or an in-air blend that the curvature gate
+# can refuse.
+lift_mean = mean(el_applied)
+@info @sprintf("Lift budget: %+.2f° of correction delivered (learnt %s, lobes up \
+                to %+.2f°); the tightest size criterion is %s with %+.2f° (%+.0f %%) \
+                to spare; min elevation %.1f° over the run, %.1f° in phase 5.",
+               lift_mean, prof_str(el_applied), fcs.el_offset_wing,
+               replace(span_worst.name, "_" => " "), span_worst.margin,
+               span_worst.pct, fig8m.min_elevation_all, el_min_final)
+
 summary = OrderedDict{String, Any}()
 run_time = Dates.now()
 # The package repo, not `examples/` — this reports the controller code, not the script's own project.
@@ -1804,6 +1838,32 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                   "how much deeper the kite flies in its worst azimuth band than in \
                    the crossing — what a SHAPED lift is aimed at, where el_bias and \
                    el_offset_final can only move the pattern rigidly [deg]")])),
+    "lift_budget" => OrderedDict(
+        vcat(
+            ["delivered_deg" => (round(lift_mean; digits = 2),
+                 "mean correction the path in the air actually carries — el_bias plus \
+                  el_offset_final once it has been delivered [deg]"),
+             "delivered_profile_deg" => (n_el_bins == 1 ? "n/a" :
+                                         round.(el_applied; digits = 2),
+                 "the same, per azimuth band, crossing first [deg]"),
+             "wing_deg" => (fcs.el_offset_wing,
+                 "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
+             "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
+                 "lowest elevation over the whole run — set in phase 4, so a phase-5 \
+                  lift does not move it [deg]"),
+             "el_min_final_deg" => (isnan(el_min_final) ? "n/a" :
+                                    round(el_min_final; digits = 2),
+                 "lowest elevation in phase 5, which is what el_offset_final buys [deg]")],
+            [string(m.name, "_deg") =>
+                 (round(m.margin; digits = 2),
+                  @sprintf("reach margin: flew %.2f° against the %.2f° required by \
+                            min_span_frac = %.2f, %+.0f %%", m.flown, m.required,
+                           fcs.min_span_frac, m.pct))
+             for m in span_margins],
+            ["tightest" => (replace(span_worst.name, "_" => " "),
+                 @sprintf("the size criterion with the least room, %+.2f° (%+.0f %%) — \
+                           what the NEXT lift has to spend", span_worst.margin,
+                          span_worst.pct))])),
     "clearance" => OrderedDict(
         "path_min_m" => (round(path_min_h_start; digits = 1),
             "lowest point of the PRE-FLIGHT path at the starting length [m]"),

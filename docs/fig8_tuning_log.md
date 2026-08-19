@@ -624,6 +624,49 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The size budget is ONE criterion, and it has 0.3 deg left (2026-08-19)
+
+`min_span_frac` interacts with every lift, so the run now reports both halves of
+that trade: `traj_opt.lift_budget` carries the correction the path in the air
+actually carries and the elevation it bought, against the room each of the three
+size criteria has left, with `tightest` naming the one the next lift has to spend.
+The same numbers print as a line at the end of the run.
+
+On the flown configuration (`el_bias_bins: 5`, `el_offset_lead: 8`, 2026-08-19_084439):
+
+    criterion            flown     required   margin
+    azimuth reach +      14.14     13.77      +0.36 deg   (+3 %)
+    azimuth reach -      15.81     13.77      +2.04 deg   (+15 %)
+    elevation span       18.53      8.79      +9.75 deg   (+111 %)
+
+**The budget is not three numbers, it is one.** The elevation span has more than
+twice what it needs and the negative reach has 15 %; everything any lift has to
+spend is the 0.36 deg on the POSITIVE azimuth reach. The pattern is flown
+asymmetrically — 14.1 deg one side against 15.8 deg the other — and it is the weak
+side that gates.
+
+Read across today's runs, as margin against each criterion:
+
+    bins  lead   reach+   reach-   span     verdict
+    1     0      -0.09    +1.41    +9.98    FAILED azimuth reach +13.8
+    5     0      +0.31    +2.01    +9.78    all 8 passed
+    5     8      +0.31    +2.01    +9.68    all 8 passed
+
+(from the archived summaries, so rounded to their 0.1 deg — the in-run block reads
++0.36 where this table reads +0.31.) Two things fall out. The per-band elevation
+learner BOUGHT ~0.4 deg of positive reach rather than costing any, which is why
+that criterion flipped from FAILED to passed and is a stronger reason to keep it
+than anything in its own entry. And the 8 s lead costs 0.1 deg of elevation span
+out of 9.7 — nothing, on the axis with room.
+
+**The threshold moves under the run.** `az_amplitude` is captured from the STARTUP
+optimizer path and the flown pattern shrinks by a third in azimuth as the tether
+grows, so the requirement is fixed to a pattern the run has outgrown by the end
+while the reach is averaged over the whole settled window. A run that fails this
+criterion by hundredths is therefore not necessarily flying a pattern that is too
+small — it may be flying a pattern the optimizer made smaller. That is the next
+thing to fix if 0.36 deg turns out to gate a lift worth having.
+
 ## The 8 s `el_offset_lead` does not circle — it is what DELIVERS the phase-5 lift (2026-08-19)
 
 The `+1.39 turns` that closed `el_offset_lead` are withdrawn. They were measured

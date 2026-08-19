@@ -6,6 +6,13 @@ The dated measurements behind all of it are in
 
 ## What is in the working tree
 
+**Update, 2026-08-19.** Everything below is committed (`6ce185c` and earlier); the
+per-band elevation learner of item 2 and the `lift_budget` block of item 4 are the
+only things that may still be uncommitted at the end of a session. Flown settings
+as of that date: `el_bias_bins: 5`, `el_bias_smooth: 0.25`, `el_offset_lead: 8.0`,
+`el_offset_wing: 1.5` azimuth 10/8. The rest of this section describes the state on
+2026-08-18 and is kept for the file references.
+
 The elevation-correction work described here is COMMITTED (`3dae201`, `1886f80` on
 top of `79ffed4`): the five `FC_Settings` fields (`el_bias_gain`,
 `el_bias_gain_final`, `el_bias_max`, `el_offset_final`, `el_offset_lead`, all
@@ -115,8 +122,23 @@ at the end.
 
 ## Where to go next
 
-Nothing on the list above is blocking any more. What the evening's measurements
-suggest, in the order I would take it:
+Nothing on the list above is blocking any more, and as of 2026-08-19 all four items
+below are answered too. What is left, in the order I would take it:
+
+- **Bound the SHAPE of the learnt profile** (from item 2). The shoulder band
+  integrates against a tracking error no reference can fix, and it cost two
+  installs. Cap a band's departure from the profile's mean, give the bands a lower
+  gain than the mean, or put `el_bias_smooth` back to 0.5.
+- **Score the size criteria against the pattern actually commanded** (from item 4).
+  The requirement is pinned to the startup path while the flown pattern shrinks a
+  third, and the positive azimuth reach — the one criterion with no room — is the
+  one that suffers for it.
+- **Independent repeats.** Every run in this session was deterministic: the same
+  request sequence gets the same paths back, so pairs of runs agree bit for bit.
+  That is not the scatter the trap below describes, and it means nothing here has
+  been tested against the optimizer answering differently.
+
+The four items as answered:
 
 1. **Shape the lobe lift on ELEVATION, not azimuth.** — ANSWERED, and the answer
    is no: the bottom of the pattern IS the lobe, so an elevation-keyed lift ramps
@@ -176,13 +198,23 @@ suggest, in the order I would take it:
    while `c1_at(phase)` is still the pattern's and not `depower_final`'s 0.775x.
    Phase-5 minimum elevation 10.31 -> 11.75 deg for -0.13 % power. See the
    tuning-log entry "The 8 s `el_offset_lead` does not circle".
-4. **`min_span_frac` interacts with every lift.** A path flown higher is flown
-   narrower, and `el_offset_lead = 2.5` already failed the criterion by
-   hundredths. Whatever raises the pattern next should report the reach margin
-   alongside the elevation it buys.
+4. **`min_span_frac` interacts with every lift.** — DONE: `traj_opt.lift_budget`
+   in the run summary (and a line at the end of the run) reports the correction the
+   path in the air actually carries and the elevation it bought, against the room
+   each size criterion has left, with `tightest` naming the binding one. Measured on
+   the flown configuration: the budget is ONE criterion — azimuth reach on the
+   POSITIVE side, +0.36 deg (+3 %) — where the negative side has +2.04 and the
+   elevation span +9.75 (+111 %). The elevation learner bought ~0.4 deg of that
+   margin rather than spending it (it is why the criterion flipped from FAILED to
+   passed), and the 8 s lead cost 0.1 deg of span out of 9.7. Caveat in the
+   tuning-log entry "The size budget is ONE criterion": the requirement is pinned to
+   the STARTUP path's amplitude while the flown pattern shrinks a third over the
+   run, so a failure by hundredths may be the optimizer's pattern shrinking rather
+   than the kite under-flying it — fix that first if 0.36 deg ever gates a lift
+   worth having.
 
 ## Two traps that cost time in this session
-
+   
 - **The runs do not repeat.** Byte-identical settings and code gave RMS d 1.25 vs
   1.61 deg and 8 vs 9 laps, because the optimizer server answers the same request
   with slightly different paths (margin 1.00 vs 0.99 at the same length). Judge any
