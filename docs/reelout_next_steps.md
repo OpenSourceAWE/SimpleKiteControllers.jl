@@ -128,15 +128,44 @@ below are answered too. What is left, in the order I would take it:
 - **Bound the SHAPE of the learnt profile** (from item 2). The shoulder band
   integrates against a tracking error no reference can fix, and it cost two
   installs. Cap a band's departure from the profile's mean, give the bands a lower
-  gain than the mean, or put `el_bias_smooth` back to 0.5.
-- **The elevation SPAN is the tight criterion now** (from item 4). +1.5 deg (+23 %)
-  where the azimuth reach has +36 %, so the next lift has to report what it does to
-  the per-lap span. Raising the pattern narrows it; whether it also flattens it is
-  not measured.
-- **Independent repeats.** Every run in this session was deterministic: the same
-  request sequence gets the same paths back, so pairs of runs agree bit for bit.
-  That is not the scatter the trap below describes, and it means nothing here has
-  been tested against the optimizer answering differently.
+  gain than the mean, or put `el_bias_smooth` back to 0.5. **Still open, and the
+  wind scan of 2026-08-19 says it is not one condition's artefact**: band 4 is the
+  highest band and its error is still open at the end at 5.0, 5.5, 6.0 and 7.0 m/s.
+  Tune it at 6.0, not at 6.5 — 6.5 is the one run where every band converges,
+  because the pattern collapsed to 65 % of its commanded height and left the kite
+  room to track it.
+- **`el_offset_wing` does not transfer across wind speed** (NEW, from the wind
+  scan). At 6.5 m/s the flown configuration FAILS the elevation-span criterion
+  (6.92 deg against 7.46 required, budget -0.55 deg), and a control run with
+  `el_offset_wing = 0` and nothing else changed passes: the 1.5 deg lobe lift costs
+  ~1.6 deg of flown pattern height, and buys 1.4 deg of minimum elevation, 0.14 deg
+  of RMS d and the whole centre-to-lobe droop for 0.3 % of the power. So the answer
+  to "the next lift has to report what it does to the per-lap span" is measured —
+  raising the pattern narrows it, roughly degree for degree at the lobes — and the
+  open question is whether 1.5 deg is still the right number, or whether the lift
+  should scale with the span the commanded pattern leaves. 7.0 m/s passes at
+  +2.21 deg, so this is not a monotone wind effect: it is which pattern the
+  optimizer happens to return.
+- **Independent repeats.** — DONE, and the premise was wrong: repeats are EXACT,
+  and the trap below is withdrawn. A repeat after `bin/run_server restart` with the
+  failure cache deleted reproduced 2026-08-19_092659 in every number, so the wind is
+  the only lever that gets a different answer out of the optimizer. Five speeds are
+  now flown (`docs/wind_scan_results.yaml`, tuning-log entry "The runs DO repeat,
+  and the wind is what the settings were never tested against"): the flown window is
+  **5.5 to 7.0 m/s**, with 5.0 failing on tracking (RMS d 2.05 deg, max 11.21, 10 %
+  saturation) and on never reaching phase 5 within `sim_time = 150 s`, and 6.5
+  failing on the span as above. What is still untested is a repeat that differs for
+  a reason OTHER than the conditions.
+- **Two things the scan turned up that nobody was looking for.** (a) The tether
+  force crest factor over the reeling window rises 1.07 -> 1.26 -> 1.43 from 6.0 to
+  7.0 m/s, so the ground station's worst peak-to-mean load is at the TOP of the
+  window, where every flight criterion is comfortable. (b) `SystemError: write:
+  Broken pipe` on `POST /step` hit every run of the scan (2-4 times each, none in
+  the 6.0 repeat) and `output/awetrim_server.log` never sees them, so it is a stale
+  pooled socket client-side that `retry_non_idempotent = true` does not cover; the
+  run then treats it as a solver failure and `reopt_retry_el_offset` reinstalls from
+  guess el 24 deg, i.e. **a run can fly a path from a seed it never asked for**.
+  Worth fixing in `examples/awetrim_client.jl` before the next campaign.
 
 The four items as answered:
 
@@ -220,11 +249,13 @@ The four items as answered:
 
 ## Two traps that cost time in this session
    
-- **The runs do not repeat.** Byte-identical settings and code gave RMS d 1.25 vs
-  1.61 deg and 8 vs 9 laps, because the optimizer server answers the same request
-  with slightly different paths (margin 1.00 vs 0.99 at the same length). Judge any
-  change over 2-3 runs, never one, and read `traj_opt.reopt.events` when two runs
-  disagree.
+- ~~**The runs do not repeat.**~~ **WITHDRAWN, 2026-08-19.** It was measured on
+  2026-08-18 (RMS d 1.25 vs 1.61 deg, 8 vs 9 laps on byte-identical settings, the
+  server answering margin 1.00 vs 0.99 at the same length), but it does not hold
+  for the current code: a repeat with the server RESTARTED and the failure cache
+  DELETED reproduced its baseline in every logged number. Quote a single run's
+  numbers — but still read `traj_opt.reopt.events` when two runs disagree, because
+  a lost request (see the broken-pipe item above) does make them diverge.
 - **`output/reelout_150m_opt.{arrow,yaml}` is overwritten by every run**, and a run
   started from the REPL while you are reading them will swap them under you. Every
   run is archived under `output/archives/<timestamp>/` with its settings — compare
@@ -233,3 +264,18 @@ The four items as answered:
   dispatch on it: `Base.include` `fc_settings.jl`, then `course_controller.jl`,
   `traj_opt_settings.jl` and `optimization.jl`, or the run dies at
   `CourseControllerSettings(fcs; dt = s.dt)`.
+
+## ToDo:
+- ~~make a run at 5 m/s and one at 7 m/s wind speed (current: 6 m/s) and create a
+  wind_scan_results.yaml file with the key results~~ — **DONE, 2026-08-19**:
+  `docs/wind_scan_results.yaml` carries 5.0, 5.5, 6.0, 6.5 and 7.0 m/s plus the
+  `el_offset_wing = 0` control at 6.5, each with laps, RMS and max cross-track
+  error, and the mean / peak / crest-factor triple for power, tether force and
+  reel-out speed — all three scored over the same reeling window
+  (`SimpleKiteControllers.reelout_power`), plus energy, the elevation span, the
+  learnt bias profile and the re-optimization tally. The verdicts are in
+  "Where to go next" above: the flown window is 5.5 to 7.0 m/s.
+- Regenerate it with
+  `examples/wind_scan.jl` if more speeds are added; each run needs
+  `environment.v_wind` AND `environment.wind_vec` of
+  `data/settings_reelout_150m.yaml` changed together, since `use_wind_vec` is true.

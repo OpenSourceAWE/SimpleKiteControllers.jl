@@ -1,0 +1,105 @@
+# Wind scan of the reel-out run flown along an externally optimized path
+# (examples/simple_opt_reelout.jl), 150 -> 380 m, no turbulence, sim_time 150 s.
+# WRITTEN BY examples/wind_scan.jl — regenerate it there, do not hand-edit.
+# Everything except environment.v_wind / wind_vec of data/settings_reelout_150m.yaml
+# is the flown configuration of 2026-08-19 (el_bias_bins 5, el_bias_smooth 0.25,
+# el_offset_final 1.5, el_offset_lead 8.0, el_offset_wing 1.5 azimuth 10/8,
+# attractor_dist 8.0, depower_final 0.328, min_feasibility_margin 0.74).
+#
+# Force, power and speed are scored over the SAME window: the samples where the
+# length setpoint was still growing (SimpleKiteControllers.reelout_power), i.e.
+# the actual reel-out phase. crest factor = peak / mean.
+#
+# Runs are deterministic: a repeat at identical settings reproduces every number
+# below, so these are single runs (see docs/fig8_tuning_log.md, "The runs DO
+# repeat, and the wind is what the settings were never tested against").
+wind_scan:
+  date: "2026-08-19"
+  git_hash: "8231f95"
+  project: "system_reelout_150m.yaml"
+  runs:
+    - v_wind_m_s: 5.0
+      archive: "output/archives/2026-08-19_095737"
+      success_criteria: "FAILED: max d < 8.0°, phase 5 (final) reached"
+      laps: 6.0
+      cross_track_deg: {rms: 2.05, max: 11.21}
+      power_W: {mean: 4774, peak: 6391, crest_factor: 1.34, predicted: 4430, ratio: 1.08}
+      force_N: {mean: 2378, peak: 2878, crest_factor: 1.21}
+      reelout_speed_m_s: {mean: 1.976, peak: 2.222, crest_factor: 1.12}
+      energy_run_kJ: 582.3
+      tether: {end_m: 375.7, stop_reason: "none"}
+      elevation: {min_deg: 11.1, span_per_lap_deg: 9.1, pct_of_commanded_B: 90}
+      steering_saturation_pct: 10
+      el_bias_profile_deg: [-0.3, -0.2, 0.42, 1.18, 0.85]
+      reopt: {requests: 7, installed: 2, margin_final_flown: 1.39}
+    - v_wind_m_s: 5.5
+      archive: "output/archives/2026-08-19_094714"
+      success_criteria: "all 8 passed"
+      laps: 7.5
+      cross_track_deg: {rms: 1.27, max: 4.99}
+      power_W: {mean: 6568, peak: 7706, crest_factor: 1.17, predicted: 6406, ratio: 1.03}
+      force_N: {mean: 2960, peak: 3305, crest_factor: 1.12}
+      reelout_speed_m_s: {mean: 2.202, peak: 2.521, crest_factor: 1.14}
+      energy_run_kJ: 711.1
+      tether: {end_m: 380.0, stop_reason: "length"}
+      elevation: {min_deg: 9.8, span_per_lap_deg: 7.5, pct_of_commanded_B: 87}
+      steering_saturation_pct: 8
+      el_bias_profile_deg: [-0.02, 0.29, 1.15, 1.75, 1.15]
+      reopt: {requests: 7, installed: 4, margin_final_flown: 0.88}
+    - v_wind_m_s: 6.0
+      archive: "output/archives/2026-08-19_094153"
+      success_criteria: "all 8 passed"
+      laps: 8.0
+      cross_track_deg: {rms: 1.28, max: 4.94}
+      power_W: {mean: 8631, peak: 9496, crest_factor: 1.10, predicted: 8620, ratio: 1.00}
+      force_N: {mean: 3579, peak: 3834, crest_factor: 1.07}
+      reelout_speed_m_s: {mean: 2.405, peak: 2.845, crest_factor: 1.18}
+      energy_run_kJ: 837.5
+      tether: {end_m: 380.0, stop_reason: "length"}
+      elevation: {min_deg: 10.4, span_per_lap_deg: 7.4, pct_of_commanded_B: 86}
+      steering_saturation_pct: 7
+      el_bias_profile_deg: [0.51, 0.81, 1.68, 2.21, 1.2]
+      reopt: {requests: 7, installed: 4, margin_final_flown: 0.87}
+    - v_wind_m_s: 6.5
+      archive: "output/archives/2026-08-19_094958"
+      success_criteria: "FAILED: elevation span > 7.5°"
+      laps: 10.5
+      cross_track_deg: {rms: 1.06, max: 4.92}
+      power_W: {mean: 11041, peak: 13895, crest_factor: 1.26, predicted: 11130, ratio: 0.99}
+      force_N: {mean: 4243, peak: 5363, crest_factor: 1.26}
+      reelout_speed_m_s: {mean: 2.600, peak: 3.176, crest_factor: 1.22}
+      energy_run_kJ: 984.0
+      tether: {end_m: 380.0, stop_reason: "length"}
+      elevation: {min_deg: 10.9, span_per_lap_deg: 6.6, pct_of_commanded_B: 65}
+      steering_saturation_pct: 0
+      el_bias_profile_deg: [0.6, 0.69, 0.88, 0.78, 0.33]
+      reopt: {requests: 7, installed: 3, margin_final_flown: 0.87}
+    - v_wind_m_s: 7.0
+      archive: "output/archives/2026-08-19_100025"
+      success_criteria: "all 8 passed"
+      laps: 9.5
+      cross_track_deg: {rms: 1.26, max: 4.98}
+      power_W: {mean: 13701, peak: 17920, crest_factor: 1.31, predicted: 14160, ratio: 0.97}
+      force_N: {mean: 4937, peak: 7041, crest_factor: 1.43}
+      reelout_speed_m_s: {mean: 2.784, peak: 3.378, crest_factor: 1.21}
+      energy_run_kJ: 1136.7
+      tether: {end_m: 380.0, stop_reason: "length"}
+      elevation: {min_deg: 10.5, span_per_lap_deg: 8.1, pct_of_commanded_B: 94}
+      steering_saturation_pct: 0
+      el_bias_profile_deg: [0.84, 1.09, 1.75, 1.87, 0.87]
+      reopt: {requests: 7, installed: 3, margin_final_flown: 0.88}
+    - v_wind_m_s: 6.5
+      archive: "output/archives/2026-08-19_095327"
+      note: "control: el_offset_wing = 0, everything else as flown"
+      success_criteria: "all 8 passed"
+      laps: 8.5
+      cross_track_deg: {rms: 1.20, max: 5.00}
+      power_W: {mean: 11004, peak: 13644, crest_factor: 1.24, predicted: 11014, ratio: 1.00}
+      force_N: {mean: 4232, peak: 5230, crest_factor: 1.24}
+      reelout_speed_m_s: {mean: 2.599, peak: 3.158, crest_factor: 1.22}
+      energy_run_kJ: 981.6
+      tether: {end_m: 380.0, stop_reason: "length"}
+      elevation: {min_deg: 9.5, span_per_lap_deg: 8.2, pct_of_commanded_B: 90}
+      steering_saturation_pct: 1
+      el_bias_profile_deg: [0.83, 1.08, 1.6, 1.56, 0.69]
+      reopt: {requests: 7, installed: 2, margin_final_flown: 1.21}

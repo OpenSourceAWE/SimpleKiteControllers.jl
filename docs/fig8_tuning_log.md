@@ -624,6 +624,108 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The runs DO repeat, and the wind is what the settings were never tested against (2026-08-19)
+
+`docs/reelout_next_steps.md` asked for independent repeats: every run of the
+2026-08-19 session was bit-identical, so nothing had been tested against the
+optimizer answering differently. Four runs, all on `8231f95` with a clean tree.
+
+**A repeat is exact, even across a server restart.** R1 (2026-08-19_094153)
+re-flew the flown configuration after `bin/run_server restart` AND with
+`output/opt_failure_cache.yaml` DELETED, so the five requests the baseline had
+skipped were re-sent to a fresh server process. Every one of them failed again,
+including the retry from guess el 24 deg, and the run reproduced
+2026-08-19_092659 in every number: 8 laps, RMS d 1.28 deg, min elevation
+10.4 deg, 8631 W, the learnt profile `[+0.51 +0.81 +1.68 +2.21 +1.20]` deg, the
+same 4 installs, the same rejections at 0.68 and 0.73, the same shift held back at
+0.48. So the "**the runs do not repeat**" trap recorded on 2026-08-18 does NOT
+hold for the current code — the whole pipeline, server included, is deterministic
+for a repeated request sequence, and a single run's numbers can be quoted. It also
+confirms the failure cache's contents are honest and costs ~130 s of wall time
+(300 s against 175 s) to verify.
+
+**The wind is therefore the only lever that gets a different answer out of the
+optimizer**, and it is what the settings had never been flown against. Five
+speeds, everything else the flown configuration; the full table with force, power
+and speed crest factors is `docs/wind_scan_results.yaml`:
+
+    v_wind   laps   RMS d   max d   min el   power    ratio  cf_F  span/lap  % of B  sat   verdict
+    5.0      6.0    2.05    11.21   11.1     4774 W   1.08   1.21  9.1 deg   90 %    10 %  FAILED max d, phase 5
+    5.5      7.5    1.27     4.99    9.8     6568 W   1.03   1.12  7.5 deg   87 %     8 %  all 8 passed
+    6.0      8.0    1.28     4.94   10.4     8631 W   1.00   1.07  7.4 deg   86 %     7 %  all 8 passed
+    6.5     10.5    1.06     4.92   10.9    11041 W   0.99   1.26  6.6 deg   65 %     0 %  FAILED span
+    7.0      9.5    1.26     4.98   10.5    13701 W   0.97   1.43  8.1 deg   94 %     0 %  all 8 passed
+
+**The flown window is 5.5 to 7.0 m/s, and both ends fail for different reasons.**
+At 5.0 the run never finishes reeling out (375.7 m of 380 in 150 s, stop reason
+"none", so phase 5 is never entered) and tracking degrades badly — RMS d 2.05 deg
+and a max of 11.21 against the 8.0 deg criterion, with steering saturated 10 % of
+the time. That is the kite running out of turn authority in weak wind, and the
+phase-5 half of the verdict is partly an artefact of `sim_time = 150 s`: a fair
+5 m/s test needs a longer run.
+
+**6.5 m/s fails the elevation-span criterion**, the one the size budget had just
+named as binding: 6.92 deg flown against 7.46 deg required, `lift_budget`
+reporting **-0.55 deg (-7 %)** where 6.0 m/s has +1.52 (+23 %). Everything else
+improves — 27 % more power at 0.99 x predicted, the best RMS d of the scan, the
+highest minimum elevation, and NO steering saturation at all. The failure is
+purely the pattern's height: the optimizer commands a TALLER pattern at 6.5
+(10.66 deg against 9.34) while the kite fills only 65 % of it.
+
+**It is not monotone in wind, and that is the point.** 7.0 m/s passes with the
+span at +2.21 deg (+34 %), because there the optimizer commands 9.17 deg and the
+kite fills 94 % of it. The criterion is relative — 0.70 x the pattern COMMANDED —
+so a run fails when the optimizer happens to hand it a tall pattern the kite will
+not fill, and which pattern comes back is not smooth in the conditions. Judge the
+span criterion across conditions, never off one wind speed.
+
+**Crest factors are the number the scan adds for sizing.** Over the reeling
+window, force goes 1.07 (6.0 m/s) -> 1.26 (6.5) -> **1.43** (7.0) and power 1.10
+-> 1.26 -> 1.31, while at 5.0 it is the low mean rather than the peak that lifts
+them (1.21 / 1.34). Reel-out speed stays tame throughout (1.12 … 1.22). So the
+ground station sees its worst peak-to-mean force at the TOP of the flown window,
+where every flight criterion is comfortable.
+
+**It is the lobe lift that spends the span.** R4 (2026-08-19_095327), 6.5 m/s with
+`el_offset_wing = 0` and nothing else changed:
+
+    el_offset_wing   span/lap   % of B   budget         min el   RMS d   c2l    power
+    1.5 deg          6.6 deg    65 %     -0.55  (-7 %)  10.9     1.06    0.00   11041 W
+    0                8.2 deg    90 %     +1.92 (+28 %)   9.5     1.20    1.22   11004 W
+
+so the 1.5 deg lobe lift costs ~1.6 deg of flown pattern height, which is the
+whole failure, and buys 1.4 deg of minimum elevation, 0.14 deg of RMS d and the
+droop (`centre_to_lobe_deg` 1.22 -> 0.00) for 0.3 % of the power. Both are
+defensible at 6.5 m/s; the criterion is what picks. `el_offset_wing` is NOT a
+setting that transfers across wind speed, and the answer asked for under "the
+elevation SPAN is the tight criterion now" is now measured: raising the pattern
+does narrow it, roughly degree for degree at the lobes.
+
+**The shoulder band peaks at four of the five wind speeds**, so the open "bound
+the shape" item is not an artefact of one condition: the converged profiles are
+`[-0.30 -0.20 +0.42 +1.18 +0.85]` at 5.0, `[-0.02 +0.29 +1.15 +1.75 +1.15]` at
+5.5, `[+0.51 +0.81 +1.68 +2.21 +1.20]` at 6.0 and `[+0.84 +1.09 +1.75 +1.87
++0.87]` at 7.0 — band 4 highest every time, and its error still open at the end
+(-0.31 deg at 7.0, -0.91 at 6.0). The exception is 6.5, where every band closes to
++-0.06 deg by lap 9 and the profile ends nearly flat
+(`[+0.60 +0.69 +0.88 +0.78 +0.33]`). That is NOT simply "no saturation": 7.0 also
+never saturates and still lags. What 6.5 has alone is the collapsed pattern — the
+kite flying 65 % of a commanded height it therefore has room to track. So the
+runaway follows how hard the pattern is to fly, not the wind, and it cannot be
+tuned at 6.5 m/s because the failure mode does not appear there.
+
+**A transport failure silently changes the seed.** `SystemError: write: Broken
+pipe` on `POST /step` appeared in every run of the scan except the 6.0 m/s repeat
+(0, then 3, 4, 3, 2, 4 events), and
+`output/awetrim_server.log` records none of them — the server never saw the
+request, so it is a stale pooled socket client-side and
+`retry_non_idempotent = true` in `examples/awetrim_client.jl` did not cover it.
+The run treats it like a solver failure, so `reopt_retry_el_offset` retries it
+from guess el 24 deg and usually installs THAT path (the `_2` events at the same
+time and length); one at L = 212 m was lost until the next lap instead. So a run
+can fly a path from a seed it never asked for, and the events log is the only
+place it shows.
+
 ## Scored against the pattern it was COMMANDED, the size budget changes sign (2026-08-19)
 
 The entry below measured the size budget against `az_amplitude`/`el_height` of the
