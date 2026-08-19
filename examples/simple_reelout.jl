@@ -431,7 +431,19 @@ try
             ramp = fcs.reelout_softstart > 0 ?
                 clamp((t - transition_start - fcs.reelout_delay) / fcs.reelout_softstart,
                       0.0, 1.0) : 1.0
-            v_cmd = ramp * v_raw
+            # ...but the soft-start must not override the tether's own protection:
+            # at 8 m/s ground wind the entry swoop drives the force to 10.7 kN
+            # (41 % over f_high) while the UpperForceController sits pinned at
+            # v_sat = 8 m/s and this ramp, still only 0.21 at t = 28.5 s, hands
+            # the drum 1.7 m/s of it. An OPEN-LOOP timer beating a CLOSED-LOOP
+            # force limiter. Release the ramp in proportion to tether load
+            # instead: inert below f_low (so the engagement transient the ramp
+            # exists for is unchanged at 5-6 m/s, where the limiter never fires
+            # during entry), fully bypassed at f_high. Continuous in the force,
+            # so there is no jump when the limiter latches.
+            force_release = clamp((winch_force(s) - rcs.f_low) /
+                                  (rcs.f_high - rcs.f_low), 0.0, 1.0)
+            v_cmd = max(ramp, force_release) * v_raw
 
             remaining = fcs.reelout_l_max - l_set
             # Soft-stop: a hard cut of v_set to 0 the instant l_set clamps to

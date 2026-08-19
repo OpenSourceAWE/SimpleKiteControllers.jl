@@ -633,26 +633,29 @@ else
     @info "Archiving suppressed by RUN_ARCHIVE = false; it is back to true for the next run."
 end
 
+plots_failed = nothing
 if show_plots
     # The flown curve and this run's log name, so the plots draw the optimized
     # path and load the _opt log instead of the lemniscate run's.
     REF_PATH = (fec.az_path, fec.el_path)
     OPT_PATHS_RAW = opt_paths_raw
     LOG_NAME = log_name
-    include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
+    # The plots are cosmetic and the run is already scored, logged and archived by
+    # here; a GLMakie failure (needs the main thread, so an eval off it throws)
+    # must not cost the marker that tells a watcher the run is over.
+    try
+        include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
+    catch exc
+        global plots_failed = exc
+        @error "Plots failed; the run itself completed and is archived." exception =
+            (exc, catch_backtrace())
+    end
 else
     @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
 end
 
-open(RUN_DONE_FILE, "w") do io
-    println(io, Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS"))
-    println(io, "archive: ", @isdefined(archive_dir) ? archive_dir : "none")
-    println(io, "log: ", joinpath(output_path, log_name * ".yaml"))
-    println(io, "criteria: ", isempty(fig8m.criteria_failed) ?
-                             "all $(fig8m.criteria) passed" :
-                             "FAILED: " * join(fig8m.criteria_failed, ", "))
-    println(io, "power: ", isnothing(opt_power_meas) ? "n/a" :
-                           @sprintf("%.0f W measured", opt_power_meas))
-end
+# Defined in simple_opt_reelout.jl before anything that can throw, and called
+# from its `catch` too — see the docstring there.
+write_run_done(isnothing(plots_failed) ? "ok" : "ok (plots failed)")
 
 nothing

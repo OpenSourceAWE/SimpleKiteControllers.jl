@@ -295,6 +295,40 @@ mkpath(output_path)
 # because that, not output/, is where the run's own numbers survive.
 const RUN_DONE_FILE = joinpath(output_path, "last_run_done.txt")
 rm(RUN_DONE_FILE; force = true)
+
+"""
+    write_run_done(status; err = nothing)
+
+Write the finished-run marker. Defined HERE, before anything that can throw, and
+called from a `catch` as well as from the normal tail of `reelout_results.jl`, so
+the marker's absence means "still running" and never "it died" — a watcher that
+only ever sees the success path waits forever on a run that crashed (measured: a
+GLMakie main-thread error in the plots, long after the simulation had finished
+and the log was safely written).
+
+`status` is `ok`, `ok (plots failed)` or `FAILED`; on failure the exception's
+first line follows on an `error:` line. Every other field is read defensively —
+a crash early enough leaves `archive_dir`/`fig8m` undefined, and the marker still
+has to be writable.
+"""
+function write_run_done(status::AbstractString; err = nothing)
+    get_global(name, default) = isdefined(Main, name) ? getfield(Main, name) : default
+    open(RUN_DONE_FILE, "w") do io
+        println(io, Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS"))
+        println(io, "status: ", status)
+        isnothing(err) || println(io, "error: ", first(split(sprint(showerror, err), "\n")))
+        println(io, "archive: ", get_global(:archive_dir, "none"))
+        println(io, "log: ", joinpath(output_path, log_name * ".yaml"))
+        fig8m = get_global(:fig8m, nothing)
+        println(io, "criteria: ", isnothing(fig8m) ? "n/a" :
+                                  isempty(fig8m.criteria_failed) ?
+                                  "all $(fig8m.criteria) passed" :
+                                  "FAILED: " * join(fig8m.criteria_failed, ", "))
+        power = get_global(:opt_power_meas, nothing)
+        println(io, "power: ", isnothing(power) ? "n/a" :
+                               @sprintf("%.0f W measured", power))
+    end
+end
 # `_opt`: this run must not overwrite the lemniscate run's log and summary — the
 # two are each other's baseline.
 log_name = basename(project_set.log_file) * "_opt"
@@ -1142,7 +1176,19 @@ try
             ramp = fcs.reelout_softstart > 0 ?
                 clamp((t - transition_start - fcs.reelout_delay) / fcs.reelout_softstart,
                       0.0, 1.0) : 1.0
-            v_cmd = ramp * v_raw
+            # ...but the soft-start must not override the tether's own protection:
+            # at 8 m/s ground wind the entry swoop drives the force to 10.7 kN
+            # (41 % over f_high) while the UpperForceController sits pinned at
+            # v_sat = 8 m/s and this ramp, still only 0.21 at t = 28.5 s, hands
+            # the drum 1.7 m/s of it. An OPEN-LOOP timer beating a CLOSED-LOOP
+            # force limiter. Release the ramp in proportion to tether load
+            # instead: inert below f_low (so the engagement transient the ramp
+            # exists for is unchanged at 5-6 m/s, where the limiter never fires
+            # during entry), fully bypassed at f_high. Continuous in the force,
+            # so there is no jump when the limiter latches.
+            force_release = clamp((winch_force(s) - rcs.f_low) /
+                                  (rcs.f_high - rcs.f_low), 0.0, 1.0)
+            v_cmd = max(ramp, force_release) * v_raw
 
             remaining = fcs.reelout_l_max - l_set
             # Soft-stop: a hard cut of v_set to 0 the instant l_set clamps to
@@ -1289,4 +1335,13 @@ t_sim = Float64(s.sys_state.time)
 save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
 
 # Scoring, the summary YAML, the archive, the plots and the finished-run marker.
-include(joinpath(@__DIR__, "reelout_results.jl"))
+# Wrapped so that a throw in scoring or archiving still leaves a marker behind:
+# `reelout_results.jl` writes the `ok` one itself as its last statement, and only
+# a path that never reaches it lands here. Rethrown — the marker reports the
+# failure, it does not swallow it.
+try
+    include(joinpath(@__DIR__, "reelout_results.jl"))
+catch exc
+    write_run_done("FAILED"; err = exc)
+    rethrow()
+end
