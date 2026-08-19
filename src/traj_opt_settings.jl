@@ -101,8 +101,49 @@ multi-modal, so the guess is a choice about the answer.
     length it is flown at. Below 1.0 the path is tighter than the kite can turn,
     and the run measures the steering clamp instead of the path. `0.0` disables
     the check and flies whatever came back.
+
+    Since 2026-08-19 this is not only a gate. `min_turn_radius_request` converts
+    it to metres — `margin/(c1*max_steering)`, 8.4 m at the shipped 0.74 — and
+    sends it with the request, so the optimizer solves under the same limit the
+    reply is about to be judged by and "PATTERN TOO TIGHT" is answered before the
+    solve rather than after it. `0.0` therefore turns off the request and the
+    gate together.
+
+    What is sent is that number scaled UP, by [`turn_radius_headroom`](@ref) and by
+    the lap's reel-out (10.1 m at the shipped numbers): the optimizer measures the
+    path's radius up its own reel-out while the gate reads the same curve at the
+    anchor, so an unscaled request is one the reply satisfies and the gate still
+    refuses.
     """
     min_feasibility_margin = 1.0
+    """
+    Extra turn radius asked of the optimizer, as a factor on what
+    [`min_feasibility_margin`](@ref) demands; `1.0` asks for exactly the gate's
+    number, which is NOT enough.
+
+    The request and the gate do not measure the same curve at the same radius, and
+    two corrections are needed. The geometric one the run MEASURES per length
+    (`reelout_anchor_ratio`: the optimizer constrains `R = r/|kappa|` at each node's
+    own radius, which grows through the lap, while the run flies the curve at the
+    anchor, tighter by `L/r` — 0.87 at 220 m, 0.92 at 380 m). This field is the
+    rest, which is about the GATE and not the geometry:
+
+    - `path_radius_profile` estimates the curvature by finite differences on the
+      resampled ~99-point reply and reads ~5 % tighter than the exact value
+      (10.81 m against 11.38 m on one reply, measured 2026-08-19);
+    - the run adds `el_bias` and `el_offset_wing` before checking, and lifting the
+      path compresses its azimuth axis by `cos(elevation)`.
+
+    1.10 covers both with a little to spare. Raising it buys installs at the cost of
+    a wider, less powerful pattern; lowering it towards 1.0 brings back replies that
+    converge, satisfy their own constraint and are then rejected at margin ~0.63
+    against a demanded 0.74 — which is what the first `use_step` run did.
+
+    The startup `/init` gets this factor alone: there is no reply to measure the
+    geometric one off yet. If the STARTUP path is refused for curvature, this is the
+    number to raise.
+    """
+    turn_radius_headroom = 1.0
     """
     Ground clearance [m] the returned path must have at the tether length it is
     flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
@@ -120,6 +161,46 @@ multi-modal, so the guess is a choice about the answer.
     """
     min_height = 50.0
 
+    # ---- Constraints the optimizer solves UNDER -------------------------- #
+    # `min_height` above is a gate: the reply is scored and thrown away if it
+    # fails, after the solve has been paid for. What follows is sent WITH the
+    # request, so the optimizer cannot offer a path that breaks it (AWETrim,
+    # 2026-08-19).
+    #
+    # `min_feasibility_margin` is BOTH now: it still gates the reply, and
+    # `min_turn_radius_request` converts it to metres and sends it, so the two
+    # cannot disagree and "PATTERN TOO TIGHT" stops being something the solve
+    # discovers only after it is paid for. The price is that a constrained cold
+    # solve lands on the best branch less often than a free one (11/18 lengths
+    # against 16/18, measured by AWETrim on the LEI-V3 reference), so a 422 where
+    # there used to be a rejected reply is the expected new failure mode.
+    """
+    Elevation floor [deg] the optimized pattern must stay above, sent with the
+    request; `0.0` keeps the optimizer's own 0.6°.
+
+    Not the same thing as [`min_height`](@ref), and that is the point: AWETrim
+    constrains HEIGHT, which a growing tether satisfies at ever lower angles (50 m
+    at 350 m of tether is 8.2°), while this repo's criterion — and `el_floor` in
+    `reelout_feasibility.jl` — is an ANGLE. Set it to `min_elevation +
+    candidate_elevation_margin` to ask for what the gate will demand.
+    """
+    pattern_elevation_min = 0.0
+    """
+    Elevation ceiling [deg] of the optimized pattern; `0.0` keeps the optimizer's
+    51.6°. Guards the run-away-to-zenith basin a failed re-optimization falls into.
+    """
+    pattern_elevation_max = 0.0
+    """
+    Half-width limit [deg] of the optimized pattern in azimuth; `0.0` keeps the
+    optimizer's 45.8°.
+    """
+    pattern_azimuth_max = 0.0
+    """
+    Smallest azimuth half-width [deg] the optimized figure may have; `0.0` is off.
+    Guards the OTHER bad basin: the pattern collapsing to zero amplitude.
+    """
+    pattern_azimuth_amplitude_min = 0.0
+
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """
     Re-optimize during the run. The path is anchored to ONE radius, and a reel-out
@@ -127,6 +208,36 @@ multi-modal, so the guess is a choice about the answer.
     length actually being flown. `false` flies the path from `/init` all the way.
     """
     reopt_enabled::Bool = false
+    """
+    Re-optimize with `/step` ALONE, keeping the session `/init` built at the start
+    of the run, so each solve WARM-STARTS from the previous optimum. `/step`
+    re-anchors the pattern to the length it is given — the server moves `r0` and
+    shifts its stored node-wise warm start by the same delta — so the seed is the
+    last optimum at the radius now being flown. `false` repeats the STARTUP solve
+    every time: a fresh `/init` from the parametric guess, i.e. a cold solve at
+    every length.
+
+    Not to be confused with feeding the FLOWN path back as the seed, which is what
+    the docstring of `examples/simple_opt_reelout.jl` warns about and which failed
+    repeatedly from ~210 m out. That refits an (azimuth, elevation) curve solved
+    for a much shorter radius; this hands the optimizer its own previous iterate in
+    its own variables and never leaves the server.
+
+    What it costs. A warm request is not reproducible on its own — it depends on
+    every solve before it — so the failure cache cannot key it and is skipped for
+    warm steps (the cold fallback below is still cached). And the run then follows
+    ONE branch of a multi-modal problem instead of re-drawing from the guess at
+    every length: a good branch is kept, a mediocre one is kept too. What it buys
+    is the cheap solve, which under `reopt_blocking` is wall time the simulation is
+    frozen for.
+
+    A warm step that comes back `"failed"` falls back to ONE cold `/init` from the
+    parametric guess, under the same rule as [`reopt_retry_el_offset`](@ref):
+    blocking mode only, since without the hold there is nothing to retry within.
+    That `/init` also RESETS the session, so the warm starts that follow it
+    continue from the new solve.
+    """
+    use_step::Bool = false
     """
     Laps between re-optimizations. Requests go out on a lap boundary because that
     is where a path swap is cheapest, and never while a solve is still running.
@@ -209,6 +320,19 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.min_height >= 0 || error("min_height must be >= 0, got $(tos.min_height).")
     tos.reopt_every_n_laps >= 1 ||
         error("reopt_every_n_laps must be >= 1, got $(tos.reopt_every_n_laps).")
+    for (name, value) in (("pattern_elevation_min", tos.pattern_elevation_min),
+                          ("pattern_elevation_max", tos.pattern_elevation_max),
+                          ("pattern_azimuth_max", tos.pattern_azimuth_max),
+                          ("pattern_azimuth_amplitude_min",
+                           tos.pattern_azimuth_amplitude_min))
+        0 <= value <= 90 || error("$name must be in [0, 90], got $value.")
+    end
+    tos.pattern_elevation_max == 0 ||
+        tos.pattern_elevation_max > tos.pattern_elevation_min ||
+        error("pattern_elevation_max ($(tos.pattern_elevation_max)) must be greater "*
+              "than pattern_elevation_min ($(tos.pattern_elevation_min)).")
+    tos.turn_radius_headroom >= 1 ||
+        error("turn_radius_headroom must be >= 1, got $(tos.turn_radius_headroom).")
     tos.candidate_elevation_margin >= 0 ||
         error("candidate_elevation_margin must be >= 0, got "*
               "$(tos.candidate_elevation_margin).")

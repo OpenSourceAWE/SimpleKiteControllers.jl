@@ -26,21 +26,33 @@ the finding, not a bug to hide. Everything else here is `simple_reelout.jl`.
 `reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run stays
 reproducible without a server) re-anchors the path to the length actually being
 flown. A request goes out on a lap boundary every `reopt_every_n_laps`, at most
-`max_reopt` times, and it repeats the STARTUP solve at the current length: `/init`
-with the parametric guess of `traj_opt.yaml`, then `opt_step(...; wait = false)`.
-`/status` is polled every `reopt_poll_interval` and the result collected from
-`opt_trajectory` — whose table is in RADIANS, unlike the degrees of every struct.
-While one runs, and after one that fails, the server keeps serving the previous
-path, so "not ready" needs no special case.
+`max_reopt` times, sent with `wait = false`; `/status` is polled every
+`reopt_poll_interval` and the result collected from `opt_trajectory` — whose table
+is in RADIANS, unlike the degrees of every struct. While one runs, and after one
+that fails, the server keeps serving the previous path, so "not ready" needs no
+special case.
 
-The flown path is deliberately NOT fed back as the seed. It is an (azimuth,
-elevation) curve optimized for a much shorter radius, so it degrades as a starting
-point the further the run walks from its anchor, and the solve escapes to
+What the request IS depends on `use_step`. With `use_step: false` it repeats the
+STARTUP solve at the current length — `/init` with the parametric guess of
+`traj_opt.yaml`, then the step — so every solve is cold and independent. With
+`use_step: true` (the shipped setting) `/init` is sent ONCE, before the run, and a
+re-optimization is `/step` alone: the server keeps the session and WARM-STARTS
+from the previous optimum, which it re-anchors to the length sent (moving `r0` and
+shifting its node-wise warm start with it). That is the cheap solve, and under
+`reopt_blocking` it is wall time the simulation is not frozen for. Its price is in
+`TrajOptSettings.use_step`: the failure cache cannot key a warm request, and the
+run follows one branch of a multi-modal problem instead of re-drawing from the
+guess at every length. A warm step that fails falls back to one cold `/init`.
+
+What is NOT done either way is feeding the FLOWN path back as the seed. It is an
+(azimuth, elevation) curve optimized for a much shorter radius, so it degrades as a
+starting point the further the run walks from its anchor, and the solve escapes to
 near-zenith where `C_beta` jams on its 0.9 rad bound, tension collapses to ~1 kN
 and the winch law cannot be met. Measured 2026-08-18: re-optimizations seeded that
 way fail repeatedly from ~210 m out, while the guess converges at 182, 200, 246,
 278, 282, 286 and 317 m — 282 m being one that failed from the flown path and
-solves to 9014 W from the guess.
+solves to 9014 W from the guess. A warm start is a different thing: the seed is the
+optimizer's own iterate in its own variables and never leaves the server.
 
 `reopt_blocking` decides what the loop does during the 7-13 s solve. `true`
 (default) holds the loop at the request until `/status` leaves `"solving"`, so the
@@ -113,6 +125,17 @@ update the bands are pulled towards each other by `fcs.el_bias_smooth`
 differences: a band sees a fifth of the samples the scalar learner had, and the
 noise that buys is what the curvature gate refuses. `el_bias_bins = 1` is the
 scalar learner exactly.
+
+The profile's SPREAD is rationed, its mean is not. A binned correction is a bend in
+the reference where the bands differ, and the pattern shrinks as the tether grows
+until it has no curvature to spare: measured 2026-08-20 at 380 m, a reply that was
+fine on its own (margin 0.95) kept 0.97 under a uniform lift of the profile's 3.06°
+mean and fell to 0.41 under its 1.74° of band-to-band spread — a rejection of the
+optimizer's own path over a correction to it. So a candidate is lifted by the whole
+mean and by the largest quarter-step of the deviation that still clears
+`min_feasibility_margin` at the current length; what is withheld stays in
+`el_target - el_applied` and goes in later through the same in-air route as any
+other shift, on the same gate. `el_bias_bins = 1` has no spread and is unaffected.
 
 The error that is fed back is the one against the OPTIMIZER's curve, i.e. the
 measured sag plus the correction already in the flown path. Closing on the sag
@@ -426,12 +449,37 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 # Anchored to the STARTING length. The pattern is optimal there and drifts off it
 # as the tether grows; re-optimizing during the run is stage 4, not this script.
 ensure_server(tos.base_url; autostart = tos.autostart_server)
+# What the solve must respect, as opposed to what the gates below score it
+# against afterwards: both are off unless data/traj_opt.yaml turns them on.
+#
+# The turn radius is asked for with HEADROOM, and re-derived per request rather
+# than set once: the optimizer measures `R = r/|kappa|` at each node's own radius,
+# which grows through the lap, while the run flies the reply at the ANCHOR, where
+# the same angular curvature is tighter by `L/r`. `opt_r_scale` carries both
+# corrections — `reelout_anchor_ratio` off the last reply for the geometry, and
+# `tos.turn_radius_headroom` for what the GATE adds on top (its finite-difference
+# curvature estimate, the elevation lift). The startup request has no reply to
+# measure yet, so it gets the headroom alone.
+opt_r_scale = tos.turn_radius_headroom
+opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+opt_box = pattern_limits_from(tos)
+isnothing(opt_r_min) && isnothing(opt_box) ||
+    @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
+                    pattern box %s.",
+                   isnothing(opt_r_min) ? "unset" :
+                       @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
+                                own, x %.2f of headroom)",
+                                opt_r_min, tos.min_feasibility_margin, opt_r_scale),
+                   isnothing(opt_box) ? "unset" : string(opt_box))
+
 start_params = InitParams(; name = tos.name, length = l_set,
                           winch_params = winch, inflow_conditions = inflow,
                           trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                           input_depower = tos.input_depower,
                           reg_weight = tos.reg_weight,
-                          detect_simple_bounds = tos.detect_simple_bounds)
+                          detect_simple_bounds = tos.detect_simple_bounds,
+                          min_turn_radius = opt_r_min,
+                          pattern_limits = opt_box)
 # Known bad? Then say so in a second rather than in the 80 s the solver needs to
 # reach its iteration cap and fail again. See the cache in awetrim_client.jl for
 # why a recorded failure can be trusted.
@@ -477,6 +525,28 @@ end
 # re-optimizations hold the loop and land in `reopt_blocked_s`.
 opt_startup_solve_s = time() - t_solve_start
 toc("Received the optimized path in: ")
+
+# What the reply was optimized AT, which is not what this run flies. The server
+# varies `l_dp` unless it is pinned (`DepowerSpec("fixed", ...)`), and its tape
+# scale is 0.4 m off V3Kite's: `l_dp = 0.6 + 5*u_p` there, `0.2 + 5*u_p` here. So
+# the gap below is a real difference between the model that predicted the power
+# and the model that flies it, and it belongs next to the prediction.
+if !isnothing(opt_result.depower)
+    flown_l_dp = 0.6 + 5 * fcs.depower_setpoint
+    @info @sprintf("Optimized at depower l_dp = %.3f m (mode %s), against %.3f m \
+                    for the flown depower_setpoint = %.2f — a %+.3f m gap on the \
+                    optimizer's tape scale.",
+                   opt_result.depower.value, opt_result.depower.mode, flown_l_dp,
+                   fcs.depower_setpoint, opt_result.depower.value - flown_l_dp)
+end
+# The optimizer's own curvature diagnostic, in metres and physical: comparable
+# with the kite's 1/(c1*u_s) and with `min_feasibility_margin`, and read
+# before this repo's angular gates ever see the path.
+isnothing(opt_result.metrics.turn_radius_min_m) ||
+    @info @sprintf("Tightest physical turn radius of the reply: %.2f m%s.",
+                   opt_result.metrics.turn_radius_min_m,
+                   isnothing(opt_r_min) ? "" :
+                       @sprintf(" (asked for >= %.2f m)", opt_r_min))
 
 # The LOBE lift: extra elevation where the sag is deepest, none in the middle of
 # the pattern. Baked into every path this run installs — the startup one here,
@@ -552,6 +622,27 @@ el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
 opt_table = opt_trajectory(; url = tos.base_url)
 opt_downloops = opt_table["spline"]["downloops"]
 opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
+# The geometric half of the request correction, now that there is a reply to
+# measure it off: how much longer the tether gets over the lap this path was
+# solved for. Every re-optimization below asks for `L/r` more turn radius than the
+# gate demands, re-measured from the reply that comes back, because the ratio
+# shrinks as the tether grows (1.19 at 180 m, 1.09 at 380 m for the same reel-out).
+# Guarded, not unconditional: a request that is off (margin 0, or a
+# `body_damping`/`depower` the turn-rate table refuses) stays off, and asking
+# `min_turn_radius_request` again would only repeat its warning once per lap.
+if !isnothing(opt_r_min)
+    opt_r_scale = reelout_anchor_ratio(opt_table) * tos.turn_radius_headroom
+    opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+end
+isnothing(opt_r_min) ||
+    @info @sprintf("Turn-radius request for the re-optimizations: %.2f m — the \
+                    gate's %.2f m at margin %.2f, x %.3f for the lap's reel-out \
+                    (%.1f -> %.1f m) and x %.2f of headroom.",
+                   opt_r_min, opt_r_min / opt_r_scale, tos.min_feasibility_margin,
+                   reelout_anchor_ratio(opt_table),
+                   minimum(Float64.(opt_table["table"]["distance_radial"])),
+                   maximum(Float64.(opt_table["table"]["distance_radial"])),
+                   tos.turn_radius_headroom)
 # Which path was flown when, so the run can be scored against the prediction of the
 # path ACTUALLY in the air rather than only the first one. A re-optimization that
 # installs appends to this; `path_blend_time` makes the swap gradual, but 4 s of
@@ -887,68 +978,106 @@ try
             if !reopt_pending && isnothing(blend_to) && reopt_n < tos.max_reopt &&
                fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
                 try
-                    # RE-INIT at the current length and seed from the parametric
-                    # guess, exactly as the startup solve does — do NOT feed the
-                    # flown path back. That path is in (azimuth, elevation) and was
-                    # optimized for a much shorter radius, so the further the run
-                    # walks from its anchor the worse a starting point it is, and
-                    # the solve escapes to near-zenith: measured 2026-08-18 at
-                    # 282 m, C_beta jams on its 0.9 rad bound at ~50° of elevation
-                    # where tension collapses to ~1 kN and the winch law cannot be
-                    # met. The same 282 m solves to 9014 W from the guess.
+                    # A re-optimization is one of two things, chosen by
+                    # `use_step` in data/traj_opt.yaml.
                     #
-                    # `reopt_retry_el_offset` adds ONE retry from a shifted guess
-                    # when the first attempt fails, which only the blocking mode can
-                    # do — see its docstring for why a re-optimization may retry
-                    # where the startup solve deliberately may not.
-                    el_seeds = (tos.reopt_blocking && tos.reopt_retry_el_offset != 0) ?
+                    # COLD (`use_step: false`): RE-INIT at the current length and
+                    # seed from the parametric guess, exactly as the startup solve
+                    # does — do NOT feed the flown path back. That path is in
+                    # (azimuth, elevation) and was optimized for a much shorter
+                    # radius, so the further the run walks from its anchor the worse
+                    # a starting point it is, and the solve escapes to near-zenith:
+                    # measured 2026-08-18 at 282 m, C_beta jams on its 0.9 rad bound
+                    # at ~50° of elevation where tension collapses to ~1 kN and the
+                    # winch law cannot be met. The same 282 m solves to 9014 W from
+                    # the guess.
+                    #
+                    # WARM (`use_step: true`): `/step` alone, keeping the session
+                    # `/init` built before the run. The seed is then the optimizer's
+                    # OWN previous solution, re-anchored to `l_now` by the server
+                    # (it moves `r0` and shifts its node-wise warm start with it) —
+                    # not an angle curve refitted at a radius it was not solved for,
+                    # which is the failure above. The failure cache cannot key such
+                    # a request, since what it seeds from is every solve before it.
+                    #
+                    # Either way ONE retry follows a failure, and only in blocking
+                    # mode — see `reopt_retry_el_offset` for why a re-optimization
+                    # may retry where the startup solve deliberately may not. A
+                    # `nothing` seed below is the warm attempt; a number is a cold
+                    # `/init` from the guess at that centre elevation, which is also
+                    # what a failed warm step falls back to (and which restarts the
+                    # warm-start chain, since `/init` resets the session).
+                    el_seeds = if tos.use_step
+                        tos.reopt_blocking ? (nothing, tos.guess_el_center) :
+                                             (nothing,)
+                    elseif tos.reopt_blocking && tos.reopt_retry_el_offset != 0
                         (tos.guess_el_center,
-                         tos.guess_el_center + tos.reopt_retry_el_offset) :
+                         tos.guess_el_center + tos.reopt_retry_el_offset)
+                    else
                         (tos.guess_el_center,)
+                    end
                     for (attempt, el_seed) in enumerate(el_seeds)
-                        guess_az_r, guess_el_r =
-                            figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                              tos.guess_d, 0.0, el_seed,
-                                              0.0, tos.guess_points)
-                        reopt_params = InitParams(; name = tos.name, length = l_now,
-                                                  winch_params = winch,
-                                                  inflow_conditions = inflow,
-                                                  trajectory = Trajectory(collect(guess_az_r),
-                                                                          collect(guess_el_r)),
-                                                  input_depower = tos.input_depower,
-                                                  reg_weight = tos.reg_weight,
-                                                  detect_simple_bounds = tos.detect_simple_bounds)
-                        # A cached failure costs the run nothing but the lap it
-                        # would have re-optimized on: no request goes out, the
-                        # kite keeps the path it has, and `reopt_n` is NOT spent,
-                        # so the budget still buys `max_reopt` real solves.
-                        cached = tos.opt_failure_cache ? opt_failed_before(reopt_params) :
-                                 nothing
-                        if !isnothing(cached)
-                            global reopt_lap = fig8_idx_progress / n_path
-                            push!(reopt_events,
-                                  (; t, l = l_now, status = "skipped",
-                                   detail = @sprintf("cached failure from %s (%s)",
-                                                     get(cached, "when", "an earlier run"),
-                                                     get(cached, "reason", "no reason recorded"))))
-                            @info @sprintf("Re-optimization at L = %.0f m skipped: this \
-                                            exact request is cached as failing (%s). \
-                                            clear_opt_failures() to retry it.",
-                                           l_now, get(cached, "reason", "no reason recorded"))
-                            attempt == length(el_seeds) && break
-                            continue
+                        # Set only on a cold attempt: it is what the failure cache
+                        # keys on, and a warm step has no such key.
+                        reopt_params = nothing
+                        if isnothing(el_seed)
+                            # `min_turn_radius` travels with the step, not because
+                            # the session forgets it — an omitted field keeps what
+                            # `/init` set — but because it MOVES with the length:
+                            # the anchor correction is `L/r`, and the lap's reel-out
+                            # is a bigger fraction of a short tether than of a long
+                            # one. `nothing` (the request is off) still means "keep".
+                            opt_step(StepParams(; length = l_now, winch_params = winch,
+                                                min_turn_radius = opt_r_min);
+                                     url = tos.base_url, wait = false)
+                        else
+                            guess_az_r, guess_el_r =
+                                figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
+                                                  tos.guess_d, 0.0, el_seed,
+                                                  0.0, tos.guess_points)
+                            reopt_params = InitParams(; name = tos.name, length = l_now,
+                                                      winch_params = winch,
+                                                      inflow_conditions = inflow,
+                                                      trajectory = Trajectory(collect(guess_az_r),
+                                                                              collect(guess_el_r)),
+                                                      input_depower = tos.input_depower,
+                                                      reg_weight = tos.reg_weight,
+                                                      detect_simple_bounds = tos.detect_simple_bounds,
+                                                      min_turn_radius = opt_r_min,
+                                                      pattern_limits = opt_box)
+                            # A cached failure costs the run nothing but the lap it
+                            # would have re-optimized on: no request goes out, the
+                            # kite keeps the path it has, and `reopt_n` is NOT spent,
+                            # so the budget still buys `max_reopt` real solves.
+                            cached = tos.opt_failure_cache ?
+                                     opt_failed_before(reopt_params) : nothing
+                            if !isnothing(cached)
+                                global reopt_lap = fig8_idx_progress / n_path
+                                push!(reopt_events,
+                                      (; t, l = l_now, status = "skipped",
+                                       detail = @sprintf("cached failure from %s (%s)",
+                                                         get(cached, "when", "an earlier run"),
+                                                         get(cached, "reason", "no reason recorded"))))
+                                @info @sprintf("Re-optimization at L = %.0f m skipped: this \
+                                                exact request is cached as failing (%s). \
+                                                clear_opt_failures() to retry it.",
+                                               l_now, get(cached, "reason", "no reason recorded"))
+                                attempt == length(el_seeds) && break
+                                continue
+                            end
+                            reopt_reply = opt_init(reopt_params; url = tos.base_url)
+                            opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
+                                     url = tos.base_url, wait = false)
                         end
-                        reopt_reply = opt_init(reopt_params; url = tos.base_url)
-                        opt_step(StepParams(l_now, winch, reopt_reply.trajectory);
-                                 url = tos.base_url, wait = false)
                         global reopt_pending = true
                         global reopt_t_request = t
                         global reopt_lap = fig8_idx_progress / n_path
                         global reopt_next_poll = t + tos.reopt_poll_interval
                         @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
-                                        (lap %.1f, request %d of %d, guess el %.0f°)%s.",
+                                        (lap %.1f, request %d of %d, %s)%s.",
                                        l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
-                                       el_seed,
+                                       isnothing(el_seed) ? "warm start" :
+                                           @sprintf("guess el %.0f°", el_seed),
                                        tos.reopt_blocking ? " — holding the simulation" : "")
                         # Freeze here rather than in the collect branch, so the reply
                         # is anchored to `l_now` and not to a length the run drifted to.
@@ -971,14 +1100,20 @@ try
                         failed = (try
                                       opt_status(tos.base_url)["state"]
                                   catch; "failed"; end) == "failed"
-                        failed && tos.opt_failure_cache &&
+                        # Only a cold request can be recorded: the cache key is the
+                        # request as the SERVER sees it, and a warm step's seed is
+                        # the whole history of solves before it, which no key covers.
+                        # A failed step also mutates nothing on the server, so the
+                        # next warm start still departs from the last good optimum.
+                        failed && tos.opt_failure_cache && !isnothing(reopt_params) &&
                             record_opt_failure!(reopt_params,
                                                 @sprintf("solver failed at L = %.1f m, \
                                                           guess el %.0f°", l_now, el_seed))
                         (failed && attempt < length(el_seeds)) || break
-                        @info @sprintf("  ... failed from guess el %.0f°; retrying \
-                                        from %.0f°.", el_seed,
-                                       tos.guess_el_center + tos.reopt_retry_el_offset)
+                        @info @sprintf("  ... failed from %s; retrying from %s.",
+                                       isnothing(el_seed) ? "the warm start" :
+                                           @sprintf("guess el %.0f°", el_seed),
+                                       @sprintf("guess el %.0f°", el_seeds[attempt + 1]))
                     end
                 catch exc
                     # A refused request must not take the run with it: the path in
@@ -1006,6 +1141,27 @@ try
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
+                        # What THIS reply was solved under, before the next request
+                        # is re-derived below.
+                        opt_r_asked = opt_r_min
+                        # Re-measure the anchor correction for the NEXT request off
+                        # the reply that just landed: the lap's reel-out is a
+                        # shrinking fraction of a growing tether, so a factor fixed
+                        # at the startup length over-asks by the end of the run.
+                        # Skipped when the request is off, as at startup.
+                        if !isnothing(opt_r_min)
+                            global opt_r_scale = reelout_anchor_ratio(tab) *
+                                                 tos.turn_radius_headroom
+                            global opt_r_min =
+                                min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+                        end
+                        # What the optimizer itself measured, in the same metres the
+                        # request was made in, next to the radii it measured them at.
+                        # The gate below reads the same curve AT THE ANCHOR, so the
+                        # two differ by `L/r` — that is what this line is here to
+                        # show when a reply is rejected for curvature.
+                        opt_r_reply = opt_float(tab["metrics"], "turn_radius_min_m")
+                        r_span = extrema(Float64.(tab["table"]["distance_radial"]))
                         # /trajectory is in RADIANS, unlike the degrees of the structs.
                         new_az = rad2deg.(Float64.(tab["table"]["azimuth"]))
                         new_el = rad2deg.(Float64.(tab["table"]["elevation"]))
@@ -1014,8 +1170,50 @@ try
                         # gates and compresses the azimuth axis by cos(elevation),
                         # which the curvature margin must be re-read for.
                         cand_raw = (copy(new_az), copy(new_el))
-                        new_el = new_el .+ bias_lift(new_az, el_target) .+
-                                 wing_lift(new_az, new_el)
+                        # As much of the learnt droop profile as the curvature gate
+                        # can take, instead of all of it or none.
+                        #
+                        # The profile's MEAN is free and its SPREAD is not. Measured
+                        # 2026-08-20 on the reply this run rejected at 380 m: the
+                        # curve itself was fine (margin 0.95 at the anchor, the
+                        # optimizer's own 12.15 m against the 10.36 m asked for), a
+                        # uniform lift of the profile's mean (3.06°) left it at 0.97,
+                        # and the profile's 1.74° of band-to-band spread took it to
+                        # 0.41. The pattern is only 4.7° tall and ±8.6° wide by then,
+                        # so a spread of that size is a bend in a curve that has none
+                        # to spare, and it lands the tightest radius on the bend.
+                        #
+                        # Dropping the reply over that is the wrong trade: the path is
+                        # what the run exists to fly, the droop correction is a
+                        # refinement of it. So the deviation from the mean is scaled
+                        # back until the candidate passes, and `el_applied` records
+                        # what was actually applied — the rest stays in `el_delta` and
+                        # goes in through the in-air shift above once the pattern can
+                        # carry it, on the same gate.
+                        wing_delta = wing_lift(new_az, new_el)
+                        el_mean = mean(el_target)
+                        el_dev = el_target .- el_mean
+                        n_native = min(tos.resample_points, length(new_az) - 1)
+                        lifted(f) = new_el .+ bias_lift(new_az, el_mean .+ f .* el_dev) .+
+                                    wing_delta
+                        function lifted_margin(e)
+                            isnothing(coeffs) && return Inf
+                            a, b = prepare_path(new_az, e; resample = n_native,
+                                                up_loops = fcs.up_loops)
+                            check_pattern_feasible(a, b, l_now, fcs.max_steering;
+                                                   c1 = c1_at(phase), prn = false).margin
+                        end
+                        bias_frac = 1.0
+                        for f in (1.0, 0.75, 0.5, 0.25, 0.0)
+                            bias_frac = f
+                            lifted_margin(lifted(f)) >= tos.min_feasibility_margin && break
+                        end
+                        new_el = lifted(bias_frac)
+                        bias_frac < 1 && maximum(abs, el_dev) > 1e-6 &&
+                            @info @sprintf("Droop profile held back to %.0f %% of its                                             spread (%.2f° band to band) on the path for                                             L = %.0f m; its %.2f° mean goes in whole.",
+                                           100 * bias_frac,
+                                           maximum(el_target) - minimum(el_target),
+                                           l_now, el_mean)
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory
@@ -1032,7 +1230,6 @@ try
                         # rescales the lap counter. The guidance itself is
                         # indifferent — it walks arc length, and the extra points sit
                         # on the same curve.
-                        n_native = min(tos.resample_points, length(new_az) - 1)
                         chk_az, chk_el = prepare_path(new_az, new_el;
                             resample = n_native, up_loops = fcs.up_loops)
                         global chk_points = n_native
@@ -1045,7 +1242,16 @@ try
                         clearance = path_min_height(chk_az, chk_el, l_now)
                         if margin < tos.min_feasibility_margin
                             event = (; t, l = l_now, status = "rejected",
-                                     detail = @sprintf("curvature margin %.2f", margin))
+                                     detail = @sprintf("curvature margin %.2f%s",
+                                                       margin,
+                                                       isnothing(opt_r_reply) ? "" :
+                                                           @sprintf(" (the optimizer \
+                                                                     measured %.2f m at \
+                                                                     r = %.0f-%.0f m, \
+                                                                     asked for >= %.2f m)",
+                                                                    opt_r_reply, r_span[1],
+                                                                    r_span[2],
+                                                                    something(opt_r_asked, 0.0))))
                         elseif tos.min_height > 0 && clearance < tos.min_height
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("clearance %.1f m", clearance))
@@ -1067,13 +1273,19 @@ try
                             # draws these as what it flew, undistorted.
                             push!(opt_paths_raw, cand_raw)
                             global blend_t0 = t
-                            # The candidate carries the whole shift, so the path in
-                            # the air does too the moment it lands.
-                            maximum(abs, el_target .- el_applied) > 1e-6 &&
+                            # What went in, which is the target only when the
+                            # spread survived the gate above; the remainder stays
+                            # in `el_delta` for the in-air route to retry.
+                            el_installed = el_mean .+ bias_frac .* el_dev
+                            maximum(abs, el_installed .- el_applied) > 1e-6 &&
                                 push!(el_shift_events,
-                                      (; t, delta = mean(el_target .- el_applied),
-                                       margin, status = "carried by an install"))
-                            global el_applied = copy(el_target)
+                                      (; t, delta = mean(el_installed .- el_applied),
+                                       margin,
+                                       status = bias_frac < 1 ?
+                                           @sprintf("carried by an install (%.0f %% of \
+                                                     the spread)", 100 * bias_frac) :
+                                           "carried by an install"))
+                            global el_applied = el_installed
                             # Arm the in-air warning again: it is one warning per
                             # SHIFT, not per run. Without this, the first hold-back
                             # silences every later one — and since the in-air route
@@ -1121,8 +1333,12 @@ try
                                                tos.min_feasibility_margin)
                             end
                             event = (; t, l = l_now, status = "installed",
-                                     detail = @sprintf("margin %.2f%s, clearance %.1f m, \
+                                     detail = @sprintf("margin %.2f%s%s, clearance %.1f m, \
                                                         %.0f W predicted", margin,
+                                                       bias_frac < 1 ?
+                                                           @sprintf(" (droop spread at \
+                                                                     %.0f %%)",
+                                                                    100 * bias_frac) : "",
                                                        isnan(margin5_flown) ? "" :
                                                            @sprintf(" (phase 5: %.2f at %.0f m)",
                                                                     margin5_flown,

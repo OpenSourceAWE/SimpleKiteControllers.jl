@@ -115,6 +115,29 @@ traj_opt:
     # one. Raising it back only helps once the optimizer is told about the V3's
     # turn-rate law — its own steering bound is what sets the 11 m radius.
     min_feasibility_margin: 0.74
+    # Extra turn radius asked of the optimizer, as a factor on the margin above.
+    # 1.0 asks for exactly what the gate demands, which is NOT enough, and the
+    # first use_step run showed why: a reply that CONVERGED with its own constraint
+    # satisfied was rejected at margin 0.63 against the 0.74 demanded here.
+    #
+    # The optimizer measures R = r/|kappa| at each node's OWN radius, and r grows
+    # through the lap (measured 2026-08-19 on a 380 m reply: distance_radial spans
+    # 380 -> 415 m, tightest node at r = 411 m with R = 12.32 m). The run installs
+    # the reply as an (azimuth, elevation) curve and flies it AT THE ANCHOR, where
+    # the same angular curvature is physically tighter by L/r: 11.38 m, 0.92x. That
+    # factor is worse on a short tether (~0.87 at 220 m) and the run measures it per
+    # length off each reply (reelout_anchor_ratio), so it is NOT in this number.
+    #
+    # This number is the gate's own two bites: path_radius_profile re-estimates the
+    # curvature from the resampled ~99-point reply and reads ~5 % tighter than the
+    # exact value (10.81 vs 11.38 m on that reply), and el_bias/el_offset_wing are
+    # added before the check, compressing the azimuth axis by cos(elevation).
+    #
+    # The startup /init gets this factor ALONE - there is no reply to measure the
+    # geometric one off yet - so raise it if a STARTUP path is refused for curvature.
+    # Same family as min_feasibility_margin: every 0.1 asks for a wider, less
+    # powerful pattern, so it is a rejection-rate knob and not a safety one.
+    turn_radius_headroom: 1.10
     # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
     # any reel-out; 0.0 disables.
     #
@@ -132,6 +155,60 @@ traj_opt:
     # The real fix is to stop discarding the optimizer's radial profile (stage 4).
     min_height: 40.0
 
+    # --- Constraints the optimizer solves UNDER ---------------------------- #
+    # min_height above is a GATE: the reply is scored and thrown away if it fails,
+    # after the 7-13 s solve has been paid for. What follows travels WITH the
+    # request (AWETrim, 2026-08-19), so the optimizer cannot offer a path that
+    # breaks it.
+    #
+    # min_feasibility_margin is BOTH now. It still gates the reply, and it is also
+    # sent, converted to metres: min_turn_radius = margin/(c1*max_steering), the
+    # kite's own physical turning limit scaled by the margin - 0.74/(0.2752*0.32)
+    # = 8.4 m at the shipped numbers, against 11.35 m of full-steering turning.
+    # That conversion is exact: the margin is a ratio of two angular radii at one
+    # length, so scaling both by that length makes it a ratio of physical ones.
+    #
+    # What is NOT length-free is where the two measure the path's own radius, and
+    # the difference is NOT in the run's favour - the opposite was recorded here
+    # until 2026-08-19, from a reply whose distance_radial stayed inside its anchor.
+    # It does not: the lap STARTS at the anchor and reels out (session.init sets
+    # distance_radial = r0), so the optimizer's R = r/|kappa| is measured at radii
+    # ABOVE the length the run installs the curve at. Measured 2026-08-19 on a 380 m
+    # reply: distance_radial 380 -> 415 m, tightest node at r = 411 m with R =
+    # 12.32 m, which at the 380 m anchor is 11.38 m - 0.92x, and ~0.87x at 220 m
+    # where the same reel-out is a bigger fraction of the tether. An unscaled
+    # request therefore buys a reply that converges, satisfies its own constraint,
+    # and is rejected here: margin 0.63 against the 0.74 demanded.
+    #
+    # So the request is scaled, per length rather than sent once at /init:
+    # reelout_anchor_ratio measures 1 + dL/L off each reply for the geometry, and
+    # turn_radius_headroom below covers what the GATE adds. Both are reported in
+    # every summary as traj_opt.feasibility.turn_radius_request_m and
+    # turn_radius_scale.
+    #
+    # The new failure mode: a constrained cold solve lands on the best branch less
+    # often than a free one - 11 of 18 lengths against 16 of 18, measured by
+    # AWETrim on the LEI-V3 reference, the rest going to a "binding" branch with
+    # the loops exactly at R_min and a few percent less power. A 422 where there
+    # used to be a "PATTERN TOO TIGHT" rejection is that trade, not a new bug;
+    # min_feasibility_margin: 0.0 turns off the request and the gate together.
+    # The pattern box, in degrees; 0.0 keeps the optimizer's own default for that
+    # side (|azimuth| <= 45.8, 0.6 <= elevation <= 51.6, no amplitude floor).
+    #
+    # pattern_elevation_min is an ANGLE where min_height is a HEIGHT, which is
+    # exactly why it exists: a growing tether meets a height floor at ever lower
+    # angles (50 m at 350 m of tether is 8.2 deg), while this repo's criterion and
+    # reelout_feasibility.jl's el_floor are angles. Set it to min_elevation +
+    # candidate_elevation_margin to ask for what the gate will demand.
+    #
+    # The two amplitude keys guard the basins a failed re-optimization falls into:
+    # the pattern collapsing to zero width (azimuth_amplitude_min) and running away
+    # to the zenith (elevation_max).
+    pattern_elevation_min: 0.0
+    pattern_elevation_max: 0.0
+    pattern_azimuth_max: 0.0
+    pattern_azimuth_amplitude_min: 0.0
+
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     # The path is anchored to ONE radius and the run walks away from it; each
     # re-optimization re-anchors it to the length actually being flown. Requests go
@@ -141,6 +218,20 @@ traj_opt:
     # installed, and blended in over path_blend_time; one that fails is dropped and
     # the run keeps flying the path it has.
     reopt_enabled: true   # off by default: a run is reproducible without a server
+    # Re-optimize with /step alone, keeping the session /init built at the start of
+    # the run: the solve warm-starts from the PREVIOUS OPTIMUM, which the server
+    # re-anchors to the length being sent (it moves r0 and shifts its stored
+    # node-wise warm start with it). false repeats the startup solve at every
+    # length instead — a fresh /init from the parametric guess above.
+    #
+    # This is not the flown path fed back (that one is refitted from angles at a
+    # radius it was not solved for, and failed repeatedly from ~210 m out); the
+    # seed here never leaves the server. The price: a warm request is not
+    # reproducible on its own, so opt_failure_cache does not key it, and the run
+    # follows one branch of a multi-modal problem instead of re-drawing from the
+    # guess. A warm step that fails falls back to one cold /init (blocking mode
+    # only), which also restarts the warm-start chain.
+    use_step: true
     reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
     max_reopt: 7             # bound on re-optimizations per run                 [-]
     path_blend_time: 4.0     # seconds over which the new path replaces the old  [s]

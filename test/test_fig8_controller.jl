@@ -767,9 +767,18 @@ end
         # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
         # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
         @test tos.min_height == 40.0
+        # Above the struct's 1.0: asking for exactly what the gate demands is what
+        # got a converged, constraint-satisfying reply rejected at margin 0.63
+        # against 0.74 (2026-08-19). The exact value follows the measurement, so
+        # only the inequality is pinned.
+        @test tos.turn_radius_headroom > TrajOptSettings().turn_radius_headroom == 1.0
         # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
         # carries whatever the last experiment needed.
         @test !TrajOptSettings().reopt_enabled
+        # Warm re-optimization: off by default, since a cold solve per length is the
+        # reproducible one, and on in the shipped file, where it buys the cheap solve.
+        @test !TrajOptSettings().use_step
+        @test tos.use_step
         # 1, not the struct's 2: the shipped file re-anchors every lap, which is
         # what the reel-out window is long enough for.
         @test tos.reopt_every_n_laps == 1
@@ -798,6 +807,11 @@ end
             neg = joinpath(dir, "n.yaml")
             write(neg, "traj_opt:\n    candidate_elevation_margin: -1.0\n")
             @test_throws ErrorException TrajOptSettings(neg)
+            # Below 1.0 the request would ask for LESS turn radius than the gate
+            # demands, which is the mistake this factor exists to correct.
+            slack = joinpath(dir, "h.yaml")
+            write(slack, "traj_opt:\n    turn_radius_headroom: 0.9\n")
+            @test_throws ErrorException TrajOptSettings(slack)
         end
     end
 

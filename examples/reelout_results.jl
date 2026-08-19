@@ -351,7 +351,18 @@ if !isnothing(opt_power_meas)
 end
 feasibility_block = OrderedDict{String, Any}(
     "min_required" => (tos.min_feasibility_margin,
-        "min_feasibility_margin of data/traj_opt.yaml [-]"))
+        "min_feasibility_margin of data/traj_opt.yaml [-]"),
+    "turn_radius_headroom" => (tos.turn_radius_headroom,
+        "factor on the gate's number for what the GATE adds: its \
+         finite-difference curvature estimate and the elevation lift [-]"),
+    "turn_radius_request_m" => (isnothing(opt_r_min) ? "unset" :
+                                round(opt_r_min; digits = 2),
+        "minimum turn radius asked of the optimizer for the LAST request; the \
+         gate's margin/(c1*max_steering) times the headroom and the lap's \
+         reel-out ratio, since the optimizer measures the radius up the reel-out \
+         while the run flies the curve at the anchor [m]"),
+    "turn_radius_scale" => (round(opt_r_scale; digits = 3),
+        "the two corrections together, as sent [-]"))
 if !isnothing(coeffs)
     feasibility_block["margin_start"] = (round(feas_start.margin; digits = 2),
         "curvature margin at the starting length; the worst case only when one \
@@ -396,6 +407,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
     "feasibility" => feasibility_block,
     "reopt" => OrderedDict(
         "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
+        "warm_start" => (tos.use_step,
+            "/step alone, seeded from the previous optimum; false re-inits from \
+             the parametric guess at every length"),
         "requests" => (reopt_n, "solves that completed, accepted or rejected"),
         "blocking" => (tos.reopt_blocking,
             "simulation held while a solve ran"),

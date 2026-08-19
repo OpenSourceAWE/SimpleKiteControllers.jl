@@ -9,14 +9,29 @@
 #     reply  = opt_init(InitParams(; name = "run-1", length = 200.0, ...))
 #     result = opt_step(StepParams(200.0, winch, reply.trajectory))
 #
-# Contract: POST /init receives and replies `InitParams`, POST /step receives and
-# replies `StepParams` (blocking by default — the reply carries the optimized
-# path). A reply trajectory is CLOSED (last point == first). Angles are DEGREES
-# in these structs, and the physical state travels in them: the tether length is
-# the `length` field, the wind the `inflow_conditions` field of `InitParams`.
-# Call-mode knobs are keyword arguments instead — `opt_step(p; wait = false)`
-# returns as soon as the solve is queued, so the caller keeps flying while the
-# server optimizes.
+# Contract: POST /init receives `InitParams` and replies `InitReply`, POST /step
+# receives `StepParams` and replies `StepReply` (blocking by default — the reply
+# carries the optimized path). The replies are the request structs plus what only
+# the server knows: the `depower` the path was optimized for, the
+# `min_turn_radius` and `pattern_limits` it was optimized under, and the solve
+# `metrics`. A reply trajectory is CLOSED (last point == first). Angles are
+# DEGREES in these structs, and the physical state travels in them: the tether
+# length is the `length` field, the wind the `inflow_conditions` field of
+# `InitParams`. Call-mode knobs are keyword arguments instead —
+# `opt_step(p; wait = false)` returns as soon as the solve is queued, so the
+# caller keeps flying while the server optimizes, and `max_iter` caps the solve.
+#
+# Depower: the server OPTIMIZES `input_depower` by default, so the path that
+# comes back is only flyable at the depower it was optimized for — read it from
+# `reply.depower.value` (measured: 1.6 sent, 1.5186 returned). Send
+# `depower = DepowerSpec("fixed", u_p)` to pin it to what the run actually flies,
+# or `"profile"` for a per-node depower schedule.
+#
+# Turn radius and pattern box: `min_turn_radius` [m] makes the optimizer respect
+# the kite's own turning limit (1/(c1*u_s_max) for a psi_dot = c1*v_a*u_s kite)
+# instead of only its internal steering bounds, and `pattern_limits` bounds where
+# the path may go in azimuth/elevation. Both replace checking-and-discarding a
+# reply after the solve: the constrained solve is the one that costs nothing.
 #
 # The endpoint functions are named `opt_*` rather than `init`/`step`/`status`
 # because a script that flies an optimized path also does `using V3Kite`, whose
@@ -41,7 +56,7 @@ end
 using HTTP, JSON3, StructTypes
 using Dates: now, format
 using YAML
-using SimpleKiteControllers: with_file_lock
+using SimpleKiteControllers: with_file_lock, turn_rate_coeffs
 
 const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
 "Default server address; every function below takes `url` to override it."
@@ -64,11 +79,86 @@ Base.@kwdef struct InflowConditions
     speeds::Vector{Float64} = [wind_speed]  # wind speeds at the given heights
 end
 
-struct WinchParams
+Base.@kwdef struct WinchParams
     mode::String      # "reelout" ("reelin" not supported yet)
     k_v::Float64      # v_set = k_v * sqrt(force)
     f_min::Float64    # minimum winch force [N]
     f_max::Float64    # maximum winch force [N]
+    # Past `f_max` the controller holds the force while the reel-out speed keeps
+    # rising, up to the winch's power limit — so the speed cap is a genuine input
+    # and not derivable from `k_v`/`f_max`. Give either; both `nothing` leaves the
+    # optimizer's own reel-speed bound (10 m/s) in force, which with this repo's
+    # kv = 0.0408 and f_high = 8000 N is never reached (3.65 m/s).
+    v_max::Union{Float64, Nothing} = nothing   # maximum reel-out speed [m/s]
+    p_max::Union{Float64, Nothing} = nothing   # maximum winch power [W]; v_max = p_max/f_max
+end
+
+"The four-field winch of the original contract; `v_max`/`p_max` stay unset."
+WinchParams(mode::AbstractString, k_v, f_min, f_max) =
+    WinchParams(; mode = String(mode), k_v = Float64(k_v),
+                f_min = Float64(f_min), f_max = Float64(f_max))
+
+"""
+    DepowerSpec(mode = "optimize", value = nothing)
+
+How the server treats the depower `l_dp` while it solves. `"optimize"` (the
+server default) varies it and reports what it landed on, `"fixed"` pins it to
+`value` — the setting the run actually flies — and `"profile"` optimizes one
+value per node, giving a depower schedule along the path.
+
+Pinning is not free: measured 2026-08-18, the ROM's predicted power collapses as
+the tape is let out (4486 W at 1.6 m, 1873 W at 1.8 m) and 2.0 m is infeasible
+outright, so `"fixed"` at the flown depower buys agreement between the two models
+with a much smaller feasible set. `value` is `nothing` in `"optimize"` mode to
+start from `input_depower`.
+"""
+Base.@kwdef struct DepowerSpec
+    mode::String = "optimize"                # "fixed" | "optimize" | "profile"
+    value::Union{Float64, Nothing} = nothing # fixed value, or the starting one
+end
+
+"""
+    DepowerReply
+
+The depower the returned path was optimized for — FLY THIS, or the reported
+metrics are not achievable. `profile` is filled in `"profile"` mode only, aligned
+point for point with the reply trajectory; `value` is then its mean.
+"""
+struct DepowerReply
+    mode::String
+    value::Float64
+    profile::Union{Vector{Float64}, Nothing}
+end
+
+"""
+    PatternLimits(; azimuth_max, elevation_min, elevation_max, azimuth_amplitude_min)
+
+A box, in DEGREES, on where the optimized pattern may go. The server bounds the
+B-spline's control coefficients, so by the convex-hull property the limits hold
+along the whole curve and not merely at its nodes.
+
+Every field is optional and `nothing` keeps the optimizer's own default for it
+(|azimuth| <= 45.8°, 0.6° <= elevation <= 51.6°, no amplitude floor).
+`azimuth_amplitude_min` is the figure's half-width and guards the degenerate
+zero-width collapse; `elevation_max` guards the run-away-to-zenith basin — the
+two bad basins a failed re-optimization falls into. On `/step` the struct
+replaces the session's limits as a whole, so an all-`nothing` `PatternLimits()`
+CLEARS them.
+"""
+Base.@kwdef struct PatternLimits
+    azimuth_max::Union{Float64, Nothing} = nothing           # |azimuth| <= this [deg]
+    elevation_min::Union{Float64, Nothing} = nothing         # elevation >= this [deg]
+    elevation_max::Union{Float64, Nothing} = nothing         # elevation <= this [deg]
+    azimuth_amplitude_min::Union{Float64, Nothing} = nothing # half-width >= this [deg]
+end
+
+"Metrics of one solve; `turn_radius_min_m` is the tightest PHYSICAL turn radius
+of the returned path [m] and is `nothing` when it could not be evaluated."
+Base.@kwdef struct SolveMetrics
+    energy_J::Float64
+    total_time_s::Float64
+    avg_power_W::Float64
+    turn_radius_min_m::Union{Float64, Nothing} = nothing
 end
 
 struct Trajectory
@@ -82,15 +172,85 @@ Base.@kwdef struct InitParams
     winch_params::WinchParams
     inflow_conditions::InflowConditions
     trajectory::Trajectory
-    input_depower::Float64 = 1.6       # depower setting
+    input_depower::Float64 = 1.6       # depower setting; only a SEED unless depower.mode == "fixed"
     reg_weight::Float64 = 1.0          # regularization weight
     detect_simple_bounds::Bool = true  # solver flag
+    # `nothing` leaves each of these to the server's default: depower is
+    # OPTIMIZED from `input_depower`, the turn radius is unconstrained beyond the
+    # optimizer's own steering bounds, and the pattern box is the optimizer's.
+    depower::Union{DepowerSpec, Nothing} = nothing
+    min_turn_radius::Union{Float64, Nothing} = nothing   # [m], 0/nothing = off
+    pattern_limits::Union{PatternLimits, Nothing} = nothing
 end
 
-struct StepParams
+Base.@kwdef struct StepParams
     length::Float64                    # current length of the tether
     winch_params::WinchParams
+    # `nothing` is a WARM START: the server keeps the pattern it already has, and
+    # the solve starts from the previous optimum re-anchored to `length` (it moves
+    # `r0` and shifts its node-wise warm start by the same delta). A trajectory
+    # here REPLACES that seed — the curve is refitted into the pattern B-spline —
+    # which is what a re-`/init` does too, only without dropping the session.
+    trajectory::Union{Trajectory, Nothing} = nothing
+    # As in `InitParams`, but here `nothing` means "keep what the session has":
+    # these are set once and stay set until a later step changes them. Send
+    # `min_turn_radius = 0.0` to drop the constraint and `PatternLimits()` to
+    # clear the box.
+    depower::Union{DepowerSpec, Nothing} = nothing
+    min_turn_radius::Union{Float64, Nothing} = nothing
+    pattern_limits::Union{PatternLimits, Nothing} = nothing
+end
+
+"The three-field step of the original contract; the session keeps its depower,
+turn-radius and pattern limits."
+StepParams(length::Real, winch_params::WinchParams, trajectory::Trajectory) =
+    StepParams(; length = Float64(length), winch_params, trajectory)
+
+"A WARM-STARTED step: no trajectory, so the solve starts from the session's own
+previous optimum, re-anchored to `length`."
+StepParams(length::Real, winch_params::WinchParams) =
+    StepParams(; length = Float64(length), winch_params)
+
+"""
+    InitReply
+
+What `/init` accepted: the [`InitParams`](@ref) it built the session from, with
+`trajectory` replaced by the FITTED starting path, plus the depower mode and the
+limits the coming solves will run under. No optimization has happened yet.
+"""
+struct InitReply
+    name::String
+    length::Union{Float64, Nothing}
+    winch_params::Union{WinchParams, Nothing}
+    inflow_conditions::Union{InflowConditions, Nothing}
     trajectory::Trajectory
+    input_depower::Union{Float64, Nothing}
+    reg_weight::Union{Float64, Nothing}
+    detect_simple_bounds::Union{Bool, Nothing}
+    depower::Union{DepowerReply, Nothing}
+    min_turn_radius::Union{Float64, Nothing}
+    pattern_limits::Union{PatternLimits, Nothing}
+    state::String
+    n_points::Union{Int, Nothing}
+end
+
+"""
+    StepReply
+
+What one blocking `/step` produced: the OPTIMIZED `trajectory`, the `depower` it
+assumes (fly both, or `metrics` is not achievable), the limits it was optimized
+under, and the solve `metrics`.
+"""
+struct StepReply
+    length::Union{Float64, Nothing}
+    winch_params::Union{WinchParams, Nothing}
+    trajectory::Trajectory
+    depower::Union{DepowerReply, Nothing}
+    min_turn_radius::Union{Float64, Nothing}
+    pattern_limits::Union{PatternLimits, Nothing}
+    state::String
+    step_index::Int
+    metrics::SolveMetrics
 end
 
 StructTypes.StructType(::Type{InflowConditions}) = StructTypes.Struct()
@@ -98,6 +258,8 @@ StructTypes.StructType(::Type{WinchParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{Trajectory}) = StructTypes.Struct()
 StructTypes.StructType(::Type{InitParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{StepParams}) = StructTypes.Struct()
+StructTypes.StructType(::Type{DepowerSpec}) = StructTypes.Struct()
+StructTypes.StructType(::Type{PatternLimits}) = StructTypes.Struct()
 
 # ---------------------------------------------------------------------------
 # Failed-request cache
@@ -133,17 +295,33 @@ const OPT_FAILURE_CACHE = joinpath(SKC_ROOT, "output", "opt_failure_cache.yaml")
 Identity of a request as the SERVER sees it: every field of `p` except `name`,
 which is the caller's label for the run and not part of the problem.
 
-`hash` is not stable across Julia versions, so an upgrade invalidates the cache.
-That is a cache MISS — one wasted solve, then the entry is rewritten — never a
-false hit, since a key that does not match is simply not found.
+EVERY field has to be in here. A field left out is a false hit — a failure
+recorded under one turn radius, depower mode or pattern box would block a
+request that differs in exactly that, which is the one bug this cache must not
+have. Hence the `"v2-"` prefix: it was grown on 2026-08-19 for the depower /
+turn-radius / pattern-limits fields (and for `alpha` and the `heights`/`speeds`
+of the fitted profiles, which the first version also missed), and the prefix
+retires the entries written under the narrower key rather than reusing them.
+
+`hash` is not stable across Julia versions either, so an upgrade invalidates the
+cache. That is a cache MISS — one wasted solve, then the entry is rewritten —
+never a false hit, since a key that does not match is simply not found.
 """
 function opt_request_key(p::InitParams)
+    w = p.winch_params
+    c = p.inflow_conditions
+    d = p.depower
+    b = p.pattern_limits
     h = hash((p.length, p.input_depower, p.reg_weight, p.detect_simple_bounds,
-              p.winch_params.k_v, p.winch_params.f_min, p.winch_params.f_max,
-              p.inflow_conditions.wind_speed, p.inflow_conditions.wind_direction,
-              p.inflow_conditions.profile_law, p.inflow_conditions.z0,
-              p.trajectory.azimuth, p.trajectory.elevation))
-    return string(h; base = 16)
+              w.mode, w.k_v, w.f_min, w.f_max, w.v_max, w.p_max,
+              c.wind_speed, c.wind_direction, c.profile_law, c.alpha, c.z0,
+              c.turbulence, c.heights, c.speeds,
+              p.trajectory.azimuth, p.trajectory.elevation,
+              d === nothing ? nothing : (d.mode, d.value),
+              p.min_turn_radius,
+              b === nothing ? nothing : (b.azimuth_max, b.elevation_min,
+                                         b.elevation_max, b.azimuth_amplitude_min)))
+    return "v2-" * string(h; base = 16)
 end
 
 """
@@ -191,6 +369,8 @@ function record_opt_failure!(p::InitParams, reason::AbstractString;
             "guess_el_center_deg" => round(sum(p.trajectory.elevation) /
                                            length(p.trajectory.elevation); digits = 2),
             "wind_speed_m_s" => p.inflow_conditions.wind_speed,
+            "min_turn_radius_m" => something(p.min_turn_radius, 0.0),
+            "depower_mode" => p.depower === nothing ? "optimize" : p.depower.mode,
             "reason" => String(reason),
             "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
         open(file, "w") do io
@@ -234,8 +414,37 @@ end
 get_json(path; url = AWETRIM_URL) = JSON3.read(HTTP.get(url * path).body, Dict{String,Any})
 
 as_dict(x) = JSON3.read(JSON3.write(x), Dict{String,Any})
-as_winch(d) = WinchParams(d["mode"], d["k_v"], d["f_min"], d["f_max"])
 as_traj(d) = Trajectory(Float64.(d["azimuth"]), Float64.(d["elevation"]))
+
+# A field the server may leave out entirely (an older or newer one) reads the
+# same as one it sends as null: absent means "not set", never an error.
+opt_get(d, key) = d === nothing ? nothing : get(d, key, nothing)
+opt_float(d, key) = (v = opt_get(d, key); v === nothing ? nothing : Float64(v))
+
+as_winch(d) = WinchParams(; mode = d["mode"], k_v = d["k_v"],
+                          f_min = d["f_min"], f_max = d["f_max"],
+                          v_max = opt_float(d, "v_max"),
+                          p_max = opt_float(d, "p_max"))
+
+function as_depower(d)
+    d === nothing && return nothing
+    profile = get(d, "profile", nothing)
+    return DepowerReply(d["mode"], Float64(d["value"]),
+                        profile === nothing ? nothing : Float64.(profile))
+end
+
+function as_pattern_limits(d)
+    d === nothing && return nothing
+    return PatternLimits(; azimuth_max = opt_float(d, "azimuth_max"),
+                         elevation_min = opt_float(d, "elevation_min"),
+                         elevation_max = opt_float(d, "elevation_max"),
+                         azimuth_amplitude_min = opt_float(d, "azimuth_amplitude_min"))
+end
+
+as_metrics(d) = SolveMetrics(; energy_J = d["energy_J"],
+                             total_time_s = d["total_time_s"],
+                             avg_power_W = d["avg_power_W"],
+                             turn_radius_min_m = opt_float(d, "turn_radius_min_m"))
 
 function as_inflow(d)
     # the server echoes heights/speeds only if the request carried them
@@ -246,37 +455,73 @@ function as_inflow(d)
                             turbulence = d["turbulence"], samples...)
 end
 
-function as_init_params(reply)
-    return InitParams(reply["name"], reply["length"],
-                      as_winch(reply["winch_params"]),
-                      as_inflow(reply["inflow_conditions"]),
-                      as_traj(reply["trajectory"]),
-                      reply["input_depower"], reply["reg_weight"],
-                      reply["detect_simple_bounds"])
+maybe(f, d) = d === nothing ? nothing : f(d)
+
+function as_init_reply(reply)
+    return InitReply(reply["name"], opt_float(reply, "length"),
+                     maybe(as_winch, opt_get(reply, "winch_params")),
+                     maybe(as_inflow, opt_get(reply, "inflow_conditions")),
+                     as_traj(reply["trajectory"]),
+                     opt_float(reply, "input_depower"),
+                     opt_float(reply, "reg_weight"),
+                     opt_get(reply, "detect_simple_bounds"),
+                     as_depower(opt_get(reply, "depower")),
+                     opt_float(reply, "min_turn_radius"),
+                     as_pattern_limits(opt_get(reply, "pattern_limits")),
+                     reply["state"], opt_get(reply, "n_points"))
+end
+
+function as_step_reply(reply)
+    return StepReply(opt_float(reply, "length"),
+                     maybe(as_winch, opt_get(reply, "winch_params")),
+                     as_traj(reply["trajectory"]),
+                     as_depower(opt_get(reply, "depower")),
+                     opt_float(reply, "min_turn_radius"),
+                     as_pattern_limits(opt_get(reply, "pattern_limits")),
+                     reply["state"], reply["step_index"],
+                     as_metrics(reply["metrics"]))
 end
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 """
-    opt_init(params::InitParams; url = AWETRIM_URL) -> InitParams
+    opt_init(params::InitParams; url = AWETRIM_URL) -> InitReply
 
 Build the optimizer's model for these conditions and fit the starting path.
-Sends `InitParams` (tether length, inflow conditions, initial guess and the
-solver knobs) and returns what the server accepted, with `trajectory` replaced
-by the fitted starting path. No optimization happens yet — that is
-[`opt_step`](@ref).
+Sends `InitParams` (tether length, inflow conditions, initial guess, the solver
+knobs and the depower/turn-radius/pattern limits) and returns what the server
+accepted, with `trajectory` replaced by the fitted starting path. No
+optimization happens yet — that is [`opt_step`](@ref).
+
+The reply also states what the coming solves will run under: `depower.mode`,
+`min_turn_radius` and `pattern_limits`, each `nothing` where the server's own
+default applies.
 """
 function opt_init(params::InitParams; url = AWETRIM_URL)
-    return as_init_params(JSON3.read(post("/init", params; url), Dict{String,Any}))
+    return as_init_reply(JSON3.read(post("/init", params; url), Dict{String,Any}))
 end
 
 """
     opt_step(params::StepParams; url = AWETRIM_URL, inflow_conditions = nothing,
-             wait = true)
+             wait = true, max_iter = nothing)
 
 Optimize the path for the current tether length (and optionally a new inflow).
-Blocks ~10-20 s and returns `StepParams` carrying the optimized trajectory.
+Blocks ~10-20 s and returns a [`StepReply`](@ref): the optimized `trajectory`,
+the `depower` it was optimized for, the limits it respects and the solve
+`metrics` (including `turn_radius_min_m`, the tightest physical radius of the
+path that came back).
+
+`max_iter` caps the solver's iterations for this step — the one lever against a
+failing solve running to IPOPT's cap, measured at 81 s against 1.5 s for a
+converged one.
+
+Every step is WARM-STARTED from the session's previous optimum; what the
+`trajectory` field does is REPLACE that seed with a curve of the caller's, refitted
+into the pattern B-spline. Leaving it `nothing` therefore re-anchors the last
+optimum to the new `length` and solves from there — the cheap solve — while
+sending one is a cold start in everything but the session (see
+`TrajOptSettings.use_step`).
 
 With `wait = false` the server accepts the job and replies immediately; the
 return value is the step index instead. Poll [`opt_status`](@ref) until its
@@ -286,14 +531,14 @@ blocking reply. While a solve runs, and after one that failed, the server keeps
 serving the PREVIOUS path, so a caller is never left without a curve to fly.
 """
 function opt_step(params::StepParams; url = AWETRIM_URL,
-                  inflow_conditions = nothing, wait = true)
+                  inflow_conditions = nothing, wait = true, max_iter = nothing)
     payload = as_dict(params)
     inflow_conditions !== nothing && (payload["inflow_conditions"] = as_dict(inflow_conditions))
+    max_iter !== nothing && (payload["max_iter"] = max_iter)
     payload["wait"] = wait
     reply = JSON3.read(post("/step", payload; url), Dict{String,Any})
     wait || return reply["step_index"]::Int
-    return StepParams(reply["length"], as_winch(reply["winch_params"]),
-                      as_traj(reply["trajectory"]))
+    return as_step_reply(reply)
 end
 
 """
@@ -310,8 +555,14 @@ opt_status(url::AbstractString = AWETRIM_URL) = get_json("/status"; url)
 The last optimized trajectory in full, which the `/init` and `/step` replies do
 not carry: the dense per-node table (`t`, `s`, `azimuth`, `elevation`,
 `azimuth_dot`, `elevation_dot`, `distance_radial`, `speed_radial`, `s_dot`,
-`tension_tether_ground`, `input_steering`, `input_depower`), the `spline` block
-with its `downloops` flag, `metrics` and `optimized_parameters`.
+`tension_tether_ground`, `input_steering`, `input_depower`, `turn_radius`), the
+`spline` block with its `downloops` flag, `metrics` and `optimized_parameters`.
+
+`turn_radius` is the path's PHYSICAL turn radius [m] at each node (`r/|kappa|`,
+geodesic on the tether sphere at that node's `distance_radial`) — the quantity
+`InitParams.min_turn_radius` constrains, and the one to compare with the kite's
+own `1/(c1*u_s_max)`. `input_depower` is constant unless the depower mode is
+`"profile"`.
 
 **The table is in RADIANS**, unlike the degrees of every struct in this file.
 
@@ -356,7 +607,7 @@ function inflow_from_settings(set)
 end
 
 """
-    winch_from_wc(wc) -> WinchParams
+    winch_from_wc(wc; v_max = nothing, p_max = nothing) -> WinchParams
 
 The winch law of a run, from the `WinchControllers.WCSettings` its
 `WinchController` is built from: `kv`, `f_low` and `f_high` of
@@ -367,8 +618,128 @@ path for THIS ground station.
 A winch too stiff to reach the optimal reel-out speed within `f_high` makes the
 problem infeasible and the server answers 422 — `kv*sqrt(f_high)` is the speed
 ceiling to compare against roughly a third of the wind speed.
+
+`v_max`/`p_max` are the ground station's limit PAST the force bound, where the
+controller holds `f_high` and the speed keeps rising: pass the system settings'
+`set.v_ro_max` (8 m/s here) to state it. Left unset, the optimizer uses its own
+10 m/s bound — which with `kv = 0.0408` and `f_high = 8000 N` the square-root law
+never reaches anyway (3.65 m/s), so this only starts to matter on a softer winch.
 """
-winch_from_wc(wc) = WinchParams("reelout", wc.kv, wc.f_low, wc.f_high)
+winch_from_wc(wc; v_max = nothing, p_max = nothing) =
+    WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low, f_max = wc.f_high,
+                v_max = v_max === nothing ? nothing : Float64(v_max),
+                p_max = p_max === nothing ? nothing : Float64(p_max))
+
+"""
+    min_turn_radius_request(fcs, tos; scale = 1.0) -> Union{Float64, Nothing}
+
+`tos.min_feasibility_margin` in METRES — `margin/(c1*max_steering)`, the kite's own
+physical turning limit scaled by the margin — sent WITH the request so the
+optimizer cannot answer with a pattern that is about to be rejected. `nothing` —
+send no constraint — when the margin is 0, which is also where the gate is off.
+
+`scale` asks for MORE than that, and a reel-out run has to: the two numbers do not
+measure the same curve at the same radius, and the difference is NOT in the run's
+favour. Pass `reelout_anchor_ratio(table) * tos.turn_radius_headroom`.
+
+The optimizer enforces `R = r/|kappa|` at each node's OWN radius, and `r` grows
+through the lap — it starts at the anchor and reels out. The run installs the reply
+as a fixed (azimuth, elevation) curve and flies it at the ANCHOR, where the same
+angular curvature is physically tighter by `L/r`. Measured 2026-08-19 on a reply
+anchored at 380 m: `distance_radial` spanned 380.0 -> 415.0 m, the tightest node sat
+at r = 411 m with R = 12.32 m, and that curve at the 380 m anchor is 11.38 m — 0.92x.
+The factor is `L/(L+dL)` with `dL` the lap's reel-out, so it BITES HARDEST AT THE
+SHORT END: ~0.87 at 220 m against ~0.92 at 380 m. `reelout_anchor_ratio` measures
+`1 + dL/L` off a reply and is the geometric half of `scale`.
+
+On top of that the gate re-estimates the curvature from the reply's ~99 points
+(`path_radius_profile`, a finite difference on the resampled polyline) and reads
+~5 % tighter than the exact anchor value — 10.81 m against 11.38 m on the same
+reply — and the run then adds `el_bias`/`el_offset_wing` before checking, which
+compresses the azimuth axis by `cos(elevation)` a little more.
+`tos.turn_radius_headroom` covers that half.
+
+Both together are why an unscaled request came back at margin 0.63 against a
+`min_feasibility_margin` of 0.74, converged and with its constraint satisfied
+(2026-08-19, L = 220 m). The scaled request costs a slightly wider pattern, i.e. a
+little power; it does not make the gate any weaker, which still scores the curve
+that will actually be flown.
+
+The conversion itself is exact: the gate's margin is a RATIO of two angular radii
+at one tether length, and scaling both by that length turns it into a ratio of
+physical ones, with the kite's physical minimum `1/(c1*u_s)` = 11.35 m at
+`c1 = 0.2752`, `u_s = 0.32`. That much IS length-free — what is not is where the
+optimizer measures the path's own radius.
+
+`c1` comes from the identified turn-rate table, which refuses to extrapolate off
+its grid. A `body_damping`/`depower_setpoint` it cannot serve therefore sends no
+constraint and warns, exactly as the feasibility GATE degrades — an off-grid run
+loses the advice, not the run.
+"""
+function min_turn_radius_request(fcs, tos; scale = 1.0)
+    tos.min_feasibility_margin > 0 || return nothing
+    scale >= 0 || error("min_turn_radius_request: scale must be >= 0, got $scale.")
+    coeffs = try
+        turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+    catch exc
+        exc isa ArgumentError || rethrow()
+        @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
+               depower = $(fcs.depower_setpoint) — asking the optimizer for NO \
+               minimum turn radius, though min_feasibility_margin = \
+               $(tos.min_feasibility_margin) will still gate the reply. Identify \
+               this cell to get the constraint back."
+        return nothing
+    end
+    return scale * tos.min_feasibility_margin / (coeffs.c1 * fcs.max_steering)
+end
+
+"""
+    reelout_anchor_ratio(table) -> Float64
+
+How much longer the tether gets over the lap a reply was solved for,
+`maximum(distance_radial)/minimum(distance_radial)`, read off an
+[`opt_trajectory`](@ref) table. `1.0` when the table carries no usable radial
+profile — the neutral factor, so a missing column costs the correction and not the
+run.
+
+This is the factor a `min_turn_radius` request has to be scaled by, because the
+optimizer's turn radius is measured along that profile while the run flies the
+curve at the anchor; see [`min_turn_radius_request`](@ref). Measured off the reply,
+per length, rather than assumed: the ratio is 1.19 at 180 m and 1.09 at 380 m for
+the same ~35 m of reel-out per lap.
+
+The tightest node is not necessarily the outermost one, so this over-asks slightly
+— by at most the fraction of the lap between the tightest node and the end of it
+(4 m of 35 on the reply measured 2026-08-19). Over-asking is the safe side: it
+costs a slightly wider pattern, where under-asking costs the whole solve.
+"""
+function reelout_anchor_ratio(table)
+    r = try
+        Float64.(table["table"]["distance_radial"])
+    catch
+        return 1.0
+    end
+    (isempty(r) || !all(isfinite, r) || minimum(r) <= 0) && return 1.0
+    return max(1.0, maximum(r) / minimum(r))
+end
+
+"""
+    pattern_limits_from(tos) -> Union{PatternLimits, Nothing}
+
+The box the optimized pattern must stay in, from the `pattern_*` fields of
+`data/traj_opt.yaml`; each is in degrees and each is off at `0.0`. `nothing` when
+all four are off, which leaves the optimizer's own defaults alone.
+"""
+function pattern_limits_from(tos)
+    on(x) = x > 0 ? Float64(x) : nothing
+    limits = PatternLimits(; azimuth_max = on(tos.pattern_azimuth_max),
+                           elevation_min = on(tos.pattern_elevation_min),
+                           elevation_max = on(tos.pattern_elevation_max),
+                           azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min))
+    all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
+                    limits.azimuth_amplitude_min)) && return nothing
+    return limits
+end
 
 # ---------------------------------------------------------------------------
 # The server process

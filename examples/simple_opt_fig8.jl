@@ -189,13 +189,36 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
                tos.guess_a, tos.guess_b, tos.guess_el_center, tos.guess_points)
 
+# What the solve must respect, as opposed to what it is scored against
+# afterwards: both are off unless data/traj_opt.yaml turns them on.
+#
+# The turn radius is asked for with `turn_radius_headroom` on top, because the
+# optimizer measures `R = r/|kappa|` at each node's own radius — which grows
+# through its lap's reel-out — while this run installs the reply as an (azimuth,
+# elevation) curve and flies it at ONE length. There is only this one solve here,
+# so the geometric part cannot be measured off a previous reply the way
+# `simple_opt_reelout.jl` does it; the headroom is all the correction there is.
+opt_r_min = min_turn_radius_request(fcs, tos; scale = tos.turn_radius_headroom)
+opt_box = pattern_limits_from(tos)
+isnothing(opt_r_min) && isnothing(opt_box) ||
+    @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
+                    pattern box %s.",
+                   isnothing(opt_r_min) ? "unset" :
+                       @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
+                                own, x %.2f of headroom)",
+                                opt_r_min, tos.min_feasibility_margin,
+                                tos.turn_radius_headroom),
+                   isnothing(opt_box) ? "unset" : string(opt_box))
+
 ensure_server(tos.base_url; autostart = tos.autostart_server)
 opt_reply = opt_init(InitParams(; name = tos.name, length = l0,
                                 winch_params = winch, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                                 input_depower = tos.input_depower,
                                 reg_weight = tos.reg_weight,
-                                detect_simple_bounds = tos.detect_simple_bounds);
+                                detect_simple_bounds = tos.detect_simple_bounds,
+                                min_turn_radius = opt_r_min,
+                                pattern_limits = opt_box);
                      url = tos.base_url)
 # No automatic retry with a different guess, deliberately: a guess that merely
 # converges is not the same answer, and picking one silently would hide which
@@ -223,6 +246,28 @@ catch exc
           `bin/run_server log` carries the solver's own output.""")
 end
 toc("Received the optimized path in: ")
+
+# What the reply was optimized AT, which is not what this run flies. The server
+# varies `l_dp` unless it is pinned (`DepowerSpec("fixed", ...)`), and its tape
+# scale is 0.4 m off V3Kite's: `l_dp = 0.6 + 5*u_p` there, `0.2 + 5*u_p` here. So
+# the gap below is a real difference between the model that predicted the power
+# and the model that flies it, and it belongs next to the prediction.
+if !isnothing(opt_result.depower)
+    flown_l_dp = 0.6 + 5 * fcs.depower_setpoint
+    @info @sprintf("Optimized at depower l_dp = %.3f m (mode %s), against %.3f m \
+                    for the flown depower_setpoint = %.2f — a %+.3f m gap on the \
+                    optimizer's tape scale.",
+                   opt_result.depower.value, opt_result.depower.mode, flown_l_dp,
+                   fcs.depower_setpoint, opt_result.depower.value - flown_l_dp)
+end
+# The optimizer's own curvature diagnostic, in metres and physical: comparable
+# with the kite's 1/(c1*u_s) and with `min_feasibility_margin`, and read
+# before this repo's angular gates ever see the path.
+isnothing(opt_result.metrics.turn_radius_min_m) ||
+    @info @sprintf("Tightest physical turn radius of the reply: %.2f m%s.",
+                   opt_result.metrics.turn_radius_min_m,
+                   isnothing(opt_r_min) ? "" :
+                       @sprintf(" (asked for >= %.2f m)", opt_r_min))
 
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
