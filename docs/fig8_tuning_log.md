@@ -624,6 +624,107 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The elevation bias LEARNS a profile now, and smoothing it costs shape (2026-08-19)
+
+`el_bias` learnt one number per lap from a whole-lap mean, which is the mean of a
+profile: the sag measured at 380 m is ~2.3 deg at the lobes against ~0.4 deg at the
+crossing, so the rigid shift lifts the crossing by a degree it never needed. The
+generalisation asked for in `docs/reelout_next_steps.md` — the same update per
+azimuth band — is built: `fcs.el_bias_bins` (`1` = the old scalar learner
+exactly), `fcs.el_bias_smooth`, and
+`bias_lift`/`smooth_bins`/`azimuth_bin` in `src/figure_eight_controller.jl`.
+
+**FLOWN, twice** (2026-08-19_080350 and _080918, 150 -> 380 m, 6 m/s, no
+turbulence, `el_bias_bins: 5`, `el_bias_smooth: 0.25`), against the rigid-shift
+baseline of 2026-08-19_072132:
+
+    bins   laps  RMS d   min el   power   sat   centre_to_lobe   margin_final_flown
+    1      8.5   1.43    10.1     8625    7 %   0.70             0.83   FAILED azimuth reach +13.8
+    5      8.0   1.25    10.3     8642    6 %   0.22             0.87   all 8 passed
+
+The two profile runs are IDENTICAL in every flight number — same optimizer
+session, same request sequence, so the server answered the same, and the only
+difference is the failure cache saving 75 s of wall time in the second. That is
+weaker evidence than two independent runs, not stronger: it says the pipeline is
+deterministic here, not that the result is robust to the paths the optimizer
+happens to return.
+
+**What it learnt is not the sag.** The converged profile is
+`[0.51 0.80 1.64 2.16 1.16]` deg, crossing first: it peaks at the SHOULDER (60-80 %
+of the amplitude), not at the lobe, and the lobe band asks for barely more than the
+crossing. That is `el_offset_wing` doing its job — the lobes are already lifted
+1.5 deg — and the learner filling the gap the fixed profile's ramp leaves between
+the crossing and the lobe. The flown droop follows: `centre_to_lobe_deg` 0.70 ->
+0.22.
+
+**The shoulder band does not converge, and it is the one to watch.** Bands 1, 2
+and 5 close to +-0.15 deg by lap 6; band 4 sits at -0.74 … -1.29 deg for the whole
+run while its correction climbs 0.58 -> 2.16 deg. It is not a sag the reference can
+fix — it is the shoulder, where the kite is bounded by TURN AUTHORITY and not by
+where the reference is, which is exactly the reason the scalar learner averaged a
+whole lap in the first place. The per-band learner has no such averaging, so it
+integrates against a wall there. Two consequences, both visible in this run:
+`reopt` installed 4 paths against the baseline's 6 (the two extra replies were
+refused at margin 0.68 and 0.73, against 0.74 required), and the phase-5
+`el_offset_final` shift was held back at 0.67. A bump in the reference costs
+curvature margin where the azimuth-keyed `el_offset_wing`, which TRANSLATES the
+lobe, costs none. Band 4 also sees the fewest samples (106-189 a lap against
+300-370 at the lobe), so it is the noisiest band as well as the one that runs away.
+
+The run is still better on every flown metric, so the profile stays on
+(`el_bias_bins: 5`). What is open is bounding the shape: a cap on how far a band
+may depart from the profile's mean, a lower gain for the bands than for the mean,
+or `el_bias_smooth` back up to 0.5 — the offline table below says 0.5 costs 0.11
+deg of shape, and this run says an unbounded band costs two installs.
+
+The rest of this entry is the update rule exercised offline against a synthetic
+sag, which is what the defaults were chosen from.
+
+**The bands are learnt, not applied.** What goes onto a path is the bands
+interpolated with a smoothstep between their CENTRES, held flat outside the outer
+two. A staircase over the bands would put a corner in the reference at every band
+edge, and a corner is exactly what `el_offset_wing_blend` measured the cost of: a
+4 deg ramp moved the tightest turn of the whole pattern off the lobe and onto the
+ramp (radius 4.1 -> 1.86 deg, margin 0.94 -> 0.43). The interpolation leaves every
+band centre with zero slope, so the profile cannot grow one however the bands move.
+
+**The key is normalized azimuth**, `|az - centre|` over the pattern's own
+amplitude, the same key the `droop_profile` diagnostic already pools on. The
+pattern shrinks by a third in azimuth over a 150 -> 380 m run, so bands fixed in
+degrees would walk out of it — the failure mode `el_offset_wing_mode:
+"azimuth_frac"` exists for.
+
+**Smoothing is shape-only, and it costs shape.** `smooth_bins` moves each band a
+fraction `lambda` towards the mean of its neighbours and then restores the
+profile's mean, so the rigid part of the correction — everything the scalar
+learner ever found — is untouched by construction. It still flattens what the
+learner settles on, because it damps the shape every lap while the gain only
+closes a fraction of it. Iterated to steady state against a noiseless quadratic
+sag (0.4 deg at the crossing, 2.3 deg at the lobe, `el_bias_gain` 0.5), as the RMS
+the converged profile still leaves:
+
+    bands    lambda 0    0.25    0.5    0.75
+    1                            0.67 (one number, any lambda)
+    3              0.18    0.37   0.53
+    5              0.10    0.21   0.32    0.40
+    7              0.07    0.15   0.22
+
+Every entry beats the rigid shift, so the smoothing is affordable at any setting
+tried; `0.25` at 5 bands is the default because the table is noiseless and the
+flown measurement is not — a band sees a fifth of the samples the scalar learner
+had, and a band that jumps on noise is a step the curvature gate refuses, which
+delivers nothing at all. Tune it DOWN if the flown per-band profile
+(`traj_opt.el_bias.lap_profiles`) is steady lap over lap.
+
+**What the fixed point is.** Unchanged in kind: each band closes on the error
+against the OPTIMIZER's curve, i.e. the sag plus the correction the flown path
+carries AT THAT AZIMUTH — the profile's interpolated value, not the band's own
+number, which is what makes the two agree inside a band the profile ramps across.
+A band with no samples in a lap keeps its value and is carried by its neighbours
+through the smoothing. `el_offset_wing` and `el_offset_final` still compose with
+it: they are in the flown path and out of the error, so the learner converges on
+the optimizer's curve plus both.
+
 ## The lobe lift cannot be keyed on ELEVATION — but its azimuth key needs NORMALIZING (2026-08-19)
 
 `el_offset_wing` raises the lobes over AZIMUTH. The obvious refinement — key it on

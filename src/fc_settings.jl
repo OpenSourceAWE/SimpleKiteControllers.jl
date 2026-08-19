@@ -237,8 +237,50 @@ Add new findings there, not here.
     i.e. no change unless it is set.
     """
     el_bias_gain_final = el_bias_gain
-    "Clamp on the learnt elevation correction [deg]; guards a diverging estimate."
+    "Clamp on the learnt elevation correction [deg], per bin; guards a diverging estimate."
     el_bias_max = 3.0
+    """
+    Azimuth bands the elevation correction is learnt over, `1` for one number for
+    the whole pattern.
+
+    The sag is not uniform — measured at 380 m, the bottom of the pattern tracks
+    ~2.3 deg under its reference where the crossing tracks ~0.4 deg under — so a
+    single number is the mean of a profile and lifts the crossing it does not need
+    to lift. With more than one band the same per-lap update runs per band, over
+    `|azimuth|` as a fraction of the path's own amplitude
+    ([`azimuth_bin`](@ref)), and what is applied is the smooth interpolation of
+    [`bias_lift`](@ref) rather than a staircase.
+
+    This LEARNS what `el_offset_wing` fixes in advance, and the two compose: the
+    lobe lift is baked into every installed path and the learner closes on the
+    optimizer's curve plus it. Bands cost samples — one lap is ~2-3 s per band at
+    5 bins — so raise `el_bias_bins` and `el_bias_smooth` together.
+    """
+    el_bias_bins::Int = 1
+    """
+    Neighbour coupling applied to the learnt profile after each lap, `0` leaving
+    the bands independent and `1` replacing each by the mean of its neighbours.
+
+    A shape constraint only — [`smooth_bins`](@ref) restores the profile's mean,
+    so the rigid part of the correction is untouched. It is what keeps a band that
+    saw few samples from stepping away from its neighbours: the reference the step
+    lands in is scored by the curvature gate, which refuses a corner (see
+    `el_offset_wing_blend`) and leaves the correction undelivered. Ignored when
+    `el_bias_bins` is 1.
+
+    It also flattens the profile the learner settles on, because it damps the
+    shape every lap while the gain only closes a fraction of it. Measured offline
+    against a noiseless quadratic sag (0.4 deg at the crossing, 2.3 deg at the
+    lobe, 5 bands, `el_bias_gain` 0.5), as the RMS the profile still leaves:
+
+        lambda   0     0.25  0.5   0.75
+        RMS      0.10  0.21  0.32  0.40
+
+    One band leaves 0.67 deg, so even the heaviest smoothing is worth more than
+    the rigid shift. Tuning goes DOWN from here if the flown profile is steady and
+    up if a band jumps.
+    """
+    el_bias_smooth = 0.25
     """
     Extra elevation [deg] the flown path is lifted by once reel-out ends, on top
     of the learnt correction. A setpoint move, not an error: the kite is asked to

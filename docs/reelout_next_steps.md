@@ -137,10 +137,33 @@ suggest, in the order I would take it:
    fractional mode is kept for the day a pattern does shrink that far.
    `traj_opt.droop_profile` in the run summary is new, and is how the next
    attempt should be scored.
-2. **Learn the profile instead of fixing it.** `el_bias` already learns a scalar
-   per lap from a whole-lap mean; the same update per azimuth bin, with the bins
-   coupled by a smoothness constraint so the reference cannot grow a corner (see
-   what a corner costs in the same entry), is the obvious generalisation.
+2. **Learn the profile instead of fixing it.** — DONE and FLOWN (2026-08-19_080350
+   and _080918): all 8 criteria against the baseline's FAILED azimuth reach, RMS d
+   1.43 -> 1.25 deg, min elevation 10.1 -> 10.3 deg, 8625 -> 8642 W,
+   `centre_to_lobe_deg` 0.70 -> 0.22, `margin_final_flown` 0.83 -> 0.87. The two runs
+   are identical in every flight number (same optimizer session and request
+   sequence), so read that as determinism, not robustness. `el_bias_bins: 5` is the
+   flown default now. **What is open**, and it is in the tuning-log entry: the
+   SHOULDER band (60-80 % of the amplitude) never converges — its correction climbs
+   0.58 -> 2.16 deg while its error stays near -0.8 deg, because the kite is bounded
+   by turn authority there and not by where the reference is — and the bump that
+   leaves in the reference cost two installs (replies refused at margin 0.68 and
+   0.73 against 0.74 required) and held the phase-5 lift back at 0.67. Bounding the
+   shape is the next move: cap a band's departure from the profile's mean, give the
+   bands a lower gain than the mean, or put `el_bias_smooth` back to 0.5.
+   The mechanics: `fcs.el_bias_bins`
+   runs the per-lap update per azimuth band (keyed on |azimuth| over the pattern's
+   own amplitude, so the bands follow a shrinking pattern) and `fcs.el_bias_smooth`
+   couples the bands; `bias_lift` applies the bands as a smoothstep between their
+   CENTRES rather than a staircase, so the reference cannot grow a corner whatever
+   the bands do; `el_bias_bins: 1` gets the old scalar learner back exactly.
+   Offline against a noiseless
+   quadratic sag the converged profile leaves 0.21 deg RMS at 5 bands and
+   `el_bias_smooth: 0.25`, against 0.67 deg for the rigid shift (tuning log,
+   2026-08-19, "The elevation bias LEARNS a profile now"). What to read on a run:
+   `traj_opt.el_bias.lap_profiles` band by band — a band whose error does not close
+   while its correction climbs is chasing a tracking error no reference can
+   fix — then `centre_to_lobe_deg` and the hold-backs in `shift_delivery`.
 3. **Re-measure the 8 s `el_offset_lead` runs.** Their +1.39 turns were recorded
    under the broken in-air gate and mean nothing now.
 4. **`min_span_frac` interacts with every lift.** A path flown higher is flown

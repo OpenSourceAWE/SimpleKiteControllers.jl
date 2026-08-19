@@ -107,7 +107,9 @@ fc_settings:
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_bias_gain:        0.5     # Per-lap learning gain for the elevation bias; 0 = off [-]
   el_bias_gain_final:  1.0     # Same, from state 5 on, where the sag deepens        [-]
-  el_bias_max:         4.0     # Clamp on the learnt elevation correction        [deg]
+  el_bias_max:         4.0     # Clamp on the learnt elevation correction, per band [deg]
+  el_bias_bins:          5     # Azimuth bands the correction is learnt over; 1 = rigid [-]
+  el_bias_smooth:     0.25     # How far each band is pulled to its neighbours per lap [-]
   el_offset_final:     1.5     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      0.0     # How long before the end the lift starts; 0 = at the end [s]
   el_offset_wing:      1.5     # Extra lift at the LOBES, none in the centre       [deg]

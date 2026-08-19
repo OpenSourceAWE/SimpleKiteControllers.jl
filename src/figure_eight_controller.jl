@@ -363,6 +363,98 @@ end
 _smoothstep(x) = (u = clamp(x, 0.0, 1.0); u * u * (3 - 2u))
 
 """
+    azimuth_frac(az, az_lo, az_hi) -> Float64
+
+Where `az` [deg] lies across a pattern spanning `az_lo … az_hi` [deg], as a
+fraction of that pattern's own half-width: `0` at its centre — the crossing —
+and `1` at either lobe. A pattern with no azimuth extent gives `0`.
+
+Normalized rather than measured in degrees because the pattern shrinks by a
+third in azimuth as the tether grows, so a profile keyed on degrees walks out of
+it over a reel-out run while one keyed on this stays where it was put.
+"""
+function azimuth_frac(az, az_lo, az_hi)
+    amp = 0.5 * (az_hi - az_lo)
+    amp > 0 || return 0.0
+    return abs(az - 0.5 * (az_lo + az_hi)) / amp
+end
+
+"""
+    azimuth_bin(az, az_lo, az_hi, nbins) -> Int
+
+Index in `1:nbins` of the azimuth band `az` falls in, bin 1 covering the
+crossing and bin `nbins` the lobes. Bands are equal in [`azimuth_frac`](@ref),
+so they keep their place on a shrinking pattern; anything past the lobe lands in
+the last bin.
+"""
+function azimuth_bin(az, az_lo, az_hi, nbins)
+    nbins >= 1 || throw(ArgumentError("nbins must be positive, got $nbins"))
+    return clamp(1 + floor(Int, nbins * azimuth_frac(az, az_lo, az_hi)), 1, nbins)
+end
+
+"""
+    bias_lift(frac::Real, bias) -> Float64
+    bias_lift(az::AbstractVector, bias) -> Vector{Float64}
+
+Elevation lift [deg] from a per-bin profile `bias`, one value per azimuth band
+of [`azimuth_bin`](@ref), at the position `frac` ([`azimuth_frac`](@ref)) or at
+every point of the path `az` [deg].
+
+The bands are only where the profile is LEARNT; what is applied is
+`bias[i]` at each band's centre with a smoothstep between neighbouring centres
+and a flat hold outside the outermost two, so the curve leaves every knot with
+zero slope. A staircase over the bands would put a corner in the reference at
+every bin edge, and the tightest turn of the pattern moves onto the corner: a
+ramp 4 deg wide costs more curvature margin than the whole lobe lift buys (see
+`el_offset_wing_blend`).
+
+A single bin is a rigid shift of the whole pattern, which is what the scalar
+elevation-bias learner of `examples/simple_opt_reelout.jl` does.
+"""
+function bias_lift(frac::Real, bias)
+    nb = length(bias)
+    nb >= 1 || throw(ArgumentError("the bias profile must have at least one bin"))
+    nb == 1 && return Float64(bias[1])
+    x = clamp(Float64(frac), 0.0, 1.0) * nb + 0.5
+    i = clamp(floor(Int, x), 1, nb - 1)
+    return bias[i] + _smoothstep(x - i) * (bias[i + 1] - bias[i])
+end
+
+function bias_lift(az::AbstractVector, bias)
+    isempty(az) && return Float64[]
+    az_lo, az_hi = extrema(az)
+    return [bias_lift(azimuth_frac(a, az_lo, az_hi), bias) for a in az]
+end
+
+"""
+    smooth_bins(bias, lambda) -> Vector{Float64}
+
+Couple neighbouring bins of a learnt profile: each bin is moved a fraction
+`lambda` of the way to the mean of its neighbours, `0` leaving the bins
+independent and `1` replacing each by that mean.
+
+Shape only — the profile's mean is restored afterwards, so smoothing never
+touches the rigid part a scalar learner would have found and only damps the
+differences between bands. Without the coupling each band closes on its own
+measurement and the noisiest one (the crossing, where the kite spends the fewest
+samples per lap) can pull a step into the reference that the curvature gate then
+refuses.
+"""
+function smooth_bins(bias, lambda)
+    0 <= lambda <= 1 || throw(ArgumentError("lambda must be in 0 … 1, got $lambda"))
+    nb = length(bias)
+    out = Float64.(collect(bias))
+    (nb < 2 || lambda == 0) && return out
+    for i in 1:nb
+        nb_mean = i == 1 ? bias[2] : i == nb ? bias[nb - 1] :
+                  0.5 * (bias[i - 1] + bias[i + 1])
+        out[i] = (1 - lambda) * bias[i] + lambda * nb_mean
+    end
+    out .+= mean(bias) - mean(out)
+    return out
+end
+
+"""
     set_path!(fec::FigureEightController, az, el; resample = 0,
               up_loops = fec.fes.up_loops)
 
