@@ -87,8 +87,9 @@ isolated pockets in length (180.0 m converges, 180.00027 m does not), so a reque
 only hits the cache when a run repeats it exactly.
 
 Only `simple_opt_reelout.jl` writes the marker; copy its two lines (the `rm` next to
-`mkpath(output_path)` and the `open(RUN_DONE_FILE, "w")` block at the end) into another
-example that needs to be waited on.
+`mkpath(output_path)` in the script itself and the `open(RUN_DONE_FILE, "w")` block at
+the end of `examples/reelout_results.jl`) into another example that needs to be waited
+on.
 
 `init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
 where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
