@@ -79,12 +79,14 @@ if !(@isdefined(fcs) && fcs isa FC_Settings)
 end
 plots = selected_plots()
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
-log_name = basename(Settings(project).log_file)
+project_set = Settings(project)
+apply_windspeed_override!(project_set, selected_windspeed())
+log_name = basename(project_set.log_file)
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
 created_at = log_created_at(log_name; path = output_path)
-fig_name = "V3 Kite Figure-of-Eight"
+fig_name = "V3 Kite Figure-of-Eight – $(round(project_set.v_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
 end

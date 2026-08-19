@@ -72,18 +72,24 @@ project = project_file(selected_reelout_project())
 if !(@isdefined(fcs) && fcs isa FC_Settings)
     fcs = FC_Settings(fc_settings(project))
 end
+# Same rule again, for the wind speed actually flown: a live run's `project_set`
+# (with any override already applied by `apply_windspeed_override!`) wins.
+if !(@isdefined(project_set) && project_set isa Settings)
+    project_set = Settings(project)
+    apply_windspeed_override!(project_set, selected_windspeed())
+end
 plots = selected_plots()
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
 # A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
 # `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
 # project keep separate logs and can be plotted against each other.
 log_name = (@isdefined(LOG_NAME) && LOG_NAME isa AbstractString) ? LOG_NAME :
-           basename(Settings(project).log_file)
+           basename(project_set.log_file)
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
 created_at = log_created_at(log_name; path = output_path)
-fig_name = "V3 Kite Reel-out"
+fig_name = "V3 Kite Reel-out – $(round(project_set.v_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
 end
