@@ -785,7 +785,14 @@ const DEPOWER_SEED_BOUNDS = (1.1, 2.3)
 
 The power-tape length `l_dp` [m] a request STARTS from, `tos.input_depower` plus
 `tos.input_depower_per_wind` per m/s of wind above `tos.input_depower_wind_ref`,
-clamped to [`DEPOWER_SEED_BOUNDS`](@ref).
+clamped to [`DEPOWER_SEED_BOUNDS`](@ref) and, below that, to
+`tos.input_depower_seed_max` when it is set.
+
+A seed landing exactly on `DEPOWER_SEED_BOUNDS`' hard ceiling is itself a
+failure mode, not just a value: measured 2026-08-20 at 150 m / 10 m/s, the ramp
+wants 2.35 m, clamps to 2.3 m, and `/step` then runs to IPOPT's iteration cap
+with no room left to move — `input_depower_seed_max` caps the ramp short of
+that ceiling instead.
 
 Only a seed — `depower_mode` stays `"optimize"` and the server moves it — but the
 seed is what decides whether the solve gets anywhere, because the AoA cap of 14°
@@ -809,10 +816,11 @@ function depower_seed(tos, wind_speed)
     seed = tos.input_depower +
            tos.input_depower_per_wind * max(0.0, wind_speed - tos.input_depower_wind_ref)
     lo, hi = DEPOWER_SEED_BOUNDS
+    hi = tos.input_depower_seed_max > 0 ? min(hi, tos.input_depower_seed_max) : hi
     clamped = clamp(seed, lo, hi)
     clamped == seed ||
         @warn @sprintf("Depower seed of %.3f m for %.1f m/s is outside AWETrim's \
-                        bounds [%.1f, %.1f] m and was clamped to %.3f m. The ramp \
+                        bounds [%.3f, %.3f] m and was clamped to %.3f m. The ramp \
                         (input_depower %.2f + %.3f per m/s above %.1f m/s of \
                         data/traj_opt.yaml) has run out of tape.",
                        seed, wind_speed, lo, hi, clamped, tos.input_depower,
