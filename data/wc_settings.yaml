@@ -77,4 +77,4 @@ wc_settings:
   max_acc:       8.0       # acceleration limit, step!'s acceleration_limit  [m/s^2]
   damage_factor: 0.2       # winch damage weighting (unused here)               [-]
   jerk_factor:   0.9       # jerk weighting in the damage calculation (unused here) [-]
-  kv:            0.0458    # v_set = kv * sqrt(force) 0.0408 for optimal performance [-]
+  kv:            0.0408    # v_set = kv * sqrt(force) 0.0408 for optimal performance [-]
