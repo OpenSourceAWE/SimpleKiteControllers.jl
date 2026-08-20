@@ -1353,7 +1353,7 @@ try
             # Collect: poll rather than block, and validate before installing.
             if reopt_pending && t >= reopt_next_poll
                 global reopt_next_poll = t + tos.reopt_poll_interval
-                state = try
+                local state = try
                     opt_status(tos.base_url)["state"]
                 catch exc
                     @warn "Could not reach the optimizer; will retry." exception = exc
