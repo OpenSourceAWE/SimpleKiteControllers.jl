@@ -1247,6 +1247,36 @@ actually given. When a fix touches `blend_from`/`blend_to` again, confirm
 `fec.az_path`'s extent against `opt_paths_raw[end]` directly before trusting
 either.
 
+## `heading_range` — a ninth success criterion, for the whole class of bug above (2026-08-20)
+
+Every guard added today (`calc_attractor`'s rate limit, `set_path!`'s branch
+guard, `blend_folds`) targets ONE mechanism that produces an extra loop. None
+of them, and none of the EXISTING criteria, would have caught it as a
+regression: `rms_d`/`max_d` stay small because the guidance tracks whatever
+reference it is given correctly (the reference is what goes wrong), and the
+extent/lap checks are blind to how many times the heading wound around to fly
+a lobe. Today's bugs were all caught by eye, off a plotted `ψ`/`χ` panel or a
+pattern-vs-optimizer comparison — worth a check that runs without a human
+looking at a plot.
+
+`fig8_metrics` now returns `heading_range`: `max - min` of the heading
+UNWRAPPED over the settled window (`wrap2pi`'d steps, cumulative sum — same
+technique used throughout today's diagnosis). An oscillating figure-eight
+stays bounded here regardless of lap count, since each lobe swings back into
+the same band — every clean run measured today reads ~330°, independent of
+whether it flew 8 or 9 laps. `print_fig8_metrics` gates it at
+`max_heading_range = 400.0`° (a new ninth criterion, keyword-configurable):
+70° of margin above the measured baseline, comfortably under even the
+mildest extra-loop episode measured today (+150-450° over baseline, i.e.
+480-780° total — several of which passed EVERY existing criterion on their
+own run). Regression tests in `test/test_fig8_controller.jl`
+(`metrics_heading_range`): a synthetic oscillating heading stays under the
+gate, a synthetic steady spin fails it by a wide margin.
+
+Existing `print_fig8_metrics` regression tests that count `criteria` exactly
+(`test_fig8_controller.jl`, `metrics_pattern_extent`) went `7 -> 8` and
+`4 -> 5` for the new check.
+
 ## `Broken pipe` on POST: HTTP.jl only auto-retries a dead pooled socket for GET (2026-08-20)
 
 `docs/reelout_next_steps.md` had this as a client-side stale socket that

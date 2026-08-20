@@ -307,6 +307,40 @@ end
         @test print_fig8_metrics(real8; settle_time = 0.0, az_center = 0.0).laps == laps
     end
 
+    @testset "metrics_heading_range" begin
+        # Regression test for the bug found 2026-08-20: a folded blend (or any
+        # other guidance defect that hands Q the wrong branch) can make the
+        # kite spin an extra loop while cross-track error and the extent checks
+        # stay clean throughout, since the guidance tracks whatever shape it is
+        # given correctly — the shape itself is what went wrong. See
+        # docs/fig8_tuning_log.md.
+        dt = 0.05
+        tt = collect(0.0:dt:60.0)
+        n = length(tt)
+        mk(headf) = (; time = tt,
+                     azimuth = zeros(Float32, n), elevation = fill(Float32(deg2rad(45)), n),
+                     heading = Float32.(headf.(tt)),
+                     var_01 = zeros(Float32, n),
+                     set_steering = zeros(Float32, n),
+                     steering = zeros(Float32, n),
+                     winch_force = [Float32[100, 0, 0, 0] for _ in 1:n])
+
+        # A normal figure-eight: heading swings back and forth, never winding up.
+        normal = mk(t -> deg2rad(-165.0 + 165.0 * sin(2pi * t / 10)))
+        m_normal = fig8_metrics(normal; settle_time = 0.0)
+        @test m_normal.heading_range < 400.0
+        p_normal = print_fig8_metrics(normal; settle_time = 0.0)
+        @test !any(f -> occursin("heading range", f), p_normal.criteria_failed)
+
+        # A steady spin: what an extra loop looks like once unwrapped — the
+        # guidance is DOING something the checks above cannot see.
+        runaway = mk(t -> deg2rad(50.0 * t))
+        m_runaway = fig8_metrics(runaway; settle_time = 0.0)
+        @test m_runaway.heading_range > 400.0
+        p_runaway = print_fig8_metrics(runaway; settle_time = 0.0)
+        @test any(f -> occursin("heading range", f), p_runaway.criteria_failed)
+    end
+
     @testset "metrics_pattern_extent" begin
         # Perfect tracking, wrong flight: these must fail on extent alone.
         A, B, el_c, T = 40.0, 15.0, 26.0, 10.0
@@ -330,7 +364,7 @@ end
         # the pattern as commanded: full width both sides, full height
         full = score(mk(t -> deg2rad(A * sin(2pi * t / T)), el8(1.0)))
         @test isempty(full.criteria_failed)
-        @test full.criteria == 7          # 4 tracking + 2 azimuth reach + 1 span
+        @test full.criteria == 8          # 5 tracking + 2 azimuth reach + 1 span
         @test full.az_reach_pos ≈ A rtol=0.01
         @test full.az_reach_neg ≈ A rtol=0.01
         @test full.el_fill ≈ 1.0 rtol=0.01
@@ -353,7 +387,7 @@ end
         # Without the geometry the extent is reported but not scored.
         bare = print_fig8_metrics(mk(t -> deg2rad(0.15A * sin(2pi * t / T)), el8(0.15));
                                   settle_time = 0.0, az_center = 0.0)
-        @test bare.criteria == 4
+        @test bare.criteria == 5
         @test isnan(bare.az_fill_pos)
     end
 

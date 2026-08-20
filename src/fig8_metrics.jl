@@ -65,6 +65,15 @@ Steering is reported on BOTH sides of the actuator, and the pair is the point:
 YAML in use (0.2 for every V3 file shipped here); it is a keyword so a log from a
 differently configured KCU can still be scored.
 
+`heading_range` [deg] is the span of the UNWRAPPED heading over the settled
+window (`max - min`, unwrap by `wrap2pi`'d steps). An oscillating figure-eight
+stays bounded here regardless of lap count, since each lobe swings back into
+the same band; it grows without bound the moment the guidance's reference
+loses its branch and the kite spins an extra loop instead of turning back —
+invisible to `rms_d`/`max_d`, which stay small because the guidance tracks
+whatever shape it is given correctly, and to the extent/lap checks, which are
+blind to how many times the heading wound around to fly it.
+
 Why each guard is shaped the way it is: `docs/fig8_tuning_log.md`.
 """
 function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold = 5.0,
@@ -92,6 +101,19 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
     heading_rate_deg =
         [0.0; rad2deg.(wrap2pi.(diff(Float64.(sl.heading)))) ./ diff(t_all)]
     psi_dot_settled = heading_rate_deg[settled]
+
+    # Unwrapped heading span over the settled window: an oscillating
+    # figure-eight stays bounded here (~330° measured on every clean run,
+    # regardless of lap count, since each lobe swings back into the same
+    # band) but grows without bound the moment Q loses its branch and the
+    # kite spins an extra loop instead of turning back — invisible to every
+    # other check here, since cross-track error stays small throughout (the
+    # guidance tracks whatever shape it is given correctly; the shape itself
+    # is what went wrong). See docs/fig8_tuning_log.md, 2026-08-20.
+    psi_settled = Float64.(sl.heading[settled])
+    psi_unwrapped = first(psi_settled) .+
+                    cumsum(vcat(0.0, wrap2pi.(diff(psi_settled))))
+    heading_range = rad2deg(maximum(psi_unwrapped) - minimum(psi_unwrapped))
 
     """
         hf_std(x)
@@ -239,6 +261,7 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
         rms_d = sqrt(mean(d .^ 2)),
         mean_d = mean(d),
         max_d = maximum(d),
+        heading_range = heading_range,
         min_elevation_settled = rad2deg(minimum(sl.elevation[settled])),
         min_elevation_all = rad2deg(minimum(sl.elevation)),
         mean_force = mean(fp),
@@ -470,6 +493,12 @@ They are scored on the fill fractions, so a geometry passed per log sample (see
 [`fig8_metrics`](@ref)) is checked lap by lap against the pattern in force at the
 time; the degrees in the printed criterion names are then the mean of it.
 
+`max_heading_range` (default `400.0`°) bounds `heading_range` (see
+[`fig8_metrics`](@ref)): every clean run measured stays near 330°, so 400°
+leaves margin above that baseline while still catching even a single mild
+extra-loop episode (measured +150-450° over baseline) well before it could be
+mistaken for normal lap-to-lap variation.
+
 Pass `require_final = true` (default `false`) to also check that `sys_state`
 reaches `5` (phase "final") somewhere in the log — `examples/simple_reelout.jl`
 only, whose entry state machine has that phase; a plain `simple_fig8.jl` run's
@@ -482,6 +511,7 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,
                             hf_window = 0.5, min_elevation = 10.0,
                             max_rms_d = 3.0, max_d_limit = 8.0, min_laps = 2.5,
+                            max_heading_range = 400.0,
                             lap_frac = 0.5, min_excursion = deg2rad(5.0),
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
@@ -495,8 +525,8 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
     end
     @printf("Fig8 (settled from t=%.1fs, settle_time=%.1fs): laps=%.1f | RMS d=%.2f° mean=%.2f° max=%.2f°\n",
             m.stats_start, m.settle_time_used, m.laps, m.rms_d, m.mean_d, m.max_d)
-    @printf("  elevation: min settled=%.1f° min WHOLE RUN=%.1f° | peak ψ̇=%.0f°/s\n",
-            m.min_elevation_settled, m.min_elevation_all, m.max_turn_rate)
+    @printf("  elevation: min settled=%.1f° min WHOLE RUN=%.1f° | peak ψ̇=%.0f°/s | heading range=%.0f°\n",
+            m.min_elevation_settled, m.min_elevation_all, m.max_turn_rate, m.heading_range)
     # Separate from the tracking line: low RMS d says ON the path, this says how much of it.
     if az_amplitude === nothing && el_height === nothing
         @printf("  extent: azimuth -%.1f°..+%.1f° (worst lobe -%.1f°/+%.1f°), elevation span %.1f° — no reference geometry given, NOT checked\n",
@@ -526,6 +556,7 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
         ("max d < $(max_d_limit)°",        m.max_d < max_d_limit),
         ("min elevation > $(min_elevation)° (whole run)",
                                            m.min_elevation_all > min_elevation),
+        ("heading range < $(max_heading_range)°", m.heading_range < max_heading_range),
     ]
     # Both sides separately: one "span" check passes on a kite that never crosses over.
     # Scored on the FILL fractions, which is the same test as comparing degrees
