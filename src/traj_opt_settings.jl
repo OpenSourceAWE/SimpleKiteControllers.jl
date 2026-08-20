@@ -155,7 +155,7 @@ multi-modal, so the guess is a choice about the answer.
     the check and flies whatever came back.
 
     Since 2026-08-19 this is not only a gate. `min_turn_radius_request` converts
-    it to metres — `margin/(c1*max_steering)`, 8.4 m at the shipped 0.74 — and
+    it to metres — `margin/(c1*max_steering)`, 9.3 m at the shipped 0.82 — and
     sends it with the request, so the optimizer solves under the same limit the
     reply is about to be judged by and "PATTERN TOO TIGHT" is answered before the
     solve rather than after it. `0.0` therefore turns off the request and the
@@ -192,10 +192,14 @@ multi-modal, so the guess is a choice about the answer.
     - the run adds `el_bias` and `el_offset_wing` before checking, and lifting the
       path compresses its azimuth axis by `cos(elevation)`.
 
-    1.10 covers both with a little to spare. Raising it buys installs at the cost of
-    a wider, less powerful pattern; lowering it towards 1.0 brings back replies that
-    converge, satisfy their own constraint and are then rejected at margin ~0.63
-    against a demanded 0.74 — which is what the first `use_step` run did.
+    1.10 covers both with a little to spare; `data/traj_opt.yaml` ships 1.20,
+    because this is also the only knob that MAKES slack — it raises the request
+    without moving the gate, so the elevation learner's per-band spread has
+    something to spend at the install (`docs/fig8_tuning_log.md`). Raising it buys
+    installs and delivered shape at the cost of a wider, less powerful pattern;
+    lowering it towards 1.0 brings back replies that converge, satisfy their own
+    constraint and are then rejected — margin ~0.63 against the 0.74 demanded at
+    the time, which is what the first `use_step` run did.
 
     The startup `/init` gets this factor alone: there is no reply to measure the
     geometric one off yet. If the STARTUP path is refused for curvature, this is the
@@ -217,11 +221,11 @@ multi-modal, so the guess is a choice about the answer.
 
     It is an assumption, so it moves with the wind and the winch — it is `v_reelout`
     times a lap. Left at `0.0` the startup asks for `turn_radius_headroom` alone,
-    which at 150 m produced a path flown at margin 0.90 against a demanded 0.74:
-    accepted, but on the steering clamp in its tightest corner until the first
-    re-optimization replaced it. A startup solve that lands short is retried once
-    under the MEASURED ratio, so this number decides how often that retry is needed,
-    not whether the run survives without it.
+    which at 150 m produced a path flown at margin 0.90 against the 0.74 demanded at
+    the time: accepted, but on the steering clamp in its tightest corner until the
+    first re-optimization replaced it. A startup solve that lands short is retried
+    once under the MEASURED ratio, so this number decides how often that retry is
+    needed, not whether the run survives without it.
     """
     turn_radius_lap_reelout_m = 0.0
     """

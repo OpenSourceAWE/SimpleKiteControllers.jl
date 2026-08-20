@@ -624,6 +624,83 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The depower SEED has to follow the wind, and a 422 at 8 m/s is what says so (2026-08-20)
+
+`input_depower` is only a seed — the server optimizes it — so it had never looked
+like a number that has to move with the conditions. At 8 m/s it is, and the
+symptom is a solve that fails rather than a path that flies badly.
+
+The solve is against an `angle_of_attack <= 14°` cap that is already BINDING at
+6 m/s, and stage 1 of `/step` — which carries NO turn-radius constraint — is where
+a seed on the wrong side of that cap shows up. Measured at 150 m, both from
+`input_depower = 1.6`:
+
+| | stage 1 | AoA | tension | outcome |
+| --- | --- | --- | --- | --- |
+| 6.0 m/s | 0.85 s, 21 iterations | 8.3-14.0° | 2753-3950 N | solved |
+| 8.0 m/s | ran to the iteration cap | -25…88° | — | trim, winch-law and radial-continuity residuals all INFEASIBLE |
+
+Stage 2 then converged to a point of local infeasibility, i.e. a 422, cached, with
+the SAME 12.20 m turn-radius ask that had solved eighteen minutes earlier at
+6 m/s. **So it was never the turn-radius knobs**, which is where the search
+started.
+
+**The fix is a one-sided ramp on the seed**: the request sends `input_depower +
+input_depower_per_wind * (v - input_depower_wind_ref)`, clamped to the server's
+1.1-2.3 m (`depower_seed`, `examples/awetrim_client.jl`), and adds nothing below
+the reference. One-sided on purpose — less wind wants less tape, but all six runs
+of the 5.0-7.0 m/s scan in `docs/wind_scan_results.yaml` converged from 1.6 m, and
+lowering their seed would move answers that are already measured.
+
+It is provisional, and it rests on two anchors: 1.6 m is the largest seed known to
+converge, at 7.0 m/s, and 1.85 m is what 8.0 m/s was first solved with. That is
+`input_depower_wind_ref: 7.0` and `input_depower_per_wind: 0.25` in
+`data/traj_opt.yaml`. **A third measured wind should REPLACE this slope, not
+extend it.** At `0.0` the seed is `input_depower` whatever the wind, i.e. the
+behaviour before today.
+
+## `min_feasibility_margin` 0.75 -> 0.82: what was measured at 6 m/s does not carry to 8 (2026-08-20)
+
+0.75 was chosen the same morning as the split between turn authority and delivered
+shape (the entry below), and everything behind that choice was measured at 6 m/s,
+where it bought ~0.95 of flown margin. The 8 m/s run of 08:45 got 1.00, 1.00,
+0.76, 0.84, 0.77 out of its five installs — three of them below the 1.00 at which
+a corner stops being flyable at all.
+
+**The run failed on the third of them** (t = 60.4 s, margin 0.76, L = 259 m):
+
+- 18.8 % of 60-70 s in the steering clamp, against 0 % in every window from 30 to
+  60 s;
+- cross-track error growing 0.2 -> 6.4° while it was;
+- at t = 64.31 s the closest point re-acquired GLOBALLY (`reacquire_margin`,
+  `figure_eight_controller.jl`) and stepped the attractor 6°, the commanded course
+  ~55° and the steering by 0.45 in one sample;
+- peak d 10.15°, which is the `max d < 8.0°` criterion, on that path and no other.
+
+So 0.82, one 10 % step up, both to reject a reply like that at the gate and to
+widen what is asked for — the number is sent as well as checked. It is the same
+story as the depower seed above: a value identified at 6 m/s that has to move with
+the wind. When a second wind is measured, this one probably wants a ramp too
+rather than a bigger constant.
+
+## `turn_radius_lap_reelout_m`: one number works because the lap's reel-out barely moves with length (2026-08-20)
+
+The turn-radius request is scaled by `1 + dL/L`, and every re-optimization
+measures that ratio off the previous reply (`reelout_anchor_ratio`). The startup
+`/init` is the one request with no reply to measure — and it is where the ratio
+matters most, since the same `dL` is a bigger fraction of a short tether: 35 m is
+1.23 at 150 m against 1.09 at 380 m.
+
+One assumed number covers it because the lap's reel-out is nearly
+length-independent: measured 33.2 m at 150 m and 35.0 m at 380 m.
+`data/traj_opt.yaml` ships 30.0. It IS an assumption though — it is `v_reelout`
+times a lap, so it moves with the wind and the winch.
+
+Left at `0.0` the startup asks for `turn_radius_headroom` alone, which at 150 m
+bought a path flown at margin 0.90 against the 0.74 demanded at the time:
+accepted, but on the steering clamp in its tightest corner until the first
+re-optimization replaced it.
+
 ## The whole-run minimum is the LAST in-air shift missing the gate by 0.04 (2026-08-20)
 
 The run's minimum elevation fell 9.66 -> 8.70° between archives `_070905` and
@@ -1359,6 +1436,27 @@ the optimization's name. The next run was clean, 7 of 7.
 **Read `traj_opt.reopt.requests` against `installed` before quoting any run.** A run
 that lost requests is not a run at different settings, and it flatters every metric
 the correction work is measured by.
+
+## `guess_el_center` 22 -> 26: retuning the winch moved the optimizer's request (2026-08-19)
+
+Raising `wc_settings.yaml`'s `f_high` 7600 -> 8000 N is a controller change, but
+`winch_from_wc` maps `f_max = f_high`, so it also changes the request the solve is
+made under. At 150.0 m and 9 m/s the 22 seed that had converged at `f_max = 7600`
+throws IPOPT's iteration limit at 8000.
+
+**A LOOSER force bound, so the feasible set grew** — this is the multi-modality of
+"IPOPT 422 at 180 m" below, not an infeasible problem. 26 is the only other seed
+with recorded convergence at 150 m, so it is the one to try, and it solves. Note
+what that record was taken at, though: 6 m/s and `f_max = 7600`, not these
+conditions.
+
+**The failure-pocket warning below still stands.** 26 is the NARROWER basin in
+tether length — it is what threw 422 at 180.00027 and 181.0 m on 2026-08-18 — and
+a reel-out run sweeps length continuously, so re-optimizations are where this will
+show up first (`reopt_retry_el_offset` gives one retry at +2°). If the pockets
+bite, the alternatives are 24 (untested) or decoupling the optimizer's `f_max`
+from `f_high`, so that retuning the winch controller stops moving what is asked of
+the optimizer.
 
 ## The runs DO repeat, and the wind is what the settings were never tested against (2026-08-19)
 
@@ -2663,6 +2761,14 @@ guess length. Harmless for guidance at ~1° spacing, but it is why
 `traj_opt.path.points` changes mid-run, and the summary now reports the initial and
 final counts separately (as it does for the pre-flight clearance, which was being
 recomputed from whatever path `fec` held at the end).
+
+**The margin the fix needs is 3°, measured twice.** The gate reads the REFERENCE
+path's lowest point while the criterion scores the FLOWN one, and the kite flies
+below its reference near the lobe tips, where the steering is already on the
+clamp. Both stage-4 runs of the day put a number on that gap: reference 10.0° ->
+flown 7.0° here, and reference 10.0° -> flown 7.3° on the second.
+`candidate_elevation_margin` in `data/traj_opt.yaml` is 3.0 to cover both, i.e.
+a candidate must clear `fcs.min_elevation + 3.0` before it is installed.
 
 ## Optimized path vs lemniscate, like for like (2026-08-18)
 
