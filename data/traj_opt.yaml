@@ -85,6 +85,31 @@ traj_opt:
     # fix it: /init's system_config_path is a path on the SERVER. See
     # docs/fig8_tuning_log.md.
     input_depower:     1.6   # depower the solve starts from                   [m]
+    # The seed FOLLOWS THE WIND above input_depower_wind_ref: the request sends
+    # input_depower + input_depower_per_wind * (v - ref), clamped to the server's
+    # 1.1-2.3 m (`depower_seed` in examples/awetrim_client.jl). Below the reference
+    # nothing is added.
+    #
+    # It has to. The solve is against an angle_of_attack <= 14 deg cap that is
+    # already BINDING at 6 m/s, and /step's stage 1 - which carries NO turn-radius
+    # constraint - is where a seed on the wrong side of that cap shows up. Measured
+    # 2026-08-20 at 150 m, both from 1.6 m: 6.0 m/s solved stage 1 in 0.85 s and 21
+    # iterations (AoA 8.3-14.0 deg, tension 2753-3950 N); 8.0 m/s ran to the
+    # iteration cap with AoA at -25...88 deg and the trim, winch-law and
+    # radial-continuity residuals all infeasible, and stage 2 then converged to a
+    # point of local infeasibility - a 422, cached, with the SAME 12.20 m turn-radius
+    # ask that had solved eighteen minutes earlier at 6 m/s. So it was never the
+    # turn-radius knobs below.
+    #
+    # ONE-SIDED, and provisional. Less wind wants less tape, but all six runs of the
+    # 5.0-7.0 m/s scan in docs/wind_scan_results.yaml converged from 1.6 m and
+    # lowering their seed would move answers that are already measured. The two
+    # anchors are 1.6 m (largest seed known to converge, at 7.0 m/s) and 1.85 m (what
+    # 8.0 m/s was first solved with); a third measured wind should REPLACE this
+    # slope, not extend it. At 0.0 the seed is input_depower whatever the wind, i.e.
+    # the behaviour before 2026-08-20.
+    input_depower_wind_ref:  7.0   # wind at which input_depower IS the seed  [m/s]
+    input_depower_per_wind:  0.25  # tape added per m/s above that      [m/(m/s)]
     reg_weight:        1.0   # regularization weight                           [-]
     detect_simple_bounds: true   # IPOPT flag
 
@@ -111,7 +136,24 @@ traj_opt:
     # ladder tries the full spread first, and with it on, that 380 m curve reads
     # ~0.34 against the 0.88 it reads flat. Giving the ladder a floor at the spread
     # already flying left the run byte-identical (see the tuning log).
-    min_feasibility_margin: 0.75
+    #
+    # 0.75 was measured AT 6 m/s, and it does not carry to 8. What it bought there
+    # was ~0.95 flown; the 8 m/s run of 2026-08-20 08:45 got 1.00, 1.00, 0.76, 0.84,
+    # 0.77 out of its five installs - three of them below the 1.00 at which a corner
+    # stops being flyable at all. The one at t = 60.4 s (margin 0.76, L = 259 m) is
+    # what the run then failed on: 18.8 % of 60-70 s in the steering clamp against
+    # 0 % in every window from 30 to 60 s, cross-track error growing 0.2 -> 6.4 deg
+    # while it was, and at t = 64.31 s the closest point re-acquired globally
+    # (reacquire_margin, figure_eight_controller.jl) and stepped the attractor 6 deg,
+    # the commanded course ~55 deg and the steering by 0.45 in one sample. Peak d
+    # 10.15 deg, which is the max d < 8.0 deg criterion, on that path and no other.
+    #
+    # So 0.82 since 2026-08-20, one 10 % step up, both to reject that reply at the
+    # gate and to widen what is asked for. It is the same story as the depower seed
+    # above: a number identified at 6 m/s that has to move with the wind. When a
+    # second wind is measured, this one probably wants a ramp too rather than a
+    # bigger constant.
+    min_feasibility_margin: 0.82
     # Extra turn radius asked of the optimizer, as a factor on the margin above.
     # 1.0 asks for exactly what the gate demands, which is NOT enough, and the
     # first use_step run showed why: a reply that CONVERGED with its own constraint

@@ -442,9 +442,14 @@ fec = FigureEightController(FigureEightSettings(;
 inflow = inflow_from_settings(project_set)
 winch = winch_from_wc(rcs)
 @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
-                z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N.",
+                z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N | \
+                depower seed %.3f m%s.",
                inflow.wind_speed, inflow.wind_direction, inflow.profile_law, inflow.z0,
-               winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max)
+               winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max,
+               depower_seed(tos, inflow.wind_speed),
+               inflow.wind_speed > tos.input_depower_wind_ref ?
+                   @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.input_depower,
+                            tos.input_depower_per_wind, tos.input_depower_wind_ref) : "")
 
 # The seed, from data/traj_opt.yaml: it decides whether the solve converges and
 # which optimum it converges to. `figure_eight_path` closes the curve itself.
@@ -490,7 +495,7 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
 start_params = InitParams(; name = tos.name, length = l_set,
                           winch_params = winch, inflow_conditions = inflow,
                           trajectory = Trajectory(collect(guess_az), collect(guess_el)),
-                          input_depower = tos.input_depower,
+                          input_depower = depower_seed(tos, inflow.wind_speed),
                           reg_weight = tos.reg_weight,
                           detect_simple_bounds = tos.detect_simple_bounds,
                           min_turn_radius = opt_r_min,
@@ -1200,7 +1205,7 @@ try
                                                       inflow_conditions = inflow,
                                                       trajectory = Trajectory(collect(guess_az_r),
                                                                               collect(guess_el_r)),
-                                                      input_depower = tos.input_depower,
+                                                      input_depower = depower_seed(tos, inflow.wind_speed),
                                                       reg_weight = tos.reg_weight,
                                                       detect_simple_bounds = tos.detect_simple_bounds,
                                                       min_turn_radius = opt_r_min,

@@ -394,7 +394,11 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
         "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
         "el_center_deg" => (tos.guess_el_center, "centre elevation of the guess [deg]"),
-        "points" => (tos.guess_points, "points the guess was sent with")),
+        "points" => (tos.guess_points, "points the guess was sent with"),
+        "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
+            "power-tape length the solve started from, input_depower ramped with \
+             the wind above input_depower_wind_ref; only a seed, the server \
+             optimizes it [m]")),
     "path" => OrderedDict(
         "points" => (n_path_initial, "points of the path installed before the run"),
         "points_final" => (length(fec.az_path),

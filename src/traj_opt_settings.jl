@@ -66,6 +66,31 @@ multi-modal, so the guess is a choice about the answer.
     infeasible — see `docs/steering_depower.md`.
     """
     input_depower = 1.6
+    """
+    Wind speed [m/s] at which `input_depower` IS the seed. Below it nothing is
+    added — see `input_depower_per_wind`.
+    """
+    input_depower_wind_ref = 7.0
+    """
+    Tape length [m] added to the seed per m/s of wind ABOVE
+    `input_depower_wind_ref`, i.e. `depower_seed` in
+    `examples/awetrim_client.jl`. `0.0` sends `input_depower` whatever the wind.
+
+    The solve is against an `angle_of_attack <= 14°` cap that is already BINDING
+    at 6 m/s (measured 2026-08-20 at 150 m: stage 1 of `/step` solved in 0.85 s
+    with AoA 8.3-14.0°, steering saturated at ±0.35). More wind needs more tape
+    to stay under it, and a seed that does not follow the wind leaves the solver
+    to find that out from a starting point on the wrong side of the cap: at
+    8 m/s from 1.6 m, stage 1 — which carries NO turn-radius constraint — ran to
+    its iteration cap with AoA at -25…88° and the trim, winch-law and
+    radial-continuity residuals all infeasible, and the constrained stage 2 then
+    converged to a point of local infeasibility. That is the whole reason this
+    ramp exists; it is not a power knob.
+
+    `0.0` here, off, so the struct alone reproduces the behaviour that predates
+    the ramp; `data/traj_opt.yaml` ships the measured slope.
+    """
+    input_depower_per_wind = 0.0
     "Regularization weight of the solve [-]"
     reg_weight = 1.0
     "Solver flag passed through to IPOPT"
@@ -359,6 +384,12 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         tos.pattern_elevation_max > tos.pattern_elevation_min ||
         error("pattern_elevation_max ($(tos.pattern_elevation_max)) must be greater "*
               "than pattern_elevation_min ($(tos.pattern_elevation_min)).")
+    tos.input_depower_wind_ref >= 0 ||
+        error("input_depower_wind_ref must be >= 0, got "*
+              "$(tos.input_depower_wind_ref).")
+    tos.input_depower_per_wind >= 0 ||
+        error("input_depower_per_wind must be >= 0, got "*
+              "$(tos.input_depower_per_wind).")
     tos.turn_radius_headroom >= 1 ||
         error("turn_radius_headroom must be >= 1, got $(tos.turn_radius_headroom).")
     tos.turn_radius_lap_reelout_m >= 0 ||

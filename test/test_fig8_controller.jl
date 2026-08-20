@@ -798,6 +798,16 @@ end
         # ~3° of undershoot was measured twice on 2026-08-18.
         @test tos.candidate_elevation_margin == 3.0
         @test tos.detect_simple_bounds
+        # The depower seed follows the wind, and only UPWARDS from the reference:
+        # all six runs of the 5.0-7.0 m/s scan converged from 1.6 m, so the
+        # reference may not drop below the top of that scan, while 8.0 m/s did not
+        # converge from it (2026-08-20, a 422 out of /step's stage 1, which carries
+        # no turn-radius constraint at all).
+        @test tos.input_depower_wind_ref >= 7.0
+        @test tos.input_depower_per_wind > 0
+        # The DEFAULT is the behaviour before the ramp existed: input_depower
+        # whatever the wind.
+        @test TrajOptSettings().input_depower_per_wind == 0.0
 
         mktempdir() do dir
             good = joinpath(dir, "t.yaml")
@@ -814,6 +824,9 @@ end
             neg = joinpath(dir, "n.yaml")
             write(neg, "traj_opt:\n    candidate_elevation_margin: -1.0\n")
             @test_throws ErrorException TrajOptSettings(neg)
+            steep = joinpath(dir, "d.yaml")
+            write(steep, "traj_opt:\n    input_depower_per_wind: -0.1\n")
+            @test_throws ErrorException TrajOptSettings(steep)
             # Below 1.0 the request would ask for LESS turn radius than the gate
             # demands, which is the mistake this factor exists to correct.
             slack = joinpath(dir, "h.yaml")

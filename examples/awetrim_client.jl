@@ -55,6 +55,7 @@ end
 
 using HTTP, JSON3, StructTypes
 using Dates: now, format
+using Printf: @sprintf
 using YAML
 using SimpleKiteControllers: with_file_lock, turn_rate_coeffs
 
@@ -749,6 +750,49 @@ function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing)
         return nothing
     end
     return scale * tos.min_feasibility_margin / (coeffs.c1 * fcs.max_steering)
+end
+
+"AWETrim's own bounds on `input_depower`, from `src/awetrim/utils/defaults.py` [m]."
+const DEPOWER_SEED_BOUNDS = (1.1, 2.3)
+
+"""
+    depower_seed(tos, wind_speed) -> Float64
+
+The power-tape length `l_dp` [m] a request STARTS from, `tos.input_depower` plus
+`tos.input_depower_per_wind` per m/s of wind above `tos.input_depower_wind_ref`,
+clamped to [`DEPOWER_SEED_BOUNDS`](@ref).
+
+Only a seed — `depower_mode` stays `"optimize"` and the server moves it — but the
+seed is what decides whether the solve gets anywhere, because the AoA cap of 14°
+is already binding at 6 m/s and the solve has to start on the feasible side of it.
+Measured 2026-08-20 at 150 m: from 1.6 m, 6 m/s solved stage 1 of `/step` in
+0.85 s and 21 iterations; 8 m/s hit the iteration cap with AoA at -25…88° and
+took the constrained stage 2 down with it (422). Stage 1 carries no turn-radius
+constraint, so this is not the `min_turn_radius` request going too far — the same
+12.20 m ask solved at 6 m/s eighteen minutes earlier.
+
+ONE-SIDED on purpose. Less wind would want less tape, but every run of the
+5.0-7.0 m/s scan in `docs/wind_scan_results.yaml` converged from 1.6 m, and
+seeding those lower would move answers that are already measured. The ramp only
+adds where nothing has been flown.
+
+The slope is anchored on two points, so treat it as provisional: 1.6 m is the
+largest seed known to converge (7.0 m/s, that scan) and 1.85 m is what 8 m/s was
+first solved with. A third measured wind should replace it rather than extend it.
+"""
+function depower_seed(tos, wind_speed)
+    seed = tos.input_depower +
+           tos.input_depower_per_wind * max(0.0, wind_speed - tos.input_depower_wind_ref)
+    lo, hi = DEPOWER_SEED_BOUNDS
+    clamped = clamp(seed, lo, hi)
+    clamped == seed ||
+        @warn @sprintf("Depower seed of %.3f m for %.1f m/s is outside AWETrim's \
+                        bounds [%.1f, %.1f] m and was clamped to %.3f m. The ramp \
+                        (input_depower %.2f + %.3f per m/s above %.1f m/s of \
+                        data/traj_opt.yaml) has run out of tape.",
+                       seed, wind_speed, lo, hi, clamped, tos.input_depower,
+                       tos.input_depower_per_wind, tos.input_depower_wind_ref)
+    return clamped
 end
 
 """
