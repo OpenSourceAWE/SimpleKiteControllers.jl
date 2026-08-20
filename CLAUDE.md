@@ -67,6 +67,24 @@ run's numbers from the **archive** it names, not from `output/`: every run overw
 `output/reelout_150m_opt.{arrow,yaml}`, and a run started while you are reading them
 will swap them under you.
 
+### Latest results per wind speed
+
+`output/scenarios/` is a symlink into the
+[SimulationResults](https://github.com/OpenSourceAWE/SimulationResults) repo, which
+keeps the latest 150 m reel-out optimizer run for each wind speed: `v03`, `v06`, `v08`,
+`v09`, `v10` — the number is the **mean wind speed in m/s**, not a version counter.
+Measured mean reel-out power ranges from 394 W at 3 m/s to 35 kW at 10 m/s.
+
+Each folder is a self-contained record of one run: the flight log
+(`reelout_150m_opt.arrow`), the run summary (`reelout_150m_opt.yaml` — git hash and
+dirty status, wind and turbulence, wall-clock time, `fig8_metrics`, and measured vs.
+predicted power; read this first instead of loading the Arrow), and copies of every
+settings file that fed it (`fc_settings_reelout.yaml`, `settings_reelout_150m.yaml`,
+`system_reelout_150m.yaml`, `traj_opt.yaml`, `wc_settings.yaml`, `gui.yaml`), so the run
+is reproducible independently of whatever `data/` currently holds. Nothing here is
+overwritten by a new run, so this is the place to compare wind speeds or an older
+tuning — `output/` itself is not.
+
 ### The optimizer's failed-request cache
 
 A failing solve runs to IPOPT's iteration cap (~81 s, against ~1.5 s for one that
