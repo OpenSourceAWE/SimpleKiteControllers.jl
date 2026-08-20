@@ -116,6 +116,16 @@ lift_mean = mean(el_applied)
                span_worst.pct, fig8m.min_elevation_all, el_min_final)
 
 summary = OrderedDict{String, Any}()
+# The FIRST key of the file, the same words the console logs as "Success criteria:
+# …". It is the one line a reader looks for, so it is not buried at the end of
+# `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
+# A failure names the criteria that broke, exactly as the console does.
+# `examples/wind_scan.jl`, which reads these summaries out of the archives, falls
+# back to the old nested position so runs flown before this still parse.
+summary["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
+    isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
+    "FAILED: " * join(fig8m.criteria_failed, ", "),
+    "pass/fail verdict vs V3Kite's success criteria")
 run_time = Dates.now()
 # The package repo, not `examples/` — this reports the controller code, not the script's own project.
 pkg_dir = pkgdir(SimpleKiteControllers)
@@ -184,9 +194,8 @@ if fig8m !== nothing
             "rate_limited_pct_time" => (round(Int, 100 * fig8m.tape_rate_frac),
                 "% of time the tape's rate limit was hit"),
             "rate_limited_peak_per_s" => (round(fig8m.max_tape_rate; digits = 3), "peak tape rate reached [1/s]"),
-            "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")),
-        "success_criteria" => (isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
-            "FAILED: " * join(fig8m.criteria_failed, ", "), "pass/fail verdict vs V3Kite's success criteria"))
+            "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")))
+    # The verdict these numbers were scored into is the file's first key now.
 end
 
 reelout_summary = OrderedDict{String, Any}()

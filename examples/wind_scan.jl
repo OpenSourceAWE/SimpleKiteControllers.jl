@@ -54,7 +54,9 @@ function scan_row((wind, archive, note)::Tuple)
             span_lap = m["extent"]["elevation_span_lap_deg"],
             span_pct = m["extent"]["elevation_span_pct_of_b"],
             sat = m["steering"]["pct_time_within_2pct_of_peak"],
-            crit = m["success_criteria"],
+            # Top-level since the verdict was promoted out of `fig8_metrics:`;
+            # the nested position is where the 2026-08-19 archives have it.
+            crit = get(y, "success_criteria", get(m, "success_criteria", "unknown")),
             p_mean = ro["power"]["mean_W"], p_peak = ro["power"]["peak_W"],
             p_cf = ro["power"]["cf_power_ro"],
             f_mean = ro["force"]["mean_N"], f_peak = ro["force"]["peak_N"],

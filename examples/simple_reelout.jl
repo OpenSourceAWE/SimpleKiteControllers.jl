@@ -623,6 +623,15 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_
                    min_span_frac = fcs.min_span_frac, require_final = true)
 
 summary = OrderedDict{String, Any}()
+# The FIRST key of the file, the same words the console logs as "Success criteria:
+# …". It is the one line a reader looks for, so it is not buried at the end of
+# `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
+# A failure names the criteria that broke, exactly as the console does. The nested
+# key stays as well here; see the comment on it below.
+summary["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
+    isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
+    "FAILED: " * join(fig8m.criteria_failed, ", "),
+    "pass/fail verdict vs V3Kite's success criteria")
 run_time = Dates.now()
 # The package repo, not `examples/` — this reports the controller code, not the script's own project.
 pkg_dir = pkgdir(SimpleKiteControllers)
@@ -687,8 +696,13 @@ if fig8m !== nothing
                 "% of time the tape's rate limit was hit"),
             "rate_limited_peak_per_s" => (round(fig8m.max_tape_rate; digits = 3), "peak tape rate reached [1/s]"),
             "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")),
+        # Deliberately the same string as the top-level verdict above, which is
+        # where a reader should look. This copy stays because `run_metrics` reads
+        # the sweep's runs from here — a shape sweep flies THIS script — and
+        # dropping it would put `success_criteria: null` in every row of
+        # output/optimization_results.yaml.
         "success_criteria" => (isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
-            "FAILED: " * join(fig8m.criteria_failed, ", "), "pass/fail verdict vs V3Kite's success criteria"))
+            "FAILED: " * join(fig8m.criteria_failed, ", "), "same verdict as the top-level key"))
 end
 
 reelout_summary = OrderedDict{String, Any}()
