@@ -91,6 +91,19 @@ multi-modal, so the guess is a choice about the answer.
     the ramp; `data/traj_opt.yaml` ships the measured slope.
     """
     input_depower_per_wind = 0.0
+    """
+    Fly the optimizer's own depower during phase 4 (fig8) instead of the fixed
+    `fcs.depower_setpoint`, converted with `awetrim_depower_to_v3kite`. Updated at
+    startup and after every re-optimization that installs a path
+    (`examples/simple_opt_reelout.jl`'s `depower_flown_opt`); phase 5 always flies
+    `fcs.depower_final` regardless of this flag.
+
+    `false` reproduces the pre-2026-08-20 behaviour. This is untested against the
+    curvature ceiling (`docs/fig8_tuning_log.md`, `PlanStrongWind.md`): the
+    optimizer's value is not clamped to it, so a value above the ceiling can start
+    a run that would otherwise have refused to fly.
+    """
+    fly_opt_depower::Bool = false
     "Regularization weight of the solve [-]"
     reg_weight = 1.0
     "Solver flag passed through to IPOPT"

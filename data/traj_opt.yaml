@@ -110,6 +110,11 @@ traj_opt:
     # the behaviour before 2026-08-20.
     input_depower_wind_ref:  7.0   # wind at which input_depower IS the seed  [m/s]
     input_depower_per_wind:  0.25  # tape added per m/s above that      [m/(m/s)]
+    # Fly the optimizer's own depower in phase 4 (fig8) instead of the fixed
+    # fcs.depower_setpoint, converted with awetrim_depower_to_v3kite. See
+    # PlanStrongWind.md's "depower question" — untested against the curvature
+    # ceiling, not clamped to it.
+    fly_opt_depower:   true  # phase 4 flies the optimizer's converted u_d     [-]
     reg_weight:        1.0   # regularization weight                           [-]
     detect_simple_bounds: true   # IPOPT flag
 

@@ -1,5 +1,12 @@
 # Fix oscillations at 9 m/s wind
 
+**Status: solved for now (2026-08-20)**, by combining A and B below rather than A alone —
+[`fly_opt_depower`](data/traj_opt.yaml#L113-L117) flies the optimizer's own converted `u_d` in
+phase 4 instead of the fixed `depower_setpoint`, and `kv` is raised 0.0408 -> 0.0458
+([data/wc_settings.yaml:80](data/wc_settings.yaml#L80), uncommitted) so the speed law asks for
+more reel-out at `f_high`. Neither change has been measured together yet at 9 m/s — the table
+below is what still needs re-running to close this out for real; see "Next step".
+
 At wind speeds above 8 m/s strong force oscillations appear because the upper force controller
 is getting activated.
 
@@ -105,12 +112,23 @@ First finding: Not directly, there is an offset to our notation that we need to 
 1b. Today `depower_setpoint` is wind-independent while the
    optimizer's seed already ramps. The obstacle is the curvature ceiling, which is a function of the *path*, not the wind — so this needs the ceiling lifted alongside:
    - at 180 m the ceiling is 0.282 (vs 0.278 at 150 m);
- 
+
+**Implemented (2026-08-20):** `TrajOptSettings.fly_opt_depower` (default `false`, `true` in
+`data/traj_opt.yaml`) makes phase 4 fly `depower_flown_opt` — the latest `u_p_equiv` from
+`opt_depower_log`, kept current at the startup solve and every re-optimization — instead of the
+fixed `depower_setpoint`. Not clamped to the curvature ceiling above; a converted value past it
+would start a run the fixed-depower gate would otherwise have refused.
+
 ### B. Give the winch more authority
 
 Raise `kv` (0.0408) so `v_set` responds harder to force. Note `v_sat` = 8.0 m/s is already being
 touched (8.25 m/s peak), so speed headroom is nearly gone — raising `v_sat` trades against drum
 and tether limits and should be checked against the plant, not just the controller.
+
+**Implemented (2026-08-20):** `kv` raised 0.0408 -> 0.0458 in `data/wc_settings.yaml` (uncommitted
+— it is the user's live tuning value, not yet folded back into the plant defaults). At `f_high` =
+8000 N that moves the speed law's ceiling from 3.65 to 4.10 m/s, buying headroom against the
+9 m/s run's 8.25 m/s `v_sat` peak without touching `v_sat` itself.
 
 ### C. Retune `UpperForceController` for *sustained* engagement
 
@@ -137,6 +155,7 @@ already computed — `upper_force_pct` in [src/fig8_metrics.jl:366](src/fig8_met
 
 ## Next step
 
-Try A1 first (wind-ramped depower on the fixed lemniscate, which is the only variant whose ceiling
-clears 0.30), and re-measure the same table. The target is mean force below 8000 N and
-`upper_force_pct` near 0 — at which point C and D become tunable rather than moot.
+Re-run the 9 m/s case with `fly_opt_depower: true` and `kv = 0.0458` both in effect, and re-measure
+the same table as "Measured" above. The target is mean force below 8000 N and `upper_force_pct`
+near 0 — at which point this plan can be closed for real, or C and D become tunable rather than
+moot if the mean force is still not under `f_high`.

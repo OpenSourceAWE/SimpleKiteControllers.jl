@@ -497,6 +497,10 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
 # AWETrim's own scale, and `u_p_equiv`, the V3Kite `rel_depower` expected to fly
 # at the same power (`awetrim_depower_to_v3kite`, docs/steering_depower.md).
 opt_depower_log = NamedTuple[]
+# What phase 4 flies when `tos.fly_opt_depower` is on, kept in step with
+# `opt_depower_log`'s latest `u_p_equiv`; falls back to the fixed setpoint
+# before the first optimizer answer.
+depower_flown_opt = fcs.depower_setpoint
 
 start_params = InitParams(; name = tos.name, length = l_set,
                           winch_params = winch, inflow_conditions = inflow,
@@ -738,9 +742,9 @@ if opt_r_on && !isnothing(coeffs_startup)
 end
 
 if !isnothing(opt_result.depower)
+    global depower_flown_opt = awetrim_depower_to_v3kite(opt_result.depower.value)
     push!(opt_depower_log,
-          (; t = 0.0, l_dp = opt_result.depower.value,
-           u_p_equiv = awetrim_depower_to_v3kite(opt_result.depower.value)))
+          (; t = 0.0, l_dp = opt_result.depower.value, u_p_equiv = depower_flown_opt))
 end
 
 # The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
@@ -924,6 +928,10 @@ try
             v_kite, v_app = Float64(s.sys_state.v_app),
             dmin, tangent = path_tangent(fec))
         phase_before == 2 && phase == 3 && (global transition_start = t)
+        # Overrides calc_steering's fixed fcs.depower_setpoint with the optimizer's
+        # own converted depower, kept current by the push!(opt_depower_log, ...)
+        # sites above; phase 5 below still wins with fcs.depower_final.
+        tos.fly_opt_depower && phase == 4 && (rel_depower = depower_flown_opt)
         # Separate from the ladder inside calc_steering so it can fire the SAME
         # step as a 3->4 transition: reel-out finishing does not wait for settling.
         if phase in (3, 4) && reelout_done
@@ -1347,8 +1355,8 @@ try
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
                         let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
-                            push!(opt_depower_log,
-                                  (; t, l_dp, u_p_equiv = awetrim_depower_to_v3kite(l_dp)))
+                            global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
+                            push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                         end
                     # The whole prospective blend to a converged reply is checked
                     # (`blend_folds`) before it is ever installed, and a folded one
@@ -1435,8 +1443,8 @@ try
                             end
                             tab = opt_trajectory(; url = tos.base_url)
                             let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
-                                push!(opt_depower_log,
-                                      (; t, l_dp, u_p_equiv = awetrim_depower_to_v3kite(l_dp)))
+                                global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
+                                push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                             end
                         end
                         # Re-measure the anchor correction for the NEXT request off

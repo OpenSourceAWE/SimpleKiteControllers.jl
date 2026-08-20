@@ -677,7 +677,7 @@ function inflow_from_settings(set)
 end
 
 """
-    winch_from_wc(wc; v_max = nothing, p_max = nothing) -> WinchParams
+    winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) -> WinchParams
 
 The winch law of a run, from the `WinchControllers.WCSettings` its
 `WinchController` is built from: `kv`, `f_low` and `f_high` of
@@ -690,12 +690,15 @@ problem infeasible and the server answers 422 — `kv*sqrt(f_high)` is the speed
 ceiling to compare against roughly a third of the wind speed.
 
 `v_max`/`p_max` are the ground station's limit PAST the force bound, where the
-controller holds `f_high` and the speed keeps rising: pass the system settings'
-`set.v_ro_max` (8 m/s here) to state it. Left unset, the optimizer uses its own
-10 m/s bound — which with `kv = 0.0408` and `f_high = 8000 N` the square-root law
-never reaches anyway (3.65 m/s), so this only starts to matter on a softer winch.
+controller holds `f_high` and the speed keeps rising. `v_max` defaults to `wc.v_sat`
+— `data/wc_settings.yaml`'s own reel-out speed limit (8 m/s here), the same cap the
+runtime `WinchController` enforces — so the optimizer is asked for a path THIS
+ground station can actually fly. Pass `v_max = nothing` to fall back to the
+optimizer's own 10 m/s bound instead, which with `kv = 0.0408` and
+`f_high = 8000 N` the square-root law never reaches anyway (3.65 m/s), so this
+only starts to matter on a softer winch.
 """
-winch_from_wc(wc; v_max = nothing, p_max = nothing) =
+winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low, f_max = wc.f_high,
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max))
