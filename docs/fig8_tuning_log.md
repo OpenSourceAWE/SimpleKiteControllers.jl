@@ -3454,3 +3454,53 @@ the distance a constant `v_entry` would over the same time. Measured at
 digits, per the `depower_final` sweep above), all 7 success criteria still
 pass. `v_reelout` itself dips to only -0.09 m/s in the process — the residual
 dip is the plant's own response lag, not the setpoint shape.
+
+### `EFFECTIVE_SIM_TIME`'s linear wind scaling undershoots below `default_v_wind` (2026-08-20)
+
+`simple_opt_reelout.jl`'s `EFFECTIVE_SIM_TIME` scaled the project's `sim_time`
+by `default_v_wind / WIND_SPEED`, assuming reel-out speed scales linearly with
+wind. At a 150 -> 380 m, 4 m/s override (225 s from that ratio against a
+150 s / 6 m/s baseline) the run reached only 378.2 m, missing `reelout_l_max`
+by 1.8 m and failing the "phase 5 (final) reached" criterion outright — the
+`el_offset_final` lift latched at `t = 217.9` s with only 7.1 s of the 225 s
+budget left. An earlier run at the same override (commit `3ea53e1`, before
+`guess_el_center` moved from 26° to 30° in `ad08158`) had reached 380 m, but
+with only 12.8 m of margin left when the lift latched — already a near-miss,
+not a comfortable pass.
+
+The measured reeling-window duration confirms the linear ratio is the wrong
+model, not just unlucky timing: 176.8 s at 4 m/s against the 150 s the ratio
+predicts at 6 m/s is an 18% miss
+(`ln(176.8/150)/ln(6/4) = 1.35` vs. the ratio's implicit exponent of 1).
+Apparent wind during phase 4 was 47.7% below the 27 m/s reference at 4 m/s,
+worse than the 20.3% deviation at 6 m/s — it falls off faster than the ambient
+wind ratio because apparent wind is dominated by the kite's own cross-wind
+flight speed, not ambient wind directly.
+
+At 3 m/s the effective problem is worse than a bad exponent: the winch spends
+38.8% of the reeling window in the `LowerForceController` (reeling IN, state 0)
+rather than reeling out — tether force averages 486 N against `f_low = 350 N`,
+close enough to the floor that force dips trigger reel-in cycles that undo
+progress. A 300 s budget (already 2x the plain-ratio baseline) only reached
+264.6 m of 380 m, achieving 114.6 m of reel-out over that window — an average
+rate of 0.45 m/s including the stalls, against `steady_v_reelout_m_s` of
+0.81 m/s when not reeling in. That is a force-floor/winch-tuning problem — see
+`winch_kv_table.yaml`, itself tuned only down to 9 m/s, and `f_low` in
+`data/wc_settings.yaml` — not a timing one, and fixing it properly needs its
+own investigation, deliberately left alone here (2026-08-20: don't touch
+`winch_kv_table.yaml`).
+
+Fix, scoped to `EFFECTIVE_SIM_TIME` only: `simple_opt_reelout.jl` raises the
+ratio to `BELOW_DEFAULT_EXPONENT = 2.0` when `WIND_SPEED < default_v_wind`.
+1.5 (a small margin over the measured 1.35 exponent from the 4 m/s data) was
+tried first but is not enough at 3 m/s: extrapolating the 0.45 m/s average
+rate over the full 230 m reel-out needs roughly 510 s of reeling alone, well
+past the 424 s that exponent 1.5 gives (`150 s * 2^1.5`). Exponent 2.0 gives
+600 s at 3 m/s (`150 s * 2^2`) and 337.5 s at 4 m/s (`150 s * 1.5^2`) — both
+comfortably above what was measured or extrapolated, at the cost of being
+generous rather than tight. At/above `default_v_wind` the plain ratio is
+unchanged since it already carries 9-30 s of margin there (measured at
+6-10 m/s, all passing). The extrapolation is untested at the full budget —
+the underlying LowerForceController stalling means more sim_time should let
+3 m/s finish, but does not make the run efficient, and a longer stall episode
+than the one measured could still leave it short.

@@ -308,10 +308,18 @@ l_tether = project_set.l_tether
 # Reel-out speed scales with the wind (more force -> faster reel-out), so a
 # slower override needs proportionally more time to cover the same tether
 # length and a faster one needs less: effective sim_time (the selected value,
-# or the project's own default) scales by default_v_wind / WIND_SPEED.
-# Without an override sim_time is unaffected.
-EFFECTIVE_SIM_TIME = isnothing(WIND_SPEED) ? SIM_TIME :
-                     something(SIM_TIME, project_set.sim_time) * default_v_wind / WIND_SPEED
+# or the project's own default) scales by default_v_wind / WIND_SPEED, steepened
+# by BELOW_DEFAULT_EXPONENT below default_v_wind since that ratio undershoots
+# there (see docs/fig8_tuning_log.md, 2026-08-20). Without an override sim_time
+# is unaffected.
+BELOW_DEFAULT_EXPONENT = 1.66 # 1.5 undershot 3 m/s; see docs/fig8_tuning_log.md, 2026-08-20
+EFFECTIVE_SIM_TIME = if isnothing(WIND_SPEED)
+    SIM_TIME
+else
+    wind_ratio = default_v_wind / WIND_SPEED
+    scale = wind_ratio <= 1 ? wind_ratio : wind_ratio^BELOW_DEFAULT_EXPONENT
+    something(SIM_TIME, project_set.sim_time) * scale
+end
 isnothing(WIND_SPEED) ||
     @info "simple_opt_reelout.jl: wind-speed override active, sim_time scaled to \
            $(round(EFFECTIVE_SIM_TIME; digits = 1)) s."
