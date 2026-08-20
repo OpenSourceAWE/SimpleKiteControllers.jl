@@ -40,6 +40,7 @@ const EXAMPLES = [
     "select_sim_time.jl      - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl         - choose figures: pattern/3d path/time series/power/aerodynamics" => "select_plots.jl",
     "plot_scenario.jl        - replot an archived run from output/scenarios/" => "plot_scenario.jl",
+    "move_scenario.jl        - move the last reel-out run into output/scenarios/vNN" => "move_scenario.jl",
     "simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)" => "simple_opt_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
     "simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
