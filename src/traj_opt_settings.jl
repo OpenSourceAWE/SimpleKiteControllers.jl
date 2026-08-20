@@ -92,6 +92,20 @@ multi-modal, so the guess is a choice about the answer.
     """
     input_depower_per_wind = 0.0
     """
+    Soft ceiling [m] on the ramped seed, below AWETrim's hard 2.3 m bound
+    (`DEPOWER_SEED_BOUNDS` in `examples/awetrim_client.jl`). `0.0` disables it —
+    the ramp then clamps to the hard bound alone.
+
+    A seed AT the hard bound leaves the solver no room to move: measured
+    2026-08-20 at 150 m / 10 m/s, the ramp's own 2.35 m clamps to 2.3 m and
+    `/step` then runs to IPOPT's iteration cap every time, constrained or not.
+    1.85 m — the same seed already calibrated at 8 m/s — converges immediately
+    instead, with margin to spare (unconstrained turn radius 13.59 m against the
+    13.34 m the run demands). This caps the ramp there rather than at the
+    server's own bound.
+    """
+    input_depower_seed_max = 0.0
+    """
     Fly the optimizer's own depower during phase 4 (fig8) instead of the fixed
     `fcs.depower_setpoint`, converted with `awetrim_depower_to_v3kite`. Updated at
     startup and after every re-optimization that installs a path
@@ -444,6 +458,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.input_depower_per_wind >= 0 ||
         error("input_depower_per_wind must be >= 0, got "*
               "$(tos.input_depower_per_wind).")
+    tos.input_depower_seed_max >= 0 ||
+        error("input_depower_seed_max must be >= 0, got "*
+              "$(tos.input_depower_seed_max).")
     tos.turn_radius_headroom >= 1 ||
         error("turn_radius_headroom must be >= 1, got $(tos.turn_radius_headroom).")
     tos.turn_radius_lap_reelout_m >= 0 ||
