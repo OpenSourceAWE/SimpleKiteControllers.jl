@@ -384,6 +384,7 @@ fcs.compliance == 0 ||
 # reads). `dt` is the file's one placeholder; the plant's timestep wins.
 dt0 = 1 / project_set.sample_freq
 wc = load_wc_settings(wc_settings(project); dt = dt0)
+wc.kv = winch_kv(project_set.v_wind)     # overrides the file's flat kv, see data/winch_kv_table.yaml
 rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 

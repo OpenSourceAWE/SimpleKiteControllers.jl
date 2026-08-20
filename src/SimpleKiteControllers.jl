@@ -28,6 +28,9 @@ export path_min_height, check_pattern_height
 export V3_TURN_RATE_COEFFS, turn_rate_coeffs, V3_TURN_RATE_C1, V3_TURN_RATE_C2
 export reload_turn_rate_table!
 
+# Wind-speed-dependent winch kv lookup table
+export winch_kv
+
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
 export winch_state_pct
@@ -53,8 +56,8 @@ export skc_data_path
 
 Absolute path of this package's bundled `data/` directory, holding
 `fc_settings.yaml` ([`FC_Settings`](@ref)), `turn_rate_coeffs.yaml`
-([`turn_rate_coeffs`](@ref)) and the system project of a run
-([`project_file`](@ref)).
+([`turn_rate_coeffs`](@ref)), `winch_kv_table.yaml` ([`winch_kv`](@ref)) and
+the system project of a run ([`project_file`](@ref)).
 
 Not `KiteUtils.get_data_path()`: that points at the *kite model's* data
 directory during a run, while these settings belong to the controller.
@@ -64,6 +67,7 @@ skc_data_path() = joinpath(dirname(@__DIR__), "data")
 include("parking_controller.jl")
 # Before figure_eight_controller.jl: its feasibility helpers default c1 to V3_TURN_RATE_C1.
 include("turn_rate_table.jl")
+include("winch_kv_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")
 include("fc_settings.jl")

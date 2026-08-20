@@ -1,0 +1,12 @@
+# Wind-speed-dependent `kv` for WinchControllers.jl's reel-out law
+# `v_set = kv * sqrt(force)` (the `kv` field of data/wc_settings.yaml).
+# `winch_kv(v_wind)` linearly interpolates between rows and CLAMPS outside
+# the identified range (0.0408 at/below 9 m/s, 0.0508 at/above 10 m/s) rather
+# than extrapolating, since only these two points have been tuned. Add a row
+# and re-identify the curve here, not a new key elsewhere, when another wind
+# speed is tuned.
+entries:
+  - v_wind: 9.0
+    kv: 0.0408
+  - v_wind: 10.0
+    kv: 0.0508
