@@ -15,7 +15,9 @@ a `Main` global. Once the model
 and settling caches exist, the figure-eight run simulates at about twice
 realtime, so its wall time is roughly half the selected `sim_time`; the first
 run of a fresh cache takes minutes longer. Its plots come up on their own at
-the end, so the plotting entry is for a log that is already on disk.
+the end, so the plotting entries are for a log that is already on disk —
+`simple_reelout_plots.jl` for the last one, `plot_scenario.jl` for an archived
+run moved into `output/scenarios/`.
 
 Started by `menu()` in a REPL from `bin/run_julia`, or by
 
@@ -37,6 +39,7 @@ const EXAMPLES = [
     "select_project.jl       - choose which system project (150m/200m/300m) to fly" => "select_project.jl",
     "select_sim_time.jl      - choose the simulation time (default or a specific value)" => "select_sim_time.jl",
     "select_plots.jl         - choose figures: pattern/3d path/time series/power/aerodynamics" => "select_plots.jl",
+    "plot_scenario.jl        - replot an archived run from output/scenarios/" => "plot_scenario.jl",
     "simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)" => "simple_opt_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
     "simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",

@@ -54,6 +54,11 @@ Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
 
     include("simple_reelout_plots.jl")
+
+Set `SCENARIO_PATH` to an `output/scenarios/<name>` folder first to replot an
+archived run instead — `fcs`/`project_set`/the log are all reloaded from that
+folder's own copies rather than the live `data/` directory. `plot_scenario.jl`
+is the menu-driven front end for that.
 """
 
 using Pkg
@@ -76,31 +81,65 @@ set_data_path(skc_data_path())
 # manual re-include never plots against a stale project or fcs.
 include(joinpath(@__DIR__, "gui_state.jl"))
 project = project_file(selected_reelout_project())
-# Same rule as simple_reelout.jl: an `fcs` already in `Main` wins. Included at the
-# end of a run that is the fcs actually FLOWN, so rebuilding it from the YAML
-# here would both draw the wrong reference path and throw away the caller's
-# assignments; only a standalone re-include with no `fcs` around reads the file.
-if !(@isdefined(fcs) && fcs isa FC_Settings)
-    fcs = FC_Settings(fc_settings(project))
-end
-# Same rule again, for the wind speed actually flown: a live run's `project_set`
-# (with any override already applied by `apply_windspeed_override!`) wins.
-if !(@isdefined(project_set) && project_set isa Settings)
-    project_set = Settings(project)
-    apply_windspeed_override!(project_set, selected_windspeed())
+
+# A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`,
+# set by `plot_scenario.jl`. Read and cleared here, like `SHOW_PLOTS`: a stale
+# value must not silently redirect a LATER live run's plots at an old archive.
+scenario_path = @isdefined(SCENARIO_PATH) ? SCENARIO_PATH : nothing
+SCENARIO_PATH = nothing
+
+if !isnothing(scenario_path)
+    # Every setting comes from ITS OWN copies inside the folder, not the live
+    # data/ directory or whatever a prior run left in `Main` — a scenario exists
+    # to freeze exactly the conditions it was flown under.
+    scenario_project = joinpath(scenario_path, "system_reelout_150m.yaml")
+    project_set = Settings(scenario_project)
+    fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
+else
+    # Same rule as simple_reelout.jl: an `fcs` already in `Main` wins. Included at
+    # the end of a run that is the fcs actually FLOWN, so rebuilding it from the
+    # YAML here would both draw the wrong reference path and throw away the
+    # caller's assignments; only a standalone re-include with no `fcs` around
+    # reads the file.
+    if !(@isdefined(fcs) && fcs isa FC_Settings)
+        fcs = FC_Settings(fc_settings(project))
+    end
+    # Same rule again, for the wind speed actually flown: a live run's
+    # `project_set` (with any override already applied by
+    # `apply_windspeed_override!`) wins.
+    if !(@isdefined(project_set) && project_set isa Settings)
+        project_set = Settings(project)
+        apply_windspeed_override!(project_set, selected_windspeed())
+    end
 end
 plots = selected_plots()
-output_path = normpath(joinpath(@__DIR__, "..", "output"))
+output_path = isnothing(scenario_path) ?
+              normpath(joinpath(@__DIR__, "..", "output")) : scenario_path
 # A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
 # `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
-# project keep separate logs and can be plotted against each other.
-log_name = (@isdefined(LOG_NAME) && LOG_NAME isa AbstractString) ? LOG_NAME :
-           basename(project_set.log_file)
+# project keep separate logs and can be plotted against each other. A scenario
+# archive is identified by its one `.arrow` file instead, since it was moved out
+# of `output/archives/` by hand and may hold any project's log.
+log_name = if !isnothing(scenario_path)
+    arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_path))
+    isempty(arrow_files) &&
+        error("No .arrow log found in scenario folder $scenario_path")
+    replace(only(arrow_files), ".arrow" => "")
+elseif @isdefined(LOG_NAME) && LOG_NAME isa AbstractString
+    LOG_NAME
+else
+    basename(project_set.log_file)
+end
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
 created_at = log_created_at(log_name; path = output_path)
-fig_name = "V3 Kite Reel-out – $(round(project_set.v_wind; digits = 1)) m/s"
+# `project_set.v_wind` is the PROJECT's base value, not necessarily what was
+# actually flown if a WIND_SPEED override was in effect — a scenario's own run
+# summary is the only place the true value survives.
+flown_wind = isnothing(scenario_path) ? project_set.v_wind :
+    V3Kite.YAML.load_file(joinpath(output_path, log_name * ".yaml"))["simulation"]["wind_speed"]
+fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
 end
