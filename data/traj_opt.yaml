@@ -101,57 +101,6 @@ traj_opt:
     # kite's minimum ANGULAR turn radius is 1/(L*c1*u_s), so a fixed curve only
     # gets easier — the 150 m path measured 0.93 at its anchor and 2.18 at 350 m.
     #
-    # Under reopt_enabled that does not hold, and EVERY solve is the worst case.
-    # The kite's minimum PHYSICAL turn radius is 1/(c1*u_s), independent of length
-    # (11.35 m at c1 = 0.2752, u_s = 0.32), and the optimizer returns patterns of
-    # 11.0-11.5 m physical radius at every length — its own input_steering (±0.35)
-    # and input_steering_rate (±0.29) bounds are binding in every solve. So the
-    # margin sits at ~1.0 whatever the tether length, and 0.85 vs 1.01 is which
-    # optimum the seed reached. Measured 2026-08-18 at 182, 200 and 246 m.
-    #
-    # It was a REJECTION-RATE knob while the replies were whatever the optimizer felt
-    # like: they clustered on ~1.0 with seed-dependent scatter, so at 1.0 almost
-    # nothing installed and every 0.1 taken off was bought with real turn authority.
-    #
-    # 2026-08-20: it is a DIAL now. The request sent to the optimizer is scaled from
-    # this number (see turn_radius_headroom below), the optimizer honours it - asked
-    # 11.86 m at 150 m, delivered 11.91 m - and what the gate then reads at the anchor
-    # is this number times the scaling cushion: 0.74 demanded bought 0.90 flown.
-    # So set it to what the kite should actually fly with, and expect ~1.2x of it at
-    # the startup length and ~1.15x on the re-optimized replies.
-    #
-    # 0.78 for ~0.95 flown, chosen over 0.82 (which would buy 1.00) to keep the
-    # pattern - and with it the power - closer to what the optimizer would pick free.
-    # Below 1.00 the tightest corner still takes all of max_steering, leaving nothing
-    # there for cross-track error; the run says so at startup, with the value that
-    # would buy 1.00 computed from what this one actually bought.
-    #
-    # 2026-08-20: 0.78 -> 0.72, to buy the elevation learner's per-band SPREAD a way
-    # past the install gate - it reached the kite as its mean alone, the phase-5
-    # install rationing 100 % of the spread away and the +1.57 deg in-air shift
-    # behind it refused three times (0.70, 0.67, 0.34 against 0.78).
-    #
-    # It did not buy that, and the reason is structural: because the REQUEST is
-    # scaled from this number, a lower gate also asks the optimizer for a tighter
-    # pattern, and the reply comes back at ~1.15x of whatever was demanded. Measured
-    # over the two runs, the installed margins moved with the gate
-    # (0.79/0.81/0.82/0.87 at 0.78 against 0.83/0.73/0.76/0.80 at 0.72) and the SLACK
-    # a lift has to spend was unchanged to +-0.01. What arrived: one more in-air
-    # blend (t = 103 s at 0.74) and a 358 m install carrying spread and lobe lift
-    # whole. What it cost: margin_final_flown 0.87 -> 0.80, phase-5 minimum elevation
-    # 9.51 -> 9.38 deg, power flat at 8640 W. Phase 5 still takes 0 % of the spread.
-    #
-    # turn_radius_headroom is the knob that MAKES slack - it raises the request
-    # without moving the gate - and it is the one that delivered (1.10 -> 1.20, 25 %
-    # of the spread and a SHAPE at last).
-    #
-    # 0.75 is the split, and at headroom 1.20 this number is a real trade rather than
-    # a rejection-rate knob. Measured there: 0.72 delivers 25 % of the spread and a
-    # phase-5 floor of 9.55 deg for margin_final_flown 0.80, 8.5 laps and RMS d 1.52
-    # deg; 0.78 gives the delivery back (0 % of the spread, a flat [2.33 x5]) and buys
-    # margin_final_flown 0.94, 9.0 laps and RMS d 1.49 deg, with the floor down at
-    # 8.65 deg. Power and energy do not separate the two (within 2 W and 0.2 kJ).
-    #
     # 0.75 measured (archive _060552, 7 of 7 solves on the fixed client): the best
     # phase-5 floor of the three at 9.66 deg, margin_final_flown 0.88, 9.0 laps,
     # 8636 W, RMS d 1.54 deg - most of what 0.78 buys at better than 0.72's
