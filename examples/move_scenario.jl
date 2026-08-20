@@ -9,8 +9,10 @@ The archive to move is read from `output/last_run_done.txt`'s `archive:`
 line, written by `reelout_results.jl` as the very last thing a run does. The
 wind speed comes from that archive's OWN run-summary YAML (found via its one
 `.arrow` log), the value actually passed to `init`, not a project's `v_wind`
-default a `WIND_SPEED` override may have replaced. Refuses to overwrite a
-non-empty scenario folder unless `overwrite = true`. `plot_scenario.jl`
+default a `WIND_SPEED` override may have replaced. `move_scenario` itself
+refuses to overwrite a non-empty scenario folder unless `overwrite = true`,
+but running this file always passes `overwrite = true` — a later run at the
+same wind speed is meant to replace the one before it. `plot_scenario.jl`
 replots whatever lands here.
 
     include("move_scenario.jl")
@@ -86,4 +88,4 @@ function move_scenario(; overwrite::Bool = false)
     return target_dir
 end
 
-move_scenario()
+move_scenario(overwrite = true)
