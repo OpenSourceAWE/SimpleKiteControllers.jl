@@ -274,6 +274,12 @@ PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection f
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind
+# Debug toggle: disables the RUNTIME UpperForceController only (`rc` below), by
+# building it from a copy of `wc_settings.yaml`'s f_high raised far out of reach.
+# `rcs`/`wc` itself is untouched, so `winch_from_wc(rcs)` still sends the
+# optimizer the f_high the file actually ships — this does not loosen what the
+# path is optimized for, only what the runtime winch is allowed to do with it.
+DISABLE_UFC = true
 @info "simple_opt_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
@@ -404,7 +410,16 @@ s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
 # used to need two files in two schemas, and since the merge they share one.
 # The file's `dt` is a placeholder; the plant's own timestep is the real one.
 rcs.dt = s.dt
-rc = WinchController(rcs)
+if DISABLE_UFC
+    rc_settings = deepcopy(rcs)
+    rc_settings.f_high = 1.0e6   # never trips; rcs itself keeps the real f_high
+    rc = WinchController(rc_settings)
+    @warn "DISABLE_UFC is set: the runtime UpperForceController will not engage \
+           at any force. The optimizer still solves under the real f_high = \
+           $(rcs.f_high) N — this is a runtime-only override."
+else
+    rc = WinchController(rcs)
+end
 stop_criteria = fcs.n_fig_eight > 0 ?
     @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
     @sprintf("%.0f m", fcs.reelout_l_max)
