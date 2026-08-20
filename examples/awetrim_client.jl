@@ -401,14 +401,61 @@ end
 # ---------------------------------------------------------------------------
 # Transport helpers
 # ---------------------------------------------------------------------------
-function post(path, payload; url = AWETRIM_URL, timeout = 600)
-    # retry_non_idempotent: the server drops idle keep-alive connections, so a pooled
-    # socket can be dead by the next call; HTTP.jl only retries POST if it asked for it
-    # (safe: it retries only when no response bytes arrived, i.e. the server never saw it)
-    response = HTTP.post(url * path, ["Content-Type" => "application/json"];
-                         body = JSON3.write(payload), read_idle_timeout = timeout,
-                         retry_non_idempotent = true)
-    return response.body
+"""
+    stale_conn_error(err) -> Bool
+
+Does `err` look like a POOLED SOCKET the server had already closed, rather than a
+real transport failure? `SystemError` (EPIPE on the write), `EOFError` and
+`HTTP.ParseError` ("unexpected EOF while reading HTTP/1 data") are the three faces
+of it seen here; the error usually arrives wrapped, so nested `.error`/`.ex`
+payloads are unwrapped and the message is matched as a backstop.
+"""
+function stale_conn_error(err, depth = 0)
+    depth > 4 && return false
+    err isa Base.SystemError && return true
+    err isa EOFError && return true
+    isdefined(HTTP, :ParseError) && err isa HTTP.ParseError && return true
+    for f in (:error, :ex, :captured, :task)
+        hasproperty(err, f) && stale_conn_error(getproperty(err, f), depth + 1) &&
+            return true
+    end
+    msg = try sprint(showerror, err) catch; string(err) end
+    return occursin("Broken pipe", msg) || occursin("ECONNRESET", msg) ||
+           occursin("connection reset", msg) || occursin("unexpected EOF", msg)
+end
+
+function post(path, payload; url = AWETRIM_URL, timeout = 600, attempts = 3)
+    # The server closes idle keep-alive connections long before the run's next
+    # request (a re-optimization is one lap apart, ~13 s), so a pooled socket is
+    # usually dead by the time it is reused — and HTTP.jl v2 does NOT cover that for
+    # us here: its transparent "reused connection died" retry is gated on
+    # `_retryable_method`, which is GET/HEAD/OPTIONS/TRACE/QUERY only, so every POST
+    # in this file was exposed. `retry_non_idempotent` feeds a different layer (the
+    # status/policy controller) and does not reach it. Measured 2026-08-20: three
+    # `SystemError: write: Broken pipe` in one run, four in the next, each one
+    # counted as a failed solve — a run then flies a path it never asked for, and its
+    # numbers are not comparable with a clean run's.
+    #
+    # So the pool is emptied before each request and the retry is done here. Both are
+    # safe for this API: /init and /step are re-sent only when the socket died, and
+    # re-sending either recomputes and overwrites what the server holds under the
+    # optimization's name — nothing accumulates.
+    body = JSON3.write(payload)
+    for attempt in 1:attempts
+        isdefined(HTTP, :close_idle_connections!) && HTTP.close_idle_connections!()
+        try
+            response = HTTP.post(url * path, ["Content-Type" => "application/json"];
+                                 body, read_idle_timeout = timeout,
+                                 retry_non_idempotent = true)
+            return response.body
+        catch err
+            (attempt < attempts && stale_conn_error(err)) || rethrow()
+            @info "POST $path: $(first(split(sprint(showerror, err), '\n'))) on \
+                   attempt $attempt of $attempts — the pooled socket was dead. \
+                   Retrying on a fresh connection."
+            sleep(0.2)
+        end
+    end
 end
 
 get_json(path; url = AWETRIM_URL) = JSON3.read(HTTP.get(url * path).body, Dict{String,Any})

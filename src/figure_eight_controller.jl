@@ -69,9 +69,19 @@ searched only within `search_window` of arc around its previous position, so it
 cannot jump to the far branch at the self-intersection, where the tangent is
 ~180° opposed. `0` disables the restriction. Above `reacquire_dist` of
 cross-track error the search goes global again, so a kite genuinely off-path is
-not trapped. `branch_tol` and `min_speed` govern the second, weaker guard —
-disambiguating near-equal candidates by the current flight direction. See
+not trapped. `branch_tol`, `branch_hysteresis` and `min_speed` govern the second,
+weaker guard — disambiguating near-equal candidates by the current flight
+direction, with `branch_hysteresis` the alignment a challenger must beat the
+incumbent by before Q moves to it. Inside that band the tie goes to the candidate
+nearest the previous Q, which is what keeps the pick from oscillating where the
+kite runs parallel to the path and several minima sit within `branch_tol`. See
 [`calc_attractor`](@ref).
+
+`q_rate_gain` is the guard the two above cannot be: it bounds how far Q may move
+per step (that many times the arc the kite itself flew), so an argmin that swaps
+between two near-equal minima is walked to rather than teleported to. It is
+suspended whenever the search goes global, since re-acquisition is the one case
+where Q must jump. `0` disables it.
 
 `search_window` is an absolute arc, and a path much smaller than twice it would
 leave no window at all: an optimized pattern at a long tether measures a few tens
@@ -100,6 +110,8 @@ commanded course by ~180°.
     attractor_distance = 7.0   # arc distance from Q to the attractor [deg]
     up_loops::Bool = true      # fly upwards during the turns at large |azimuth|
     branch_tol = 3.0           # candidates within dmin + branch_tol are disambiguated [deg]
+    branch_hysteresis = 10.0   # how much better aligned a candidate must be to take Q [deg]
+    q_rate_gain = 2.0          # Q may advance this many times the kite's own arc per step [-]
     min_speed = 1.0            # minimum angular speed to trust the course estimate [deg/s]
     course_tau = 0.5           # low-pass on the course estimate [s]
     search_window = 45.0       # arc half-width of the local Q search [deg]
@@ -558,10 +570,15 @@ equally close. Two mechanisms keep Q on the right one:
    re-acquires globally, and its half-width is capped at `search_window_max_frac`
    of the path's arc length, so a small pattern keeps a window rather than losing
    the guard to a window wider than the curve.
-2. **Flight direction** (`branch_tol`): among the remaining near-equal
-   candidates, the branch whose tangent needs the smaller heading change wins.
-   It only ever sees the far branch when the search is global — inside a window
-   the far branch is not a candidate at all.
+2. **Flight direction** (`branch_tol`, `branch_hysteresis`): among the remaining
+   near-equal candidates, the branch whose tangent needs the smaller heading
+   change wins — but only if it wins by `branch_hysteresis`, and inside that band
+   the candidate nearest the previous Q is kept instead. Without the hysteresis
+   the pick oscillates wherever the kite runs nearly parallel to the path, since
+   the incumbent is re-derived from this step's distances rather than carried
+   over (measured 2026-08-20; see the code). It only ever sees the far branch
+   when the search is global — inside a window the far branch is not a candidate
+   at all, and its ~180° of tangent difference is far outside the band.
 """
 function calc_attractor(fec::FigureEightController, azimuth, elevation)
     fes = fec.fes
@@ -588,6 +605,7 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
     # point of all can belong to the branch traversed the other way.
     trust = fec.has_prev && fec.speed >= fes.min_speed
     aligned(i) = !trust || abs(wrap2pi(fec.tangent[i] - fec.course)) <= pi / 2
+    went_global = false
 
     dmin = Inf
     imin = fec.last_idx
@@ -620,6 +638,7 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
             idxs = 1:n
             dmin = d_global
             imin = i_global
+            went_global = true
         end
     end
     iq = imin
@@ -627,19 +646,79 @@ function calc_attractor(fec::FigureEightController, azimuth, elevation)
         # Of the local minima within branch_tol, take the smallest steering effort.
         # The bar starts at Q's own effort: a candidate must be better ALIGNED to
         # take it, not merely be a local minimum.
+        #
+        # With HYSTERESIS, because that comparison alone is not stable. It is
+        # rebuilt from scratch every step and its incumbent is whichever point is
+        # nearest THIS step, not the Q chosen last step, so where the kite runs
+        # nearly parallel to the path the distance profile is flat, several minima
+        # sit inside `branch_tol`, and a wiggle in the course estimate changes the
+        # winner. Measured 2026-08-20 on the 150 -> 380 m reel-out: 24 flips
+        # between t = 20 and 121 s, every one of them at |azimuth| 8.5-10.2° (both
+        # lobes, nowhere near the crossing this guard exists for), each moving Q
+        # about five points, the attractor ~1° and the commanded course 6-17°.
+        # The cross-track error jumped with it (2.54 <-> 3.50° at t = 120.5 s) and
+        # the steering answered with steps of up to 0.38, into the clamp.
+        #
+        # So a challenger must be better aligned by `branch_hysteresis` to be taken
+        # on merit; within that band the tie goes to the candidate nearest the
+        # PREVIOUS Q in arc index, which is continuity. Neither guard can freeze Q:
+        # the candidate set is rebuilt from the current distances every step, so it
+        # walks forward with the kite. At the crossing the two branches differ by
+        # ~180° of tangent, far outside the band, so that disambiguation is
+        # untouched.
+        prev = fec.last_idx
+        idx_gap(i) = min(mod(i - prev, n), mod(prev - i, n))
+        hyst = deg2rad(fes.branch_hysteresis)
         best = abs(wrap2pi(fec.tangent[iq] - fec.course))
+        best_gap = idx_gap(iq)
         for j in idxs
             i = mod1(j, n)
             d = dists[i]
             if d <= dmin + fes.branch_tol &&
                d <= dists[mod1(i - 1, n)] && d <= dists[mod1(i + 1, n)]
                 effort = abs(wrap2pi(fec.tangent[i] - fec.course))
-                if effort < best
-                    best = effort
+                take = if effort < best - hyst
+                    true                       # clearly better aligned
+                elseif effort < best + hyst
+                    idx_gap(i) < best_gap      # a tie: stay with the incumbent
+                else
+                    false
+                end
+                if take
+                    best = min(best, effort)
+                    best_gap = idx_gap(i)
                     iq = i
                 end
             end
         end
+    end
+    # RATE LIMIT. Everything above RANKS candidates, and the jump is upstream of the
+    # ranking: measured 2026-08-20 on the 150 -> 380 m reel-out, the plain nearest
+    # point — alignment and window ignored — teleports 3 to 20 indices on a
+    # 360-point path, 15-16 times between t = 20 and 121 s, whenever two minima of a
+    # flat distance profile swap order. Q follows, the attractor `attractor_distance`
+    # beyond it moves ~1°, the commanded course steps 6-17° and the steering answers
+    # with up to 0.39 of `max_steering`, sometimes into the clamp. Neither
+    # `branch_tol` nor `branch_hysteresis` can see it (the tuning log has both null
+    # results), because by then the argmin has already moved.
+    #
+    # So Q is not allowed to move faster than the KITE does: at most `q_rate_gain`
+    # times the arc flown this step, and never less than one point, in either
+    # direction. A swapped argmin is then walked to over a few steps instead of
+    # teleported to, which bounds the attractor's motion by construction. The gain
+    # is above 1 so Q can still catch up and never falls permanently behind.
+    #
+    # NOT applied when the search went global (`reacquire_margin`, or a kite beyond
+    # `reacquire_dist`): re-acquisition is exactly the case where Q must be allowed
+    # to jump, and it is guarded by its own margin. Nor on the step a new path is
+    # installed — `set_path!` re-indexes Q there, before this runs.
+    if trust && use_window && !went_global && fes.q_rate_gain > 0 && total_len > 0
+        mean_seg = total_len / n
+        arc_max = max(mean_seg, fes.q_rate_gain * fec.speed * fes.dt)
+        k_max = max(1, floor(Int, arc_max / mean_seg))
+        step = mod(iq - fec.last_idx, n)
+        step > n ÷ 2 && (step -= n)
+        abs(step) > k_max && (iq = mod1(fec.last_idx + sign(step) * k_max, n))
     end
     # walk attractor_distance degrees of arc forward from Q
     k = iq

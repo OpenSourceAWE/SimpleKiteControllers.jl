@@ -165,7 +165,13 @@ below are answered too. What is left, in the order I would take it:
   pooled socket client-side that `retry_non_idempotent = true` does not cover; the
   run then treats it as a solver failure and `reopt_retry_el_offset` reinstalls from
   guess el 24 deg, i.e. **a run can fly a path from a seed it never asked for**.
-  Worth fixing in `examples/awetrim_client.jl` before the next campaign.
+  **FIXED 2026-08-20** in `examples/awetrim_client.jl`, after two runs lost 3 and 4
+  of their 7 solves and produced numbers that read as a tuning win. HTTP.jl v2.6.5
+  does auto-retry a request whose pooled connection died, but only for
+  `GET/HEAD/OPTIONS/TRACE/QUERY` (`_retryable_method`), so every POST here was
+  exposed; `post` now empties the pool before each request and retries up to 3 times
+  on `stale_conn_error`. Check `traj_opt.reopt.requests` against `installed` before
+  quoting a run — a run that lost requests is not a run at different settings.
 
 The four items as answered:
 

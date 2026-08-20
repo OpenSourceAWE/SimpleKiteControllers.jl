@@ -624,6 +624,218 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The learnt SPREAD reaches the kite everywhere but phase 5, and the gate is not the lever (2026-08-20)
+
+The elevation learner converges on a profile and the kite flies its MEAN. Baseline
+(`1ba6dab`, archive `2026-08-20_013624`, re-run of `_012624` and bit-identical to it
+in every physical number): learnt `[+1.59 +1.81 +2.45 +2.77 +1.79]°`, the phase-5
+install rationing 100 % of the spread away, the `+1.57°` shift behind it refused
+three times in the air (margins 0.70, 0.67, 0.34 against 0.78) and
+`delivered_profile_deg` flat at `[2.33 ×5]`.
+
+Two levers, one run each, on the same seed and wind:
+
+1. **Ration order reversed** — the lobe lift given up before the droop spread
+   (`examples/simple_opt_reelout.jl`). Archive `_014616`, 8 of 8, 8641 W. The
+   358 m install went from "75 % of the spread" to the spread WHOLE (lobe lift at
+   75 % instead), and the in-air route was unaffected. The 380 m install still took
+   0 %: dropping the lift frees ~0.14 of margin where the spread costs ~0.54, so it
+   buys one install, not the decisive one.
+2. **`min_feasibility_margin` 0.78 -> 0.72** — archive `_015130`, 8 of 8, 8640 W.
+   It bought one more in-air blend (`t_103.3`, 0.74 vs 0.72) and the 358 m install
+   now carries spread AND lobe lift whole. Phase 5 unchanged: 0 % of the spread,
+   `delivered_profile_deg` still `[2.33 ×5]`, the shift refused at 0.62 and 0.34.
+
+**Why the gate is not the lever.** The same number is SENT to the optimizer
+(`min_turn_radius = margin/(c1*max_steering)`, scaled), so a lower gate also asks
+for a tighter reply, and the reply lands ~1.15x above whatever was demanded. The
+installed margins moved with it — 0.79/0.81/0.82/0.87 at 0.78 against
+0.83/0.73/0.76/0.80 at 0.72 — leaving the SLACK the lift has to spend unchanged to
+±0.01 (0.09 -> 0.08 at the last install), and `turn_radius_request_m` 14.19 -> 13.08
+with the predicted power flat (9249 -> 9266 W). What it did cost is turn authority
+the run keeps: `margin_final_flown` 0.87 -> 0.80 and phase-5 minimum elevation
+9.51 -> 9.38°.
+
+So `turn_radius_headroom` (1.10) is the knob that MAKES slack — it raises the
+request without moving the gate — and it is the one to try next for the phase-5
+spread.
+
+**Tested, and it is the one: `turn_radius_headroom` 1.10 -> 1.20** (third run,
+archive `_020401`, gate left at 0.72 so only one thing moved). The phase-5 install
+took **25 % of the spread** where every run before it took 0, and
+`delivered_profile_deg` is a shape at last — `[2.09 2.18 2.41 2.56 2.41]°` against
+the flat `[2.33 ×5]` of all three earlier runs. It cost nothing measurable: 8641 W
+against 8640, 8 of 8 criteria, phase-5 minimum elevation 9.55° (the best of the
+three), `turn_radius_request_m` 13.08 -> 14.27. The in-air route improved too —
+the `t_118` shift was refused at 0.70 against 0.72, i.e. it now misses by 0.02.
+
+The ladder still stops one step in: the 380 m install lands at margin 0.73 with 25 %
+of the spread, one rung above the gate. Two more runs settled what is on either side
+of that.
+
+**1.30 reaches the next rung and is not worth it** (archive `_021401`, gate 0.72).
+The 380 m install carried the spread WHOLE, but phase-5 minimum elevation fell
+9.55 -> 7.95°, power 8641 -> 8600 W and RMS d 1.52 -> 1.56° (8 of 8 and 8.5 laps
+either way). Part of the extra delivery is not delivery: the wider pattern tracks
+better, so there is less to correct — the converged profile fell from
+`[1.64 1.90 2.60 2.90 1.79]` to `[0.48 0.65 0.68 0.21 -0.14]°`. Headroom went back
+to 1.20.
+
+**The gate is a real trade at 1.20, not a free revert** (archive `_054646`, headroom
+1.20, gate back to 0.78). The delivery is lost again — phase-5 install at 0 % of the
+spread, `delivered_profile_deg` flat at `[2.33 ×5]` — and what comes back is turn
+authority and tracking: `margin_final_flown` 0.80 -> 0.94, laps 8.5 -> 9.0, RMS d
+1.52 -> 1.49°, power 8641 -> 8642 W, energy 836.9 -> 837.1 kJ. The price is the
+thing the correction exists for: phase-5 minimum elevation 9.55 -> 8.65°.
+
+So at headroom 1.20 the choice is 0.72 for +0.9° of phase-5 floor and a delivered
+SHAPE, against 0.78 for 0.14 of phase-5 turn authority, half a lap and 0.03° of RMS.
+Power and energy do not separate them (within 2 W and 0.2 kJ over four runs).
+
+**0.75, the split** (archive `_060552`, 7 requests, 7 installed, on the fixed
+client — the two runs before it lost 3 and 4 requests to the broken pipe below and
+are not comparable). It is the best of the three on the number the correction exists
+for, phase-5 minimum elevation **9.66°** (9.55 at 0.72, 8.65 at 0.78), while keeping
+`margin_final_flown` 0.88, 9.0 laps and 8636 W — i.e. most of what 0.78 buys, at
+0.72's elevation. RMS d 1.54° is the worst of the three by 0.05.
+
+What it does NOT do is leave a shape on the path. The in-air route delivered the
+whole +1.60° per-band shift at t = 117.8 s (margin 0.75 against 0.75 required), and
+then the 380 m install at t = 128.5 s rationed the spread to 0 % and REPLACED what
+was flying with the flat mean — `delivered_profile_deg` `[2.35 ×5]`.
+
+**That take-back is geometric, not bookkeeping.** It looked like the ration ladder
+scoring from `el_target` while ignoring what the path in the air already carried, so
+the ladder was given a floor at the applied spread (`bias_floor`, the applied
+deviation projected onto the new target's shape; rungs at or above it first, the
+floor itself last among them, and a `@warn` when the install still ends below it).
+The run at 1.20 / 0.75 with the floor in is **byte-identical** to the one without it
+(`_061442` vs `_060552`): the ladder had already tried 100 % of the spread first and
+the 380 m reply cannot carry it — with the spread on, that curve reads ~0.34 against
+the 0.88 it reads flat. The floor only bites in the intermediate case (a floor of
+0.6 now stops there instead of falling through to 0.5), and the warning stops the
+downgrade being silent. Keeping the shape at 380 m needs a different reply, not a
+different ladder.
+
+## The steering steps mid-strand are Q re-selection, and `branch_tol` had no hysteresis (2026-08-20)
+
+Steering steps of up to 0.38 between t = 20 and 121 s, some of them into the
+±0.32 clamp. They are not the plant, the winch or the KCU: every one coincides with
+a step in the raw guidance course (`var_05`) and in the cross-track error
+(`var_01`), which is Q's OWN distance — at t = 120.5 s it flips 2.54 <-> 3.50° in
+consecutive samples. 24 events in the window, every one at |azimuth| **8.5-10.2°**,
+on both lobes, nowhere near the crossing.
+
+The cause is in `calc_attractor`. Among local minima within `dmin + branch_tol`
+(3.0°) it takes the smallest steering effort, and that comparison was rebuilt from
+scratch every step with the incumbent being whichever point is nearest THIS step —
+not the Q chosen last step. Mid-strand the kite runs nearly parallel to the path
+~2° off it, so the distance profile is flat, several minima sit inside 3°, and a
+wiggle in the course estimate changes the winner: Q moves ~5 points, the attractor
+~1°, the commanded course 6-17°, and the P path answers with a step.
+
+Fixed with hysteresis (`branch_hysteresis`, 10.0° default, beside `branch_tol`): a
+challenger must be better aligned by that much to take Q on merit, and inside the
+band the tie goes to the candidate nearest the PREVIOUS Q. No lag results — the
+candidate set is rebuilt each step, and on a synthetic walk the mean Q lag went
+0.66 -> 0.77 index.
+
+**It is a partial fix**, measured on the 150 -> 380 m run (archive `_064132`,
+7 of 7 solves): flips 24 -> 19, `hf_std_steering` 0.0157 -> **0.0109** (-31 %),
+`hf_std_turnrate` 0.64 -> 0.60°/s, RMS d 1.54 -> 1.51°, power 8636 -> 8641 W, 9.0
+laps, 8 of 8. The largest single-sample step is still 0.39 and the survivors are at
+the same |azimuth| 8.4-10.2°, i.e. the competing candidates there differ in
+alignment by MORE than 10° and are switched on merit, not as ties — the same thing
+a synthetic rippled path showed (84 -> 82 hops at hysteresis 10°).
+
+**`branch_tol` 3.0 -> 1.0 is a NULL result** (archive `_064919`): the run is
+bit-identical to `_064132` in every logged sample — same 19 flips at the same
+azimuths, same 0.0109, same 8641 W. So the survivors do not come from the
+disambiguation band at all: every candidate it was ranking was already within 1°.
+`branch_tol` went back to 3.0, since 1.0 bought nothing and 3.0 is the value the
+crossing guard was tuned with.
+
+**What the instrumented run says (archives `_070342` and the A/B after it).** The
+log has no free channel — `var_14`/`var_15`/`var_16` are V3Kite's `rel_depower`,
+`L/D_wing` and `L/D_eff`, written by `log_state!` AFTER the example's own
+assignments, so a first instrumented run came back with a depower signal in
+`var_14` and was wasted. The diagnostics now go to `output/q_diag.csv` (`t`,
+`q_idx`, `q_near`, `q_align_deg`, `u_s`), `q_near` being the plain nearest point
+with alignment and window ignored.
+
+The cause is upstream of every guard: **the nearest point itself teleports**, 15-16
+times between t = 20 and 121 s, by 3 to 20 indices on a 360-point path (the count is
+identical with the hysteresis on and off — it is raw geometry, not ranking). Q
+follows it, and the attractor 8° of arc beyond Q moves ~1°, which is the steering
+step. `q_align` at those moments is 18-28°, far from the `aligned` gate's 90°, so
+that gate is not involved either.
+
+The hysteresis limits the DAMAGE rather than the cause, which the A/B confirms
+(same run, `branch_hysteresis` 10 vs 0): big Q steps 29 vs 38, backward moves 6 vs
+10, worst single-sample steering step 0.39 vs 0.467, mean Q lag 1.57 vs 1.23 points.
+So it is kept at 10.0 — it costs a third of a path point of lag and buys a quarter
+of the big steps. An earlier reading of these same rows as "the hysteresis causes a
+lag-then-snap" was wrong: the snap is there without it, and worse.
+
+**The RATE LIMIT is the fix** (`q_rate_gain = 2.0`, archive `_071750`): Q may move
+at most that many times the arc the KITE flew this step, floor of one point, either
+direction — suspended when the search goes global, since re-acquisition is the one
+case where Q must jump. A swapped argmin is then walked to over a few steps.
+
+Measured against the run before it: Q steps larger than 2 indices **29 -> 1** (the
+survivor is `set_path!` re-indexing at an install), steering steps above 0.05 in the
+window **20 -> 1**, and the one survivor is at t = 22.27 s, which is not a Q event at
+all — it is the entry handover, where the regulated error wraps -32° -> +143° with
+the kite 44.5° off path and the command goes to the clamp for the dive. **After
+t = 30 s the largest steering step in the whole run is 0.04.** `hf_std_steering`
+0.0109 -> **0.0085** (0.0157 before any of this, so -46 % overall). Everything else
+is unchanged or better: RMS d 1.51 -> 1.53°, power 8641 -> 8644 W, 9.0 laps, 8 of 8,
+7 of 7 solves, mean Q lag 1.3 points, and 0.1 ms per step of cost.
+
+The instrumentation was removed once it had answered. To bring it back: collect
+`t`, `fec.last_idx`, `argmin` of `SimpleKiteControllers._dist` over the path with
+alignment IGNORED, and `rad2deg(abs(wrap2pi(fec.tangent[fec.last_idx] -
+fec.course)))` into vectors in the loop and dump them next to the log — NOT into
+`var_14`/`var_15`/`var_16`, which are V3Kite's `rel_depower`, `L/D_wing` and
+`L/D_eff` and are overwritten by `log_state!` after the example writes them.
+
+That leaves the plain nearest point. `imin` is the minimum over the window, and
+the tie-break only ever reconsiders STRICT local minima (`d <= dists[i±1]`); a
+competing point on a plateau, or one that flips in and out of the `aligned` set as
+the course estimate wiggles, is never a candidate and moves Q without either guard
+seeing it. Before another knob is turned here, log the Q INDEX per step (a free
+`var_14`) and read what it does at a flip — two runs have now been spent on guards
+that rank candidates, and the evidence says the jump is upstream of the ranking.
+
+## `Broken pipe` on POST: HTTP.jl only auto-retries a dead pooled socket for GET (2026-08-20)
+
+`docs/reelout_next_steps.md` had this as a client-side stale socket that
+`retry_non_idempotent = true` does not cover, and worth fixing "before the next
+campaign". It bit hard here: two consecutive runs lost 3 and 4 of their 7 solves
+(`SystemError: write: Broken pipe`, one `unexpected EOF while reading HTTP/1 data`),
+installed 4 and 1 paths against the usual 7, and produced numbers that looked like a
+tuning WIN — every in-air shift blended in, RMS d 1.17°, phase-5 floor 11.17° —
+because the run was flying an old, wide 295 m path all the way to 380 m. A server
+restart did not help; the second run was the worse of the two.
+
+The cause is in HTTP.jl v2.6.5, not the server: it does retry a request whose reused
+pooled connection died, but `_retryable_method` (`http_transport.jl:1476`) admits
+only `GET/HEAD/OPTIONS/TRACE/QUERY`, so no POST in `examples/awetrim_client.jl` was
+ever covered. `retry_non_idempotent` feeds the status/policy controller, which is a
+different layer. Re-optimizations are ~13 s apart, well past the server's keep-alive,
+so the pooled socket is usually dead when it is picked up again.
+
+Fixed in `post`: the pool is emptied before each request
+(`HTTP.close_idle_connections!`) and up to 3 attempts are made, retrying only on
+`stale_conn_error` — `SystemError`, `EOFError`, `HTTP.ParseError`, unwrapped through
+nested `.error`/`.ex` payloads with a message match as backstop. Safe for this API:
+re-sending `/init` or `/step` recomputes and overwrites what the server holds under
+the optimization's name. The next run was clean, 7 of 7.
+
+**Read `traj_opt.reopt.requests` against `installed` before quoting any run.** A run
+that lost requests is not a run at different settings, and it flatters every metric
+the correction work is measured by.
+
 ## The runs DO repeat, and the wind is what the settings were never tested against (2026-08-19)
 
 `docs/reelout_next_steps.md` asked for independent repeats: every run of the

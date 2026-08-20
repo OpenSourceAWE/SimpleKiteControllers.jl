@@ -1291,17 +1291,64 @@ try
                             check_pattern_feasible(a, b, l_now, fcs.max_steering;
                                                    c1 = c1_at(phase), prn = false).margin
                         end
-                        # Ration order: the droop SPREAD first, since its mean is
-                        # the correction that matters and costs nothing, then the
-                        # lobe lift — measured 2026-08-20 at 380 m, `el_offset_wing`
-                        # of 1.5° on a 4.7°-tall pattern is worth 0.14 of margin on
-                        # its own (0.95 -> 0.81). Both are the RUN's additions to the
-                        # optimizer's curve; the curve is what the run exists to fly,
-                        # so it is never the thing given up.
+                        # Ration order: the LOBE LIFT first, then the droop spread.
+                        # Both are the RUN's additions to the optimizer's curve; the
+                        # curve is what the run exists to fly, so it is never the
+                        # thing given up. Between the two additions the spread is
+                        # the one that was MEASURED — `el_bias` is what the kite's
+                        # own tracking error asked for, per band, and the learner
+                        # re-closes on whatever is left standing — while
+                        # `el_offset_wing` is a fixed 1.5° guess at the same shape.
+                        # Giving up the measurement to keep the guess is backwards.
+                        #
+                        # It is the more expensive half of the trade, and knowingly:
+                        # measured 2026-08-20 at 380 m, the spread costs 0.54 of
+                        # margin (0.95 -> 0.41) against the lobe lift's 0.14
+                        # (0.95 -> 0.81), so a spread that fits now needs the lift
+                        # rationed to 0 first and often more of the gate besides
+                        # (see `min_feasibility_margin`). What the old order bought
+                        # was cheap margin and an undelivered correction: on the run
+                        # of 2026-08-20 01:36 the phase-5 install took 0 % of the
+                        # spread and the +1.57° shift behind it was refused three
+                        # times, so the learner's whole profile reached the kite as
+                        # its mean.
+                        #
+                        # Measured on the run of 2026-08-20 01:46: the 358 m install
+                        # went from 75 % of the spread to the spread WHOLE (the lobe
+                        # lift rationed to 75 % instead), 8 of 8 criteria and 8641 W.
+                        # The 380 m install still takes 0 % — 0.14 of freed margin
+                        # against a spread that costs 0.54 — and lowering the gate
+                        # does not help there either; see the tuning-log entry
+                        # "The learnt SPREAD reaches the kite everywhere but phase 5".
+                        # The ladder stops at what the kite is ALREADY flying. An
+                        # install rations from `el_target`, which is the correction
+                        # the learner wants, and knows nothing about `el_applied`,
+                        # the one the in-air route already got onto the path — so a
+                        # reply that could not carry the spread took it back off,
+                        # and the run flew the flat mean again. Measured 2026-08-20
+                        # at gate 0.75: the whole +1.60° per-band shift blended in at
+                        # t = 117.8 s, and the 380 m install 11 s later put
+                        # `delivered_profile_deg` back to [2.35 x5].
+                        #
+                        # The floor is that applied spread expressed in the new
+                        # target's shape (a least-squares fraction, since the two
+                        # profiles are different vectors), and the rungs above it are
+                        # tried first, the floor itself last among them. Below it the
+                        # ladder still runs: a reply whose curve cannot carry even
+                        # what is flying is taken anyway — the path is what the run
+                        # exists to fly — but it says so, where it used to be silent.
+                        applied_dev = el_applied .- mean(el_applied)
+                        dev_norm = sum(abs2, el_dev)
+                        bias_floor = dev_norm > 1e-12 ?
+                            clamp(sum(applied_dev .* el_dev) / dev_norm, 0.0, 1.0) : 0.0
+                        rungs = ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5),
+                                 (1.0, 0.25), (1.0, 0.0), (0.75, 0.0),
+                                 (0.5, 0.0), (0.25, 0.0), (0.0, 0.0))
+                        ladder = vcat([r for r in rungs if r[1] >= bias_floor],
+                                      [(bias_floor, 0.0)],
+                                      [r for r in rungs if r[1] < bias_floor])
                         bias_frac, wing_frac = 1.0, 1.0
-                        for (fs, fw) in ((1.0, 1.0), (0.75, 1.0), (0.5, 1.0),
-                                         (0.25, 1.0), (0.0, 1.0), (0.0, 0.75),
-                                         (0.0, 0.5), (0.0, 0.25), (0.0, 0.0))
+                        for (fs, fw) in ladder
                             bias_frac, wing_frac = fs, fw
                             lifted_margin(lifted(fs, fw)) >= tos.min_feasibility_margin &&
                                 break
@@ -1316,6 +1363,15 @@ try
                                            l_now, 100 * bias_frac,
                                            maximum(el_target) - minimum(el_target),
                                            100 * wing_frac, fcs.el_offset_wing, el_mean)
+                        # Louder than the line above, and a different event: this
+                        # install does not just withhold a correction, it TAKES BACK
+                        # one the kite was already flying.
+                        bias_frac < bias_floor - 1e-9 &&
+                            @warn @sprintf("The path for L = %.0f m cannot carry the \
+                                            spread already flying: %.0f %% installed \
+                                            against %.0f %% applied. The in-air route \
+                                            will retry it as the tether grows.",
+                                           l_now, 100 * bias_frac, 100 * bias_floor)
                         # TWO resolutions of the same reply, on purpose.
                         #
                         # The CHECKS run at the reply's own resolution: /trajectory

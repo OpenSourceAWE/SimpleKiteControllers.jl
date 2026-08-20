@@ -125,7 +125,44 @@ traj_opt:
     # Below 1.00 the tightest corner still takes all of max_steering, leaving nothing
     # there for cross-track error; the run says so at startup, with the value that
     # would buy 1.00 computed from what this one actually bought.
-    min_feasibility_margin: 0.78
+    #
+    # 2026-08-20: 0.78 -> 0.72, to buy the elevation learner's per-band SPREAD a way
+    # past the install gate - it reached the kite as its mean alone, the phase-5
+    # install rationing 100 % of the spread away and the +1.57 deg in-air shift
+    # behind it refused three times (0.70, 0.67, 0.34 against 0.78).
+    #
+    # It did not buy that, and the reason is structural: because the REQUEST is
+    # scaled from this number, a lower gate also asks the optimizer for a tighter
+    # pattern, and the reply comes back at ~1.15x of whatever was demanded. Measured
+    # over the two runs, the installed margins moved with the gate
+    # (0.79/0.81/0.82/0.87 at 0.78 against 0.83/0.73/0.76/0.80 at 0.72) and the SLACK
+    # a lift has to spend was unchanged to +-0.01. What arrived: one more in-air
+    # blend (t = 103 s at 0.74) and a 358 m install carrying spread and lobe lift
+    # whole. What it cost: margin_final_flown 0.87 -> 0.80, phase-5 minimum elevation
+    # 9.51 -> 9.38 deg, power flat at 8640 W. Phase 5 still takes 0 % of the spread.
+    #
+    # turn_radius_headroom is the knob that MAKES slack - it raises the request
+    # without moving the gate - and it is the one that delivered (1.10 -> 1.20, 25 %
+    # of the spread and a SHAPE at last).
+    #
+    # 0.75 is the split, and at headroom 1.20 this number is a real trade rather than
+    # a rejection-rate knob. Measured there: 0.72 delivers 25 % of the spread and a
+    # phase-5 floor of 9.55 deg for margin_final_flown 0.80, 8.5 laps and RMS d 1.52
+    # deg; 0.78 gives the delivery back (0 % of the spread, a flat [2.33 x5]) and buys
+    # margin_final_flown 0.94, 9.0 laps and RMS d 1.49 deg, with the floor down at
+    # 8.65 deg. Power and energy do not separate the two (within 2 W and 0.2 kJ).
+    #
+    # 0.75 measured (archive _060552, 7 of 7 solves on the fixed client): the best
+    # phase-5 floor of the three at 9.66 deg, margin_final_flown 0.88, 9.0 laps,
+    # 8636 W, RMS d 1.54 deg - most of what 0.78 buys at better than 0.72's
+    # elevation. Caveat: the shape does not survive to the end. The in-air route
+    # delivered the whole +1.60 deg per-band shift at t = 117.8 s and the 380 m
+    # install then rationed the spread to 0 % and replaced it with the flat mean, so
+    # delivered_profile_deg reads [2.35 x5]. That is the REPLY, not the ladder: the
+    # ladder tries the full spread first, and with it on, that 380 m curve reads
+    # ~0.34 against the 0.88 it reads flat. Giving the ladder a floor at the spread
+    # already flying left the run byte-identical (see the tuning log).
+    min_feasibility_margin: 0.75
     # Extra turn radius asked of the optimizer, as a factor on the margin above.
     # 1.0 asks for exactly what the gate demands, which is NOT enough, and the
     # first use_step run showed why: a reply that CONVERGED with its own constraint
@@ -148,7 +185,31 @@ traj_opt:
     # geometric one off yet - so raise it if a STARTUP path is refused for curvature.
     # Same family as min_feasibility_margin: every 0.1 asks for a wider, less
     # powerful pattern, so it is a rejection-rate knob and not a safety one.
-    turn_radius_headroom: 1.10
+    #
+    # 2026-08-20: 1.10 -> 1.20, for the elevation learner's per-band SPREAD. Unlike
+    # min_feasibility_margin this one MAKES slack: it raises the request without
+    # moving the gate, so the reply arrives further above the number the install has
+    # to clear, and the ration ladder can spend the difference on the spread instead
+    # of throwing it away (0 % of the spread reached phase 5 at 1.10, on both 0.78
+    # and 0.72). The price is in the same currency as ever - a wider pattern is a
+    # less powerful one - so read power and the criteria, not just the delivery.
+    #
+    # Measured: the phase-5 install took 25 % of the spread and delivered a SHAPE
+    # ([2.09 2.18 2.41 2.56 2.41] deg against the flat [2.33 x5] of every run before
+    # it), for 8641 W against 8640, 8 of 8 criteria and a phase-5 floor of 9.55 deg -
+    # no price at all at this step. The install still lands one rung above the gate
+    # (margin 0.73 vs 0.72), so 50 % of the spread is what the next increase buys.
+    #
+    # 1.30 was tried for that next rung and given back. It does reach it - the 380 m
+    # install carried the spread WHOLE (lobe lift at 75 %) - but the run around it is
+    # worse where it counts: phase-5 minimum elevation 9.55 -> 7.95 deg, power 8641 ->
+    # 8600 W, RMS d 1.52 -> 1.56 deg (8 of 8 either way, 8.5 laps either way). Part of
+    # the extra delivery is not delivery at all: the wider pattern tracks better, so
+    # the learner has less to correct - the profile it converged on fell from
+    # [1.64 1.90 2.60 2.90 1.79] to [0.48 0.65 0.68 0.21 -0.14] deg. 1.20 buys the
+    # shape at no cost; 1.30 buys a bigger fraction of a smaller correction and pays
+    # 1.6 deg of phase-5 floor for it.
+    turn_radius_headroom: 1.20
     # Reel-out per lap assumed for the STARTUP request, in metres; 0.0 assumes none.
     # Every later request measures that ratio off the previous reply, but the first
     # one has no reply to measure - and it is where the ratio matters most, since the
