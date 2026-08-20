@@ -137,6 +137,14 @@ mean and by the largest quarter-step of the deviation that still clears
 `el_target - el_applied` and goes in later through the same in-air route as any
 other shift, on the same gate. `el_bias_bins = 1` has no spread and is unaffected.
 
+The IN-AIR route rations on the same ladder, and did not always: it was
+all-or-nothing, so a shift whose spread failed the gate took its mean down with it.
+That is the run's minimum elevation — the last shift owed before the winch stops is
+`el_offset_final` plus the converged bias, ~1.6°, and two runs at identical settings
+split on it by 0.04 of margin for a degree of ground clearance (see the tuning log,
+"The whole-run minimum is the LAST in-air shift missing the gate by 0.04"). The
+mean now goes in whole wherever the spread cannot, and only the remainder waits.
+
 The error that is fed back is the one against the OPTIMIZER's curve, i.e. the
 measured sag plus the correction already in the flown path. Closing on the sag
 itself does not converge and is what the first version did (measured 2026-08-18):
@@ -1011,9 +1019,6 @@ try
             # difference onto the path in the air, while the curvature still passes.
             el_delta = el_target .- el_applied
             if maximum(abs, el_delta) > 1e-6 && isnothing(blend_to) && !reopt_pending
-                # Per point, not rigidly: with more than one band the shift owed to
-                # the lobes is not the one owed to the crossing.
-                shifted = fec.el_path .+ bias_lift(fec.az_path, el_delta)
                 # Scored at `chk_points`, the resolution the path in the air came
                 # at, exactly as the install gate scores its own reply — because a
                 # curvature check on an UPSAMPLED polyline measures the sampling,
@@ -1027,27 +1032,90 @@ try
                 # CHECK is downsampled; what is flown keeps `n_path` points, which
                 # the lap counter depends on.
                 chk_n = min(chk_points, length(fec.az_path) - 1)
-                shift_az, shift_el = prepare_path(fec.az_path, shifted;
-                                                  resample = chk_n,
-                                                  up_loops = fcs.up_loops)
-                margin = isnothing(coeffs) ? Inf :
-                    check_pattern_feasible(shift_az, shift_el,
-                        Float64(s.sys_state.l_tether[1]), fcs.max_steering;
-                        c1 = c1_at(phase), prn = false).margin
-                if margin >= tos.min_feasibility_margin
+                # RATIONED, exactly as the install ladder rations a candidate, and
+                # for the same reason: the shift's MEAN is a rigid lift the pattern
+                # barely notices, its SPREAD is a bend in a curve that has no
+                # curvature to spare (measured 2026-08-20 at 380 m: 0.95 -> 0.97
+                # under the mean, 0.95 -> 0.41 under the spread). All-or-nothing
+                # here threw the mean away with the spread whenever the whole shift
+                # missed the gate, and the shift that matters most is the last one —
+                # `el_offset_final` plus the converged bias, ~1.6°, owed just before
+                # the winch stops and the kite loses 23 % of its turn authority to
+                # `depower_final`. Measured on two runs at the same settings whose
+                # only difference was the Q rate limit: at t = 117.8 s the whole
+                # 1.60° passed at margin 0.75 and the run's floor was 9.66°; the
+                # next run's 1.58° read 0.71 at t = 117.1 s, went in NOTHING, and
+                # only arrived at the 380 m install at t = 127.6 s — 4.5 s after
+                # reel-out had already stopped, blending past the run's minimum at
+                # t = 129.1 s, floor 8.70°. A 0.04 miss on one threshold cost a
+                # degree of ground clearance, which is what a ladder exists to stop.
+                #
+                # Per point, not rigidly: with more than one band the shift owed to
+                # the lobes is not the one owed to the crossing. What goes in is
+                # added to `el_applied`; the remainder stays in `el_delta` and is
+                # retried on the next lap, on the same gate, as before.
+                d_mean = mean(el_delta)
+                d_dev = el_delta .- d_mean
+                shifted_by(fm, fd) = fec.el_path .+
+                    bias_lift(fec.az_path, fm * d_mean .+ fd .* d_dev)
+                function shift_margin(e)
+                    isnothing(coeffs) && return Inf
+                    a, b = prepare_path(fec.az_path, e; resample = chk_n,
+                                        up_loops = fcs.up_loops)
+                    check_pattern_feasible(a, b, Float64(s.sys_state.l_tether[1]),
+                        fcs.max_steering; c1 = c1_at(phase), prn = false).margin
+                end
+                # Spread first, then the mean — the spread is what costs margin, so
+                # giving it up buys the most height per rung. The mean is never
+                # rationed below a quarter: a shift that small is not worth a 4 s
+                # blend, and it is retried whole next lap anyway.
+                rungs = ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5), (1.0, 0.25),
+                         (1.0, 0.0), (0.75, 0.0), (0.5, 0.0), (0.25, 0.0))
+                hit = nothing
+                margin = NaN
+                for (fm, fd) in rungs
+                    e = shifted_by(fm, fd)
+                    m = shift_margin(e)
+                    isnan(margin) && (margin = m)   # the WHOLE shift's margin, reported
+                    if m >= tos.min_feasibility_margin
+                        hit = (fm, fd, e, m)
+                        break
+                    end
+                end
+                # A rung that moves no band by more than a hundredth of a degree is
+                # not a delivery; let it fall through to the hold-back and retry.
+                if !isnothing(hit) &&
+                   maximum(abs, hit[1] * d_mean .+ hit[2] .* d_dev) <= 0.01
+                    hit = nothing
+                end
+                if !isnothing(hit)
+                    fm, fd, shifted, hit_margin = hit
                     global blend_from = (copy(fec.az_path), copy(fec.el_path))
                     global blend_to = (copy(fec.az_path), shifted)
                     global blend_t0 = t
-                    push!(el_shift_events, (; t, delta = mean(el_delta),
-                                            margin, status = "blended in"))
-                    global el_applied = copy(el_target)
+                    went_in = fm * d_mean .+ fd .* d_dev
+                    push!(el_shift_events, (; t, delta = mean(went_in),
+                                            margin = hit_margin,
+                                            status = (fm < 1 || fd < 1) ?
+                                                @sprintf("blended in (%.0f %% of the \
+                                                          mean, %.0f %% of the spread)",
+                                                         100 * fm, 100 * fd) :
+                                                "blended in"))
+                    global el_applied = el_applied .+ went_in
                     global el_shift_warned = false
+                    (fm < 1 || fd < 1) &&
+                        @info @sprintf("Elevation shift rationed to fit the curvature \
+                                        gate: %.0f %% of the %+.2f° mean, %.0f %% of \
+                                        the %.2f° spread; the rest is retried next \
+                                        lap.", 100 * fm, d_mean, 100 * fd,
+                                       maximum(d_dev) - minimum(d_dev))
                 elseif !el_shift_warned
                     push!(el_shift_events, (; t, delta = mean(el_delta),
                                             margin, status = "held back"))
                     global el_shift_warned = true
                     @warn @sprintf("Elevation shift of %s held back: the curvature \
-                                    margin would be %.2f. Retrying as the tether grows.",
+                                    margin would be %.2f even rationed to a quarter \
+                                    of its mean. Retrying as the tether grows.",
                                    prof_str(el_delta), margin)
                 end
             end

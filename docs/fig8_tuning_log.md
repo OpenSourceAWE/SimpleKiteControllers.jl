@@ -624,6 +624,102 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The whole-run minimum is the LAST in-air shift missing the gate by 0.04 (2026-08-20)
+
+The run's minimum elevation fell 9.66 -> 8.70° between archives `_070905` and
+`_071750`. Nothing in `data/` changed between them — the six settings files are
+byte-identical — and the only code that moved was the Q rate limit
+(`q_rate_gain = 2.0`, the entry below). It is not a Q effect.
+
+**Where the minimum is.** t = 129.1 s, azimuth -7.9°, phase 5, tether 379.9 m,
+`v_reelout` 0.08 m/s — 6.0 s after reel-out stopped at t = 123.1 s, in the FIRST
+phase-5 lobe. It is a one-off: the lobe minima either side of it read 10.36
+(t = 122.4, phase 4) and 10.46, 9.64, 10.45 (phases 5). Cross-track error at the
+dip is 3.62°, the worst of the settled window against a phase-4 typical 2.4-2.8°.
+
+**Why that lobe.** `depower_final` (0.274 -> 0.328, delivered over ~1.5 s by the
+KCU's rate limit) costs 23 % of `c1`, so every phase-5 lobe sags ~1° deeper than a
+phase-4 one — that part is by design and shows in all four. The extra 1.7° is that
+the reference the kite entered phase 5 on had received NONE of its phase-5 lift:
+
+| | shift owed | at | margin | outcome | floor |
+|---|---|---|---|---|---|
+| `_070905` | +1.60° | t = 116.9 | 0.75 | held back | |
+| | +1.60° | t = 117.8 | 0.75 | **blended in** | **9.66°** |
+| `_071750` | +1.58° | t = 117.1 | **0.71** | held back | |
+| | +1.58° | t = 127.6 | 0.86 | carried by an install | **8.70°** |
+
+Same settings, same gate (`min_feasibility_margin` 0.75). One run cleared it on the
+nose and flew the last 5 s of reel-out and all of phase 5 with the lift on the path;
+the other missed by 0.04, so `el_offset_final` plus the converged bias reached the
+kite only at the 380 m install — 4.5 s after the winch had stopped, blending until
+t = 131.6 s, i.e. straight past the minimum at 129.1 s.
+
+**The in-air route was all-or-nothing where the install route rations.** Fixed in
+`examples/simple_opt_reelout.jl` by giving it the same ladder: the shift's MEAN goes
+in whole and its SPREAD is scaled back until the curvature gate passes, then the
+mean itself down to a quarter, the remainder staying in `el_target - el_applied` to
+be retried next lap exactly as before. The split is the one the install ladder was
+measured on (2026-08-20, 380 m: a uniform lift of the mean 0.95 -> 0.97, the spread
+0.95 -> 0.41), so the mean — which is most of the 1.6° and all of the height — is
+no longer thrown away with the spread. A rung that moves no band by more than 0.01°
+falls through to the hold-back rather than spending a 4 s blend.
+
+**FLOWN, and the mean-only rung is the whole result** (archive `_080541`, against
+`_074433`; nothing else moved, 7 of 7 solves either way). The t = 117.1 s shift that
+was refused at 0.71 goes in as `100 % of the mean, 0 % of the spread` at **0.76**,
+4 s before the last of the reel-out, and 50 % of the spread follows at t = 121.1 s
+(0.75). A second mean-only rung lands in phase 5 at t = 139.2 s (+1.09°, margin
+0.90), which the all-or-nothing route had never delivered either.
+
+| | `_074433` | `_080541` |
+|---|---|---|
+| min elevation, whole run | 8.70° | **9.65°** |
+| first phase-5 lobe (t ~ 129) | **8.70°** | **10.19°** |
+| where the run's minimum is | the 4->5 transient | an ordinary lobe, t = 140.6 s |
+| `delivered_deg` | 2.33° | **3.42°** |
+| power | 8644 W | 8637 W |
+| RMS d | 1.53° | 1.56° |
+| laps / criteria | 9.0 / 8 of 8 | 9.0 / 8 of 8 |
+
+The transient is gone as a transient: the first phase-5 lobe reads 10.19° against
+the 10.23° of the last phase-4 one, so the 4->5 boundary no longer sets the run's
+floor at all. What is left is the ordinary phase-5 sag, and its worst lobe is the
+number to beat next. Cost: 7 W (0.08 %) and 0.03° of RMS d.
+
+What it does NOT fix is the SHAPE. `delivered_profile_deg` is still flat
+(`[3.42 ×5]`) — the t = 128.0 s install rations the spread to 0 % as ever, and the
+t = 125.1 and 132.0 retries read 0.57 and 0.38. The mean is delivered, the profile
+is not; that is the same 380 m limitation as the entry below, unchanged.
+
+**`reelout_softstop` is NOT the follow-up, and the reasoning that said it was is
+worth recording so it is not proposed again.** The stop is hard (`reelout_softstop`
+= 0.0): `v_reelout` overshoots to -0.8 m/s, the drum reels 1.5 m back in, tether
+force spikes 3500 -> 4470 N and `v_app` 21.6 -> 28.7 m/s over t = 123.3-127.0,
+immediately before the dip — so a soft stop looks like the other half of the same
+transient. It is not, for two reasons that compound:
+
+- **The stop ramp is open-loop and discards `v_cmd` for its whole duration.** Once
+  `stop_start` latches, `v_set = stop_v_entry * (1 - (t-t0)/stop_T)` and nothing
+  else — neither the `force_release` bypass nor the `UpperForceController`'s output
+  reaches the drum for ~12 s. That is the same shape as the `reelout_softstart` bug
+  fixed on 2026-08-19 (an open-loop timer overriding closed-loop tether
+  protection), except the softstart at least has a force release and this has none.
+- **The ramp is flown at `depower_setpoint`, not `depower_final`.** The depower step
+  fires at phase 5, i.e. at the END of the ramp, so the entire deceleration happens
+  with the kite fully powered while its reel-out relief decays to zero. The
+  `depower_final` sweep below gives the destination: frozen length at 0.30 is
+  **5149 N** mean and 0.274 is on the steep side of it (0.30 -> 0.328 alone is
+  5149 -> 3456 N). The 4470 N being removed is a ~2 s transient; what replaces it is
+  a monotone climb toward several times that, with the winch unable to pay out.
+
+The 2026-08-16 measurement below is real (overshoot 0.36 -> 0.016 m, power dip
+-3 -> -0.49 kW at `reelout_softstop = 6.0`) but it scored the power undershoot, not
+the peak force during the ramp. Anything here needs the ramp to take the force law
+back — `max(ramp, force_release * v_cmd)`, which gives up the exact landing on
+`reelout_l_max` — or the depower step moved to the START of the ramp, or both. Until
+one of those exists, the hard stop is the cheaper of the two problems.
+
 ## The learnt SPREAD reaches the kite everywhere but phase 5, and the gate is not the lever (2026-08-20)
 
 The elevation learner converges on a profile and the kite flies its MEAN. Baseline
