@@ -398,7 +398,21 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
             "power-tape length the solve started from, input_depower ramped with \
              the wind above input_depower_wind_ref; only a seed, the server \
-             optimizes it [m]")),
+             optimizes it [m]"),
+        "depower_optimized" => let seen = Dict{String, Int}(), dp = OrderedDict{String, Any}()
+            for e in opt_depower_log
+                k = @sprintf("t_%05.1f_s", e.t)
+                n = get(seen, k, 0) + 1
+                seen[k] = n
+                dp[n == 1 ? k : "$(k)_$n"] =
+                    (round(e.l_dp; digits = 3),
+                     @sprintf("optimizer's l_dp [m]; rel_depower equivalent %.3f \
+                               (awetrim_depower_to_v3kite), against the flown \
+                               depower_setpoint = %.3f",
+                              e.u_p_equiv, fcs.depower_setpoint))
+            end
+            dp
+        end),
     "path" => OrderedDict(
         "points" => (n_path_initial, "points of the path installed before the run"),
         "points_final" => (length(fec.az_path),

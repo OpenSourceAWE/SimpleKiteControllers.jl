@@ -132,6 +132,28 @@ struct DepowerReply
 end
 
 """
+Total offset [rel_depower units] between the two models at equal power, measured
+2026-08-18 (`docs/steering_depower.md`): V3Kite (VSM) needs 0.12 MORE `rel_depower`
+than AWETrim's ROM for the same power (slopes -15.2 vs -17.8 per unit, matched at
+6538 W: u_p = 0.2915 against u_p = 0.1699). 0.08 of that (0.4 m of tape) is the two
+models' own tape-length zero (`0.6 + 5*u_p` here, `0.2 + 5*u_p` in V3Kite); the
+remaining 0.04 (0.2 m) is genuine, unexplained aerodynamic disagreement — a single
+measured point, not a fitted curve.
+"""
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.12
+
+"""
+    awetrim_depower_to_v3kite(l_dp) -> Float64
+
+Convert an AWETrim `l_dp` [m] (`input_depower`, `l_dp = 0.6 + 5*u_p`) into the
+V3Kite `rel_depower` expected to fly at the SAME power, i.e. `(l_dp - 0.6)/5 +
+`[`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref). This is the FULL correction — do not
+also subtract the 0.4 m calibration offset separately, it is already inside the
+0.12.
+"""
+awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
+
+"""
     PatternLimits(; azimuth_max, elevation_min, elevation_max, azimuth_amplitude_min)
 
 A box, in DEGREES, on where the optimized pattern may go. The server bounds the

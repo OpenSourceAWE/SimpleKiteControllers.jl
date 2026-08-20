@@ -44,6 +44,11 @@ whole-run energy the `E_mech` curve ends on — which is the number to compare
 across runs, since a change to when reel-out engages moves mean power and window
 length in opposite directions. Both are selectable plots like the others, so
 `select_plots()` shows them in the menu; `simple_fig8_plots.jl` ignores the keys.
+A fifth panel, flown `rel_depower` (`var_14`) against the optimizer's own
+depower converted to the same units (`awetrim_depower_to_v3kite`, step-held
+between reopt solves), is added when `simple_opt_reelout.jl`'s
+`opt_depower_log` is in scope — silently skipped for a plain `simple_reelout.jl`
+run or a standalone replot of an older archive, neither of which has it.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -335,28 +340,40 @@ if "power" in plots
                           string(round(pm.energy_run / 1000)) * "~\\mathrm{kJ},~" *
                           "E_{\\mathrm{reel-out}} = " *
                           string(round(pm.energy / 1000)) * "~\\mathrm{kJ}")
+    panels = Any[f_tether, v_ro, p_mech, e_mech]
+    ylabels = Any[
+        L"F_{\mathrm{tether}}~[\mathrm{N}]",
+        L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
+        L"P_{\mathrm{mech}}~[\mathrm{kW}]",
+        L"E_{\mathrm{mech}}~[\mathrm{kJ}]",
+    ]
+    labels = Any[
+        nothing,
+        nothing,
+        # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
+        p_label,
+        e_label,
+    ]
+    if @isdefined(opt_depower_log) && !isempty(opt_depower_log)
+        t_dp = Float64[e.t for e in opt_depower_log]
+        u_dp = Float64[e.u_p_equiv for e in opt_depower_log]
+        # Right-continuous step hold: the optimizer's value applies from the
+        # reopt that produced it until the next one.
+        idx = searchsortedlast.(Ref(t_dp), Float64.(sl.time[rng]))
+        u_p_opt = [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
+        push!(panels, [Float64.(sl.var_14[rng]), u_p_opt])
+        push!(ylabels, L"u_d~[-]")
+        push!(labels, [L"\mathrm{flown}", L"\mathrm{optimizer~(equiv.)}"])
+    end
+
     p4 = plotx(
         sl.time[rng],
-        f_tether,
-        v_ro,
-        p_mech,
-        e_mech;
+        panels...;
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
         legendsize = 16,
-        ylabels = [
-            L"F_{\mathrm{tether}}~[\mathrm{N}]",
-            L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
-            L"P_{\mathrm{mech}}~[\mathrm{kW}]",
-            L"E_{\mathrm{mech}}~[\mathrm{kJ}]",
-        ],
-        labels = [
-            nothing,
-            nothing,
-            # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
-            p_label,
-            e_label,
-        ],
+        ylabels = ylabels,
+        labels = labels,
         fig = fig_name * " – power",
     )
     display(p4)

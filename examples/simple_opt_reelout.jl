@@ -492,6 +492,12 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                                 tos.turn_radius_lap_reelout_m, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
+# One row per depower value the optimizer reports back (startup solve, each
+# reopt), for the run summary and the power plot: `t` [s], `l_dp` [m] on
+# AWETrim's own scale, and `u_p_equiv`, the V3Kite `rel_depower` expected to fly
+# at the same power (`awetrim_depower_to_v3kite`, docs/steering_depower.md).
+opt_depower_log = NamedTuple[]
+
 start_params = InitParams(; name = tos.name, length = l_set,
                           winch_params = winch, inflow_conditions = inflow,
                           trajectory = Trajectory(collect(guess_az), collect(guess_el)),
@@ -547,17 +553,18 @@ opt_startup_solve_s = time() - t_solve_start
 toc("Received the optimized path in: ")
 
 # What the reply was optimized AT, which is not what this run flies. The server
-# varies `l_dp` unless it is pinned (`DepowerSpec("fixed", ...)`), and its tape
-# scale is 0.4 m off V3Kite's: `l_dp = 0.6 + 5*u_p` there, `0.2 + 5*u_p` here. So
-# the gap below is a real difference between the model that predicted the power
-# and the model that flies it, and it belongs next to the prediction.
+# varies `l_dp` unless it is pinned (`DepowerSpec("fixed", ...)`), and
+# `awetrim_depower_to_v3kite` converts it to the V3Kite rel_depower expected to
+# fly at the SAME power — the full correction (calibration + measured aero
+# offset), not just the two scales' 0.4 m zero difference. See
+# docs/steering_depower.md.
 if !isnothing(opt_result.depower)
-    flown_l_dp = 0.6 + 5 * fcs.depower_setpoint
-    @info @sprintf("Optimized at depower l_dp = %.3f m (mode %s), against %.3f m \
-                    for the flown depower_setpoint = %.2f — a %+.3f m gap on the \
-                    optimizer's tape scale.",
-                   opt_result.depower.value, opt_result.depower.mode, flown_l_dp,
-                   fcs.depower_setpoint, opt_result.depower.value - flown_l_dp)
+    u_p_equiv = awetrim_depower_to_v3kite(opt_result.depower.value)
+    @info @sprintf("Optimized at depower l_dp = %.3f m (mode %s) = rel_depower \
+                    %.3f equivalent, against the flown depower_setpoint = %.3f — \
+                    a %+.3f gap.",
+                   opt_result.depower.value, opt_result.depower.mode, u_p_equiv,
+                   fcs.depower_setpoint, u_p_equiv - fcs.depower_setpoint)
 end
 # The optimizer's own curvature diagnostic, in metres and physical: comparable
 # with the kite's 1/(c1*u_s) and with `min_feasibility_margin`, and read
@@ -728,6 +735,12 @@ if opt_r_on && !isnothing(coeffs_startup)
                    path." exception = exc
         end
     end
+end
+
+if !isnothing(opt_result.depower)
+    push!(opt_depower_log,
+          (; t = 0.0, l_dp = opt_result.depower.value,
+           u_p_equiv = awetrim_depower_to_v3kite(opt_result.depower.value)))
 end
 
 # The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
@@ -1333,6 +1346,10 @@ try
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
+                        let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
+                            push!(opt_depower_log,
+                                  (; t, l_dp, u_p_equiv = awetrim_depower_to_v3kite(l_dp)))
+                        end
                     # The whole prospective blend to a converged reply is checked
                     # (`blend_folds`) before it is ever installed, and a folded one
                     # is not flown at all: a fresh reply is requested instead,
@@ -1417,6 +1434,10 @@ try
                                 break
                             end
                             tab = opt_trajectory(; url = tos.base_url)
+                            let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
+                                push!(opt_depower_log,
+                                      (; t, l_dp, u_p_equiv = awetrim_depower_to_v3kite(l_dp)))
+                            end
                         end
                         # Re-measure the anchor correction for the NEXT request off
                         # the reply that just landed: the lap's reel-out is a
