@@ -426,18 +426,13 @@ stop_criteria = fcs.n_fig_eight > 0 ?
 @info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %s.",
                rcs.kv, stop_criteria)
 
-# Standalone force-floor guard for phases 0-2 (park/dive/hold) — deliberately
-# NOT `rc`. `WinchController`'s own SpeedController is ACTIVE (its integrator
+# Standalone force-floor guard for phases 0-2 (park/dive/hold)
+# `WinchController`'s own SpeedController is ACTIVE (its integrator
 # accumulating v_set_in - v_act = kv*sqrt(force) - v_act) whenever the force
 # limiters are off, i.e. essentially the whole entry, since nothing before
 # phase 3 is meant to move the drum. Left running "live" while its output is
 # ignored, that integrator winds up over tens of seconds and dumps a large,
-# stale command once something changes — MEASURED: v_reelout spiking to
-# +8 m/s (`rcs.v_sat`, saturated) instead of the intended reel-IN, once `rc`
-# was stepped throughout the entry to fix the force floor below. A bare
-# `LowerForceController` has no SpeedController and no mixer to wind up, so
-# the guard uses one of those instead; `rc` itself stays untouched (and its
-# soft-start clock at 0) until phase 3, exactly as before this guard existed.
+# stale command once something changes. 
 guard_lfc = LowerForceController(rcs)
 
 # Length setpoint: starts at the tether length after settling and warm-up, and
