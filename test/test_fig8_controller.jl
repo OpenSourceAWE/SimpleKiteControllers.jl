@@ -237,6 +237,46 @@ end
         @test d3 < 1e-6      # found it despite the window
     end
 
+    @testset "reacquire_respects_rate_limit" begin
+        # A `reacquire_margin` jump (the window's best aligned candidate loses to
+        # the global one) must obey `q_rate_gain` exactly like any other candidate
+        # swap — see the note on the RATE LIMIT block in `calc_attractor`. Before
+        # that fix, `went_global` exempted this jump from the limit entirely.
+        #
+        # A tiny window forced to catch up in big index strides (the kite "moving"
+        # several path points between calls) reliably triggers it: walk the path,
+        # and after every call check the index move against the bound the guard
+        # itself would compute (`q_rate_gain * speed * dt`, floor of one point).
+        function _max_jump_over_bound(fec; stride, offset = 0.0)
+            n = length(fec.az_path)
+            worst = 0.0
+            prev = nothing
+            for i in 1:stride:(2n)
+                k = mod1(i, n)
+                kn = mod1(k + 1, n)
+                dx = fec.az_path[kn] - fec.az_path[k]
+                dy = fec.el_path[kn] - fec.el_path[k]
+                len = hypot(dx, dy)
+                calc_attractor(fec, fec.az_path[k] - offset * dy / len,
+                               fec.el_path[k] + offset * dx / len)
+                if prev !== nothing
+                    jump = abs(fec.last_idx - prev)
+                    jump = min(jump, n - jump)
+                    mean_seg = sum(fec.seg_len) / n
+                    arc_max = max(mean_seg, fec.fes.q_rate_gain * fec.speed * fec.fes.dt)
+                    k_max = max(1, floor(Int, arc_max / mean_seg))
+                    worst = max(worst, jump / k_max)
+                end
+                prev = fec.last_idx
+            end
+            worst
+        end
+        for sw in (1.0, 2.0), off in (0.0, 0.3)
+            fec = _make_test_controller(search_window = sw)
+            @test _max_jump_over_bound(fec; stride = 15, offset = off) <= 1.0
+        end
+    end
+
     @testset "metrics_lap_counting" begin
         # Regression tests for three lap-counting bugs; see docs/fig8_tuning_log.md.
         dt = 0.05

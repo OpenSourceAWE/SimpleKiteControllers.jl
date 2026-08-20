@@ -861,9 +861,28 @@ reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
 reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
 reopt_events = NamedTuple[] # one row per solve, for the run summary
 # The blend in progress: two canonical paths of equal length and a start time.
+# Both are guaranteed fold-free across the whole w in [0, 1] before either is
+# ever assigned — see the accept gate's fold-check below.
 blend_from = nothing
 blend_to = nothing
 blend_t0 = NaN
+
+"""
+    blend_folds(az0, el0, az1, el1) -> Bool
+
+Does `blend_paths` between these two closed curves collapse `path_min_radius`
+anywhere across `w` in `[0, 1]`, relative to the smaller of the two endpoints'
+own radius? Sampled at `tos.blend_probe_points` points; a fold shows up as a
+near-zero radius against endpoints that are not, so a coarse sweep catches it —
+see the tuning log entry on why this replaced a runtime hold/jump-cap instead.
+"""
+function blend_folds(az0, el0, az1, el1)
+    r0 = min(path_min_radius(az0, el0), path_min_radius(az1, el1))
+    r0 <= 0 && return false   # degenerate endpoint; not this check's job
+    any(w -> path_min_radius(blend_paths(az0, el0, az1, el1, w)...) <
+             tos.blend_fold_margin * r0,
+        range(0.0, 1.0; length = tos.blend_probe_points))
+end
 
 toc("Start simulation loop...")
 
@@ -1076,13 +1095,20 @@ try
                 # blend, and it is retried whole next lap anyway.
                 rungs = ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5), (1.0, 0.25),
                          (1.0, 0.0), (0.75, 0.0), (0.5, 0.0), (0.25, 0.0))
+                # A rung that clears the endpoint margin can still fold `blend_paths`
+                # between the CURRENT elevation and this one somewhere in between
+                # (`lobe_lift`'s own docstring: it FOLDS the path once the lift is
+                # large enough) — checked here too, not just for reopt installs,
+                # since a rung that folds is skipped for the SAME reason a rung
+                # short of margin is: the next, smaller one is strictly safer.
                 hit = nothing
                 margin = NaN
                 for (fm, fd) in rungs
                     e = shifted_by(fm, fd)
                     m = shift_margin(e)
                     isnan(margin) && (margin = m)   # the WHOLE shift's margin, reported
-                    if m >= tos.min_feasibility_margin
+                    if m >= tos.min_feasibility_margin &&
+                       !blend_folds(fec.az_path, fec.el_path, fec.az_path, e)
                         hit = (fm, fd, e, m)
                         break
                     end
@@ -1306,6 +1332,50 @@ try
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
+                    # The whole prospective blend to a converged reply is checked
+                    # (`blend_folds`) before it is ever installed, and a folded one
+                    # is not flown at all: a fresh warm /step is requested instead,
+                    # holding the simulation, up to `blend_max_retries` times. This
+                    # replaced three successive runtime-side attempts to react to a
+                    # fold DURING an already-started blend, each of which traded one
+                    # failure mode for another — see the tuning log entry "Why
+                    # retry, not react" for the measurements behind the choice.
+                    for blend_attempt in 0:tos.blend_max_retries
+                        if blend_attempt > 0
+                            @info @sprintf("  ... candidate at L = %.0f m folds in \
+                                            blend; requesting a fresh reply (retry \
+                                            %d of %d), holding the simulation.",
+                                           l_now, blend_attempt, tos.blend_max_retries)
+                            opt_step(StepParams(; length = l_now, winch_params = winch,
+                                                min_turn_radius = opt_r_min);
+                                     url = tos.base_url, wait = false)
+                            t_retry = time()
+                            retry_state = "solving"
+                            while retry_state == "solving"
+                                sleep(tos.reopt_poll_interval)
+                                retry_state = try
+                                    opt_status(tos.base_url)["state"]
+                                catch exc
+                                    @warn "Could not reach the optimizer while \
+                                           retrying a folded blend; will retry." exception = exc
+                                    "solving"
+                                end
+                            end
+                            global reopt_blocked_s += time() - t_retry
+                            if retry_state != "converged"
+                                @warn @sprintf("Blend-fold retry %d of %d for L = \
+                                                %.0f m did not converge (%s); giving \
+                                                up on this cycle.",
+                                               blend_attempt, tos.blend_max_retries,
+                                               l_now, retry_state)
+                                event = (; t, l = l_now, status = "rejected",
+                                         detail = @sprintf("blend-fold retry %d did \
+                                                            not converge (%s)",
+                                                           blend_attempt, retry_state))
+                                break
+                            end
+                            tab = opt_trajectory(; url = tos.base_url)
+                        end
                         # Re-measure the anchor correction for the NEXT request off
                         # the reply that just landed: the lap's reel-out is a
                         # shrinking fraction of a growing tether, so a factor fixed
@@ -1466,6 +1536,14 @@ try
                         global chk_points = n_native
                         cand_az, cand_el = prepare_path(new_az, new_el;
                             resample = n_path, up_loops = fcs.up_loops)
+                        # Canonicalized the SAME way as `cand_az`/`cand_el` — same
+                        # resample count, same start-point rotation — so
+                        # `blend_folds` and the real `blend_paths` both interpolate
+                        # the same point correspondence `prepare_path` establishes.
+                        # An uncanonicalized `fec.az_path` folds EVERY candidate,
+                        # including a plain, ordinary one: measured 2026-08-20.
+                        cand_from = prepare_path(fec.az_path, fec.el_path;
+                            resample = n_path, up_loops = fcs.up_loops)
                         # At the CURRENT length, which is what it will be flown at.
                         margin = isnothing(coeffs) ? Inf :
                             check_pattern_feasible(chk_az, chk_el, l_now,
@@ -1483,9 +1561,11 @@ try
                                                                     opt_r_reply, r_span[1],
                                                                     r_span[2],
                                                                     something(opt_r_min, 0.0))))
+                            break
                         elseif tos.min_height > 0 && clearance < tos.min_height
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("clearance %.1f m", clearance))
+                            break
                         elseif minimum(chk_el) < el_floor
                             # The clearance floor does NOT imply this one: at 318 m
                             # of tether, 50 m of height is 9° of elevation. The
@@ -1495,9 +1575,17 @@ try
                                      detail = @sprintf("descends to %.1f°, below \
                                                         min_elevation + margin = %.1f°",
                                                        minimum(chk_el), el_floor))
+                            break
+                        elseif blend_folds(cand_from..., cand_az, cand_el)
+                            if blend_attempt < tos.blend_max_retries
+                                continue   # a fresh reply is requested at the top
+                            end
+                            event = (; t, l = l_now, status = "rejected",
+                                     detail = @sprintf("blend folds after %d retries",
+                                                       tos.blend_max_retries))
+                            break
                         else
-                            global blend_from = prepare_path(fec.az_path, fec.el_path;
-                                resample = n_path, up_loops = fcs.up_loops)
+                            global blend_from = cand_from
                             global blend_to = (cand_az, cand_el)
                             # Here, not before the gates: a REJECTED reply is not
                             # a path the kite ever flies, and the pattern plot
@@ -1577,8 +1665,10 @@ try
                                                                     margin5_flown,
                                                                     fcs.reelout_l_max),
                                                        clearance, new_pred))
+                            break
                         end
                     end
+                        end
                     push!(reopt_events, event)
                     # Blocking collects on the SAME step as the request, so the
                     # simulated gap is 0 by construction; the wall time is the figure
@@ -1595,8 +1685,22 @@ try
 
             # Blend: a step in the reference is a step in the cross-track error,
             # and the guidance answers a step with steering.
+            #
+            # `blend_paths` interpolates two closed curves point BY INDEX, and
+            # that can fold the curve IN BETWEEN even when neither endpoint does.
+            # Rather than react to that HERE — three attempts at it, 2026-08-20,
+            # each traded one failure mode for another (see the tuning log: an
+            # absolute-margin hold checked the wrong resolution and starved every
+            # later reopt; a relative check fixed that but a wide fold zone meant
+            # a big single-step jump on recovery; not reverting on abandon avoided
+            # the jump but could leave the kite stuck on a barely-blended shape
+            # for the rest of the run once retries cascaded) — the WHOLE
+            # prospective blend is now checked once, before `blend_to` is ever
+            # set, in the accept gate below. `blend_to` is guaranteed fold-free
+            # across all of `w`, so this loop needs no guard at all: a plain
+            # linear ramp.
             if !isnothing(blend_to)
-                w = (t - blend_t0) / tos.path_blend_time
+                w = clamp((t - blend_t0) / tos.path_blend_time, 0.0, 1.0)
                 b_az, b_el = blend_paths(blend_from[1], blend_from[2],
                                          blend_to[1], blend_to[2], w)
                 set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)

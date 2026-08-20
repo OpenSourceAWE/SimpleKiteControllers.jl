@@ -305,6 +305,34 @@ multi-modal, so the guess is a choice about the answer.
     """
     path_blend_time = 4.0
     """
+    Fraction of the smaller of two blend ENDPOINTS' own `path_min_radius` (both
+    at the run's flying resolution) that every sampled point of the prospective
+    blend between them must clear (`blend_folds`,
+    `examples/simple_opt_reelout.jl`). Checked once, BEFORE a candidate is ever
+    installed — `blend_paths` interpolates two closed curves point BY INDEX,
+    which can fold the curve IN BETWEEN even when neither endpoint does, and a
+    folded blend reads a near-zero radius against endpoints that are not, so
+    this does not need to be tight.
+    """
+    blend_fold_margin = 0.5
+    """
+    Points `blend_folds` samples `w` at across `[0, 1]` when checking a
+    prospective blend before installing it. A fold zone measured 2026-08-20
+    spanned `w` = 0.2-0.78 (more than half the blend), so a coarse sweep is
+    enough to catch one; it does not need to find the fold's exact extent, only
+    that it exists somewhere in the range.
+    """
+    blend_probe_points::Int64 = 21
+    """
+    Fresh solves `examples/simple_opt_reelout.jl` requests, holding the
+    simulation, if a re-optimization reply's own prospective blend folds
+    (`blend_folds`) even though the reply itself clears the curvature/clearance/
+    elevation gates. Exhausting this without a fold-free reply keeps flying the
+    CURRENT path and falls back to the ordinary `reopt_every_n_laps` schedule,
+    same as any other rejected reply.
+    """
+    blend_max_retries::Int64 = 3
+    """
     Seconds between `/status` polls while a solve is running. SIMULATED seconds
     when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
     simulated then). The solve takes 7-13 s of wall time (measured), so polling
@@ -400,6 +428,12 @@ function TrajOptSettings(filename::String; path = skc_data_path())
               "$(tos.candidate_elevation_margin).")
     tos.path_blend_time > 0 ||
         error("path_blend_time must be > 0, got $(tos.path_blend_time).")
+    0 < tos.blend_fold_margin <= 1 ||
+        error("blend_fold_margin must be in (0, 1], got $(tos.blend_fold_margin).")
+    tos.blend_probe_points >= 3 ||
+        error("blend_probe_points must be >= 3, got $(tos.blend_probe_points).")
+    tos.blend_max_retries >= 0 ||
+        error("blend_max_retries must be >= 0, got $(tos.blend_max_retries).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     return tos

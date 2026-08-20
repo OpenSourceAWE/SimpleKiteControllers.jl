@@ -14,6 +14,7 @@ fi
 
 GCT="--gcthreads=4,1"
 export JULIA_PKG_SERVER_REGISTRY_PREFERENCE=eager
+export MKL_NUM_THREADS=4
 
 julia_version=$(julia --version | awk '{print($3)}')
 julia_major=${julia_version:0:3} 

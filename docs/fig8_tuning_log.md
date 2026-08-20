@@ -903,6 +903,350 @@ seeing it. Before another knob is turned here, log the Q INDEX per step (a free
 `var_14`) and read what it does at a flip — two runs have now been spent on guards
 that rank candidates, and the evidence says the jump is upstream of the ranking.
 
+## Two more unguarded branch-teleport paths at the crossing: `reacquire_margin` and `set_path!` (2026-08-20)
+
+Found from a plotted run (archive `2026-08-20_100839`, the 150 -> 380 m reel-out),
+not from a dedicated diagnostic pass: unwrapped ψ swings between -50° and -313°
+for 3 lobes, then between +135° and -320° for 2 lobes, then back. The kite's
+actual azimuth/elevation trace is the SAME size in both windows (checked
+directly against the log, not inferred) — the extra ~180-360° is heading/course
+alone, both moving together within a few degrees the whole way through, so it is
+a real extra turn, not a plotting artifact. It starts at t = 62.75-62.9 s, where
+`var_02` (attractor azimuth) jumps ~7.4° in one 0.011 s step and `var_06`
+(regulated error) spikes -3.9° -> +44.3°, with the kite's own measured angular
+speed a steady ~5.8°/s through the same window (rules out a `min_speed` dropout)
+and cross-track error (`var_01`) never above ~6° (rules out `reacquire_dist`
+genuine off-path re-acquisition). A jump that size in one step, at that speed,
+is more than `q_rate_gain = 2.0` should ever allow — the guard from
+"The steering steps mid-strand…" above should have capped it to about a point
+of arc.
+
+Two gaps in the guards explain it, both in `src/figure_eight_controller.jl`, and
+both fixed here. **Neither fix was verified by rerunning the sim** — the finding
+and the fix are from reading the code and the log, not a measured before/after
+on the reel-out; that is still open.
+
+**1. `reacquire_margin`'s global search shares `aligned`'s 90° gate**, and near
+the crossing the far branch can pass it too. The RATE LIMIT block exempted any
+`went_global` jump on the theory that re-acquisition is the one case Q must be
+allowed to jump — true for a kite genuinely beyond `reacquire_dist` (`use_window
+== false` from the start, never touches this flag), but that is not the only
+way `went_global` becomes true: an active window whose best ALIGNED candidate is
+merely `reacquire_margin` (3°) worse than the global ALIGNED best also sets it,
+and that comparison can go to the wrong branch without the kite being off-path
+at all. Fixed by rate-limiting a `reacquire_margin` jump exactly like any other
+candidate swap; genuine off-path re-acquisition is untouched, since it was
+already exempt via `use_window` alone.
+
+Verified synthetically, not on the real run: `_make_test_controller` with a
+small `search_window` (1-2°) and `calc_attractor` called in bigger index strides
+(to force the window to fall behind) reliably triggers `went_global`. Comparing
+the index jump against the bound the guard itself computes
+(`q_rate_gain * speed * dt`), the exempted code let it through at up to **2.33x**
+that bound; with the fix it never exceeds 1.0x across a sweep of window/stride/
+offset combinations. Regression test: `reacquire_respects_rate_limit`.
+
+**2. `set_path!` had no branch guard at all.** `examples/simple_opt_reelout.jl`
+calls it every simulation step for the whole `path_blend_time` (4.0 s in this
+run's `traj_opt.yaml`) of a gradual path swap (`blend_paths` then `set_path!` in
+the main loop), and it re-indexed Q to the plain nearest point on the new path —
+no `aligned`, no `branch_hysteresis`, no `q_rate_gain`, since it writes
+`fec.last_idx` directly and those guards only ever see it downstream, inside
+`calc_attractor`. As the blended curve reshapes step by step near the
+self-intersection, the nearer of the two branches can swap, same failure as an
+unranked `argmin` elsewhere in this file. The timing fits: this run's reopt
+install nearest the anomaly is logged at t = 60.8 s, and 60.8 + 4.0 s = 64.8 s
+brackets the observed t = 62.75-62.9 s.
+
+Fixed by restricting the remap to points whose tangent is within 90° of the OLD
+`last_idx`'s tangent, falling back to the plain nearest point if none qualify —
+the same idea as `aligned`, applied with the only reference direction
+`set_path!` has (it gets no live position or course estimate). Gated on
+`fec.has_prev`: a fresh, never-flown controller's `last_idx` is the constructor
+default (`1`), whose tangent means nothing, and applying the filter there broke
+the existing `set_path` test (`dmin` at index 40 came back 2.51° instead of
+~0 — the guard picked the tangent-nearest point on the new path over the true
+nearest one, exactly as designed, but the "old branch" it was preserving was
+never real).
+
+## The extra loop survived both guards above — the fold is IN `blend_paths`, not in Q (2026-08-20)
+
+Reran the 150 -> 380 m reel-out after the two fixes above (archive
+`2026-08-20_104750`): the discontinuity in `var_02`/`var_06`/`set_steering` at
+t = 62.85 s is gone — smooth signals, no jump — but the unwrapped-ψ "extra loop"
+itself was still there, same timing, same shape, now perfectly smooth. That
+rules out a Q-selection bug: nothing upstream of `calc_attractor` was jumping,
+so the guidance had to be tracking something that genuinely asks for the extra
+turn.
+
+Instrumented `blend_paths`'s own output (`path_min_radius` of the blended curve,
+logged at every step of every blend — removed again once it had answered) and
+reran once more (archive `2026-08-20_110305`). Confirmed directly: three blend
+windows collapse to `path_min_radius` ~0° at some point strictly BETWEEN the
+endpoints, though both endpoints are individually fine —
+
+| blend window | radius at w=0 | min DURING the blend | radius at w=1 |
+|---|---|---|---|
+| t=60.8-64.8 s | 1.33° | **0.000°** | 0.86° |
+| t=81.5-85.5 s | 0.91° | **0.003°** | 0.65° |
+| t=102.4-106.4 s | 0.91° | **0.000°** | 0.59° |
+
+— and those three windows are exactly the three extra-loop episodes. Earlier
+blends (t=39-58 s), where the old and new pattern are still similar in size,
+show no collapse at all (min stays within ~0.1° of both endpoints). `blend_paths`
+interpolates two closed curves point BY INDEX; as reel-out narrows the pattern
+more each install, the two endpoint curves diverge more, and a plain linear
+blend between two differently-shaped closed curves can produce a cusp in the
+MIDDLE that neither endpoint has. The guidance then tracks that cusp correctly
+— no bug in it — which from the ground reads as a smooth extra loop with zero
+cross-track error, exactly what was measured. Nothing existing catches it: the
+curvature gate only ever checks the CANDIDATE endpoint, never the path in
+between.
+
+**Fixed by rate-limiting `w` itself**, the same shape of fix as the two above:
+`examples/simple_opt_reelout.jl`'s blend loop tracks `blend_w_eff` (the weight
+actually flown) separately from the clock-driven `w`, and only advances it to a
+candidate whose `check_pattern_feasible` margin clears `min_feasibility_margin`.
+A folded patch holds Q on the last safe shape instead of flying through the
+cusp. `blend_w_eff`/`blend_w_warned` reset at both places a blend starts (the
+reopt install and the el_bias shift-blend).
+
+First cut (archive `2026-08-20_111030`) checked the candidate against the live
+`l_now` and looked clean — unwrapped ψ in -333.2..-49.6°, every lobe the same
+~260° swing, all 8 criteria — but the check was ONLY against ψ, and the very
+next run (`_111412`) came back with `reopt.requests: 1` instead of 6 and an
+EMPTY `el_bias.shift_delivery`: the first blend of the run held and never let
+go, and both later mechanisms are gated on `isnothing(blend_to)`. Two bugs, not
+one:
+
+1. **The live `l_now` was the wrong length to check against.** Margin generally
+   worsens with `l_tether`, and reel-out keeps advancing while a hold is in
+   effect, so a hold under the live length turns into a gap that widens every
+   step it stays held. Fixed with `blend_l0`, the length captured ONCE at
+   `blend_t0`. Alone, this did not fix the stuck run (`_111947`, still
+   `requests: 1`).
+
+2. **The candidate margin was checked at the wrong resolution.** The accept-time
+   gate checks `chk_az`/`chk_el` at the server's native ~99 points, not
+   `cand_az`/`cand_el` at the run's flying `n_path` (360) — an upsampled check
+   overstates an otherwise-smooth curve's tightness, so the two resolutions
+   exist on purpose. Checking the blend against `n_path` directly meant `w = 1`
+   (`blend_to` itself) could fail a gate it had already passed at accept time,
+   holding forever. The tempting fix — downsample the candidate to
+   `chk_points` before checking, matching the accept-time gate exactly — is
+   WRONG: measured on archive `_112525`, it restored `reopt.requests: 5` but
+   brought the +133°/-108° extra-loop episodes straight back, because the fold
+   this guard exists to catch only shows up once the curve is resampled UP to
+   flying resolution — the coarser check cannot see it. So the candidate margin
+   stays checked at flying resolution (`cand_az`/`cand_el` as `blend_paths`
+   returns them), which means `blend_to` is genuinely NOT guaranteed to pass
+   here even though it already cleared the coarser accept-time gate.
+
+Given that, a hold can legitimately never clear — the accepted candidate itself
+folds once flown at `n_path`, a resolution the accept-time gate never checked.
+So a `w = 1` failure no longer holds indefinitely: it ABANDONS the install,
+reverting `fec` to `blend_from` and clearing `blend_from`/`blend_to`, freeing
+the next reopt cycle to request a fresh reply rather than starving for the rest
+of the run.
+
+Measured (archive `2026-08-20_113021`): `reopt.requests: 5`, `installed: 5`,
+all 8 criteria pass, and unwrapped ψ stays in -333.2..-2.7° for the whole run —
+every lobe the same swing, no extra-loop episodes. Power 19434 W vs 20560-20582
+W before (a ~5.5 % dip — abandoning a folded candidate costs more than holding
+briefly did, since the run flies the OLDER path for longer while it waits on
+the next reopt cycle instead of the folded one at all).
+
+**Waiting out the ordinary schedule was still a bad trade** — the kite flies a
+path already known stale for up to `reopt_every_n_laps` laps for no reason, on
+top of the wall time already spent on the reply that got thrown away. Fixed by
+rewinding `reopt_lap` on abandonment (`fig8_idx_progress / n_path -
+reopt_every_n_laps`), so the very next loop pass is eligible to request a
+replacement rather than waiting out the normal cadence. Costs one extra solve
+from `max_reopt`'s budget per abandonment; worth it; a stale path was the whole
+problem this fix exists to avoid.
+
+Measured (archive `2026-08-20_114258`): `reopt.requests: 7`, `installed: 7` —
+MORE than the 5-6 of a run with no abandonments, since immediate retries add to
+the ordinary schedule rather than replacing a slot in it. All 8 criteria pass,
+unwrapped ψ again -333.2..-2.7° with no extra-loop episodes, power 19632 W
+(between the hold-only 20012 W and the wait-out-the-schedule 19434 W — flying
+the stale path for less time costs less than the full ordinary wait, but more
+than never abandoning at all).
+
+**The `check_pattern_feasible`/`min_feasibility_margin` check above was itself
+wrong — do not bring it back.** The very next run came back with `reopt.
+requests: 1` and an EMPTY `shift_delivery`, and this time it was not a fluke:
+the accept-time gate checks candidates at the server's native ~99 points
+(`chk_az`/`chk_el`), but `blend_paths`/`blend_to` fly at `n_path` (360,
+upsampled), and **upsampling alone roughly HALVES `path_min_radius`** —
+measured directly, an ordinary already-accepted candidate with no fold in it at
+all read 3.39° at 99 points and 1.54° at 360, same curve. Checking the upsampled
+version against a threshold calibrated for the native one failed nearly every
+candidate, including `blend_to` itself at `w = 1`: the whole run's worth of
+reopt replies were silently abandoned one after another and the kite flew the
+STARTUP path for all 112 s — invisible to `criteria`, which scores whatever
+`fec` was actually given, not the discarded replies. A plotted comparison
+against the optimizer's own (uncorrected) path made it obvious: the flown
+pattern was the wide, short-tether STARTUP shape throughout, nothing like the
+narrow one the optimizer kept sending.
+
+**Fixed by comparing like resolution to like, not an absolute threshold from a
+different one.** `blend_r0`, the smaller of the two blend ENDPOINTS' own
+`path_min_radius` — BOTH measured at `n_path`, captured once at blend start —
+replaces `check_pattern_feasible`/`min_feasibility_margin`/`blend_l0` entirely;
+an intermediate `w` must clear `blend_fold_margin * blend_r0` (default 0.5).
+Since `blend_r0` IS the smaller endpoint, both `w = 0` and `w = 1` trivially
+clear it for any margin `<= 1` — no absolute-threshold mismatch, and no "even
+the endpoint folds" case to abandon out of. A genuine fold is nowhere near the
+bar regardless: measured, a folded blend's minimum was ~0.000° against
+endpoints of 1.33°/0.86°.
+
+**That reintroduced a milder version of the same problem `blend_l0` was for.**
+A fold zone in `w` is not always a brief dip — measured, one spanned `w` =
+0.2-0.78, over half the blend, `path_min_radius` under 10 % of `blend_r0`
+throughout. There is no smooth crossing: every point strictly between fails the
+same gate the endpoints on either side pass. Resuming with a single jump (fine
+for a NARROW fold) meant a 0.58 jump in blend weight once the clock-driven `w`
+cleared the far side — most of the pattern's shape changing in one step:
+`criteria` failed `max d < 8.0°` (10.36° measured) and the extra-loop episodes
+were back, just later in the run. `blend_max_jump` (default 0.3) bounds it: a
+recovery bigger than that ABANDONS the install — reverts to `blend_from`,
+rewinds `reopt_lap` for an immediate replacement — instead of crossing a fold
+that wide.
+
+Measured (archive `2026-08-20_120810`): `reopt.requests: 7`, `installed: 7`,
+all 8 criteria pass (max d 5.99° vs the 10.36° that failed), power 20445 W, and
+unwrapped ψ stays in -333.2..-2.7° for the whole run with every lobe the same
+~260-280° swing — no extra-loop episodes anywhere. **This is NOT the version in
+the script** — see the next entry for why, and what replaced it.
+
+## Why retry, not react — checking the whole blend BEFORE flying any of it (2026-08-20)
+
+`blend_max_jump`'s own abandon path still visibly discontinuous. Plotted a run
+(`d`, elevation, ψ/χ/χ_set, `Δχ`, `u_s`, tether force) and found `u_s` stepping
+and `d` spiking to ~6° at t = 70-73 s. Traced it to the abandon branch itself:
+it called `set_path!(fec, blend_from...)`, snapping `fec` back to `w = 0` —
+but `fec` was ALREADY at `blend_w_eff`'s shape (already verified safe, already
+what was installed by the `set_path!` at the bottom of the loop every step it
+held), so the revert was a second, gratuitous jump on the far side of the one
+this whole mechanism exists to avoid.
+
+Removing the revert (stay at `blend_w_eff`, just clear `blend_from`/`blend_to`)
+fixed the jump but broke something worse: five reopt installs fired in 10 s
+(each abandon rewinding `reopt_lap` for an immediate retry), each one's
+`blend_from` inheriting the PREVIOUS attempt's barely-blended, increasingly
+lopsided shape, burning through `max_reopt` while the kite ended up frozen at
+`blend_w_eff = 0.094` — 9 % blended — for the last 40+ s of a 112 s run.
+Unwrapped ψ reached +1886°: not oscillating, continuously spinning on the one
+lobe the degenerate shape happened to cover. `criteria` still passed (scored
+against whatever `fec` was actually given, over the WHOLE run, so 70 good
+seconds hid 40 broken ones) — this was WORSE than the jump it replaced, just
+less visible in one plot.
+
+**The user's question was the right one: why should a bad reply ever get
+`blend_from`/`blend_to` set for it at all?** Every fix so far reacted to a fold
+AFTER a blend had already started. Checking the WHOLE prospective blend BEFORE
+either global is ever assigned removes the entire class: if `blend_to` is
+guaranteed fold-free across every `w` in `[0, 1]`, nothing downstream needs a
+guard, a jump cap, or an abandon path — the blend loop goes back to a plain
+linear ramp, no state but `blend_from`/`blend_to`/`blend_t0`.
+
+`blend_folds(az0, el0, az1, el1)` (`examples/simple_opt_reelout.jl`) samples
+`path_min_radius` at `blend_probe_points` values of `w` and compares each
+against `blend_fold_margin * min(radius(az0,el0), radius(az1,el1))` — the same
+relative test as `blend_r0`, just run ONCE, upfront, over the whole range
+instead of reactively at the clock-driven `w`. In the reopt accept gate it
+becomes a fourth condition alongside curvature/clearance/elevation, wrapped in
+`for blend_attempt in 0:blend_max_retries`: a fold requests a fresh WARM
+`/step` and retries (holding the simulation — the wall time already shows up in
+`blocked_s`), and only gives up — same as any other rejection, falling back to
+the ordinary `reopt_every_n_laps` schedule — once retries are exhausted. The
+el_bias shift's own rung ladder gets the same check for free: a rung that folds
+is treated exactly like a rung short of margin, tried and passed over for the
+next, smaller one.
+
+**Two bugs on the way to a working version, both self-inflicted:**
+
+1. First cut checked `blend_folds(fec.az_path, fec.el_path, cand_az, cand_el)`
+   directly — but `cand_az`/`cand_el` come out of `prepare_path` (resampled,
+   rotated to the azimuth extreme), and raw `fec.az_path` is neither. Blending
+   two curves whose point correspondence doesn't match TELLS `blend_paths`
+   completely different things are the same index, which folds catastrophically
+   at every `w`, not just where the two curves actually differ. Measured:
+   `installed: 0` for the WHOLE run — even the very first reopt reply, at
+   L = 189 m, previously margin 1.02 and clean at every resolution checked so
+   far, was rejected every time. Fixed by canonicalizing `fec.az_path`/
+   `el_path` through the SAME `prepare_path(...; resample = n_path, up_loops =
+   fcs.up_loops)` used to build `cand_az`/`cand_el`, hoisted once per attempt as
+   `cand_from` and reused for both the check and the eventual `blend_from`.
+2. (Caught by the same fix, not separately measured): the retry loop's `for
+   blend_attempt in 0:blend_max_retries` needed an extra `end` when it went in
+   around the existing `if margin < ... elseif ... else ... end` chain — a
+   plain missing-`end` `ParseError`, not a logic bug, but worth naming since
+   Julia's error pointed at a line number far from the actual mismatch.
+
+Measured (archive `2026-08-20_125009`, after both fixes): `reopt.requests: 5`,
+`installed: 5` — every reply installed FIRST TRY, no retries spent. All 8
+criteria pass, max d 4.95° (below the 5.99° a runtime hold still left), power
+19438 W, unwrapped ψ -333.2..-2.7° for the whole run, and the largest
+`set_steering` single-step change anywhere in the settled window (t >= 28.5 s)
+is 0.031 — no discontinuity, however small, anywhere. **Every number here is
+real except the power** — see the next entry: `blend_to` was never actually
+set for a reopt install this whole time, so none of these five runs ever flew
+a re-optimized path at all. `blend_fold_margin`, `blend_probe_points` and
+`blend_max_retries` are `TrajOptSettings` fields (`src/traj_opt_settings.jl`);
+`blend_l0` and `blend_max_jump` no longer exist.
+
+## `blend_to` was never assigned — every "installed" run this session flew the STARTUP path (2026-08-20)
+
+Every verification above was read off `reopt_events`/`criteria`, which score
+whatever `fec` was actually given — and `fec` was never given anything but the
+STARTUP path, for five straight runs, despite every one logging `installed: 5`
+with a distinct margin and predicted power per install. Caught only because
+the user asked for a pattern plot and read it correctly: "flown" was the wide,
+150 m-anchor STARTUP shape for the WHOLE run, "optimizer, uncorrected" showed
+five genuinely narrower replies, and they did not match. Power alone should
+have been the tell — 19438 W repeated bit-for-bit across three different code
+versions (the buggy fold-check giving `installed: 0`, and both "fixed"
+versions after it) is not three re-optimized runs converging on the same
+number, it is the SAME unre-optimized run three times.
+
+The cause: hoisting `cand_from` (`blend_folds` canonicalization fix, above)
+replaced
+
+```julia
+global blend_from = prepare_path(fec.az_path, fec.el_path;
+    resample = n_path, up_loops = fcs.up_loops)
+global blend_to = (cand_az, cand_el)
+```
+
+with `global blend_from = cand_from` — and dropped the `blend_to` line
+entirely. `blend_to` stayed `nothing` (cleared at the end of the PREVIOUS
+blend, and nothing after ever set it again), so `if !isnothing(blend_to)`
+in the blend loop was false every step: `set_path!` was never called with the
+new candidate, `fec` never moved. Every OTHER piece of accept-branch
+bookkeeping — `opt_paths_raw`, `el_applied`, `fig8_idx_progress` rescaling,
+the "installed" event with its real margin and predicted power — ran exactly
+as if the install had happened, because none of it actually checks that
+`blend_to` is what the guidance is using.
+
+Restored the missing line. Verified directly, not just from the log this
+time: archive `2026-08-20_130953`, `fec.az_path` at the end of the run spans
+-7.90..7.91°, matching `opt_paths_raw[end]` (the LAST, narrowest reply) to four
+significant figures — not `opt_paths_raw[1]` (the startup reply, -18.5..19.4°)
+the way it silently had every time before. Flown azimuth extent narrows
+progressively through the run (±17° at t=45-50 s, ±14° at t=70-75 s, ±7° at
+t=105-110 s), matching the five installs at L = 189/229/274/324/382 m. Power
+20515 W — finally a DIFFERENT number from the 19438 W that recurred across
+three runs that never re-optimized at all. Unwrapped ψ still -333.2..-2.7° for
+the whole run. This is the version in the script.
+
+**Lesson for next time a check here reads clean:** `criteria` and the reopt
+event log both score/report what a run BELIEVES it did, not what `fec` was
+actually given. When a fix touches `blend_from`/`blend_to` again, confirm
+`fec.az_path`'s extent against `opt_paths_raw[end]` directly before trusting
+either.
+
 ## `Broken pipe` on POST: HTTP.jl only auto-retries a dead pooled socket for GET (2026-08-20)
 
 `docs/reelout_next_steps.md` had this as a client-side stale socket that
