@@ -424,6 +424,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "wall time the simulation was frozen waiting for replies [s]"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
+        "blend_retries" => (@isdefined(blend_retries_total) ? blend_retries_total : 0,
+            "cold-restart attempts spent on a reply whose blend folded or \
+             predicted collapsed power (`blend_folds`/`min_power_frac`), across \
+             every install this run"),
         # Keyed by time, but two events CAN share one: a blocking solve is
         # requested and collected on the same step, so a seed skipped from the
         # failure cache carries the same `t` as the install that follows it. A

@@ -1277,6 +1277,60 @@ Existing `print_fig8_metrics` regression tests that count `criteria` exactly
 (`test_fig8_controller.jl`, `metrics_pattern_extent`) went `7 -> 8` and
 `4 -> 5` for the new check.
 
+## The blend-fold retry was asking the same question three times, and once fixed, converged on a collapsed pattern (2026-08-20)
+
+The user asked directly: between the three retries logged as "blend folds
+after 3 retries" (`t_060.8_s`, `t_072.5_s`, `t_085.3_s` on one run), did
+anything actually change between attempts? No — the retry called `opt_step`
+(a WARM request) with an unchanged `length`/`winch_params`/`min_turn_radius`
+every time. A warm step re-anchors the server's OWN previous optimum, so an
+unchanged query from an unchanged warm-start state solves to the same local
+optimum every time: the three retries almost certainly re-asked the identical
+question and got the identical folding answer back, at the cost of ~3x the
+wall time for nothing. `reopt_retry_el_offset`/`el_seeds` exist for exactly
+this reason on a solver FAILURE (docstring: "a retry from a different seed
+usually lands elsewhere") — reused here.
+
+**First cut scaled the guess offset UP by `blend_attempt`**
+(`guess_el_center + blend_attempt * reopt_retry_el_offset`, so retry 3 asked
+from 3x the one offset that magnitude is actually validated at). Measured:
+`criteria` FAILED `RMS d`, `max d` AND the new `heading range` — the first
+regression the new check caught for real. One install (`t_087.7_s`) predicted
+2094 W against ~22000 W everywhere else in the SAME run, margin 0.87,
+clearance 153.6 m — a pattern collapsed to near-zero amplitude, which
+trivially clears curvature margin, clearance and `blend_folds` (there is
+almost no pattern left to be tight, low, or foldable), got installed, and
+unwrapped ψ reached -693° by the end.
+
+Two fixes, both needed:
+
+1. **Bounded the retry seed.** Alternating `guess_el_center +-
+   reopt_retry_el_offset` (never scaled past the one validated offset)
+   instead of walking further away each attempt.
+2. **A power floor**, checked alongside `blend_folds` and retried the same
+   way: `new_pred >= min_power_frac * opt_power_pred` (default 0.3), against
+   the STARTUP prediction specifically — not the previous install's, so a
+   chain of retries cannot ratchet the floor down alongside itself. This is
+   the one that actually would have caught the collapsed pattern; the seed
+   bound only reduces how often a bad basin is reached in the first place.
+
+Measured (archive `2026-08-20_134122`): all 9 criteria pass, 7 installs, every
+predicted power back in the ~21000-23200 W band (the `t_087.7_s`-equivalent
+install this time predicted 23244 W), power 20519 W, unwrapped ψ
+-333.2..-2.7°. `min_power_frac` is a `TrajOptSettings` field
+(`src/traj_opt_settings.jl`).
+
+**No way to say how many retries a run actually spent, short of grepping
+`@info` text out of stdout** — asked directly, and the honest answer was an
+inference from wall time (28.3 s/install measured vs a clean, no-retry
+baseline of 15.1 s/install two runs earlier), not a number. Added
+`blend_retries_total`, incremented once per cold-restart attempt, reported as
+`reopt.blend_retries` in the run summary (`examples/reelout_results.jl`)
+alongside `requests`/`installed`/`blocked_s`. Measured directly on the next
+run (archive `2026-08-20_135218`): `blend_retries: 3` across the 7 installs,
+criteria and power unchanged (all 9 pass, 20519 W) — confirms retries are
+firing in normal operation, not just in the pathological runs measured above.
+
 ## `Broken pipe` on POST: HTTP.jl only auto-retries a dead pooled socket for GET (2026-08-20)
 
 `docs/reelout_next_steps.md` had this as a client-side stale socket that

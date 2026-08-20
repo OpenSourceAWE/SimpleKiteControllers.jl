@@ -333,6 +333,19 @@ multi-modal, so the guess is a choice about the answer.
     """
     blend_max_retries::Int64 = 3
     """
+    Fraction of the STARTUP install's predicted power a re-optimization reply
+    must clear, checked alongside `blend_folds` and retried the same way
+    (`examples/simple_opt_reelout.jl`). A pattern collapsed to near-zero
+    amplitude trivially clears curvature/clearance margin and `blend_folds` —
+    there is almost no pattern left to be tight, low, or foldable — but is a
+    candidate no run should fly: measured 2026-08-20, 2094 W predicted against
+    ~22000 W everywhere else in the same run, installed anyway because nothing
+    else caught it. Checked against the STARTUP prediction specifically, not
+    the previous install's, so a chain of retries cannot ratchet the floor down
+    alongside itself.
+    """
+    min_power_frac = 0.3
+    """
     Seconds between `/status` polls while a solve is running. SIMULATED seconds
     when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
     simulated then). The solve takes 7-13 s of wall time (measured), so polling
@@ -434,6 +447,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("blend_probe_points must be >= 3, got $(tos.blend_probe_points).")
     tos.blend_max_retries >= 0 ||
         error("blend_max_retries must be >= 0, got $(tos.blend_max_retries).")
+    0 < tos.min_power_frac <= 1 ||
+        error("min_power_frac must be in (0, 1], got $(tos.min_power_frac).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     return tos

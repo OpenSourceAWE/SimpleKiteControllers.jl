@@ -860,6 +860,7 @@ reopt_t_request = NaN       # [s] when the pending request went out
 reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
 reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
 reopt_events = NamedTuple[] # one row per solve, for the run summary
+blend_retries_total = 0     # cold-restart attempts spent on a folded/collapsed reply
 # The blend in progress: two canonical paths of equal length and a start time.
 # Both are guaranteed fold-free across the whole w in [0, 1] before either is
 # ever assigned — see the accept gate's fold-check below.
@@ -1334,20 +1335,61 @@ try
                         tab = opt_trajectory(; url = tos.base_url)
                     # The whole prospective blend to a converged reply is checked
                     # (`blend_folds`) before it is ever installed, and a folded one
-                    # is not flown at all: a fresh warm /step is requested instead,
+                    # is not flown at all: a fresh reply is requested instead,
                     # holding the simulation, up to `blend_max_retries` times. This
                     # replaced three successive runtime-side attempts to react to a
                     # fold DURING an already-started blend, each of which traded one
                     # failure mode for another — see the tuning log entry "Why
                     # retry, not react" for the measurements behind the choice.
+                    #
+                    # COLD each time, not a repeated warm `/step`: a warm step
+                    # re-anchors the server's OWN previous optimum, and asking for
+                    # the same length again from the same warm-start state solves
+                    # to the same local optimum every time — measured 2026-08-20,
+                    # three installs logged "rejected — blend folds after 3
+                    # retries" with nothing varied between attempts, so the three
+                    # retries almost certainly re-asked the identical question and
+                    # got the identical folding answer back. `el_seeds`/
+                    # `reopt_retry_el_offset` exist for the same reason on a
+                    # solver FAILURE; reused here with the same "one attempt at
+                    # most, per install" cost, since a retry that folds again is
+                    # a normal rejection, not a run-ending one.
+                    reject_reason = ""
                     for blend_attempt in 0:tos.blend_max_retries
                         if blend_attempt > 0
-                            @info @sprintf("  ... candidate at L = %.0f m folds in \
-                                            blend; requesting a fresh reply (retry \
-                                            %d of %d), holding the simulation.",
-                                           l_now, blend_attempt, tos.blend_max_retries)
-                            opt_step(StepParams(; length = l_now, winch_params = winch,
-                                                min_turn_radius = opt_r_min);
+                            global blend_retries_total += 1
+                            # Alternating +/- `reopt_retry_el_offset`, not scaled
+                            # UP by `blend_attempt`: that grew as far as 3x the
+                            # one offset this magnitude is actually validated at
+                            # (`reopt_retry_el_offset`'s own docstring, tuned for
+                            # solver failures) — measured 2026-08-20, it walked
+                            # the guess far enough to converge on a technically
+                            # non-folding but near-collapsed pattern (2094 W
+                            # predicted against ~22000 W everywhere else, margin
+                            # 1.71 — trivially "safe" because there is almost no
+                            # pattern left to fold), which the run then flew,
+                            # unwrapped ψ reaching 693° start to end.
+                            retry_el_seed = tos.guess_el_center +
+                                (isodd(blend_attempt) ? 1 : -1) * tos.reopt_retry_el_offset
+                            @info @sprintf("  ... candidate at L = %.0f m rejected \
+                                            (%s); cold-restarting from guess el \
+                                            %.0f° (retry %d of %d), holding the \
+                                            simulation.",
+                                           l_now, reject_reason, retry_el_seed,
+                                           blend_attempt, tos.blend_max_retries)
+                            retry_az, retry_el = figure_eight_path(tos.guess_a,
+                                tos.guess_b, tos.guess_c, tos.guess_d, 0.0,
+                                retry_el_seed, 0.0, tos.guess_points)
+                            retry_params = InitParams(; name = tos.name, length = l_now,
+                                winch_params = winch, inflow_conditions = inflow,
+                                trajectory = Trajectory(collect(retry_az),
+                                                        collect(retry_el)),
+                                input_depower = depower_seed(tos, inflow.wind_speed),
+                                reg_weight = tos.reg_weight,
+                                detect_simple_bounds = tos.detect_simple_bounds,
+                                min_turn_radius = opt_r_min, pattern_limits = opt_box)
+                            retry_reply = opt_init(retry_params; url = tos.base_url)
+                            opt_step(StepParams(l_now, winch, retry_reply.trajectory);
                                      url = tos.base_url, wait = false)
                             t_retry = time()
                             retry_state = "solving"
@@ -1549,6 +1591,17 @@ try
                             check_pattern_feasible(chk_az, chk_el, l_now,
                                 fcs.max_steering; c1 = c1_at(phase), prn = false).margin
                         clearance = path_min_height(chk_az, chk_el, l_now)
+                        # Against the STARTUP prediction, not the previous install's:
+                        # `opt_power_pred` never moves, where a chain of retries could
+                        # otherwise ratchet the floor down alongside itself. A
+                        # collapsed-to-near-zero-amplitude pattern trivially clears
+                        # margin/clearance (there is almost no pattern left to be
+                        # tight or low) and `blend_folds` (nothing to fold either) —
+                        # measured 2026-08-20, 2094 W predicted against ~22000 W
+                        # everywhere else in the same run, installed anyway, ψ
+                        # unwrapping 693° by the end.
+                        new_pred = Float64(tab["metrics"]["avg_power_W"])
+                        cand_folds = blend_folds(cand_from..., cand_az, cand_el)
                         if margin < tos.min_feasibility_margin
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("curvature margin %.2f%s",
@@ -1576,13 +1629,20 @@ try
                                                         min_elevation + margin = %.1f°",
                                                        minimum(chk_el), el_floor))
                             break
-                        elseif blend_folds(cand_from..., cand_az, cand_el)
+                        elseif cand_folds ||
+                               new_pred < tos.min_power_frac * opt_power_pred
+                            reason = cand_folds ? "blend folds" :
+                                @sprintf("%.0f W predicted, below %.0f%% of the \
+                                          startup prediction (%.0f W)",
+                                         new_pred, 100 * tos.min_power_frac,
+                                         opt_power_pred)
                             if blend_attempt < tos.blend_max_retries
+                                reject_reason = reason
                                 continue   # a fresh reply is requested at the top
                             end
                             event = (; t, l = l_now, status = "rejected",
-                                     detail = @sprintf("blend folds after %d retries",
-                                                       tos.blend_max_retries))
+                                     detail = @sprintf("%s, after %d retries",
+                                                       reason, tos.blend_max_retries))
                             break
                         else
                             global blend_from = cand_from
@@ -1630,7 +1690,6 @@ try
                             n_path_new = length(fec.az_path)
                             global fig8_idx_progress *= n_path_new / n_path
                             global n_path = n_path_new
-                            new_pred = Float64(tab["metrics"]["avg_power_W"])
                             push!(pred_timeline, (t = t, power = new_pred))
                             global margin5_flown = phase5_margin(chk_az, chk_el)
                             # Not a rejection reason: this path is accepted for the
