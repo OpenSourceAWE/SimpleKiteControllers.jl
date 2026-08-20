@@ -38,7 +38,7 @@ traj_opt:
     # basin in tether LENGTH — which a reel-out run sweeps — so it is the first
     # number to move when a length throws 422. The alternatives are 22 (a wider
     # basin, but it does not converge at the current f_high) and 24 (untested).
-    guess_el_center:  26.0   # centre elevation of the guess                 [deg]
+    guess_el_center:  30.0   # centre elevation of the guess                 [deg]
     guess_points:      361   # points sent; the reply has as many              [-]
 
     # --- Solver knobs ----------------------------------------------------- #
