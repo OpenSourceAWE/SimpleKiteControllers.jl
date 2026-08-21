@@ -19,10 +19,10 @@ which the `Logger(sam, steps)` constructor calls:
 
 | slots | contents | bytes/sample (Float32) | share |
 |------:|----------|-----------------------:|------:|
-| ~44 | structural points — 39 from `V3Kite/data/struc_geometry.yaml` + 5 tether interior nodes (`n_segments: 6`) | 528 | 11.8 % |
+| 44 | structural points — 39 from `V3Kite/data/struc_geometry.yaml` + 5 tether interior nodes (`n_segments: 6`) | 528 | 11.8 % |
 | **288** | **VSM panel corners — 4 per panel × `n_panels: 72` (`V3Kite/data/vsm_settings.yaml`)** | **3456** | **77.5 %** |
-| 1 | wing origin | 12 | 0.3 % |
-| — | all remaining `SysState` fields (quaternions, turn rates, wind vectors, forces, moments, `twist_angles`, `flap_angle`, winch set values, `var_01..16`, …) | 466 | 10.4 % |
+| 2 | wing origin + the co-located rigid body's origin (one slot and one `orient` frame each) | 24 | 0.5 % |
+| — | all remaining `SysState` fields (quaternions, turn rates, wind vectors, forces, moments, `twist_angles`, `flap_angle`, winch set values, `var_01..16`, …) | 454 | 10.2 % |
 | | **total** | **4462** | |
 
 4462 B × 42,663 samples ≈ **190 MB raw**. `save_log` defaults to `compress = true`
@@ -53,8 +53,23 @@ Items 2 and 3 are noise. The corners are the whole story.
 |---|---:|---|
 | as-is, 90 Hz | 152 MB | |
 | resample to 20 Hz | **~34 MB** | 4.5× — the one-line fix, plenty for KiteViewers replay |
-| don't log panel corners (~45 slots instead of 333), keep 90 Hz | ~33 MB | no signal loss, but needs a flag upstream: `write_aero_log_points!` indexes `X`/`Y`/`Z` unconditionally, so a shorter `Logger` would go out of bounds |
+| don't log panel corners (46 slots instead of 334), keep 90 Hz | ~33 MB | no signal loss, but needs a flag upstream: `write_aero_log_points!` indexes `X`/`Y`/`Z` unconditionally, so a shorter `Logger` would go out of bounds |
 | both | ~8 MB | |
+
+## Doing it after the fact: `examples/compress.jl`
+
+The third row needs no upstream flag as long as the trimming happens *after* the
+run: `compress_log(file)` rewrites a saved log without the corner block, in place
+or to a new file, with `every = n` to decimate on top. Nothing downstream has to
+change — `load_log` takes the position count from the file itself
+(`P = length(table.Z[1])`), and `KiteViewers.update_segments!` only reads slots
+`1:n_points` — so a trimmed log replays in `simple_reelout_play.jl` unchanged.
+The `created_at` stamp and the `var_01..16` column names survive the rewrite.
+
+Measured on the reference run: **152 MB -> 35 MB** (4.3x) in a few seconds, and 11.9 MB
+(12.8x) with `every = 3`. The corner block is slots 45..332; the two origin slots
+move down to 45..46, which only code recomputing `position_slots` from a live
+model would notice.
 
 **Caveat on resampling:** decimating aliases the fast signals — `winch_force` peaks,
 `t_sim`, steering. The metrics already recorded in the run's `.yaml` (peak 951 N,
