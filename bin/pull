@@ -5,7 +5,7 @@ if [[ $(basename $(pwd)) == "bin" ]]; then
     cd ..
 fi
 
-REPOS=(SimulationResults V3Kite KiteUtils MakieControlPlots WinchControllers)
+REPOS=(SimulationResults V3Kite KiteUtils MakieControlPlots WinchControllers AWETrim)
 
 for repo in "${REPOS[@]}"; do
     if [[ ! -d "../$repo" ]]; then

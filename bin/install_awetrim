@@ -20,7 +20,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/awegroup/AWETrim"
-BRANCH="add_run_server"
+BRANCH="develop"
 TARGET="../AWETrim"
 
 if [[ $(basename "$(pwd)") == "bin" ]]; then
