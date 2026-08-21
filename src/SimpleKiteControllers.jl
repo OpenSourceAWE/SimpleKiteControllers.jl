@@ -37,6 +37,7 @@ export winch_state_pct
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
+export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
 export TrajOptSettings

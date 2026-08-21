@@ -667,7 +667,7 @@ if run_archive
         # Without this the archive cannot reproduce its own run: the guess decides
         # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin
         # decide what is re-anchored and what is flown.
-        joinpath(skc_data_path(), "traj_opt.yaml"),           # optimizer guess and knobs
+        joinpath(skc_data_path(), traj_opt_settings_file(project)), # optimizer guess and knobs
     ]
     output_files = [
         joinpath(output_path, log_name * ".arrow"),

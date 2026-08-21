@@ -8,7 +8,16 @@
 # function (analogous to `KiteUtils.wc_settings`); it names its OWN file
 # (fc_settings_reelout.yaml, not fig8's fc_settings.yaml) because REEL_OUT needs
 # `compliance: 0`, unlike the figure-eight runs' default of 0.5.
+# `traj_opt_settings` is read the same way, by `traj_opt_settings_file`, and
+# feeds `simple_opt_reelout.jl`'s `TrajOptSettings`. `winch_kv_table` feeds
+# `winch_kv` (via `winch_kv_table_file`) and `turn_rate_coeffs` feeds
+# `reload_turn_rate_table!` (via `turn_rate_coeffs_file`); both are only
+# resolved through THIS project when a caller passes it explicitly —
+# `__init__`'s own turn-rate load reads `system_fig8_200m.yaml` instead.
 system:
     sim_settings: "settings_reelout_150m.yaml"
     wc_settings: "wc_settings.yaml"
     fc_settings: "fc_settings_reelout.yaml"
+    traj_opt_settings: "traj_opt.yaml"
+    winch_kv_table: "winch_kv_table.yaml"
+    turn_rate_coeffs: "turn_rate_coeffs.yaml"

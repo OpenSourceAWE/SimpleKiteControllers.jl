@@ -599,6 +599,44 @@ function fc_settings(project = project_file())
 end
 
 """
+    turn_rate_coeffs_file(project = project_file()) -> String
+
+Get the turn-rate table filename from the system project, the same way as
+[`fc_settings`](@ref). Returns the value of the `turn_rate_coeffs` field of
+the project's `system` section; present in every project.
+"""
+function turn_rate_coeffs_file(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["turn_rate_coeffs"]
+end
+
+"""
+    winch_kv_table_file(project = project_file()) -> String
+
+Get the winch kv table filename from the system project, the same way as
+[`fc_settings`](@ref). Returns the value of the `winch_kv_table` field of the
+project's `system` section; only reel-out projects carry it.
+"""
+function winch_kv_table_file(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["winch_kv_table"]
+end
+
+"""
+    traj_opt_settings_file(project = project_file()) -> String
+
+Get the trajectory-optimizer settings filename from the system project, the
+same way as [`fc_settings`](@ref). Returns the value of the
+`traj_opt_settings` field of the project's `system` section; present in every
+project that flies against an externally optimized path (both fig8 and
+reel-out).
+"""
+function traj_opt_settings_file(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["traj_opt_settings"]
+end
+
+"""
     winch_force_gains(fcs::FC_Settings) -> NamedTuple
 
 Force-mode winch gains with the `compliance` scaling applied, as a NamedTuple

@@ -19,8 +19,6 @@ it lives here only because the guidance's feasibility check is the only
 consumer. A second kite means a second file, not a second column.
 """
 
-const TURN_RATE_TABLE_FILE = "turn_rate_coeffs.yaml"
-
 # Quality bar an interpolation neighbour must meet, per V3Kite's steering_test_v3.jl.
 const TURN_RATE_MAX_C1_REL_STD = 0.01
 const TURN_RATE_MAX_G_REL_STD = 0.35
@@ -70,12 +68,13 @@ function _parse_turn_rate_entry(edict)
 end
 
 """
-    _load_turn_rate_table() -> TurnRateTable
+    _load_turn_rate_table(project = project_file()) -> TurnRateTable
 
-Read and parse `data/turn_rate_coeffs.yaml` fresh from disk.
+Read and parse the system project's `turn_rate_coeffs` file
+([`turn_rate_coeffs_file`](@ref)) fresh from disk.
 """
-function _load_turn_rate_table()
-    path = joinpath(skc_data_path(), TURN_RATE_TABLE_FILE)
+function _load_turn_rate_table(project = project_file())
+    path = joinpath(skc_data_path(), turn_rate_coeffs_file(project))
     raw = YAML.load_file(path)
     conditions = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in raw["conditions"])
     entries = [_parse_turn_rate_entry(e) for e in raw["entries"]]
@@ -85,13 +84,14 @@ end
 const _TURN_RATE_TABLE = Ref{TurnRateTable}()
 
 """
-    reload_turn_rate_table!()
+    reload_turn_rate_table!(project = project_file())
 
-Re-read `data/turn_rate_coeffs.yaml` and refresh [`turn_rate_coeffs`](@ref),
-[`V3_TURN_RATE_COEFFS`](@ref), [`V3_TURN_RATE_C1`](@ref) and
-[`V3_TURN_RATE_C2`](@ref) from it. The table is otherwise read only at package
-load — call this after V3Kite.jl's `examples/build_turn_rate_table.jl` appends
-rows in the same session, instead of restarting.
+Re-read the system project's `turn_rate_coeffs` file ([`turn_rate_coeffs_file`](@ref))
+and refresh [`turn_rate_coeffs`](@ref), [`V3_TURN_RATE_COEFFS`](@ref),
+[`V3_TURN_RATE_C1`](@ref) and [`V3_TURN_RATE_C2`](@ref) from it. The table is
+otherwise read only at package load, against the default `project` — call this
+after V3Kite.jl's `examples/build_turn_rate_table.jl` appends rows in the same
+session, instead of restarting.
 
 If the `[0,0,40]`/0.25 lookup behind `V3_TURN_RATE_C1`/`C2` throws, this function
 warns and leaves them at their previous value (`NaN` before the first successful
@@ -99,8 +99,8 @@ load): a data-quality problem in one grid cell must never become a load-time
 failure, since this runs from `__init__`. `turn_rate_coeffs` still throws
 normally for any other caller asking for that combination.
 """
-function reload_turn_rate_table!()
-    table = _load_turn_rate_table()
+function reload_turn_rate_table!(project = project_file())
+    table = _load_turn_rate_table(project)
     _TURN_RATE_TABLE[] = table
     global V3_TURN_RATE_COEFFS = Dict((e.body_damping, e.depower) => (c1 = e.c1, c2 = e.c2, delay = e.delay)
                                        for e in table.entries)
@@ -110,7 +110,7 @@ function reload_turn_rate_table!()
         global V3_TURN_RATE_C2 = default.c2
     catch e
         @error "reload_turn_rate_table!: could not refresh V3_TURN_RATE_C1/C2 -- " *
-               "the [0,0,40]/0.25 row in data/$(TURN_RATE_TABLE_FILE) is unusable. " *
+               "the [0,0,40]/0.25 row in data/$(turn_rate_coeffs_file(project)) is unusable. " *
                "Leaving them at their previous value. Re-identify that cell with " *
                "V3Kite.jl/examples/build_turn_rate_table.jl." exception=(e, catch_backtrace())
     end

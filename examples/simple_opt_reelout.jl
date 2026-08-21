@@ -285,7 +285,7 @@ DISABLE_UFC = true
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 # The optimizer's own settings: server, initial guess, solver knobs, margin.
-tos = TrajOptSettings("traj_opt.yaml")
+tos = TrajOptSettings(traj_opt_settings_file(project))
 
 # Per-run overrides of the settings just loaded, for a SWEEP: read and cleared
 # here like SHOW_PLOTS above, so a leftover value can never silently change the
@@ -392,7 +392,7 @@ fcs.compliance == 0 ||
 # reads). `dt` is the file's one placeholder; the plant's timestep wins.
 dt0 = 1 / project_set.sample_freq
 wc = load_wc_settings(wc_settings(project); dt = dt0)
-wc.kv = winch_kv(project_set.v_wind)     # overrides the file's flat kv, see data/winch_kv_table.yaml
+wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, see data/winch_kv_table.yaml
 rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 

@@ -113,7 +113,7 @@ project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 # The optimizer's own settings: server, initial guess, solver knobs. Separate
 # from fcs on purpose — see the file's header and the docstring above.
-tos = TrajOptSettings("traj_opt.yaml")
+tos = TrajOptSettings(traj_opt_settings_file(project))
 
 project_set = Settings(project)
 apply_windspeed_override!(project_set, WIND_SPEED)

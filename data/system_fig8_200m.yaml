@@ -5,7 +5,14 @@
 # resolved under the active data path, which the example points here too.
 # `fc_settings` is read the same way, by this package's own `fc_settings`
 # function (analogous to `KiteUtils.wc_settings`).
+# `traj_opt_settings` is read the same way, by `traj_opt_settings_file`, and
+# feeds `simple_opt_fig8.jl`'s `TrajOptSettings`. `turn_rate_coeffs` feeds
+# `reload_turn_rate_table!`, also resolved through `turn_rate_coeffs_file`;
+# this is the project `__init__` reads it against by default, since it names
+# `project_file()`'s own default file.
 system:
     sim_settings: "settings_fig8_200m.yaml"
     wc_settings: "wc_settings.yaml"
     fc_settings: "fc_settings.yaml"
+    traj_opt_settings: "traj_opt.yaml"
+    turn_rate_coeffs: "turn_rate_coeffs.yaml"
