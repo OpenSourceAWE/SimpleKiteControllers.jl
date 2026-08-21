@@ -1,0 +1,23 @@
+# Copyright (c) 2025 Uwe Fechner
+# SPDX-License-Identifier: BSD-3-Clause
+
+if [[ $(basename $(pwd)) == "bin" ]]; then
+    cd ..
+fi
+
+REPOS=(SimulationResults V3Kite KiteUtils MakieControlPlots WinchControllers)
+
+for repo in "${REPOS[@]}"; do
+    if [[ ! -d "../$repo" ]]; then
+        echo "Error: ../$repo not found" >&2
+        continue
+    fi
+
+    cd "../$repo"
+    if ! git pull; then
+        git stash
+        git pull
+        git stash apply
+    fi
+    cd -
+done
