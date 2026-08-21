@@ -825,12 +825,12 @@ end
         @test tos.base_url == "http://127.0.0.1:8000"
         @test tos.guess_a == 30.0
         @test tos.guess_b == 12.0
-        # 26 since 2026-08-19, not the 22 that was the wider basin in tether LENGTH
-        # (2026-08-18): raising wc_settings' f_high 7600 -> 8000 moves the request's
-        # f_max with it, and at 150.0 m / 9 m/s the 22 seed throws IPOPT's iteration
-        # limit where it used to converge. See the YAML header, which carries both
-        # measurements and what to try if the failure pockets bite.
-        @test tos.guess_el_center == 26.0
+        # 30 since 2026-08-20 (ad08158), not the 26 that was the narrower basin in
+        # tether LENGTH before it: raising wc_settings' f_high 7600 -> 8000 moves the
+        # request's f_max with it, and at 150.0 m / 9 m/s the 22 seed throws IPOPT's
+        # iteration limit where it used to converge. See the YAML header, which
+        # carries both measurements and what to try if the failure pockets bite.
+        @test tos.guess_el_center == 30.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is
