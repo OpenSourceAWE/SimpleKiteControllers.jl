@@ -472,11 +472,12 @@ winch = winch_from_wc(rcs)
 
 # The seed, from data/traj_opt.yaml: it decides whether the solve converges and
 # which optimum it converges to. `figure_eight_path` closes the curve itself.
+el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
 guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                       tos.guess_d, 0.0, tos.guess_el_center,
+                                       tos.guess_d, 0.0, el_center_seed,
                                        0.0, tos.guess_points)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-               tos.guess_a, tos.guess_b, tos.guess_el_center, tos.guess_points)
+               tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
 
 # Anchored to the STARTING length. The pattern is optimal there and drifts off it
 # as the tether grows; re-optimizing during the run is stage 4, not this script.
@@ -558,7 +559,7 @@ catch exc
           Three candidates, most likely first:
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
               it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
-              $(tos.guess_b)°, guess_el_center = $(tos.guess_el_center)° of \
+              $(tos.guess_b)°, guess_el_center = $(el_center_seed)° of \
               data/traj_opt.yaml, which seeds the request and nothing else — \
               widening or raising it changes the guess, not the flown path. \
               Measured at 150 m and 6 m/s: 20°/11° at 18° does not converge, \
@@ -712,21 +713,34 @@ isnothing(opt_r_min) ||
 # constraint it should have carried. A retry that fails or comes back no better
 # changes nothing: the first path stays installed and the gates below judge it as
 # they always did.
+#
+# The retry asks for margin_startup*1.05, not the full min_feasibility_margin: the
+# request already carries `turn_radius_headroom` on top of the target, so jumping
+# straight to the gate's margin overshoots it at the reply (measured 2026-08-21,
+# 150 m: 0.72 -> 0.90 against a target of 0.82) and the wider turn radius narrows
+# the installed pattern enough to fail ground clearance instead. A 5 % step keeps
+# the correction close to what was actually missing.
 if opt_r_on && !isnothing(coeffs_startup)
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
                                             c1 = coeffs_startup.c1, prn = false).margin
     if margin_startup < tos.min_feasibility_margin
+        margin_retry_target = min(1.05 * margin_startup, tos.min_feasibility_margin)
+        opt_r_min_retry = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                                  margin = margin_retry_target)
         @info @sprintf("The startup path is at margin %.2f, below \
                         min_feasibility_margin = %.2f: re-solving once at L = %.1f m \
-                        under the corrected turn radius (%.2f m, was %.2f m).",
-                       margin_startup, tos.min_feasibility_margin, l_set, opt_r_min,
+                        under the corrected turn radius (%.2f m, was %.2f m), \
+                        targeting margin %.2f (+5 %%).",
+                       margin_startup, tos.min_feasibility_margin, l_set,
+                       opt_r_min_retry,
                        opt_r_min / opt_r_scale *
                            (1 + tos.turn_radius_lap_reelout_m / l_set) *
-                           tos.turn_radius_headroom)
+                           tos.turn_radius_headroom,
+                       margin_retry_target)
         t_retry = time()
         try
             retry_result = opt_step(StepParams(; length = l_set, winch_params = winch,
-                                               min_turn_radius = opt_r_min);
+                                               min_turn_radius = opt_r_min_retry);
                                     url = tos.base_url)
             retry_table = opt_trajectory(; url = tos.base_url)
             retry_raw = install_optimized_path!(retry_result)
@@ -1232,13 +1246,13 @@ try
                     # what a failed warm step falls back to (and which restarts the
                     # warm-start chain, since `/init` resets the session).
                     el_seeds = if tos.use_step
-                        tos.reopt_blocking ? (nothing, tos.guess_el_center) :
+                        tos.reopt_blocking ? (nothing, el_center_seed) :
                                              (nothing,)
                     elseif tos.reopt_blocking && tos.reopt_retry_el_offset != 0
-                        (tos.guess_el_center,
-                         tos.guess_el_center + tos.reopt_retry_el_offset)
+                        (el_center_seed,
+                         el_center_seed + tos.reopt_retry_el_offset)
                     else
-                        (tos.guess_el_center,)
+                        (el_center_seed,)
                     end
                     # Asked for under the turn authority the reply will be JUDGED
                     # with, which from phase 5 is `depower_final`'s c1 — ~23 % below
@@ -1413,7 +1427,7 @@ try
                             # 1.71 — trivially "safe" because there is almost no
                             # pattern left to fold), which the run then flew,
                             # unwrapped ψ reaching 693° start to end.
-                            retry_el_seed = tos.guess_el_center +
+                            retry_el_seed = el_center_seed +
                                 (isodd(blend_attempt) ? 1 : -1) * tos.reopt_retry_el_offset
                             @info @sprintf("  ... candidate at L = %.0f m rejected \
                                             (%s); cold-restarting from guess el \

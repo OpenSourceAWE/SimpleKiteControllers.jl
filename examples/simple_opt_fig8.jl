@@ -188,11 +188,12 @@ winch = winch_from_wc(wcs)
 # solve converges and which optimum it converges to, while fcs.f8_* size the
 # lemniscate the OTHER runs fly. `figure_eight_path` closes the curve itself
 # (last point == first), which is the shape the server expects.
+el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
 guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                       tos.guess_d, 0.0, tos.guess_el_center,
+                                       tos.guess_d, 0.0, el_center_seed,
                                        0.0, tos.guess_points)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-               tos.guess_a, tos.guess_b, tos.guess_el_center, tos.guess_points)
+               tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
 
 # What the solve must respect, as opposed to what it is scored against
 # afterwards: both are off unless data/traj_opt.yaml turns them on.
@@ -241,7 +242,7 @@ catch exc
           Three candidates, most likely first:
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
               it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
-              $(tos.guess_b)°, guess_el_center = $(tos.guess_el_center)° of \
+              $(tos.guess_b)°, guess_el_center = $(el_center_seed)° of \
               data/traj_opt.yaml, which seeds the request and nothing else — \
               widening or raising it changes the guess, not the flown path. \
               Measured at 150 m and 6 m/s: 20°/11° at 18° does not converge, \

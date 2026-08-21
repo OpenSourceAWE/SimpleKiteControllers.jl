@@ -51,6 +51,23 @@ multi-modal, so the guess is a choice about the answer.
     "Centre elevation of the guess [deg]"
     guess_el_center = 26.0
     """
+    Centre elevation [deg] `guess_el_center` STEPS UP to at
+    `guess_el_center_wind_ref` and above; `0.0` disables the step, so the guess
+    stays at `guess_el_center` whatever the wind.
+
+    A step, not a ramp like `input_depower`'s: the guess is a choice of BASIN in a
+    multi-modal solve (see the struct docstring), and a basin that converges at one
+    wind does not shrink gracefully into a worse one at another — it is either the
+    tested seed or it is not.
+    """
+    guess_el_center_high = 0.0
+    """
+    Wind speed [m/s] at and above which `guess_el_center_high` replaces
+    `guess_el_center` as the guess's centre elevation. Unused while
+    `guess_el_center_high` is `0.0`.
+    """
+    guess_el_center_wind_ref = 0.0
+    """
     Points the guess is sent with. The reply comes back with as many points as
     were sent (measured; the server's own `n_points` does not enter), so this
     also sets the resolution of the optimized path before resampling.
@@ -485,5 +502,10 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("min_power_frac must be in (0, 1], got $(tos.min_power_frac).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
+    tos.guess_el_center_high >= 0 ||
+        error("guess_el_center_high must be >= 0, got $(tos.guess_el_center_high).")
+    tos.guess_el_center_wind_ref >= 0 ||
+        error("guess_el_center_wind_ref must be >= 0, got "*
+              "$(tos.guess_el_center_wind_ref).")
     return tos
 end
