@@ -14,6 +14,10 @@
 # `reload_turn_rate_table!` (via `turn_rate_coeffs_file`); both are only
 # resolved through THIS project when a caller passes it explicitly —
 # `__init__`'s own turn-rate load reads `system_fig8_200m.yaml` instead.
+# `kite_settings`/`structural_geometry`/`aero_geometry`/`vsm_settings`/
+# `settle_settings`/`heading_settings` are V3Kite's own project keys, resolved
+# against ITS data path (not this file's), so they name V3Kite's particle-model
+# defaults (`system_psm.yaml`'s own values) unchanged.
 system:
     sim_settings: "settings_reelout_180m.yaml"
     wc_settings: "wc_settings.yaml"
@@ -21,3 +25,9 @@ system:
     traj_opt_settings: "traj_opt.yaml"
     winch_kv_table: "winch_kv_table.yaml"
     turn_rate_coeffs: "turn_rate_coeffs.yaml"
+    kite_settings: "kite_settings_psm.yaml"
+    structural_geometry: "struc_geometry.yaml"
+    aero_geometry: "cfd_aero_geometry.yaml"
+    vsm_settings: "vsm_settings.yaml"
+    settle_settings: "settle_settings_default.yaml"
+    heading_settings: "heading_settings_psm.yaml"

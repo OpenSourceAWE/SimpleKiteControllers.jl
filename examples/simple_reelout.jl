@@ -243,7 +243,8 @@ wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 # field (which init builds for it) at the same speed.
 # No cache_path either: V3Kite's default is where its own precompile workload
 # compiled the model, and a different model binary costs 40 s of re-JIT in init.
-s = init(project_set.v_wind, l_tether; body_damping = fcs.body_damping,
+s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
+    body_sim_damping = 0.8 .* fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,

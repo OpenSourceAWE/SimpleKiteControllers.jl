@@ -85,8 +85,8 @@ DAMPING_PER_STIFFNESS = 0.001  # Damping per stiffness of tether and bridles [s]
 
 # `init` leaves the data path alone, so `save_log`/`load_log` below need it set here.
 set_data_path(v3_data_path())
-s = init(V_WIND, TETHER_LENGTH; body_damping = INITIAL_BODY_DAMPING,
-    min_damping = FLOWN_BODY_DAMPING, damping_per_stiffness = DAMPING_PER_STIFFNESS,
+s = init(V_WIND, TETHER_LENGTH; body_start_damping = INITIAL_BODY_DAMPING,
+    body_sim_damping = FLOWN_BODY_DAMPING, damping_per_stiffness = DAMPING_PER_STIFFNESS,
     depower_setpoint = DEPOWER_SETPOINT, sim_time = SIM_TIME, dt = DT,
     system_yaml = PROJECT, aero_mode = AERO_MODE)
 
