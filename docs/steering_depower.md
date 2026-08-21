@@ -14,6 +14,31 @@ meters at all.** `rel_depower`/`rel_steering` are dimensionless actuator command
 
 Both paths share the same front end.
 
+## Summary
+
+- Every plant lags `rel_depower`/`rel_steering` through the same KCU rate-limited
+  P controller ([Step 1](#step-1-all-plants-the-kcu-actuator-lag)) before using them
+  for anything.
+- **V3Kite**, the plant this repo flies, then turns the lagged commands into
+  unstretched tape lengths, affinely
+  ([Step 2a](#step-2a-v3kite--the-actual-meters)):
+  $$
+  L_\mathrm{left} = 1.6 - 1.4\,u_s,\quad L_\mathrm{right} = 1.6 + 1.4\,u_s,\quad
+  L_\mathrm{depower} = 0.2 + 5.0\,u_p \ \ [\mathrm{m}]
+  $$
+  with $u_s$ = `rel_steering`, $u_p$ = `rel_depower` (plus config offsets, `0.0` by
+  default).
+- **KPS3/KPS4** never turn `rel_steering` into a length at all — it becomes an
+  angle or a force directly — and `rel_depower` passes through a length only as an
+  intermediate on the way to an angle
+  ([Step 2b](#step-2b-kps3kps4--no-steering-length-at-all)).
+- **AWETrim**'s optimizer works in its own absolute tape length $l_\mathrm{dp}$
+  [m], on a different zero than V3Kite's ([A third scale](#a-third-scale-the-awetrim-optimizer)).
+  Converting one flown depower into the other is a fixed shift, codified as
+  `awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6)/5.0 + 0.12` — see
+  [below](#the-two-models-agree-on-sensitivity-and-differ-by-an-offset) for the
+  derivation and a worked example.
+
 ## Step 1 (all plants): the KCU actuator lag
 
 `rel_*` never reaches the geometry directly — it is a *setpoint* handed to the KCU
@@ -137,7 +162,29 @@ driven by `examples/awetrim_client.jl`) does not take a relative command at all.
 `input_depower` **is** $l_\mathrm{dp}$, an absolute power-tape length in metres,
 bounded to `(1.1, 2.3)` m in AWETrim's `src/awetrim/utils/defaults.py`. So the number
 in `data/traj_opt.yaml` is already in the unit the server wants — but it is on a
-*different scale* from V3Kite's.
+*different scale* from V3Kite's, and (since 2026-08-20) only the base of what is
+actually sent.
+
+### `input_depower` is a seed, not the value flown
+
+By default the server **optimizes** `input_depower` itself and reports what it
+landed on (`DepowerSpec(mode = "optimize")`, `examples/awetrim_client.jl`); the
+YAML value is only where that search starts. `DepowerSpec` has two other modes:
+`"fixed"` pins the solve to one value — the setting the run actually flies, at the
+cost of a much smaller feasible set (§ below) — and `"profile"` optimizes one
+value per path node, returning a depower schedule instead of a scalar.
+
+The seed itself is no longer the raw `input_depower` above a reference wind speed.
+`depower_seed(tos, wind_speed)` (`examples/awetrim_client.jl`) adds
+`tos.input_depower_per_wind` metres per m/s of wind above
+`tos.input_depower_wind_ref` (7 m/s), clamped to AWETrim's own `(1.1, 2.3)` m
+bound and, below that, to `tos.input_depower_seed_max` when set — because a seed
+landing exactly on the hard 2.3 m ceiling leaves the solver no room to move and
+fails outright. It exists because the solve runs against a 14° angle-of-attack cap
+that is already binding at 6 m/s: more wind needs more tape to stay under it, and
+an un-ramped seed starts on the wrong side of the cap. `data/traj_opt.yaml` ships
+the measured slope; `TrajOptSettings.input_depower_per_wind` defaults to `0.0`, which
+reproduces the pre-ramp behaviour.
 
 AWETrim calibrates against the 2019 V3 flight logs
 (`src/awetrim/identification/controls.py`): kcu 22 % is powered at 1.7 m, kcu 30 % is
@@ -198,16 +245,41 @@ that, leaving ~0.2 m of genuine aerodynamic disagreement.
 That is why `input_depower` is left free and a predicted-vs-measured ratio is a
 comparison at two different depower settings — but the fix is a shift, not a rebuild.
 
-**Caveat, measured after the above:** both AWETrim columns here were solved with its
-built-in tether of 10 mm / 970 kg/m³ against this repo's 4 mm / 724 kg/m³. Correcting
-that raises the optimizer's power by 22-25 %, so the 0.61 m equal-power offset is an
-**upper bound** on the depower discrepancy, not the residual. The slope comparison is
-unaffected — it is a shape, not a level. See
-[fig8_tuning_log.md](fig8_tuning_log.md).
+The 0.12 offset is now code, not just a derived number:
 
-## Why it matters here
+```julia
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.12   # rel_depower units
 
-This package commands `rel_steering` and only ever sees the plant respond as a turn
-rate, $\dot\psi = c_1 v_a u_s$. The 2.8 m/unit figure above is what closes that loop
-physically, and the KCU rate limit is why `turn_rate_coeffs` carries a `delay`
-alongside `c1`/`c2` — the steering tape cannot follow a step command.
+awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5.0 + AWETRIM_V3KITE_DEPOWER_OFFSET
+```
+
+(`examples/awetrim_client.jl`). With the numbers in:
+
+$$
+u_p = \frac{l_\mathrm{dp} - 0.6}{5.0} + 0.12 \ \ [\mathrm{rel\_depower}]
+$$
+
+`0.6/5.0` is exactly `0.12`, so this collapses to $u_p = l_\mathrm{dp}/5.0$ — the AWETrim
+zero-offset (0.4 m) and the genuine aerodynamic offset (0.2 m) exactly cancel the
+`0.6` intercept. Two worked points: the seed `l_dp = 1.6` m gives $u_p = 0.32$; the
+equal-power point measured above, `l_dp = 2.01` m (AWETrim's scale for $u_p = 0.282$
+on *its own* affine map), gives $u_p = 0.402$ — 0.12 more than the naive
+`(l_dp-0.6)/5 = 0.282` a reader would get by only undoing AWETrim's own zero shift
+and ignoring the aerodynamic disagreement.
+
+This is the FULL correction — do not also subtract the 0.4 m calibration term
+separately. `TrajOptSettings.fly_opt_depower` (`false` by default) flies the
+optimizer's own depower during the fig-eight phase through this conversion, instead
+of the fixed `fcs.depower_setpoint` — installed by `simple_opt_reelout.jl` at
+startup and after every re-optimization; phase 5 always flies `fcs.depower_final`
+regardless of the flag.
+
+**Historical caveat, since fixed:** both AWETrim columns above were originally solved
+with its built-in tether of 10 mm / 970 kg/m³ against this repo's 4 mm / 724 kg/m³,
+which raised the optimizer's power by 22-25 % and made the 0.61 m equal-power offset
+an upper bound rather than the residual. AWETrim's `data/LEI-V3-KITE/system.yaml` was
+changed to 4 mm / 724 kg/m³ on 2026-08-18 (`1e27e66`, "Change tether diameter to
+4mm"), so both models now solve against the same tether and the mismatch no longer
+applies. See [fig8_tuning_log.md](fig8_tuning_log.md).
+
+
