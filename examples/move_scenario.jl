@@ -15,6 +15,13 @@ but running this file always passes `overwrite = true` — a later run at the
 same wind speed is meant to replace the one before it. `plot_scenario.jl`
 replots whatever lands here.
 
+The log is compressed on the way in (`examples/compress.jl`): the VSM panel
+corners, ~78 % of an `.arrow` file and pure visualisation data, are dropped,
+which is what keeps a scenario folder pushable to `SimulationResults` — see
+`docs/log_size.md`. Nothing downstream notices; `plot_scenario.jl` and
+`simple_reelout_play.jl` read a trimmed log unchanged. Pass `compress = false`
+to keep the corners.
+
     include("move_scenario.jl")
 """
 
@@ -24,6 +31,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using YAML
+# `compress_scenario`, run on the folder once the files have landed in it.
+include(joinpath(@__DIR__, "compress.jl"))
 
 const OUTPUT_DIR = normpath(joinpath(@__DIR__, "..", "output"))
 const RUN_DONE_FILE = joinpath(OUTPUT_DIR, "last_run_done.txt")
@@ -63,14 +72,20 @@ function scenario_name(archive_dir::AbstractString)
 end
 
 """
-    move_scenario(; overwrite = false)
+    move_scenario(; overwrite = false, compress = true, every = 1)
 
 Move the last run's archive (see `last_run_archive`) into
 `output/scenarios/vNN`, `NN` its wind speed (see `scenario_name`). Refuses
 when the target folder already has files in it unless `overwrite = true`, in
 which case they are replaced.
+
+`compress = true` then trims the panel corners out of the moved `.arrow` log
+(`compress_scenario`), roughly 4x smaller at the full sample rate. `every = n`
+additionally keeps only every n-th row — a viewing artefact, not a scoring
+input, so leave it at 1 unless the folder is only ever going to be replayed
+(see the caveat in `docs/log_size.md`).
 """
-function move_scenario(; overwrite::Bool = false)
+function move_scenario(; overwrite::Bool = false, compress::Bool = true, every::Int = 1)
     archive_dir = last_run_archive()
     status = only(filter(startswith("status: "), readlines(RUN_DONE_FILE)))
     occursin("ok", status) || @warn "Last run did not finish cleanly: $status"
@@ -84,6 +99,7 @@ function move_scenario(; overwrite::Bool = false)
         mv(f, joinpath(target_dir, basename(f)); force = overwrite)
     end
     rm(archive_dir)
+    compress && compress_scenario(target_dir; every)
     @info "Moved $archive_dir to $target_dir"
     return target_dir
 end

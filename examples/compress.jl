@@ -61,12 +61,17 @@ model build — because only the count is wanted. `project` names a
 tether interior nodes (`segments`), hence the point count.
 """
 function n_struct_points(; project = nothing)
-    set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-    isnothing(project) && (project = selected_reelout_project())
-    set = Settings(project_file(project))
-    sys_struct = load_sys_struct_from_yaml(joinpath(v3_data_path(), "struc_geometry.yaml");
-        set, aero_mode = SymbolicAWEModels.AeroNone())
-    return length(sys_struct.points)
+    data_path = get_data_path()   # a caller mid-workflow keeps its own data path
+    try
+        set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
+        isnothing(project) && (project = selected_reelout_project())
+        set = Settings(project_file(project))
+        sys_struct = load_sys_struct_from_yaml(joinpath(v3_data_path(), "struc_geometry.yaml");
+            set, aero_mode = SymbolicAWEModels.AeroNone())
+        return length(sys_struct.points)
+    finally
+        set_data_path(data_path)
+    end
 end
 
 """
@@ -173,10 +178,15 @@ Run [`compress_log`](@ref) over every `.arrow` file in `dir` — e.g. one
 `SimulationResults` scenario folder, or all of them at once by pointing this at
 the parent and mapping it yourself. `kwargs` go to `compress_log`.
 """
-function compress_scenario(dir::AbstractString; kwargs...)
+function compress_scenario(dir::AbstractString; n_points = nothing, project = nothing,
+                           kwargs...)
     logs = filter(f -> endswith(f, ".arrow"), readdir(dir; join = true))
     isempty(logs) && @warn "No .arrow log in $dir"
-    return [compress_log(log; kwargs...) for log in logs]
+    # Resolved once: every log in a scenario folder is the same system.
+    if !isempty(logs) && isnothing(n_points)
+        n_points = n_struct_points(; project)
+    end
+    return [compress_log(log; n_points, kwargs...) for log in logs]
 end
 
 nothing
