@@ -140,7 +140,7 @@ models' own tape-length zero (`0.6 + 5*u_p` here, `0.2 + 5*u_p` in V3Kite); the
 remaining 0.04 (0.2 m) is genuine, unexplained aerodynamic disagreement — a single
 measured point, not a fitted curve.
 """
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.12
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.109
 
 """
     awetrim_depower_to_v3kite(l_dp) -> Float64
@@ -704,12 +704,15 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) =
                 p_max = p_max === nothing ? nothing : Float64(p_max))
 
 """
-    min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing) -> Union{Float64, Nothing}
+    min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
+                            margin = tos.min_feasibility_margin) -> Union{Float64, Nothing}
 
-`tos.min_feasibility_margin` in METRES — `margin/(c1*max_steering)`, the kite's own
-physical turning limit scaled by the margin — sent WITH the request so the
-optimizer cannot answer with a pattern that is about to be rejected. `nothing` —
-send no constraint — when the margin is 0, which is also where the gate is off.
+`margin` in METRES — `margin/(c1*max_steering)`, the kite's own physical turning
+limit scaled by the margin — sent WITH the request so the optimizer cannot answer
+with a pattern that is about to be rejected. Defaults to `tos.min_feasibility_margin`;
+pass a smaller value to ask for less than the full gate, e.g. a graduated startup
+retry. `nothing` — send no constraint — when `margin` is 0, which is also where the
+gate is off.
 
 `scale` asks for MORE than that, and a reel-out run has to: the two numbers do not
 measure the same curve at the same radius, and the difference is NOT in the run's
@@ -757,11 +760,12 @@ The table refuses to extrapolate off its grid. A `body_damping`/`depower_setpoin
 it cannot serve therefore sends no constraint and warns, exactly as the feasibility
 GATE degrades — an off-grid run loses the advice, not the run.
 """
-function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing)
-    tos.min_feasibility_margin > 0 || return nothing
+function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
+                                 margin = tos.min_feasibility_margin)
+    margin > 0 || return nothing
     scale >= 0 || error("min_turn_radius_request: scale must be >= 0, got $scale.")
     if !isnothing(c1) && isfinite(c1) && c1 > 0
-        return scale * tos.min_feasibility_margin / (c1 * fcs.max_steering)
+        return scale * margin / (c1 * fcs.max_steering)
     end
     coeffs = try
         turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
@@ -774,7 +778,7 @@ function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing)
                this cell to get the constraint back."
         return nothing
     end
-    return scale * tos.min_feasibility_margin / (coeffs.c1 * fcs.max_steering)
+    return scale * margin / (coeffs.c1 * fcs.max_steering)
 end
 
 "AWETrim's own bounds on `input_depower`, from `src/awetrim/utils/defaults.py` [m]."
@@ -826,6 +830,24 @@ function depower_seed(tos, wind_speed)
                        seed, wind_speed, lo, hi, clamped, tos.input_depower,
                        tos.input_depower_per_wind, tos.input_depower_wind_ref)
     return clamped
+end
+
+"""
+    guess_el_center_seed(tos, wind_speed) -> Float64
+
+The centre elevation [deg] the initial-guess lemniscate is built at:
+`tos.guess_el_center_high` at and above `tos.guess_el_center_wind_ref`,
+`tos.guess_el_center` below it. `tos.guess_el_center_high == 0.0` disables the
+step, so this returns `tos.guess_el_center` at every wind.
+
+A STEP, not a ramp like [`depower_seed`](@ref)'s: the guess picks a basin of a
+multi-modal solve (`TrajOptSettings`' docstring), and there is no reason to
+believe a basin that converges at one wind shrinks gracefully into one that
+converges at another — only the tested seeds are known to work.
+"""
+function guess_el_center_seed(tos, wind_speed)
+    tos.guess_el_center_high > 0 && wind_speed >= tos.guess_el_center_wind_ref ?
+        tos.guess_el_center_high : tos.guess_el_center
 end
 
 """
