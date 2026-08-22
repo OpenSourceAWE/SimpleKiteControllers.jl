@@ -1,7 +1,8 @@
 # Local override of V3Kite's data/kite_settings_psm.yaml, forced onto the
 # monolith backend regardless of what the upstream package ships (see
-# examples/simple_auto_parking.jl, which always points its project's
-# `kite_settings:` at this file instead of V3Kite's own copy).
+# examples/simple_auto_parking.jl and examples/simple_opt_reelout.jl, which
+# always point their project's `kite_settings:` at this file instead of
+# V3Kite's own copy).
 kite_settings:
   wing_type: particle_dynamics   # particle_dynamics | rigid_dynamics
   aero_mode: continuous          # direct | continuous | pressure
