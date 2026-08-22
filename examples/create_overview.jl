@@ -16,7 +16,9 @@ folder missing the YAML file or its `summary:` block is skipped with a
 warning, not an error.
 
 Also opens the same table as a nicely formatted HTML pop-up in the default
-browser, via PrettyTables' `:html` backend (`xdg-open`).
+browser, via PrettyTables' `:html` backend (`xdg-open`), with the power
+curve (mean reel-out power vs. wind speed, as in `plot_powercurve.jl`)
+embedded below it.
 
 Run from the menu, or by
 
@@ -30,6 +32,8 @@ end
 
 using YAML
 using PrettyTables
+using MakieControlPlots
+using Base64
 
 const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
 const SUMMARY_FILE = "reelout_150m_opt.yaml"
@@ -79,20 +83,43 @@ function write_overview_md(rows, md_file)
 end
 
 """
+    powercurve_png(rows) -> String
+
+Plot mean reel-out power [kW] against wind speed [m/s] for `rows` (already
+sorted by wind speed) with MakieControlPlots, the same curve as
+`plot_powercurve.jl`, and save it as a temporary PNG file, returning its path.
+"""
+function powercurve_png(rows)
+    v_wind = [row["wind_speed_m_s"] for row in rows]
+    p_kw = [row["mean_power_W"] / 1000 for row in rows]
+    plotxy(v_wind, p_kw; xlabel = "wind speed [m/s]", ylabel = "mean reel-out power [kW]",
+           title = "V3 reel-out power curve", scatter = true, disp = true, fig = "powercurve")
+    png_file = joinpath(tempdir(), "powercurve.png")
+    savefig(png_file)
+    MakieControlPlots.close("powercurve")
+    return png_file
+end
+
+"""
     show_overview_html(rows)
 
-Render `rows` as an HTML table with PrettyTables and open it in the default
+Render `rows` as an HTML table with PrettyTables, with the power curve
+embedded below it as a base64-encoded PNG, and open it in the default
 browser, giving a nicely formatted pop-up view of the same data as the
 markdown table.
 """
 function show_overview_html(rows)
     headers = collect(last.(COLUMNS))
     data = [row[key] for row in rows, (key, _) in COLUMNS]
+    table_html = pretty_table(String, data; column_labels = headers, backend = :html, alignment = :c)
+    img_b64 = base64encode(read(powercurve_png(rows)))
     # a snap-confined browser (e.g. Firefox) cannot see dotfiles/dotdirs under $HOME
     html_file = joinpath(homedir(), "overview.html")
     open(html_file, "w") do io
-        pretty_table(io, data; column_labels = headers, backend = :html, stand_alone = true,
-                     alignment = :c)
+        println(io, "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body>")
+        println(io, table_html)
+        println(io, "<img src=\"data:image/png;base64,$img_b64\" alt=\"power curve\">")
+        println(io, "</body></html>")
     end
     run(`xdg-open $html_file`; wait = false)
 end
