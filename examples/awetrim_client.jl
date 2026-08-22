@@ -822,15 +822,19 @@ function depower_seed(tos, wind_speed)
     seed = tos.input_depower +
            tos.input_depower_per_wind * max(0.0, wind_speed - tos.input_depower_wind_ref)
     lo, hi = DEPOWER_SEED_BOUNDS
-    hi = tos.input_depower_seed_max > 0 ? min(hi, tos.input_depower_seed_max) : hi
-    clamped = clamp(seed, lo, hi)
-    clamped == seed ||
+    soft_hi = tos.input_depower_seed_max > 0 ? min(hi, tos.input_depower_seed_max) : hi
+    clamped = clamp(seed, lo, soft_hi)
+    # Only warn when the EFFECTIVE seed still lands on AWETrim's own hard bound:
+    # a clamp by input_depower_seed_max short of it is the deliberate, calibrated
+    # cap that setting exists for, not the failure mode this warns about.
+    if clamped != seed && (clamped == lo || clamped == hi)
         @warn @sprintf("Depower seed of %.3f m for %.1f m/s is outside AWETrim's \
                         bounds [%.3f, %.3f] m and was clamped to %.3f m. The ramp \
                         (input_depower %.2f + %.3f per m/s above %.1f m/s of \
                         data/traj_opt.yaml) has run out of tape.",
                        seed, wind_speed, lo, hi, clamped, tos.input_depower,
                        tos.input_depower_per_wind, tos.input_depower_wind_ref)
+    end
     return clamped
 end
 

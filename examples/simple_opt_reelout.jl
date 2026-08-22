@@ -856,6 +856,7 @@ cc = CourseController(ccs)
 transition_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
 stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
+stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 reelout_done = false        # true once either stop criterion has ended reel-out
 stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
@@ -1014,6 +1015,14 @@ try
         if phase in (3, 4) && reelout_done
             set_phase!(cc, 5)
             phase = 5
+        end
+        # Ramps depower toward depower_final in step with v_set's own soft-stop
+        # decay, so shedding lift offsets the tension the slowing winch would
+        # otherwise raise; the clamp holds it at depower_final once reached.
+        if !isnan(stop_start)
+            rel_depower = stop_dp_entry +
+                (fcs.depower_final - stop_dp_entry) * clamp((t - stop_start) / stop_T, 0.0, 1.0)
+        elseif phase == 5
             rel_depower = fcs.depower_final
         end
         chi_cmd = cc.chi_cmd
@@ -1252,7 +1261,9 @@ try
         end
 
         # ---- Re-optimize the path for the length now being flown -------- #
-        if tos.reopt_enabled && phase >= 4
+        # phase 4 only: l_set is frozen at reelout_l_max in phase 5, so a
+        # lap-boundary trigger there would keep re-asking for a length already solved.
+        if tos.reopt_enabled && phase == 4
             l_now = Float64(s.sys_state.l_tether[1])
 
             # Queue: on a lap boundary, never while a solve or a blend is running,
@@ -1989,6 +2000,7 @@ try
                remaining <= v_cmd * fcs.reelout_softstop
                 global stop_start = t
                 global stop_v_entry = v_cmd
+                global stop_dp_entry = rel_depower
                 global stop_T = 2 * remaining / v_cmd
             end
             # Second stop criterion: N COMPLETE laps since the counter started at phase 4.
@@ -1999,6 +2011,7 @@ try
                 if fcs.reelout_softstop > 0 && v_cmd > 0
                     global stop_start = t
                     global stop_v_entry = v_cmd
+                    global stop_dp_entry = rel_depower
                     # No remaining distance to solve T from — unlike the reelout_l_max
                     # latch, the length is the free variable here. Same nominal duration.
                     global stop_T = 2 * fcs.reelout_softstop
