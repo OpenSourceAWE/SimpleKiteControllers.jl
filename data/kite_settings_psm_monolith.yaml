@@ -1,0 +1,46 @@
+# Local override of V3Kite's data/kite_settings_psm.yaml, forced onto the
+# monolith backend regardless of what the upstream package ships (see
+# examples/simple_auto_parking.jl, which always points its project's
+# `kite_settings:` at this file instead of V3Kite's own copy).
+kite_settings:
+  wing_type: particle_dynamics   # particle_dynamics | rigid_dynamics
+  aero_mode: continuous          # direct | continuous | pressure
+  backend: monolith              # monolith | kernel model assembly
+  vsm_interval: 1                # steps between VSM aero solves
+
+  body_sim_damping: [0.0, 0.0, 20.0]   # per-axis wing-frame damping in flight
+  world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
+
+  wing_mass: 0.0                 # [kg] mass redistributed over the wing nodes
+  wing_mass_le_frac: 0.75        # leading-edge share of `wing_mass`
+  wing_drag_coeff: 0.0           # parasitic drag spread over the wing nodes
+
+  adapter_dir: null              # SurfplanAdapter export for Comer-Levy bending
+
+  init_mode: settle              # settle | relaxed_state
+  init_state: null               # relaxed state settling starts from
+
+  remake_model: false            # true rebuilds the serialized model bin
+  remake_settled_state: false   # true re-runs settling instead of loading the arrow
+  brake: true                    # winch brake engaged after bring-up
+
+  geom:
+    reduce_tip: false            # shorten the tip segments
+    tip_reduction: 0.4           # [m] taken off each tip segment
+    tip_segments: [47, 48, 57, 58]  # segment indices the tip reduction hits
+    reduce_te: false             # shorten the trailing-edge segments
+    te_frac: 0.95                # fraction of rest length the TE keeps
+    te_segments: [20, 28]        # first/last TE segment index
+    reduce_depower: false        # shorten the depower tape
+    depower_reduction: 0.2       # [m] taken off the depower tape
+    depower_offset: 0.0          # added to every depower command (0..1)
+    steering_dp_offset: 0.0      # extra depower per unit |steering|
+    reduce_steering: false       # shorten the steering tapes
+    steering_reduction: 0.2      # [m] taken off each steering tape
+    tether_length: null          # [m] overrides the settings tether length
+
+  bridle:
+    compression_frac: 0.01           # stiffness a segment keeps in compression
+    compression_damping_frac: 1.0    # the same for the damping term
+    bridle_rel_damping: 0.01         # [s] damping per stiffness on lines/tapes
+    pulley_efficiency: 0.95          # line tension a sheave passes on
