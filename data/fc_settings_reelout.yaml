@@ -67,10 +67,10 @@ fc_settings:
   # power and energy incomparable. Length is now the only criterion for both.
   n_fig_eight:        0        # Laps after which reel-out stops; 0 = length only [-]
   depower_final:      0.35     # Flown from phase 5 (final), once l_max is reached; tuned
-                                # to hold ~3458 N, the reel-out mean force — see the log   [-]
-  reelout_softstart:  12.0      # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
-  reelout_softstop:   5.0      # Linear decel trigger at the OTHER end; being tuned
-                                # against the power undershoot — see the log        [s]
+                               # to hold ~3458 N, the reel-out mean force — see the log   [-]
+  reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
+  reelout_softstop:   2.0      # Linear decel trigger at the OTHER end; being tuned
+                               # against the power undershoot — see the log        [s]
   reelout_delay:      4.0      # Wait after phase 3 before reel-out starts          [s]
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
