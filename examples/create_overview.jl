@@ -15,6 +15,9 @@ Columns: `date`, `time`, `v_wind`, `power`, `power_ratio`, `total_time`,
 folder missing the YAML file or its `summary:` block is skipped with a
 warning, not an error.
 
+Also opens the same table as a nicely formatted HTML pop-up in the default
+browser, via PrettyTables' `:html` backend (`xdg-open`).
+
 Run from the menu, or by
 
     include("examples/create_overview.jl")
@@ -26,6 +29,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using YAML
+using PrettyTables
 
 const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
 const SUMMARY_FILE = "reelout_150m_opt.yaml"
@@ -75,10 +79,30 @@ function write_overview_md(rows, md_file)
 end
 
 """
+    show_overview_html(rows)
+
+Render `rows` as an HTML table with PrettyTables and open it in the default
+browser, giving a nicely formatted pop-up view of the same data as the
+markdown table.
+"""
+function show_overview_html(rows)
+    headers = collect(last.(COLUMNS))
+    data = [row[key] for row in rows, (key, _) in COLUMNS]
+    # a snap-confined browser (e.g. Firefox) cannot see dotfiles/dotdirs under $HOME
+    html_file = joinpath(homedir(), "overview.html")
+    open(html_file, "w") do io
+        pretty_table(io, data; column_labels = headers, backend = :html, stand_alone = true,
+                     alignment = :c)
+    end
+    run(`xdg-open $html_file`; wait = false)
+end
+
+"""
     create_overview()
 
 Scan `SimulationResults/scenarios/` and write `overview.md` there, one row
-per scenario ordered by wind speed.
+per scenario ordered by wind speed, then display the same table as a
+pop-up in the default browser.
 """
 function create_overview()
     isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
@@ -92,6 +116,7 @@ function create_overview()
     md_file = joinpath(SCENARIOS_DIR, "overview.md")
     write_overview_md(rows, md_file)
     @info "Wrote overview" md_file rows=length(rows)
+    show_overview_html(rows)
 end
 
 create_overview()

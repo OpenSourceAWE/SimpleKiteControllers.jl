@@ -16,6 +16,7 @@ OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 OrdinaryDiffEqBDF = "6ad6398a-0878-4a85-9266-38940aa047c8"
 OrdinaryDiffEqCore = "bbf590c4-e513-4bbe-9b18-05decba2e5d8"
 OrdinaryDiffEqNonlinearSolve = "127b3ac7-2247-4354-8eb6-78cf4e7c58e8"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
@@ -28,12 +29,12 @@ SymbolicAWEModels = "9c9a347c-5289-41db-a9b9-25ccc76c3360"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 Timers = "21f18d07-b854-4dab-86f0-c15a3821819a"
 V3Kite = "4caac9c8-c726-438f-ab10-3553e918eab1"
-YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 WinchControllers = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
+YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [sources]
 SimpleKiteControllers = {path = ".."}
-V3Kite = {url = "https://github.com/OpenSourceAWE/V3Kite.jl", rev = "beam-model"}
+V3Kite = {rev = "beam-model", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
 
 [compat]
 KiteViewers = "0.6"
