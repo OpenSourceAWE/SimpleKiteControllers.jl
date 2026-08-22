@@ -150,6 +150,7 @@ end
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
+using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,

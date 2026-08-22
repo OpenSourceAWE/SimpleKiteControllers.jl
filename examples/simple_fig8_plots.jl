@@ -61,6 +61,7 @@ using MakieControlPlots
 using LaTeXStrings
 using V3Kite                  # the log, its data path, wrap_to_pi
 using SimpleKiteControllers   # FC_Settings, figure_eight_path
+using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
 @info "Loading simulation results..."
 # Where simple_fig8.jl saved the log; `init` no longer moves the data path.

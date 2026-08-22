@@ -624,6 +624,58 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## A 0.002 change in one constant cost 255 W, via a basin flip the power floor could not see (2026-08-22)
+
+`output/scenarios/v04_3` measured 1581 W against `v04_2`'s 1836 W and `v04`'s
+1885 W, same 4 m/s, same 150 m. Every archived settings file of the two later
+runs is byte-identical and both ran clean on `ufryzen`; the only difference is
+commit `c29158b`, `AWETRIM_V3KITE_DEPOWER_OFFSET` 0.109 -> 0.107. That constant
+is in the flight loop, not just the report: `fly_opt_depower: true` feeds
+`awetrim_depower_to_v3kite(l_dp)` straight into `rel_depower` for all of phase 4,
+so v04_3 flew 0.002 less depower from the first phase-4 step.
+
+The two runs diverge from the first re-optimization (t = 64.3 s vs 64.4 s) and
+track each other for four installs. Then the fifth solve is asked a different
+question, because by then the drift had stretched one lap by 3.4 s:
+
+```
+install #5   v04_2:  t=180.6 s  L=308 m  l_dp 1.468  ->  2217 W predicted
+             v04_3:  t=182.4 s  L=312 m  l_dp 1.606  ->  1065 W predicted
+```
+
+Four metres further out, the warm-started solver converged into a different,
+much worse local optimum — more depowered, higher and taller (`commanded_el_height`
+15.3° vs 10.4°, `el_min_final` 16.6° vs 9.3°, clearance 103.9 m vs 82.5 m) — and
+every later solve warm-started from there (943 W, 1022 W). That path held **27 %
+of the reeling window**; measured/predicted is 1.02 in both runs, so the plant
+flew exactly what it was handed. The arithmetic closes: put 2200 W back into that
+27 % and the weighted prediction goes 1550 -> 1856 W, i.e. v04_2's 1836 W.
+
+**Not a verdict on 0.107.** 0.12 -> 1885 W, 0.109 -> 1836 W, 0.107 -> 1581 W is
+not a trend; it is a discrete basin flip in a chaotic run, and the same constant
+would very likely give ~1850 W again at a slightly different re-opt phase.
+
+**What should have caught it.** `min_power_frac` (0.3) is measured against the
+STARTUP prediction, 1475 W here, so the floor was 442 W and 1065 W sailed
+through. Because predicted power RISES with tether length, the startup value is
+the run's minimum and that gate is effectively disabled by the time it matters.
+Added `min_power_frac_prev` (default 0.7), the same rejection and cold retry
+against the PREVIOUS INSTALL's prediction. It needs no anti-ratchet of its own —
+a rejected reply is never installed, so the reference cannot move while a retry
+chain runs.
+
+It is skipped until one re-optimization has installed a path. The startup path is
+solved at the starting length from the parametric guess, and the first
+re-anchoring may legitimately predict far less: `v03` goes 200 -> 116 W (0.58)
+and passes all nine criteria. That first step keeps `min_power_frac` as its only
+power gate.
+
+Replayed against every archived run in `output/scenarios/`, 0.7 rejects exactly
+two candidates: this one (0.507 of its predecessor) and the collapsed pattern of
+2026-08-20 (which `min_power_frac` already caught). The worst drop in any good
+run is 0.946 (`v04_2`'s last install), and the startup step aside, everything
+else measured sits above 0.98.
+
 ## The clearance gate was rejecting three replies in a row, and nothing in the request knew about it (2026-08-22)
 
 `output/scenarios/v06_4`, 6 m/s, 150 m: four of seven re-optimizations were gated

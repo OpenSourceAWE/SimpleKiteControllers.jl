@@ -76,6 +76,7 @@ end
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
+using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm

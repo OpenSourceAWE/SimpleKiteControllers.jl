@@ -240,6 +240,7 @@ run_script = basename(@__FILE__)
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
+using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
@@ -1471,6 +1472,11 @@ try
                     # not the guess it is solved from, and the guess only ever moves
                     # up. `el_min_extra` carries the shortfall.
                     reject_low = false
+                    # `pred_timeline` grows only on an INSTALL, so this is frozen
+                    # for the whole retry chain below; its first entry is the
+                    # startup solve, which `min_power_frac_prev` does not gate on.
+                    prev_install_pred = length(pred_timeline) > 1 ?
+                        pred_timeline[end].power : NaN
                     for blend_attempt in 0:tos.blend_max_retries
                         if blend_attempt > 0
                             global blend_retries_total += 1
@@ -1722,15 +1728,11 @@ try
                             check_pattern_feasible(chk_az, chk_el, l_now,
                                 fcs.max_steering; c1 = c1_at(phase), prn = false).margin
                         clearance = path_min_height(chk_az, chk_el, l_now)
-                        # Against the STARTUP prediction, not the previous install's:
-                        # `opt_power_pred` never moves, where a chain of retries could
-                        # otherwise ratchet the floor down alongside itself. A
-                        # collapsed-to-near-zero-amplitude pattern trivially clears
-                        # margin/clearance (there is almost no pattern left to be
-                        # tight or low) and `blend_folds` (nothing to fold either) —
-                        # measured 2026-08-20, 2094 W predicted against ~22000 W
-                        # everywhere else in the same run, installed anyway, ψ
-                        # unwrapping 693° by the end.
+                        # Gated against BOTH the startup prediction and the previous
+                        # install's: a collapsed pattern and a worse local optimum
+                        # both clear margin, clearance and `blend_folds`, and neither
+                        # floor alone sees the other (`min_power_frac`,
+                        # `min_power_frac_prev`).
                         new_pred = Float64(tab["metrics"]["avg_power_W"])
                         cand_folds = blend_folds(cand_from..., cand_az, cand_el)
                         if margin < tos.min_feasibility_margin
@@ -1784,12 +1786,21 @@ try
                                      detail = reason * retried(blend_attempt))
                             break
                         elseif cand_folds ||
-                               new_pred < tos.min_power_frac * opt_power_pred
-                            reason = cand_folds ? "blend folds" :
+                               new_pred < tos.min_power_frac * opt_power_pred ||
+                               new_pred < tos.min_power_frac_prev * prev_install_pred
+                            reason = if cand_folds
+                                "blend folds"
+                            elseif new_pred < tos.min_power_frac * opt_power_pred
                                 @sprintf("%.0f W predicted, below %.0f%% of the \
                                           startup prediction (%.0f W)",
                                          new_pred, 100 * tos.min_power_frac,
                                          opt_power_pred)
+                            else
+                                @sprintf("%.0f W predicted, below %.0f%% of the \
+                                          previous install's (%.0f W)",
+                                         new_pred, 100 * tos.min_power_frac_prev,
+                                         prev_install_pred)
+                            end
                             if blend_attempt < tos.blend_max_retries
                                 reject_reason = reason
                                 reject_low = false   # this one is not about height

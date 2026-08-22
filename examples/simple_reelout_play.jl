@@ -46,6 +46,7 @@ end
 using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
+using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 # Selectively: KiteViewers exports `init` in some versions too, which would clash with V3Kite's.
 import KiteViewers
 using KiteViewers: Viewer3D, update_segments!, update_status_text!, clear_viewer, stop,

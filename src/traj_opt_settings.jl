@@ -426,6 +426,26 @@ multi-modal, so the guess is a choice about the answer.
     """
     min_power_frac = 0.3
     """
+    Fraction of the PREVIOUS INSTALL's predicted power a re-optimization reply
+    must clear, retried exactly like `min_power_frac`; `0.0` is off. Guards the
+    other way the solver goes wrong: not a collapsed pattern but a different,
+    much worse local optimum at a length a few metres further out — measured
+    2026-08-22, 2100 W at 264 m followed by 1065 W at 312 m, installed and flown
+    for 27 % of the reel-out. `min_power_frac` cannot see that, since predicted
+    power RISES with tether length and its startup reference is the run's
+    minimum.
+
+    Skipped until one re-optimization has installed a path, because the startup
+    path is solved at the starting length from the parametric guess and the
+    first re-anchoring may legitimately predict far less (v03: 200 -> 116 W).
+    That step keeps `min_power_frac` as its only power gate. Beyond it, every
+    good run measured drops at most to 0.95 of the previous install.
+
+    Needs no anti-ratchet of its own: a rejected reply is never installed, so
+    the reference cannot move while a retry chain runs.
+    """
+    min_power_frac_prev = 0.7
+    """
     Seconds between `/status` polls while a solve is running. SIMULATED seconds
     when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
     simulated then). The solve takes 7-13 s of wall time (measured), so polling
@@ -535,6 +555,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("blend_max_retries must be >= 0, got $(tos.blend_max_retries).")
     0 < tos.min_power_frac <= 1 ||
         error("min_power_frac must be in (0, 1], got $(tos.min_power_frac).")
+    0 <= tos.min_power_frac_prev <= 1 ||
+        error("min_power_frac_prev must be in [0, 1], got "*
+              "$(tos.min_power_frac_prev).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     tos.guess_el_center_high >= 0 ||
