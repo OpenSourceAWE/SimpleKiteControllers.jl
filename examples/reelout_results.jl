@@ -647,6 +647,27 @@ else
     @warn "No simulated time elapsed — no performance figure."
 end
 
+# A recap of the numbers scattered above, written last so it reads as the file's
+# TL;DR without displacing `success_criteria` as the first key.
+summary_block = OrderedDict{String, Any}(
+    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
+    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
+    "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
+if !isnothing(opt_power_meas)
+    summary_block["mean_power_W"] = (round(Int, opt_power_meas), "mean reel-out power the run harvested [W]")
+    summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
+        "measured / predicted mean reel-out power, against the weighted prediction")
+end
+if t_sim > 0
+    summary_block["total_wall_time_s"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
+    summary_block["realtime_factor"] = (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
+        "sim_time / wall_time, excluding time frozen for re-optimization")
+end
+summary_block["optimization_requests"] = (reopt_n, "solves that completed, accepted or rejected")
+summary_block["optimizations_installed"] = (count(e -> e.status == "installed", reopt_events),
+    "new paths actually flown")
+summary["summary"] = summary_block
+
 open(joinpath(output_path, log_name * ".yaml"), "w") do io
     println(io, "# Run summary for output/", log_name,
             ".arrow, written by examples/simple_reelout.jl at the end of the run.")

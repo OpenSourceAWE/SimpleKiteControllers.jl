@@ -8,6 +8,7 @@ fi
 REPOS=(SimulationResults V3Kite KiteUtils MakieControlPlots WinchControllers AWETrim)
 
 for repo in "${REPOS[@]}"; do
+    echo "--> Pulling $repo"
     if [[ ! -d "../$repo" ]]; then
         echo "Error: ../$repo not found" >&2
         continue

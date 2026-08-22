@@ -829,6 +829,19 @@ else
     @warn "No simulated time elapsed — no performance figure."
 end
 
+# A recap of the numbers scattered above; last key, so `success_criteria` stays
+# the first thing a reader sees. No optimizer here, so no power_ratio or
+# optimization_requests/installed — those only exist in reelout_results.jl.
+summary_block = OrderedDict{String, Any}(
+    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
+    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
+    "wind_speed_m_s" => (project_set.v_wind, "mean wind speed passed to init [m/s]"))
+isnothing(rp) || (summary_block["mean_power_W"] =
+    (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"))
+t_sim > 0 && (summary_block["realtime_factor"] =
+    (round(t_sim / t_wall; digits = 2), "sim_time / wall_time"))
+summary["summary"] = summary_block
+
 open(joinpath(output_path, log_name * ".yaml"), "w") do io
     println(io, "# Run summary for output/", log_name,
             ".arrow, written by examples/simple_reelout.jl at the end of the run.")
