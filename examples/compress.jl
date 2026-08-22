@@ -3,7 +3,9 @@
 
 """
 Shrink a saved `.arrow` flight log by dropping the VSM panel-corner slots from
-its `X`/`Y`/`Z` position arrays — about 78 % of a reel-out log, see
+every `SysState` field that carries them — `X`/`Y`/`Z`, `VX`/`VY`/`VZ`,
+`aero_force_x/y/z` and `drag_force_x/y/z`, the twelve fields sharing
+`SysState`'s `P` type parameter — about 78 % of a reel-out log, see
 `docs/log_size.md`. Optionally also decimates the rows (`every = n`).
 
 The corners are pure visualisation data written by
@@ -11,13 +13,18 @@ The corners are pure visualisation data written by
 them. `KiteViewers.update_segments!` only touches slots `1:n_points`, and
 `load_log` takes the position count from the file itself
 (`P = length(table.Z[1])`), so a shortened log loads and replays unchanged —
-no flag or version bump anywhere upstream.
+no flag or version bump anywhere upstream. All twelve fields must end up the
+same length regardless of how many corners each started with — `SysState`
+takes one `P` for all of them — so a log where `X`/`Y`/`Z` already lack
+corners but `VX`/`aero_force_*`/`drag_force_*` still carry them (as
+`SymbolicAWEModels` can produce) is cut per-field, not skipped.
 
 The slot layout is `points | panel_corners | wing origins | body origins`
-(`SymbolicAWEModels.position_slots`). This keeps the structural points and the
-trailing origins and cuts the corner block out of the middle, so the origins
-move down from slot 333 to 45. Only code that recomputes `position_slots` from
-a live model would notice; the viewer does not.
+(`SymbolicAWEModels.position_slots`) in every one of the twelve fields. This
+keeps the structural points and the trailing origins and cuts the corner
+block out of the middle, so the origins move down from slot 333 to 45. Only
+code that recomputes `position_slots` from a live model would notice; the
+viewer does not.
 
     include("compress.jl")
     compress_log("../output/reelout_150m_opt.arrow")                # in place
@@ -94,8 +101,16 @@ function log_colmeta(fullname::AbstractString, loaded_colmeta::AbstractDict)
 end
 
 """
+The twelve `SysState` fields that share its `P` type parameter, hence the
+ones a panel-corner cut must touch together — see [`compress_log`](@ref).
+"""
+const P_FIELDS = (:X, :Y, :Z, :VX, :VY, :VZ,
+                   :aero_force_x, :aero_force_y, :aero_force_z,
+                   :drag_force_x, :drag_force_y, :drag_force_z)
+
+"""
     compress_log(infile; outfile = nothing, n_points = nothing, n_origins = nothing,
-                 project = nothing, every = 1, keep_origins = true, compress = true)
+                 project = nothing, every = 3, keep_origins = true, compress = true)
 
 Rewrite the `.arrow` log at `infile` without its VSM panel corners, replacing it
 unless `outfile` is given. Returns the path written.
@@ -111,13 +126,14 @@ unless `outfile` is given. Returns the path written.
   reel-out logs carry two: the wing, plus a co-located rigid body.)
 - `project`: `system_*.yaml` handed to `slot_layout`; defaults to the selected
   reel-out project.
-- `every`: keep every n-th row as well (`1` = all rows, full rate).
+- `every`: keep every n-th row as well (`1` = all rows, full rate). Defaults to
+  `3`.
 - `keep_origins`: keep the trailing wing/body origin slots. `false` drops them
-  too, leaving `X`/`Y`/`Z` at exactly the structural points.
+  too, leaving every [`P_FIELDS`](@ref) field at exactly the structural points.
 - `compress`: LZ4 the arrow file, as `save_log` does by default.
 """
 function compress_log(infile::AbstractString; outfile = nothing, n_points = nothing,
-                      n_origins = nothing, project = nothing, every::Int = 1,
+                      n_origins = nothing, project = nothing, every::Int = 3,
                       keep_origins::Bool = true, compress::Bool = true)
     isfile(infile) || error("No such log: $infile")
     every >= 1 || error("every must be >= 1, got $every")
@@ -125,31 +141,35 @@ function compress_log(infile::AbstractString; outfile = nothing, n_points = noth
 
     syslog = load_log(abspath(infile))
     sl = syslog.syslog
-    P = length(sl.X[1])
+    cols = SA.components(sl)
     isnothing(n_origins) && (n_origins = length(sl.Qw[1]))
-    n_corners = P - n_points - n_origins
-    n_corners >= 0 || error("Log has $P position slots, fewer than the $n_points \
-                             points + $n_origins origins it is taken to hold.")
-    # VSM logs 4 corners per panel; anything else means the counts are wrong for
-    # this log and cutting would eat real points.
-    n_corners % 4 == 0 || error("$(n_corners) slots between the $n_points points and \
-                                 the $n_origins origins of $infile is not a whole number \
-                                 of 4-corner panels — pass n_points/n_origins explicitly.")
-    if n_corners == 0 && every == 1
+    P2 = n_points + (keep_origins ? n_origins : 0)
+
+    field_P = Dict(f => length(cols[f][1]) for f in P_FIELDS)
+    for (f, P) in field_P
+        n_corners = P - n_points - n_origins
+        n_corners >= 0 || error("$f has $P position slots, fewer than the $n_points \
+                                 points + $n_origins origins it is taken to hold.")
+        # VSM logs 4 corners per panel; anything else means the counts are wrong for
+        # this log and cutting would eat real points.
+        n_corners % 4 == 0 || error("$(n_corners) slots between the $n_points points and \
+                                     the $n_origins origins of $f in $infile is not a whole \
+                                     number of 4-corner panels — pass n_points/n_origins \
+                                     explicitly.")
+    end
+    if every == 1 && all(==(P2), values(field_P))
         @info "$infile carries no panel corners already — nothing to do."
         return infile
     end
 
-    keep = keep_origins ? [1:n_points; (P - n_origins + 1):P] : collect(1:n_points)
     rows = 1:every:length(sl)
-    P2 = length(keep)
     O = length(sl.Qw[1])
     D = length(sl.flap_angle[1])
 
-    cols = SA.components(sl)
+    keep(P) = keep_origins ? [1:n_points; (P - n_origins + 1):P] : collect(1:n_points)
+    cut(c, P) = [MVector{P2, KiteUtils.MyFloat}(view(c[i], keep(P))) for i in rows]
     thinned = every == 1 ? cols : map(c -> c[rows], cols)
-    cut(c) = [MVector{P2, KiteUtils.MyFloat}(view(c[i], keep)) for i in rows]
-    newcols = merge(thinned, (X = cut(cols.X), Y = cut(cols.Y), Z = cut(cols.Z)))
+    newcols = merge(thinned, NamedTuple(f => cut(cols[f], field_P[f]) for f in P_FIELDS))
     small = KiteUtils.SysLog{P2}(syslog.name,
         log_colmeta(abspath(infile), syslog.colmeta),
         SA.StructArray{SysState{P2, O, D}}(newcols))
@@ -167,7 +187,8 @@ function compress_log(infile::AbstractString; outfile = nothing, n_points = noth
     after = filesize(dest)
 
     @info @sprintf("%s: %d -> %d position slots%s, %.1f MB -> %.1f MB (%.1fx).",
-        basename(dest), P, P2, every == 1 ? "" : @sprintf(", every %d-th row", every),
+        basename(dest), maximum(values(field_P)), P2,
+        every == 1 ? "" : @sprintf(", every %d-th row", every),
         before / 1e6, after / 1e6, before / after)
     return dest
 end
