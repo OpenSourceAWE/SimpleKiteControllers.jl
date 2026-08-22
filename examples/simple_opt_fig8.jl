@@ -149,8 +149,6 @@ end
 # The wind speed comes from the same file unless WIND_SPEED overrides it above: it is
 # a plant condition, and project_set.v_wind keeps the mean wind, the turbulent field
 # and the optimizer's inflow_from_settings query (below) at the same speed.
-# No cache_path either: V3Kite's default is where its own precompile workload
-# compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     body_sim_damping = 0.8 .* fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
