@@ -133,14 +133,16 @@ end
 
 """
 Total offset [rel_depower units] between the two models at equal power, measured
-2026-08-18 (`docs/steering_depower.md`): V3Kite (VSM) needs 0.12 MORE `rel_depower`
+2026-08-18 (`docs/steering_depower.md`): V3Kite (VSM) needed 0.12 MORE `rel_depower`
 than AWETrim's ROM for the same power (slopes -15.2 vs -17.8 per unit, matched at
-6538 W: u_p = 0.2915 against u_p = 0.1699). 0.08 of that (0.4 m of tape) is the two
-models' own tape-length zero (`0.6 + 5*u_p` here, `0.2 + 5*u_p` in V3Kite); the
-remaining 0.04 (0.2 m) is genuine, unexplained aerodynamic disagreement — a single
-measured point, not a fitted curve.
+6538 W: u_p = 0.2915 against u_p = 0.1699), of which 0.08 (0.4 m of tape) was the two
+models' own tape-length zero (`0.6 + 5*u_p` here, `0.2 + 5*u_p` in V3Kite) and 0.04
+(0.2 m) genuine, unexplained aerodynamic disagreement — a single measured point, not
+a fitted curve. The constant below has since been lowered to 0.107 (2026-08-21,
+commit `ee1ecbd`); that revision has not been re-measured or re-derived against the
+split above.
 """
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.109
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.107
 
 """
     awetrim_depower_to_v3kite(l_dp) -> Float64

@@ -35,7 +35,7 @@ Both paths share the same front end.
 - **AWETrim**'s optimizer works in its own absolute tape length $l_\mathrm{dp}$
   [m], on a different zero than V3Kite's ([A third scale](#a-third-scale-the-awetrim-optimizer)).
   Converting one flown depower into the other is a fixed shift, codified as
-  `awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6)/5.0 + 0.12` — see
+  `awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6)/5.0 + 0.107` — see
   [below](#the-two-models-agree-on-sensitivity-and-differ-by-an-offset) for the
   derivation and a worked example.
 
@@ -238,17 +238,19 @@ and winch as the ROM was given) against the ROM's own pinned sweep:
 
 The slopes are within 15 % of each other, so the earlier reading — that the models
 disagree about depower *qualitatively* — was wrong. They respond to depower almost
-identically; they are **offset along the depower axis by 0.12 of `rel_depower`, i.e.
-0.61 m of tape**. The 0.4 m calibration offset above accounts for about two thirds of
-that, leaving ~0.2 m of genuine aerodynamic disagreement.
+identically; measured 2026-08-18, they were **offset along the depower axis by 0.12
+of `rel_depower`, i.e. 0.61 m of tape**. The 0.4 m calibration offset above accounts
+for about two thirds of that, leaving ~0.2 m of genuine aerodynamic disagreement.
 
 That is why `input_depower` is left free and a predicted-vs-measured ratio is a
 comparison at two different depower settings — but the fix is a shift, not a rebuild.
 
-The 0.12 offset is now code, not just a derived number:
+That 0.12 offset became code, but the constant has since been lowered to **0.107**
+(2026-08-21, commit `ee1ecbd`, "Lower depower offset"); that revision has not been
+re-measured or re-derived against the 0.4 m / 0.2 m split above:
 
 ```julia
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.12   # rel_depower units
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.107   # rel_depower units
 
 awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5.0 + AWETRIM_V3KITE_DEPOWER_OFFSET
 ```
@@ -256,16 +258,19 @@ awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5.0 + AWETRIM_V3KITE_DEPOWER_OF
 (`examples/awetrim_client.jl`). With the numbers in:
 
 $$
-u_p = \frac{l_\mathrm{dp} - 0.6}{5.0} + 0.12 \ \ [\mathrm{rel\_depower}]
+u_p = \frac{l_\mathrm{dp} - 0.6}{5.0} + 0.107 \ \ [\mathrm{rel\_depower}]
 $$
 
-`0.6/5.0` is exactly `0.12`, so this collapses to $u_p = l_\mathrm{dp}/5.0$ — the AWETrim
-zero-offset (0.4 m) and the genuine aerodynamic offset (0.2 m) exactly cancel the
-`0.6` intercept. Two worked points: the seed `l_dp = 1.6` m gives $u_p = 0.32$; the
-equal-power point measured above, `l_dp = 2.01` m (AWETrim's scale for $u_p = 0.282$
-on *its own* affine map), gives $u_p = 0.402$ — 0.12 more than the naive
-`(l_dp-0.6)/5 = 0.282` a reader would get by only undoing AWETrim's own zero shift
-and ignoring the aerodynamic disagreement.
+At the originally measured 0.12, `0.6/5.0` is exactly `0.12`, so the map collapsed to
+$u_p = l_\mathrm{dp}/5.0$ — the AWETrim zero-offset (0.4 m) and the genuine
+aerodynamic offset (0.2 m) exactly cancelling the `0.6` intercept. That cancellation
+was specific to 0.12 and does not hold at 0.107: the current map is
+$u_p = l_\mathrm{dp}/5.0 - 0.013$, a small residual intercept rather than an exact
+collapse. Two worked points at the current constant: the seed `l_dp = 1.6` m gives
+$u_p = 0.307$; the equal-power point measured above, `l_dp = 2.01` m (AWETrim's scale
+for $u_p = 0.282$ on *its own* affine map), gives $u_p = 0.389$ — 0.107 more than the
+naive `(l_dp-0.6)/5 = 0.282` a reader would get by only undoing AWETrim's own zero
+shift and ignoring the aerodynamic disagreement.
 
 This is the FULL correction — do not also subtract the 0.4 m calibration term
 separately. `TrajOptSettings.fly_opt_depower` (`false` by default) flies the
