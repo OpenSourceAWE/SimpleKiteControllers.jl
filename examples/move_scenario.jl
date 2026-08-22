@@ -104,11 +104,12 @@ archived into `vNN_2`, `vNN_3`, ... instead — see `unique_scenario_dir`).
 
 `compress = true` then trims the panel corners out of the moved `.arrow` log
 (`compress_scenario`), roughly 4x smaller at the full sample rate. `every = n`
-additionally keeps only every n-th row — a viewing artefact, not a scoring
-input, so leave it at 1 unless the folder is only ever going to be replayed
-(see the caveat in `docs/log_size.md`).
+additionally keeps only every n-th row, resampling to 30 Hz by default
+(`every = 3`) to keep a scenario folder pushable to `SimulationResults` —
+a viewing artefact, not a scoring input (see the caveat in `docs/log_size.md`).
+Pass `every = 1` to keep the full sample rate instead.
 """
-function move_scenario(; overwrite::Bool = false, unique::Bool = false, compress::Bool = true, every::Int = 1)
+function move_scenario(; overwrite::Bool = false, unique::Bool = false, compress::Bool = true, every::Int = 3)
     archive_dir = last_run_archive()
     status = only(filter(startswith("status: "), readlines(RUN_DONE_FILE)))
     occursin("ok", status) || @warn "Last run did not finish cleanly: $status"
