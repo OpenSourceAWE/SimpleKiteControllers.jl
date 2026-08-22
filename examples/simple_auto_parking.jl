@@ -22,6 +22,11 @@ the closed-loop response stays roughly invariant when the apparent wind speed
 changes. Because `DiscretePID` is in standard form (`K*(e + ...)`), scaling `K`
 scales the D action along with it.
 
+PROJECT's `kite_settings:` is always redirected to
+`data/kite_settings_psm_monolith.yaml` in this repo (a `backend: monolith`
+copy of V3Kite's own `kite_settings_psm.yaml`), regardless of which backend
+the upstream package ships — see the patched-project block before `init`.
+
 Logs the run to "tmp_auto_parking" in the `output` folder
 (`examples/../output`, created if missing). For verification, run
 `include("examples/simple_auto_parking.jl")` and check the printed heading
@@ -43,9 +48,11 @@ end
 using Timers; tic()
 using V3Kite
 using V3Kite: init, step!
+using SimpleKiteControllers: skc_data_path
 using DiscretePIDs: set_K!
 using Statistics
 using Printf
+using YAML
 include(joinpath(@__DIR__, "winch_adapter.jl"))  # winch_torque!: V3Kite is torque-only
 
 @info "simple_auto_parking.jl: heading-stabilized parking of the V3 kite."
@@ -85,10 +92,28 @@ DAMPING_PER_STIFFNESS = 0.001  # Damping per stiffness of tether and bridles [s]
 
 # `init` leaves the data path alone, so `save_log`/`load_log` below need it set here.
 set_data_path(v3_data_path())
+
+# Force the monolith backend: patch a copy of PROJECT whose `kite_settings:`
+# always points at this repo's data/kite_settings_psm_monolith.yaml, never at
+# V3Kite's own (kernel-backend) kite_settings_psm.yaml. The copy is written to
+# `output/`, so every other entry is resolved to an absolute path too — they
+# would otherwise be looked up relative to the copy's own directory instead of
+# `v3_data_path()`.
+OUTPUT_DIR = joinpath(@__DIR__, "..", "output")
+mkpath(OUTPUT_DIR)
+project_dict = YAML.load_file(joinpath(v3_data_path(), PROJECT))
+for (key, file) in project_dict["system"]
+    project_dict["system"][key] = joinpath(v3_data_path(), file)
+end
+project_dict["system"]["kite_settings"] =
+    joinpath(skc_data_path(), "kite_settings_psm_monolith.yaml")
+PROJECT_MONOLITH = joinpath(OUTPUT_DIR, "system_reelout_monolith.yaml")
+YAML.write_file(PROJECT_MONOLITH, project_dict)
+
 s = init(V_WIND, TETHER_LENGTH; body_start_damping = INITIAL_BODY_DAMPING,
     body_sim_damping = FLOWN_BODY_DAMPING, damping_per_stiffness = DAMPING_PER_STIFFNESS,
     depower_setpoint = DEPOWER_SETPOINT, sim_time = SIM_TIME, dt = DT,
-    system_yaml = PROJECT, aero_mode = AERO_MODE)
+    system_yaml = PROJECT_MONOLITH, aero_mode = AERO_MODE, remake_model = false)
 
 # Constant-length setpoint: the tether length just after settling.
 l0 = s.sys_state.l_tether[1]
@@ -128,8 +153,6 @@ catch e
 end
 
 @info "Save the log"
-OUTPUT_DIR = joinpath(@__DIR__, "..", "output")
-mkpath(OUTPUT_DIR)
 save_log(s.logger, "tmp_auto_parking"; path=OUTPUT_DIR, colmeta=timestamp_colmeta())
 
 # Regulation error over the settled part (skip the initial transient).
