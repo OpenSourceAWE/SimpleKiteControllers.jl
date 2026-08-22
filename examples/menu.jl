@@ -55,6 +55,7 @@ const EXAMPLES = [
     "optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)" => "optimize_fig8.jl",
     "optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
+    "create_overview.jl      - write SimulationResults/scenarios/overview.md across wind speeds" => "create_overview.jl",
 ]
 
 """

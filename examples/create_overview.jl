@@ -1,0 +1,97 @@
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
+"""
+Write `SimulationResults/scenarios/overview.md`, a table with one row per
+`vNN` scenario folder (`v03`…`v10`, excluding `v08_2` — same wind speed as
+`v08`), read from each folder's own `reelout_150m_opt.yaml` `summary:` block.
+
+Columns: `date`, `time`, `v_wind`, `power`, `power_ratio`, `total_time`,
+`rt_factor`, `opt_requests`, `opts_installed` — read from the YAML
+`summary:` section's `date`, `time`, `wind_speed_m_s`, `mean_power_W`,
+`power_ratio`, `total_wall_time_s`, `realtime_factor`,
+`optimization_requests` and `optimizations_installed` respectively (see
+`examples/reelout_results.jl`). Rows are sorted by wind speed ascending. A
+folder missing the YAML file or its `summary:` block is skipped with a
+warning, not an error.
+
+Run from the menu, or by
+
+    include("examples/create_overview.jl")
+"""
+
+using Pkg
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    Pkg.activate(joinpath(@__DIR__))
+end
+
+using YAML
+
+const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
+const SUMMARY_FILE = "reelout_150m_opt.yaml"
+const SKIPPED_FOLDERS = ("v08_2",)
+# yaml key => displayed column header
+const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_m_s" => "v_wind",
+                 "mean_power_W" => "power", "power_ratio" => "power_ratio",
+                 "total_wall_time_s" => "total_time", "realtime_factor" => "rt_factor",
+                 "optimization_requests" => "opt_requests",
+                 "optimizations_installed" => "opts_installed")
+
+"""
+    scenario_summary(dir) -> Union{Dict, Nothing}
+
+The `summary:` block of `dir`'s `reelout_150m_opt.yaml`, or `nothing` (with a
+warning) if the file or the block is missing.
+"""
+function scenario_summary(dir::AbstractString)
+    yaml_file = joinpath(dir, SUMMARY_FILE)
+    if !isfile(yaml_file)
+        @warn "Skipping $(basename(dir)): $SUMMARY_FILE not found"
+        return nothing
+    end
+    y = YAML.load_file(yaml_file)
+    if !haskey(y, "summary")
+        @warn "Skipping $(basename(dir)): no summary: block in $SUMMARY_FILE"
+        return nothing
+    end
+    return y["summary"]
+end
+
+"""
+    write_overview_md(rows, md_file)
+
+Write `rows` (each a `summary:` `Dict`) as a Markdown table to `md_file`,
+with every column centered.
+"""
+function write_overview_md(rows, md_file)
+    headers = last.(COLUMNS)
+    open(md_file, "w") do io
+        println(io, "| " * join(headers, " | ") * " |")
+        println(io, "| " * join(fill(":---:", length(headers)), " | ") * " |")
+        for row in rows
+            println(io, "| " * join((row[key] for (key, _) in COLUMNS), " | ") * " |")
+        end
+    end
+end
+
+"""
+    create_overview()
+
+Scan `SimulationResults/scenarios/` and write `overview.md` there, one row
+per scenario ordered by wind speed.
+"""
+function create_overview()
+    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+        isdir(dir) && basename(dir) ∉ SKIPPED_FOLDERS
+    end
+    summaries = filter(!isnothing, scenario_summary.(dirs))
+    isempty(summaries) && error("No usable $SUMMARY_FILE summary: blocks found in $SCENARIOS_DIR")
+
+    rows = sort(summaries; by = row -> row["wind_speed_m_s"])
+    md_file = joinpath(SCENARIOS_DIR, "overview.md")
+    write_overview_md(rows, md_file)
+    @info "Wrote overview" md_file rows=length(rows)
+end
+
+create_overview()
