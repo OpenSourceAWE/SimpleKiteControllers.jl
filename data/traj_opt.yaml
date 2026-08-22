@@ -160,7 +160,10 @@ traj_opt:
     # rather than a safety margin being traded away. The optimizer constrains HEIGHT
     # and not elevation, and it reaches its 50 m floor at the END of a lap's
     # reel-out, so a path installed as (azimuth, elevation) and flown at the anchor
-    # is ~42 m up — 50 * r0/r_low — whatever the starting length. No starting length
+    # is ~42 m up — 50 * r0/r_low — whatever the starting length. That ratio was
+    # backed out of rejected replies at 6 m/s on 2026-08-22 and is worse than the
+    # ~1.19 assumed here (55-70 m of reel-out per lap, not 35), which is what
+    # elevation_min_from_gates below exists for. No starting length
     # clears 50 here; the run climbs through it within the first lap instead, and
     # the flown minimum is what matters. That number is in every summary as
     # traj_opt.clearance.flown_min_m — watch it, not this.
@@ -197,6 +200,27 @@ traj_opt:
     # the pattern collapsing to zero width (azimuth_amplitude_min) and running away
     # to the zenith (elevation_max).
     pattern_elevation_min: 0.0
+    # Raise that floor to whatever the GATES will demand at the length being asked
+    # for, per request: asind(min_height/L) for the clearance gate and
+    # min_elevation + candidate_elevation_margin for the elevation one. false sends
+    # pattern_elevation_min alone.
+    #
+    # A height floor is not something the optimizer can meet on this run's behalf.
+    # AWETrim reaches its own 50 m at the END of a lap's reel-out, where the reply
+    # is installed as angles and judged at the anchor, so what arrives is
+    # 50 * r0/r_max — and that ratio is measured, not assumed: three consecutive
+    # replies were gated out at 38.6, 40.0 and 39.5 m against the 40 m floor on
+    # 2026-08-22, leaving the run on its startup path for 99 % of the reeling
+    # window. The floor FALLS as the tether grows, so it travels with every
+    # request (a warm /step included) the way min_turn_radius does.
+    elevation_min_from_gates: true
+    # Extra elevation asked for on top of the measured shortfall when a reply
+    # rejected for clearance or elevation is re-asked with a raised floor; 0.0
+    # re-asks for the shortfall alone. Spends the blend_max_retries budget, and is
+    # off with elevation_min_from_gates — a cold re-ask with identical inputs
+    # solves to the identical reply, which is why the gates below it still give up
+    # on the spot.                                                            [deg]
+    elevation_min_retry_margin: 0.5
     pattern_elevation_max: 0.0
     pattern_azimuth_max: 0.0
     pattern_azimuth_amplitude_min: 0.0
@@ -236,9 +260,11 @@ traj_opt:
     # spanned w = 0.2-0.78, more than half the blend, so a coarse sweep catches one.
     blend_fold_margin: 0.5   # fraction of the endpoints' own radius             [-]
     blend_probe_points: 21   # values of w that blend_folds samples              [-]
-    # Fresh solves requested, holding the simulation, when a reply clears the
-    # curvature, clearance and elevation gates but its own blend folds or its
-    # predicted power collapses. Exhausting them keeps flying the CURRENT path and
+    # Fresh solves requested, holding the simulation, when a reply is rejected: for
+    # a folded blend or a collapsed prediction, cold-restarted from a moved guess;
+    # for clearance or elevation, re-asked at a floor raised by the shortfall
+    # (elevation_min_from_gates). Curvature never retries — nothing about the
+    # question would change. Exhausting them keeps flying the CURRENT path and
     # falls back to the ordinary reopt_every_n_laps schedule.
     blend_max_retries: 3     # fresh solves per rejected reply                   [-]
     # A pattern collapsed to near-zero amplitude clears curvature, clearance and

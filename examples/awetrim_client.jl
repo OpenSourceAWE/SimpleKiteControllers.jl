@@ -881,16 +881,54 @@ function reelout_anchor_ratio(table)
 end
 
 """
-    pattern_limits_from(tos) -> Union{PatternLimits, Nothing}
+    elevation_min_request(fcs, tos, l_tether; extra = 0.0) -> Union{Float64, Nothing}
+
+The elevation floor [deg] to send with a request made for tether length
+`l_tether`: the highest of what the gates will demand there —
+`asind(tos.min_height/l_tether)` for the clearance one and `fcs.min_elevation +
+tos.candidate_elevation_margin` for the elevation one — and
+`tos.pattern_elevation_min`, plus `extra`. `nothing` asks for nothing and leaves
+the optimizer's own 0.6°; `tos.elevation_min_from_gates = false` sends
+`tos.pattern_elevation_min` alone.
+
+Inverting [`path_min_height`](@ref) at the length being asked for is what makes
+the request and the gate the same question: AWETrim constrains HEIGHT and reaches
+its floor at the END of the lap's reel-out, while the reply is installed as angles
+at the anchor and judged there. The floor FALLS as the tether grows, so it belongs
+with every request and not in the session — see the analogous argument for
+`min_turn_radius` at the request site.
+
+`extra` is what a retry raises the floor by after a reply was gated out, measured
+off that reply and carried forward: the shortfall is structural and the next
+length has it too.
+"""
+function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
+    el_min = Float64(tos.pattern_elevation_min)
+    if tos.elevation_min_from_gates
+        el_min = max(el_min, fcs.min_elevation + tos.candidate_elevation_margin)
+        tos.min_height > 0 && l_tether > tos.min_height &&
+            (el_min = max(el_min, asind(tos.min_height / l_tether)))
+    end
+    el_min += extra
+    return el_min > 0 ? el_min : nothing
+end
+
+"""
+    pattern_limits_from(tos; elevation_min = nothing) -> Union{PatternLimits, Nothing}
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
 `data/traj_opt.yaml`; each is in degrees and each is off at `0.0`. `nothing` when
 all four are off, which leaves the optimizer's own defaults alone.
+
+`elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
+of [`elevation_min_request`](@ref), which depends on the length being asked for and
+so cannot come from the file alone.
 """
-function pattern_limits_from(tos)
-    on(x) = x > 0 ? Float64(x) : nothing
+function pattern_limits_from(tos; elevation_min = nothing)
+    on(x) = !isnothing(x) && x > 0 ? Float64(x) : nothing
     limits = PatternLimits(; azimuth_max = on(tos.pattern_azimuth_max),
-                           elevation_min = on(tos.pattern_elevation_min),
+                           elevation_min = on(something(elevation_min,
+                                                        tos.pattern_elevation_min)),
                            elevation_max = on(tos.pattern_elevation_max),
                            azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min))
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,

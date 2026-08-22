@@ -830,7 +830,7 @@ end
         # request's f_max with it, and at 150.0 m / 9 m/s the 22 seed throws IPOPT's
         # iteration limit where it used to converge. See the YAML header, which
         # carries both measurements and what to try if the failure pockets bite.
-        @test tos.guess_el_center == 30.0
+        @test tos.guess_el_center == 29.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is
@@ -871,6 +871,18 @@ end
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
         @test tos.candidate_elevation_margin == 3.0
+        # On by default since 2026-08-22: the clearance gate is a HEIGHT the request
+        # never carried, and three replies in a row were thrown away 1.4 m short.
+        @test TrajOptSettings().elevation_min_from_gates
+        @test tos.elevation_min_from_gates
+        @test tos.elevation_min_retry_margin >= 0
+        # The identity the per-request floor inverts: ask for asind(min_height/L)
+        # and `path_min_height` reads back exactly min_height at that length. This
+        # is the whole reason the request and the gate can be made the same
+        # question — the optimizer's own floor is a height at a DIFFERENT radius.
+        let L = 187.0, el_ask = asind(tos.min_height / L)
+            @test path_min_height([0.0, 1.0], [el_ask, el_ask + 5], L) ≈ tos.min_height
+        end
         @test tos.detect_simple_bounds
         # The depower seed follows the wind, and only UPWARDS from the reference:
         # all six runs of the 5.0-7.0 m/s scan converged from 1.6 m, so the
@@ -898,6 +910,9 @@ end
             neg = joinpath(dir, "n.yaml")
             write(neg, "traj_opt:\n    candidate_elevation_margin: -1.0\n")
             @test_throws ErrorException TrajOptSettings(neg)
+            low = joinpath(dir, "l.yaml")
+            write(low, "traj_opt:\n    elevation_min_retry_margin: -0.5\n")
+            @test_throws ErrorException TrajOptSettings(low)
             steep = joinpath(dir, "d.yaml")
             write(steep, "traj_opt:\n    input_depower_per_wind: -0.1\n")
             @test_throws ErrorException TrajOptSettings(steep)

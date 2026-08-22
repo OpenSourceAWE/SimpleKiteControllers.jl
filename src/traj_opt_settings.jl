@@ -252,7 +252,9 @@ multi-modal, so the guess is a choice about the answer.
     AWETrim constrains HEIGHT (50 m, `DEFAULT_LIMITS["height"]`) and does not
     constrain elevation at all — but it reaches that floor at the END of a lap's
     reel-out, so a curve installed as (azimuth, elevation) and flown at its anchor
-    radius clears only `50 * r0/r_low` ≈ 42 m, whatever the anchor. This floor is
+    radius clears only `50 * r0/r_low` ≈ 42 m, whatever the anchor — and less than
+    that where a lap reels out more than the ~35 m that estimate assumes, which is
+    what [`elevation_min_from_gates`](@ref) exists for. This floor is
     therefore about the anchor radius, not about how low the kite gets: the run
     reels out and climbs through 50 m within the first lap. `data/traj_opt.yaml`
     ships 40.0 for that reason, and the flown minimum is reported separately.
@@ -286,6 +288,36 @@ multi-modal, so the guess is a choice about the answer.
     candidate_elevation_margin` to ask for what the gate will demand.
     """
     pattern_elevation_min = 0.0
+    """
+    Raise the floor above to whatever the GATES will demand at the length being
+    asked for, per request: `asind(min_height/L)` for the clearance gate and
+    `min_elevation + candidate_elevation_margin` for the elevation one
+    (`elevation_min_request` in `examples/awetrim_client.jl`). `false` sends
+    `pattern_elevation_min` alone.
+
+    A height floor is not something the optimizer can meet on this run's behalf.
+    AWETrim reaches its own 50 m at the END of a lap's reel-out, where the reply
+    is installed as angles and judged at the anchor, so what arrives is
+    `50 * r0/r_max` — and that ratio is measured, not assumed: three consecutive
+    replies were gated out at 38.6, 40.0 and 39.5 m against a 40 m floor on
+    2026-08-22, leaving the run on its startup path for 99 % of the reeling
+    window. Inverting the gate closes the gap by construction, at the price every
+    sent constraint carries: a constrained cold solve lands on the best branch
+    less often than a free one.
+    """
+    elevation_min_from_gates::Bool = true
+    """
+    Extra elevation [deg] asked for on top of the measured shortfall when a reply
+    rejected for clearance or elevation is re-asked with a raised floor; `0.0`
+    re-asks for the shortfall alone. The retry spends the `blend_max_retries`
+    budget and is off with `elevation_min_from_gates`.
+
+    There is no retry for the curvature gate for the reason there was none for
+    these two until now: a cold re-ask with identical inputs solves to the
+    identical reply. Raising the floor is what makes the second question a
+    different one.
+    """
+    elevation_min_retry_margin = 0.5
     """
     Elevation ceiling [deg] of the optimized pattern; `0.0` keeps the optimizer's
     51.6°. Guards the run-away-to-zenith basin a failed re-optimization falls into.
@@ -490,6 +522,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.candidate_elevation_margin >= 0 ||
         error("candidate_elevation_margin must be >= 0, got "*
               "$(tos.candidate_elevation_margin).")
+    tos.elevation_min_retry_margin >= 0 ||
+        error("elevation_min_retry_margin must be >= 0, got "*
+              "$(tos.elevation_min_retry_margin).")
     tos.path_blend_time > 0 ||
         error("path_blend_time must be > 0, got $(tos.path_blend_time).")
     0 < tos.blend_fold_margin <= 1 ||

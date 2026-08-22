@@ -624,6 +624,86 @@ depower. `c1` is linear over the range (0.1495 to `u_s` 0.374 vs 0.1513 to
 levers change the operating point: reel-out (restores `c1 = 0.3159` and a 0.03 s
 dead time by making a low depower survivable) or a 300 m tether.
 
+## The clearance gate was rejecting three replies in a row, and nothing in the request knew about it (2026-08-22)
+
+`output/scenarios/v06_4`, 6 m/s, 150 m: four of seven re-optimizations were gated
+out, three of them on clearance and by less than 1.5 m.
+
+```
+t_044.7_s: rejected — clearance 38.6 m   # at L = 187 m
+t_061.1_s: rejected — clearance 40.0 m   # at L = 226 m
+t_079.9_s: rejected — clearance 39.5 m   # at L = 270 m
+t_101.5_s: rejected — descends to 7.4°, below min_elevation + margin = 9.5°
+```
+
+The cost is the whole point of re-optimizing: the startup path flew **99 % of the
+reeling window at 7451 W predicted**, against the 9273 W of the first reply that
+got through, at L = 378 m. Four `max_reopt` slots and ~32 s of frozen wall time
+bought nothing. The kite's own `flown_min_m` was 47.0 m — nothing unsafe was being
+prevented, the run was reeling out and climbing through the floor within the lap.
+
+**The ratio is bigger than "Height floor: no starting length clears AWETrim's
+50 m" (2026-08-18) assumed.** That entry computed the anchor clearance as
+`50 * r0/r_low` ≈ 42 m from ~35 m of reel-out per lap. Back it out of these
+rejections instead: `50/38.6 = 1.30` at 187 m and `50/39.5 = 1.27` at 270 m, i.e.
+55-70 m per lap at this wind. What the optimizer delivers at the anchor is 38-40 m
+and the floor is 40, so every reply was a coin flip on the third digit.
+
+**The gate was a post-hoc one.** `min_height` is checked after the 8 s solve is
+paid for, and nothing in the request mentioned it: `pattern_elevation_min` was
+`0.0`, so `pattern_limits_from` returned `nothing` and no elevation constraint went
+out at all. The same fix that closed this for curvature on 2026-08-19 applies —
+send what the gate will demand, and stop discovering it afterwards.
+
+**`elevation_min_from_gates` (new, default `true`).** Each request now carries
+`max(asind(min_height/L), min_elevation + candidate_elevation_margin)`, computed at
+the length being asked for (`elevation_min_request` in `awetrim_client.jl`). It
+inverts `path_min_height`, which is the gate itself, so the request and the gate
+are the same question. What it would have asked for on this run:
+
+| L | ask | which floor binds | anchor clearance at the ask |
+|--:|--:|:--|--:|
+| 150 m | 15.47° | clearance | 40.0 m |
+| 187 m | 12.35° | clearance | 40.0 m |
+| 226 m | 10.19° | clearance | 40.0 m |
+| 270 m | 9.50° | elevation | 44.6 m |
+| 320 m | 9.50° | elevation | 52.8 m |
+| 380 m | 9.50° | elevation | 62.7 m |
+
+All four rejections are inside that table — the three clearance ones below 270 m,
+and the 7.4° one at 320 m where the elevation floor takes over. The floor FALLS as
+the tether grows, which is why it travels with every request, warm `/step`
+included: a box built once at 150 m would ask for 15.5° at 320 m, where 9.5° is
+enough, and buy a needlessly high and less powerful pattern. Same argument as
+`min_turn_radius`, opposite direction.
+
+**`elevation_min_retry_margin` (new, 0.5°) — and why there was no retry.** The
+curvature/clearance/elevation gates gave up on the spot, and correctly so under
+the old code: a cold re-ask with identical inputs solves to the identical reply
+(measured 2026-08-20 on the fold retries, three attempts with nothing varied).
+`reopt_retry_el_offset` covers a solve that FAILED, never a reply that was
+rejected. With a floor in the request the second question is a different one, so a
+clearance/elevation rejection now re-asks at a floor raised by the measured
+shortfall plus this margin, spending the `blend_max_retries` budget. The guess
+centre moves too, but only upward for these — the alternating +/- is aimed at
+folds. Curvature still does not retry: nothing about that question would change.
+
+The shortfall is carried across cycles rather than reset per request
+(`el_min_extra`, in the summary as `traj_opt.clearance.elevation_min_extra_deg`).
+It is structural — an angle curve installed at the anchor, where the optimizer
+earns part of its height by reeling out within the lap — so the next length has it
+too, and paying one retry for it per run is enough.
+
+Two things to know before the next run. The failure cache keys on the request as
+the server sees it, and that now includes the pattern box, so entries recorded
+before this change will not match and their requests will be sent again — which is
+the correct behaviour, since they were a different question. And the price every
+sent constraint carries applies here as it did to `min_turn_radius`: a constrained
+cold solve lands on the best branch less often than a free one, so a 422 where
+there used to be a rejected reply is the expected new failure mode.
+
+Not fixed, still the real fix: the reply's radial profile is discarded. Stage 4.
+
 ## The depower SEED has to follow the wind, and a 422 at 8 m/s is what says so (2026-08-20)
 
 `input_depower` is only a seed — the server optimizes it — so it had never looked

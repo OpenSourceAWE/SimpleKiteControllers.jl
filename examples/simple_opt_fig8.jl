@@ -206,7 +206,8 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 # `turn_radius_lap_reelout_m` over this run's length.
 opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l0) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
-opt_box = pattern_limits_from(tos)
+opt_box = pattern_limits_from(tos;
+                              elevation_min = elevation_min_request(fcs, tos, l0))
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",

@@ -529,7 +529,8 @@ ensure_server(tos.base_url; autostart = tos.autostart_server)
 opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l_set) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
-opt_box = pattern_limits_from(tos)
+opt_box = pattern_limits_from(tos;
+                              elevation_min = elevation_min_request(fcs, tos, l_set))
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",
@@ -939,7 +940,13 @@ reopt_t_request = NaN       # [s] when the pending request went out
 reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
 reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
 reopt_events = NamedTuple[] # one row per solve, for the run summary
-blend_retries_total = 0     # cold-restart attempts spent on a folded/collapsed reply
+blend_retries_total = 0     # cold-restart attempts spent on a rejected reply
+# [deg] how far the last reply that was gated out for clearance or elevation fell
+# below the floor it was asked for. Carried across cycles, not reset per request:
+# the shortfall is structural (an angle curve installed at the anchor, where the
+# optimizer earns part of its height by reeling out within the lap) and the next
+# length has it too, so paying a retry for it once is enough.
+el_min_extra = 0.0
 # The blend in progress: two canonical paths of equal length and a start time.
 # Both are guaranteed fold-free across the whole w in [0, 1] before either is
 # ever assigned — see the accept gate's fold-check below.
@@ -963,6 +970,13 @@ function blend_folds(az0, el0, az1, el1)
              tos.blend_fold_margin * r0,
         range(0.0, 1.0; length = tos.blend_probe_points))
 end
+
+"""
+    retried(n) -> String
+
+How a rejection reports the retries that preceded it, `""` for the first try.
+"""
+retried(n) = n > 0 ? @sprintf(", after %d retries", n) : ""
 
 toc("Start simulation loop...")
 
@@ -1291,6 +1305,15 @@ try
                     opt_r_on && (global opt_r_min =
                         min_turn_radius_request(fcs, tos; scale = opt_r_scale,
                                                 c1 = c1_at(phase)))
+                    # The elevation floor MOVES with the length the same way the
+                    # turn radius does, and in the other direction: `min_height` is
+                    # met at ever lower angles as the tether grows, so a box built
+                    # once at the starting length over-asks by hundreds of metres
+                    # of tether. Rebuilt per request, raised by whatever the last
+                    # gated-out reply fell short by.
+                    global opt_box_now = pattern_limits_from(tos;
+                        elevation_min = elevation_min_request(fcs, tos, l_now;
+                                                              extra = el_min_extra))
                     for (attempt, el_seed) in enumerate(el_seeds)
                         # Set only on a cold attempt: it is what the failure cache
                         # keys on, and a warm step has no such key.
@@ -1303,7 +1326,8 @@ try
                             # is a bigger fraction of a short tether than of a long
                             # one. `nothing` (the request is off) still means "keep".
                             opt_step(StepParams(; length = l_now, winch_params = winch,
-                                                min_turn_radius = opt_r_min);
+                                                min_turn_radius = opt_r_min,
+                                                pattern_limits = opt_box_now);
                                      url = tos.base_url, wait = false)
                         else
                             guess_az_r, guess_el_r =
@@ -1319,7 +1343,7 @@ try
                                                       reg_weight = tos.reg_weight,
                                                       detect_simple_bounds = tos.detect_simple_bounds,
                                                       min_turn_radius = opt_r_min,
-                                                      pattern_limits = opt_box)
+                                                      pattern_limits = opt_box_now)
                             # A cached failure costs the run nothing but the lap it
                             # would have re-optimized on: no request goes out, the
                             # kite keeps the path it has, and `reopt_n` is NOT spent,
@@ -1442,6 +1466,11 @@ try
                     # most, per install" cost, since a retry that folds again is
                     # a normal rejection, not a run-ending one.
                     reject_reason = ""
+                    # A rejection for clearance or elevation is retried too, but it
+                    # is a different retry: what is varied is the FLOOR asked for,
+                    # not the guess it is solved from, and the guess only ever moves
+                    # up. `el_min_extra` carries the shortfall.
+                    reject_low = false
                     for blend_attempt in 0:tos.blend_max_retries
                         if blend_attempt > 0
                             global blend_retries_total += 1
@@ -1457,12 +1486,21 @@ try
                             # pattern left to fold), which the run then flew,
                             # unwrapped ψ reaching 693° start to end.
                             retry_el_seed = el_center_seed +
-                                (isodd(blend_attempt) ? 1 : -1) * tos.reopt_retry_el_offset
+                                (reject_low || isodd(blend_attempt) ? 1 : -1) *
+                                tos.reopt_retry_el_offset
+                            retry_el_min = elevation_min_request(fcs, tos, l_now;
+                                                                 extra = el_min_extra)
                             @info @sprintf("  ... candidate at L = %.0f m rejected \
                                             (%s); cold-restarting from guess el \
-                                            %.0f° (retry %d of %d), holding the \
+                                            %.0f°%s (retry %d of %d), holding the \
                                             simulation.",
                                            l_now, reject_reason, retry_el_seed,
+                                           isnothing(retry_el_min) ? "" :
+                                               @sprintf(", floor %.1f°%s", retry_el_min,
+                                                        el_min_extra > 0 ?
+                                                            @sprintf(" (+%.1f° for the \
+                                                                      shortfall)",
+                                                                     el_min_extra) : ""),
                                            blend_attempt, tos.blend_max_retries)
                             retry_az, retry_el = figure_eight_path(tos.guess_a,
                                 tos.guess_b, tos.guess_c, tos.guess_d, 0.0,
@@ -1474,7 +1512,9 @@ try
                                 input_depower = depower_seed(tos, inflow.wind_speed),
                                 reg_weight = tos.reg_weight,
                                 detect_simple_bounds = tos.detect_simple_bounds,
-                                min_turn_radius = opt_r_min, pattern_limits = opt_box)
+                                min_turn_radius = opt_r_min,
+                                pattern_limits = pattern_limits_from(tos;
+                                    elevation_min = retry_el_min))
                             retry_reply = opt_init(retry_params; url = tos.base_url)
                             opt_step(StepParams(l_now, winch, retry_reply.trajectory);
                                      url = tos.base_url, wait = false)
@@ -1707,18 +1747,41 @@ try
                                                                     something(opt_r_min, 0.0))))
                             break
                         elseif tos.min_height > 0 && clearance < tos.min_height
+                            reason = @sprintf("clearance %.1f m", clearance)
+                            # In DEGREES, which is the currency the request is made
+                            # in: how far the reply's lowest point sits below the
+                            # elevation this gate demands at this length.
+                            deficit = asind(min(1.0, tos.min_height / l_now)) -
+                                      minimum(chk_el)
+                            if tos.elevation_min_from_gates &&
+                               blend_attempt < tos.blend_max_retries
+                                global el_min_extra += deficit +
+                                                       tos.elevation_min_retry_margin
+                                reject_reason = reason
+                                reject_low = true
+                                continue   # re-asked at a raised floor, at the top
+                            end
                             event = (; t, l = l_now, status = "rejected",
-                                     detail = @sprintf("clearance %.1f m", clearance))
+                                     detail = reason * retried(blend_attempt))
                             break
                         elseif minimum(chk_el) < el_floor
                             # The clearance floor does NOT imply this one: at 318 m
                             # of tether, 50 m of height is 9° of elevation. The
                             # margin is there because the kite flies BELOW its
                             # reference — ~3° measured, twice.
+                            reason = @sprintf("descends to %.1f°, below \
+                                               min_elevation + margin = %.1f°",
+                                              minimum(chk_el), el_floor)
+                            if tos.elevation_min_from_gates &&
+                               blend_attempt < tos.blend_max_retries
+                                global el_min_extra += el_floor - minimum(chk_el) +
+                                                       tos.elevation_min_retry_margin
+                                reject_reason = reason
+                                reject_low = true
+                                continue
+                            end
                             event = (; t, l = l_now, status = "rejected",
-                                     detail = @sprintf("descends to %.1f°, below \
-                                                        min_elevation + margin = %.1f°",
-                                                       minimum(chk_el), el_floor))
+                                     detail = reason * retried(blend_attempt))
                             break
                         elseif cand_folds ||
                                new_pred < tos.min_power_frac * opt_power_pred
@@ -1729,6 +1792,7 @@ try
                                          opt_power_pred)
                             if blend_attempt < tos.blend_max_retries
                                 reject_reason = reason
+                                reject_low = false   # this one is not about height
                                 continue   # a fresh reply is requested at the top
                             end
                             event = (; t, l = l_now, status = "rejected",

@@ -448,9 +448,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
         "blend_retries" => (@isdefined(blend_retries_total) ? blend_retries_total : 0,
-            "cold-restart attempts spent on a reply whose blend folded or \
-             predicted collapsed power (`blend_folds`/`min_power_frac`), across \
-             every install this run"),
+            "cold-restart attempts spent on a rejected reply — a folded blend, a \
+             collapsed prediction, or a clearance/elevation shortfall re-asked at \
+             a raised floor — across every install this run"),
         # Keyed by time, but two events CAN share one: a blocking solve is
         # requested and collected on the same step, so a seed skipped from the
         # failure cache carries the same `t` as the install that follows it. A
@@ -581,7 +581,20 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                                         for (lt, el) in zip(sl.l_tether, sl.elevation));
                                 digits = 1),
             "lowest point the kite actually reached over the run [m]"),
-        "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]")),
+        "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]"),
+        "elevation_min_asked_deg" => (
+            let b = @isdefined(opt_box_now) && !isnothing(opt_box_now) ?
+                    opt_box_now : opt_box
+                isnothing(b) || isnothing(b.elevation_min) ? "unset" :
+                    round(b.elevation_min; digits = 2)
+            end,
+            "elevation floor the LAST request carried, the higher of \
+             asind(min_height/L) and min_elevation + candidate_elevation_margin at \
+             the length it was made for; the optimizer constrains HEIGHT, and only \
+             at the far end of the lap's reel-out [deg]"),
+        "elevation_min_extra_deg" => (round(el_min_extra; digits = 2),
+            "raise a rejected reply's shortfall added to that floor, carried \
+             forward once measured; 0 means no reply was gated out low [deg]")),
     "inflow" => OrderedDict(
         "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"),
         "wind_direction_deg" => (inflow.wind_direction, "direction the wind comes from [deg]"),
