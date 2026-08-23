@@ -16,20 +16,26 @@ script's structure intact.
 
 """
     plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
-                         opt_raw::Union{Nothing, Tuple} = nothing) -> Figure
+                         opt_raw::Union{Nothing, Tuple} = nothing,
+                         project::Union{Nothing, AbstractString} = nothing) -> Figure
 
 Plot the azimuth/elevation flight pattern for a scenario in `scenario_dir`
 (flown path vs. attractor reference, or vs. optimizer-raw if available).
-Loads all necessary data from within the scenario directory's own copies of
-settings and the flight log, and returns the Makie figure. When `disp=false`,
-the figure is created but not displayed (suitable for batch processing).
-`opt_raw` may be passed as `(az_array, el_array)` to overlay the optimizer's
-uncorrected paths; if absent, uses the attractor reference instead.
+Loads the flight log from `scenario_dir`. The system project defaults to
+`scenario_dir`'s own `system_reelout_150m.yaml` copy, present in an archived
+scenario folder (`output/scenarios/<name>` or `output/archives/<run>`); pass
+`project` explicitly for a live run in `output/`, whose project file lives in
+`data/` and is never copied there. When `disp=false`, the figure is created
+but not displayed (suitable for batch processing). `opt_raw` may be passed as
+`(az_array, el_array)` to overlay the optimizer's uncorrected paths; if
+absent, uses the attractor reference instead.
 """
 function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
-                               opt_raw::Union{Nothing, Tuple} = nothing)
-    # Load settings and log from the scenario's own copies
-    scenario_project = joinpath(scenario_dir, "system_reelout_150m.yaml")
+                               opt_raw::Union{Nothing, Tuple} = nothing,
+                               project::Union{Nothing, AbstractString} = nothing)
+    # Load settings and log; the system project is either the caller's own
+    # resolved path, or the scenario folder's own copy
+    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_dir)
 

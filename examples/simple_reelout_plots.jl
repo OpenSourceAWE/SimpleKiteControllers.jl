@@ -98,6 +98,7 @@ if !isnothing(scenario_path)
     scenario_project = joinpath(scenario_path, "system_reelout_150m.yaml")
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
+    pattern_project = scenario_project
 else
     # Same rule as simple_reelout.jl: an `fcs` already in `Main` wins. Included at
     # the end of a run that is the fcs actually FLOWN, so rebuilding it from the
@@ -114,6 +115,7 @@ else
         project_set = Settings(project)
         apply_windspeed_override!(project_set, selected_windspeed())
     end
+    pattern_project = project
 end
 plots = selected_plots()
 output_path = isnothing(scenario_path) ?
@@ -226,7 +228,8 @@ if "pattern" in plots
     else
         nothing
     end
-    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw = opt_raw_for_plot)
+    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw = opt_raw_for_plot,
+                               project = pattern_project)
     display(p1)
     sleep(0.1)
 end
