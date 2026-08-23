@@ -20,8 +20,7 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 #%% code id=overview_table
 using DataFrames
 
-overview_path = expanduser("~/repos/SimulationResults/scenarios/overview.md")
-overview_lines = split(readfile(overview_path), '\n')
+overview_lines = split(@asset("notebooks/overview.md"), '\n')
 header = strip.(split(strip(overview_lines[1], '|'), '|'))
 rows = [strip.(split(strip(l, '|'), '|')) for l in overview_lines[3:end] if !isempty(strip(l))]
 overview_df = DataFrame([header[i] => [something(tryparse(Float64, r[i]), r[i]) for r in rows] for i in eachindex(header)])
@@ -31,7 +30,8 @@ show_force || select!(overview_df, Not([:min_force, :av_force, :max_force]))
 show_reelout || select!(overview_df, Not(names(overview_df, r"^v_ro")))
 show_performance || select!(overview_df, Not([:total_time, :rt_factor]))
 
-slate_table(overview_df; align=Dict(:opt_requests => :center, :opts_installed => :center))
+align = Dict(c => :center for c in (:opt_requests, :opts_installed) if c in propertynames(overview_df))
+slate_table(overview_df; align)
 
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
 #   docid = b94b3a69-a369-4ec8-bcb0-c8230e4ff1d3

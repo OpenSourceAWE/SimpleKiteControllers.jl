@@ -182,6 +182,12 @@ function create_overview()
     md_file = joinpath(SCENARIOS_DIR, "overview.md")
     write_overview_md(rows, md_file)
     @info "Wrote overview" md_file rows=length(rows)
+
+    notebooks_file = joinpath(@__DIR__, "..", "notebooks", "overview.md")
+    mkpath(dirname(notebooks_file))
+    write_overview_md(rows, notebooks_file)
+    @info "Wrote overview" notebooks_file rows=length(rows)
+
     show_overview_html(rows)
 end
 
