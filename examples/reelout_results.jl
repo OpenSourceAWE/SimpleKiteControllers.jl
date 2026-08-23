@@ -775,9 +775,6 @@ else
     @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
 end
 
-# Printed last, after the plots: the results block above is a wall of printf and
-# this is the comparison the script exists for. `@info`, not `printf`, so the power
-# line lands on the same stream as everything that came before it.
 isnothing(opt_power_meas) || @info power_summary
 printstyled("Summary:\n"; bold = true)
 write_yaml_commented(stdout, 1, summary_block; color = true)
