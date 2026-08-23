@@ -16,27 +16,42 @@ checked by re-scoring an existing log rather than by flying again.
 # ==================== RESULTS ==================== #
 
 """
-    write_yaml_commented(io, indent, node)
+    write_yaml_commented(io, indent, node; comment_col = 36, color = false)
 
 Serialize a nested `OrderedDict` as YAML, recursing into `OrderedDict` values
 and appending a trailing `# comment` for leaves given as `(value, comment)`
 pairs, aligned to `comment_col` where the line is short enough.
-`YAML.write_file` has no concept of comments, hence this by hand.
+`YAML.write_file` has no concept of comments, hence this by hand. `color = true`
+adds ANSI syntax highlighting (keys, string/number values, comments); leave it
+off when `io` is a file, so no escape codes end up on disk.
 """
-function write_yaml_commented(io, indent, node; comment_col = 36)
+function write_yaml_commented(io, indent, node; comment_col = 36, color = false)
     pad = "  "^indent
     for (k, v) in node
         if v isa AbstractDict
-            println(io, pad, k, ":")
-            write_yaml_commented(io, indent + 1, v; comment_col)
+            print(io, pad)
+            color ? printstyled(io, k; color = :cyan, bold = true) : print(io, k)
+            println(io, ":")
+            write_yaml_commented(io, indent + 1, v; comment_col, color)
         else
             value, comment = v isa Tuple ? v : (v, "")
             val = value isa AbstractString ? "\"$value\"" : string(value)
             prefix = string(pad, k, ": ", val)
-            if isempty(comment)
-                println(io, prefix)
+            print(io, pad)
+            if color
+                printstyled(io, k; color = :cyan)
+                print(io, ": ")
+                printstyled(io, val; color = value isa AbstractString ? :green : :yellow)
             else
-                println(io, prefix, " "^max(1, comment_col - length(prefix)), "# ", comment)
+                print(io, k, ": ", val)
+            end
+            if isempty(comment)
+                println(io)
+            else
+                print(io, " "^max(1, comment_col - length(prefix)))
+                color ? printstyled(io, "# ", comment; color = :light_black) :
+                    print(io, "# ", comment)
+                println(io)
             end
         end
     end
@@ -704,11 +719,6 @@ end
 
 # ==================== ARCHIVE ==================== #
 
-# Repeated here, as the last thing the run says: the results block above is a wall
-# of printf and this is the comparison the script exists for. `@info`, not `printf`,
-# so it lands on the same stream as the archive line it precedes.
-isnothing(opt_power_meas) || @info power_summary
-
 # One timestamped folder per run under output/archives/, so the exact config
 # that produced a log survives even after the next run overwrites output/*.
 # RUN_ARCHIVE = false skips it, read and cleared like SHOW_PLOTS: a sweep writes
@@ -764,6 +774,13 @@ if show_plots
 else
     @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
 end
+
+# Printed last, after the plots: the results block above is a wall of printf and
+# this is the comparison the script exists for. `@info`, not `printf`, so the power
+# line lands on the same stream as everything that came before it.
+isnothing(opt_power_meas) || @info power_summary
+printstyled("Summary:\n"; bold = true)
+write_yaml_commented(stdout, 1, summary_block; color = true)
 
 # Defined in simple_opt_reelout.jl before anything that can throw, and called
 # from its `catch` too — see the docstring there.
