@@ -24,6 +24,7 @@ overview_lines = split(@asset("notebooks/overview.md"), '\n')
 header = strip.(split(strip(overview_lines[1], '|'), '|'))
 rows = [strip.(split(strip(l, '|'), '|')) for l in overview_lines[3:end] if !isempty(strip(l))]
 overview_df = DataFrame([header[i] => [something(tryparse(Float64, r[i]), r[i]) for r in rows] for i in eachindex(header)])
+filter!(:v_wind => ==(Float64(wind_speed)), overview_df)
 
 show_optimization || select!(overview_df, Not([:opt_requests, :opts_installed]))
 show_force || select!(overview_df, Not([:min_force, :av_force, :max_force]))
@@ -37,6 +38,17 @@ slate_table(overview_df; align)
 @md"""
 ![power curve](/n/results/asset/notebooks/powercurve.png)
 """
+
+#%% code id=wind_speed_bind
+@bind wind_speed Slider(3:10; default=3, label="Wind speed [m/s]")
+
+#%% web id=pattern_plot
+@web(html"""
+<img src="/n/results/asset/notebooks/pattern_v{{ lpad(wind_speed, 2, '0') }}.png" alt="flight pattern">
+""",
+css"""
+img { display: block; margin: 0 auto; }
+""")
 
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
 #   docid = b94b3a69-a369-4ec8-bcb0-c8230e4ff1d3
