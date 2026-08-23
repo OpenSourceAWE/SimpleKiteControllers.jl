@@ -33,6 +33,11 @@ show_performance || select!(overview_df, Not([:total_time, :rt_factor]))
 align = Dict(c => :center for c in (:opt_requests, :opts_installed) if c in propertynames(overview_df))
 slate_table(overview_df; align)
 
+#%% md id=powercurve_plot
+@md"""
+![power curve](/n/results/asset/notebooks/powercurve.png)
+"""
+
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
 #   docid = b94b3a69-a369-4ec8-bcb0-c8230e4ff1d3
 # ╚═╡

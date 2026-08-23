@@ -138,18 +138,18 @@ function powercurve_png(rows)
 end
 
 """
-    show_overview_html(rows)
+    show_overview_html(rows, png_file)
 
 Render `rows` as an HTML table with PrettyTables, with the power curve
-embedded below it as a base64-encoded PNG, and open it in the default
-browser, giving a nicely formatted pop-up view of the same data as the
-markdown table.
+`png_file` (from `powercurve_png`) embedded below it as a base64-encoded PNG,
+and open it in the default browser, giving a nicely formatted pop-up view of
+the same data as the markdown table.
 """
-function show_overview_html(rows)
+function show_overview_html(rows, png_file)
     headers = collect(last.(COLUMNS))
     data = [row[key] for row in rows, (key, _) in COLUMNS]
     table_html = pretty_table(String, data; column_labels = headers, backend = :html, alignment = :c)
-    img_b64 = base64encode(read(powercurve_png(rows)))
+    img_b64 = base64encode(read(png_file))
     # a snap-confined browser (e.g. Firefox) cannot see dotfiles/dotdirs under $HOME
     html_file = joinpath(homedir(), "overview.html")
     open(html_file, "w") do io
@@ -167,8 +167,9 @@ end
     create_overview()
 
 Scan `SimulationResults/scenarios/` and write `overview.md` there, one row
-per scenario ordered by wind speed, then display the same table as a
-pop-up in the default browser.
+per scenario ordered by wind speed, mirror `overview.md` and the power curve
+PNG into `notebooks/` for `notebooks/results.jl` to embed, then display the
+same table as a pop-up in the default browser.
 """
 function create_overview()
     isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
@@ -183,12 +184,18 @@ function create_overview()
     write_overview_md(rows, md_file)
     @info "Wrote overview" md_file rows=length(rows)
 
-    notebooks_file = joinpath(@__DIR__, "..", "notebooks", "overview.md")
-    mkpath(dirname(notebooks_file))
+    notebooks_dir = joinpath(@__DIR__, "..", "notebooks")
+    mkpath(notebooks_dir)
+    notebooks_file = joinpath(notebooks_dir, "overview.md")
     write_overview_md(rows, notebooks_file)
     @info "Wrote overview" notebooks_file rows=length(rows)
 
-    show_overview_html(rows)
+    png_file = powercurve_png(rows)
+    notebooks_png_file = joinpath(notebooks_dir, "powercurve.png")
+    cp(png_file, notebooks_png_file; force = true)
+    @info "Wrote power curve" notebooks_png_file
+
+    show_overview_html(rows, png_file)
 end
 
 create_overview()
