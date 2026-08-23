@@ -669,9 +669,8 @@ end
 summary_block = OrderedDict{String, Any}(
     "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
     "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
-    "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
+    "wind_speed_gnd" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
 if !isnothing(opt_power_meas)
-    summary_block["mean_power_W"] = (round(Int, opt_power_meas), "mean reel-out power the run harvested [W]")
     summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
         "measured / predicted mean reel-out power, against the weighted prediction")
 end
@@ -684,16 +683,16 @@ summary_block["optimization_requests"] = (reopt_n, "solves that completed, accep
 summary_block["optimizations_installed"] = (count(e -> e.status == "installed", reopt_events),
     "new paths actually flown")
 if have_phase4
-    summary_block["av_power_W"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
-    summary_block["min_power_W"] = (round(Int, p4_power.min), "min reel-out power over phase four [W]")
-    summary_block["max_power_W"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
-    summary_block["min_force_N"] = (round(Int, p4_force.min), "min tether force over phase four [N]")
-    summary_block["av_force_N"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
-    summary_block["max_force_N"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
-    summary_block["v_ro_min_m_s"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four [m/s]")
-    summary_block["v_ro_av_m_s"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
-    summary_block["v_ro_max_m_s"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
-    summary_block["av_depower"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
+    summary_block["av_power_ro"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
+    summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four [W]")
+    summary_block["max_power_ro"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
+    summary_block["min_force_ro"] = (round(Int, p4_force.min), "min tether force over phase four [N]")
+    summary_block["av_force_ro"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
+    summary_block["max_force_ro"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
+    summary_block["v_ro_min"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four [m/s]")
+    summary_block["v_ro_av"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
+    summary_block["v_ro_max"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
+    summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
 end
 summary["summary"] = summary_block
 
