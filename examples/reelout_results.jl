@@ -360,7 +360,7 @@ if !isnothing(opt_power_meas)
     # Built once and repeated as an `@info` after the archive line: this is the
     # comparison the script exists for, and here it is buried in the results block.
     global power_summary = @sprintf("Optimizer predicted %.0f W of mean reel-out \
-                                     power%s; the run measured %.0f W (%.2f x).",
+                                     power%s; measured %.0f W (%.2f x).",
         opt_power_pred_eff,
         length(pred_shares) > 1 ?
             @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
@@ -776,7 +776,7 @@ else
 end
 
 isnothing(opt_power_meas) || @info power_summary
-printstyled("Summary:\n"; bold = true)
+printstyled("\nSummary:\n"; bold = true)
 write_yaml_commented(stdout, 1, summary_block; color = true)
 
 # Defined in simple_opt_reelout.jl before anything that can throw, and called
