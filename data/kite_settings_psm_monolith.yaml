@@ -9,7 +9,7 @@ kite_settings:
   backend: monolith              # monolith | kernel model assembly
   vsm_interval: 10                # steps between VSM aero solves
 
-  body_sim_damping: [0.0, 0.0, 20.0]   # per-axis wing-frame damping in flight
+  body_sim_damping: [0.0, 0.0, 38.0]   # per-axis wing-frame damping in flight
   world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
 
   wing_mass: 0.0                 # [kg] mass redistributed over the wing nodes
