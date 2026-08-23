@@ -95,6 +95,12 @@ function plot_powercurve()
           legend_position = [:auto, :lt, :auto],
           title = "V3 reel-out power curve", scatter = true, disp = true,
           fig = "powercurve")
+    
+    # Save the plot to PNG file in notebooks folder
+    notebooks_dir = normpath(joinpath(@__DIR__, "..", "notebooks"))
+    ispath(notebooks_dir) || mkdir(notebooks_dir)
+    png_file = joinpath(notebooks_dir, "powercurve.png")
+    savefig(png_file)
 end
 
 plot_powercurve()
