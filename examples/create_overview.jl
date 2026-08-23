@@ -7,13 +7,19 @@ Write `SimulationResults/scenarios/overview.md`, a table with one row per
 `v08`), read from each folder's own `reelout_150m_opt.yaml` `summary:` block.
 
 Columns: `date`, `time`, `v_wind`, `power`, `power_ratio`, `total_time`,
-`rt_factor`, `opt_requests`, `opts_installed` — read from the YAML
-`summary:` section's `date`, `time`, `wind_speed_m_s`, `mean_power_W`,
-`power_ratio`, `total_wall_time_s`, `realtime_factor`,
-`optimization_requests` and `optimizations_installed` respectively (see
-`examples/reelout_results.jl`). Rows are sorted by wind speed ascending. A
-folder missing the YAML file or its `summary:` block is skipped with a
-warning, not an error.
+`rt_factor`, `opt_requests`, `opts_installed`, `av_power`, `min_power`,
+`max_power`, `min_force`, `av_force`, `max_force`, `v_ro_min`, `v_ro_av`,
+`v_ro_max`, `av_depower` — read from the YAML `summary:` section's
+`date`, `time`, `wind_speed_m_s`, `mean_power_W`, `power_ratio`,
+`total_wall_time_s`, `realtime_factor`, `optimization_requests`,
+`optimizations_installed`, `av_power_W`, `min_power_W`, `max_power_W`,
+`min_force_N`, `av_force_N`, `max_force_N`, `v_ro_min_m_s`, `v_ro_av_m_s`,
+`v_ro_max_m_s` and `av_depower` respectively (see
+`examples/reelout_results.jl`). The `av_`/`min_`/`max_` fields are all
+averaged over phase four (the figure-eight flying phase), distinct from
+`power`/`mean_power_W`, which is scored over the reeling window. Rows are
+sorted by wind speed ascending. A folder missing the YAML file or its
+`summary:` block is skipped with a warning, not an error.
 
 Also opens the same table as a nicely formatted HTML pop-up in the default
 browser, via PrettyTables' `:html` backend (`xdg-open`), with the power
@@ -43,7 +49,12 @@ const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_m_s" => "v_wind
                  "mean_power_W" => "power", "power_ratio" => "power_ratio",
                  "total_wall_time_s" => "total_time", "realtime_factor" => "rt_factor",
                  "optimization_requests" => "opt_requests",
-                 "optimizations_installed" => "opts_installed")
+                 "optimizations_installed" => "opts_installed",
+                 "av_power_W" => "av_power", "min_power_W" => "min_power",
+                 "max_power_W" => "max_power", "min_force_N" => "min_force",
+                 "av_force_N" => "av_force", "max_force_N" => "max_force",
+                 "v_ro_min_m_s" => "v_ro_min", "v_ro_av_m_s" => "v_ro_av",
+                 "v_ro_max_m_s" => "v_ro_max", "av_depower" => "av_depower")
 
 """
     scenario_summary(dir) -> Union{Dict, Nothing}

@@ -201,7 +201,8 @@ end
 reelout_summary = OrderedDict{String, Any}()
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
 fig8 = findall(x -> Int(x) == 4, sl.sys_state)
-if isempty(fig8)
+have_phase4 = !isempty(fig8)
+if !have_phase4
     # Reel-out runs from phase 3, so this is about the anchor only.
     @warn "Phase 4 never reached — no fig8 apparent wind speed."
 else
@@ -219,6 +220,24 @@ else
         "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
         "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
             "mean v_app deviation from v_app_ref [%]"))
+
+    # Same phase-4 window, for the power/force/reel-out-speed/depower fields in
+    # `summary["summary"]` — distinct from `reelout.force`/`reelout.power` below,
+    # which are scored over the REELING window (length setpoint growing), not phase 4.
+    f4 = Float64.(getindex.(sl.winch_force, 1))[fig8]
+    vro4 = Float64.(getindex.(sl.v_reelout, 1))[fig8]
+    p4 = f4 .* vro4
+    dp4 = Float64.(sl.depower[fig8])
+    p4_power = (av = mean(p4), min = minimum(p4), max = maximum(p4))
+    p4_force = (av = mean(f4), min = minimum(f4), max = maximum(f4))
+    p4_v_ro = (av = mean(vro4), min = minimum(vro4), max = maximum(vro4))
+    p4_depower_av = mean(dp4)
+    @printf("  Phase 4: power av %.0f W (min %.0f, max %.0f); force av %.0f N \
+             (min %.0f, max %.0f); v_reelout av %.2f m/s (min %.2f, max %.2f); \
+             depower av %.3f.\n",
+            p4_power.av, p4_power.min, p4_power.max,
+            p4_force.av, p4_force.min, p4_force.max,
+            p4_v_ro.av, p4_v_ro.min, p4_v_ro.max, p4_depower_av)
 end
 # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
 # stop_reason is "" when the run ended with reel-out still going.
@@ -245,13 +264,11 @@ else
             rp.mean_power, rp.peak_power, rp.cf_power_ro, rp.duration, rp.n,
             rp.energy / 1000, rp.energy_run / 1000)
     reelout_summary["force"] = OrderedDict(
-        "mean_N" => (round(Int, rp.mean_force), "mean tether force over the reeling window [N]"),
-        "peak_N" => (round(Int, rp.peak_force), "peak tether force over the reeling window [N]"),
-        "cf_force_ro" => (round(rp.cf_force_ro; digits = 2), "crest factor: peak_N / mean_N"))
+        "cf_force_ro" => (round(rp.cf_force_ro; digits = 2),
+            "crest factor: peak / mean tether force over the reeling window"))
     reelout_summary["power"] = OrderedDict(
-        "mean_W" => (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"),
-        "peak_W" => (round(Int, rp.peak_power), "peak reel-out power over the reeling window [W]"),
-        "cf_power_ro" => (round(rp.cf_power_ro; digits = 2), "crest factor: peak_W / mean_W"),
+        "cf_power_ro" => (round(rp.cf_power_ro; digits = 2),
+            "crest factor: peak / mean reel-out power over the reeling window"),
         "duration_s" => (round(rp.duration; digits = 1), "reeling window length [s]"),
         "n_samples" => (rp.n, "sample count in the reeling window"),
         "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
@@ -666,6 +683,18 @@ end
 summary_block["optimization_requests"] = (reopt_n, "solves that completed, accepted or rejected")
 summary_block["optimizations_installed"] = (count(e -> e.status == "installed", reopt_events),
     "new paths actually flown")
+if have_phase4
+    summary_block["av_power_W"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
+    summary_block["min_power_W"] = (round(Int, p4_power.min), "min reel-out power over phase four [W]")
+    summary_block["max_power_W"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
+    summary_block["min_force_N"] = (round(Int, p4_force.min), "min tether force over phase four [N]")
+    summary_block["av_force_N"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
+    summary_block["max_force_N"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
+    summary_block["v_ro_min_m_s"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four [m/s]")
+    summary_block["v_ro_av_m_s"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
+    summary_block["v_ro_max_m_s"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
+    summary_block["av_depower"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
+end
 summary["summary"] = summary_block
 
 open(joinpath(output_path, log_name * ".yaml"), "w") do io

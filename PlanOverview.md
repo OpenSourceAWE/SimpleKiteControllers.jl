@@ -1,4 +1,6 @@
 # Add overview.md
+Status: **DONE**
+
 Create a table overview.md as file in the root directory.
 
 The table shall be generated from the following files:
@@ -31,3 +33,27 @@ In the script create_overview.jl, change the column names of the generated table
 - replace realtime_factor with rt_factor
 - replace optimization_requests with opt_requests
 - replace optimizations_installed with opts_installed
+
+## Additions
+Can you add the following fields to the summary of each simulation
+- av_power
+- min_power
+- max_power
+- min_force
+- av_force
+- max_force
+- v_ro_min
+- v_ro_av
+- v_ro_max
+- av_depower
+The averaging shall apply to phase four.
+
+Remove the existing mean_N, peak_N (reelout.force block) and mean_W, peak_W
+(reelout.power block) fields, since they are superseded by the phase-four
+fields above. Leave the rest of those two blocks (cf_force_ro, cf_power_ro,
+duration_s, n_samples, energy_kJ, energy_run_kJ) untouched.
+
+a. add this to reelout_results.jl
+b. write a one-time script to extend the existing reelout_150m_opt.yaml files in the subfolders of output/scenarios
+c. update create_overview.jl
+d. remove mean_N/peak_N/mean_W/peak_W from reelout_results.jl and from the archived reelout_150m_opt.yaml files
