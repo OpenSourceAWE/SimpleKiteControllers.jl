@@ -229,7 +229,7 @@ if "pattern" in plots
         nothing
     end
     p1 = plot_pattern_scenario(output_path; disp = true, opt_raw = opt_raw_for_plot,
-                               project = pattern_project)
+                               project = pattern_project, log_name = log_name)
     display(p1)
     sleep(0.1)
 end

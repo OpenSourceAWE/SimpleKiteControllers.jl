@@ -17,7 +17,8 @@ script's structure intact.
 """
     plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                          opt_raw::Union{Nothing, Tuple} = nothing,
-                         project::Union{Nothing, AbstractString} = nothing) -> Figure
+                         project::Union{Nothing, AbstractString} = nothing,
+                         log_name::Union{Nothing, AbstractString} = nothing) -> Figure
 
 Plot the azimuth/elevation flight pattern for a scenario in `scenario_dir`
 (flown path vs. attractor reference, or vs. optimizer-raw if available).
@@ -28,11 +29,15 @@ scenario folder (`output/scenarios/<name>` or `output/archives/<run>`); pass
 `data/` and is never copied there. When `disp=false`, the figure is created
 but not displayed (suitable for batch processing). `opt_raw` may be passed as
 `(az_array, el_array)` to overlay the optimizer's uncorrected paths; if
-absent, uses the attractor reference instead.
+absent, uses the attractor reference instead. Pass `log_name` explicitly to
+avoid ambiguity when multiple logs exist in the directory (common in `output/`
+after multiple runs); if absent and `project` is provided, searches for the
+one `.arrow` file.
 """
 function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                opt_raw::Union{Nothing, Tuple} = nothing,
-                               project::Union{Nothing, AbstractString} = nothing)
+                               project::Union{Nothing, AbstractString} = nothing,
+                               log_name::Union{Nothing, AbstractString} = nothing)
     # Load settings and log; the system project is either the caller's own
     # resolved path, or the scenario folder's own copy
     scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
@@ -40,9 +45,11 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_dir)
 
     # Find and load the .arrow log file
-    arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
-    isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
-    log_name = replace(only(arrow_files), ".arrow" => "")
+    if isnothing(log_name)
+        arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
+        isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
+        log_name = replace(only(arrow_files), ".arrow" => "")
+    end
     syslog = load_log(log_name; path = scenario_dir)
     sl = syslog.syslog
 
