@@ -49,7 +49,7 @@ write(workload, """
     set_data_path(v3_data_path())
     s = init(9.51, 150.0; system_yaml = "system_reelout.yaml")
     for _ in 1:5
-        step!(s; rel_depower = 0.25, set_length = s.sys_state.l_tether[1])
+        step!(s; rel_depower = 0.25)
     end
 
     log_path = mktempdir()
