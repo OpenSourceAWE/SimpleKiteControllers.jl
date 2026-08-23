@@ -875,6 +875,12 @@ if run_archive
     for f in unique(vcat(input_yaml_files, output_files))
         isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
     end
+    # Copy settings back to output/ for the plotting script to find them.
+    # They get overwritten on the next run, but that is the point: each run's
+    # plots use the settings that run actually flew.
+    for f in input_yaml_files
+        isfile(f) && cp(f, joinpath(output_path, basename(f)); force = true)
+    end
     @info "Archived run inputs and outputs to $archive_dir"
 else
     @info "Archiving suppressed by RUN_ARCHIVE = false; it is back to true for the next run."
