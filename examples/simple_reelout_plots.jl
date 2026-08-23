@@ -73,6 +73,8 @@ using V3Kite                  # the log, its data path, wrap_to_pi
 using SimpleKiteControllers   # FC_Settings, figure_eight_path
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
+include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
+
 @info "Loading simulation results..."
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
@@ -211,23 +213,20 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 
 if "pattern" in plots
     @info "Plotting the pattern..."
-    project_name = replace(basename(project), ".yaml" => "")
-    # Two curves where the optimizer's own answer is available: what was asked
-    # for and what was flown. The attractor is deliberately NOT drawn there — it
-    # walks the PRE-DISTORTED path (`el_bias`, `el_offset_final`,
-    # `el_offset_wing`), so it sits between the two and reads as a third opinion
-    # about the reference when there is only one. It stays as the reference for a
-    # lemniscate run, which has no optimizer curve to show instead.
-    p1 = plotxy(
-        isnothing(opt_raw) ? [az_deg, ref_az] : [az_deg, opt_raw[1]],
-        isnothing(opt_raw) ? [el_deg, ref_el] : [el_deg, opt_raw[2]];
-        xlabel = L"\mathrm{azimuth}~[°]",
-        ylabel = L"\mathrm{elevation}~[°]",
-        legend = isnothing(opt_raw) ?
-                 [L"\mathrm{flown}", L"\mathrm{attractor}"] :
-                 [L"\mathrm{flown}", L"\mathrm{optimizer,~uncorrected}"],
-        fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
-    )
+    # Construct opt_raw from OPT_PATHS_RAW if available (from simple_opt_reelout.jl)
+    opt_raw_for_plot = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
+                          !isempty(OPT_PATHS_RAW)
+        oaz = Float64[]; oel = Float64[]
+        for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
+            k > 1 && (push!(oaz, NaN); push!(oel, NaN))
+            append!(oaz, paz); push!(oaz, first(paz))
+            append!(oel, pel); push!(oel, first(pel))
+        end
+        (oaz, oel)
+    else
+        nothing
+    end
+    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw = opt_raw_for_plot)
     display(p1)
     sleep(0.1)
 end
