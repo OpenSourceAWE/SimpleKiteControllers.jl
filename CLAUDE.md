@@ -113,8 +113,7 @@ on.
 where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
 depot scratchspace for an installed copy — and deserializing any *other* model binary
 costs ~40 s of re-JIT per process, because the RuntimeGeneratedFunction id is part of the
-type the cached SciML specializations are keyed to. See
-[docs/sysimage_notes.md](docs/sysimage_notes.md).
+type the cached SciML specializations are keyed to.
 
 ## Environments
 
@@ -135,10 +134,8 @@ loadable, the V3Kite source). Read them before touching a version bound.
 choice is about Revise on V3Kite's source, not about speed — that was true until
 2026-08-05, when `init` cost ~34 s under `url`/`rev`, and the real cause turned out to be
 that the run deserialized a model binary V3Kite's precompile workload had never compiled
-against. Dropping `cache_path` fixed it for both sources;
-[docs/sysimage_notes.md](docs/sysimage_notes.md) has the crossover table and the six dead
-ends that preceded it (a PackageCompiler sysimage is *not* the lever — it is worth ~4 s
-either way).
+against. Dropping `cache_path` fixed it for both sources (a PackageCompiler sysimage is
+*not* the lever — it is worth ~4 s either way).
 
 Switch it with `bin/dev` (local checkout, default `../V3Kite`) and `bin/free` (back to
 `url`/`rev`); never edit it by hand. `bin/dev` comments the `url`/`rev` line out and adds
@@ -181,11 +178,23 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   and the example takes `s.steps`/`s.dt` back from the model after `init`.
 - `fig8_metrics.jl` — `fig8_metrics`/`print_fig8_metrics`, headless scoring of a flown
   log. No plotting dependency, so sweeps can run headless.
+- `course_controller.jl` — `CourseControllerSettings`/`CourseController`, the
+  figure-of-eight inner loop: commanded course in, `rel_steering`/`rel_depower` out
+  (`calc_steering`). Owns the four-phase entry state machine (0 park, 1 dive, 2 hold,
+  3 transition, 4 fig8; 5 "final" is winch-triggered from outside via `set_phase!`), the
+  entry descent limiter, and the heading/course feedback blend.
+- `winch_kv_table.jl` — `winch_kv(v_wind)`, wind-speed-dependent `kv` for
+  WinchControllers.jl's reel-out law, interpolated from the system project's
+  `winch_kv_table` file.
+- `optimization.jl` — `OptSettings` and the shared machinery (`opt_grid`,
+  `claim_task!`/`release_claims!`, `record_result!`/`load_results`, `rank_results`, ...)
+  behind the parallel figure-eight shape sweep driven by `examples/optimize_fig8.jl`.
+- `traj_opt_settings.jl` — `TrajOptSettings`, the settings of a run flown along an
+  externally optimized path (`examples/simple_opt_fig8.jl`), loaded from
+  `data/traj_opt.yaml`.
 
-`examples/simple_fig8.jl` is the integration: it owns the four-phase entry state machine
-(park → dive → hold → transition), the entry descent limiter, the heading/course feedback
-blend, the winch mode choice and the simulation loop. Per the README TODO, that logic has
-not yet been lifted into a controller type.
+`examples/simple_fig8.jl` is the integration: it drives `CourseController` from
+`SysState`, plus the winch mode choice and the simulation loop.
 
 ### Things that will bite
 
@@ -222,8 +231,8 @@ not yet been lifted into a controller type.
   collapsing as the pattern is raised (`cos(elevation)` compresses the azimuth axis). A
   figure-eight near zenith is geometrically impossible at any PID tuning —
   `check_pattern_feasible` prints the margin at startup.
-- **Log slot mapping** (`var_01`…`var_09`, `bearing`, `sys_state` as phase 0–4) is
-  documented in `examples/simple_fig8.jl`'s docstring and relied on by
+- **Log slot mapping** (`var_01`…`var_09`, `bearing`, `sys_state` as `CourseController`'s
+  phase 0–4) is documented in `examples/simple_fig8.jl`'s docstring and relied on by
   `fig8_metrics.jl` and `simple_fig8_plots.jl`. Changing a slot means changing all three.
 
 ## Conventions
@@ -259,11 +268,6 @@ not yet been lifted into a controller type.
 - Branch `main`. V3Kite is at `v1.0.2`, but sourced from a **local checkout** — see
   "Sourcing V3Kite" above; `examples/Project.toml` must be put back on `url`/`rev`
   before pushing.
-- **`PlanMigrate.md` is outdated** — it describes the (now completed) move of this
-  controller out of V3Kite, and still refers to an `examples/v3kite_support.jl` that no
-  longer exists. Do not treat it as a description of the current code: the helpers it
-  discusses (`create_heading_pid`, `WinchForceController`, `winch_force_torque!`,
-  `span_mean_aoa`, `warmup!`) are V3Kite exports now.
 
 ## Coding conventions
 
