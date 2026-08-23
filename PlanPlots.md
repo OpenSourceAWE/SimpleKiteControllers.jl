@@ -50,3 +50,21 @@ Fix plot_powercurve.jl to use only existing keys.
 
 ## Step 7
 - update create_overview.jl to use the new plot
+
+## Step 8 ✓
+"The pattern plot" here means the azimuth/elevation flight-pattern plot
+(flown vs. attractor, or flown vs. optimizer-raw when available) currently
+built inline in `simple_reelout_plots.jl`'s `"pattern" in plots` block — NOT
+the powercurve plot from steps 1-7, which stays a single aggregate figure
+across all scenarios.
+
+✓ Extracted block's logic into standalone `plot_pattern_scenario()` function in
+  `plot_pattern_utils.jl`, which loads scenario directory's own settings/log,
+  computes az/el plot without needing script-local state, and accepts optional
+  `opt_raw` parameter for optimizer paths.
+✓ Updated `simple_reelout_plots.jl` to include `plot_pattern_utils.jl` and call
+  the extracted function for its interactive "pattern" plot, preserving
+  behavior with `OPT_PATHS_RAW` support.
+✓ Created `create_plots.jl`: loops non-empty `output/scenarios/` folders, calls
+  `plot_pattern_scenario()` per scenario with `disp=false`, saves PNG files to
+  `notebooks/pattern_<scenario>.png` (e.g. `pattern_v08.png`).
