@@ -203,11 +203,6 @@ The guess is not a formality — it decides whether the solve converges and whic
 of several optima it converges to, so this script never retries with a different
 one behind your back; see `simple_opt_fig8.jl`'s docstring for the measurements.
 
-PROJECT's `kite_settings:` is always redirected to
-`data/kite_settings_psm_monolith.yaml` in this repo (a `backend: monolith`
-copy of V3Kite's own `kite_settings_psm.yaml`), regardless of which backend
-the upstream package ships — see the patched-project block before `init`.
-
 `fcs.f8_a`/`f8_b`/`el_center` describe a lemniscate that is NOT flown here. The
 pattern's centre (the dive target, and `var_04`) and its extent (the size criteria
 of `fig8_metrics`) are measured off the installed path instead.
@@ -252,7 +247,6 @@ using Statistics: mean
 using Printf
 import Dates
 using OrderedCollections: OrderedDict
-using YAML
 
 @info "simple_opt_reelout.jl: reeling out along an externally optimized path."
 toc("Loaded packages in: ")
@@ -387,28 +381,6 @@ log_name = basename(project_set.log_file) * "_opt"
 
 # ======================== INIT =========================== #
 
-# Force the monolith backend: patch a copy of `project` whose `kite_settings:`
-# always points at this repo's data/kite_settings_psm_monolith.yaml, never at
-# V3Kite's own (kernel-backend) kite_settings_psm.yaml. The copy is written to
-# `output_path`, so the two kinds of path in it need different treatment:
-# `sim_settings` resolves relative to the project file itself and so needs to
-# become absolute, and so do the six V3Kite-only keys, which always resolve
-# against `v3_data_path()` regardless of the project file's own location. The
-# rest (`wc_settings`, `fc_settings`, ...) are bare names that resolve through
-# the active data path set above, unaffected by where the project file lives.
-project_dict = YAML.load_file(project)
-project_dict["system"]["sim_settings"] =
-    joinpath(skc_data_path(), project_dict["system"]["sim_settings"])
-for key in ("kite_settings", "structural_geometry", "aero_geometry",
-            "vsm_settings", "settle_settings", "heading_settings")
-    haskey(project_dict["system"], key) || continue
-    project_dict["system"][key] = joinpath(v3_data_path(), project_dict["system"][key])
-end
-project_dict["system"]["kite_settings"] =
-    joinpath(skc_data_path(), "kite_settings_psm_monolith.yaml")
-PROJECT_MONOLITH = joinpath(output_path, "system_reelout_monolith.yaml")
-YAML.write_file(PROJECT_MONOLITH, project_dict)
-
 fcs.compliance >= 0 ||
     error("compliance must be >= 0, got $(fcs.compliance)")
 fcs.compliance == 0 ||
@@ -437,7 +409,7 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     body_sim_damping = 0.8 .* fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = PROJECT_MONOLITH, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
+    system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
     sim_time = EFFECTIVE_SIM_TIME, warmup_time = fcs.warmup_time,
     # The warm-up relaxes at constant length, against the same loop the run uses.
     warmup_torque = (m, l) -> winch_torque!(wpc, m, l), remake_model = false)
