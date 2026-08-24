@@ -2,7 +2,7 @@
 
 julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "40100a03b3e94f1c14cf5ca8cd2cf6f985317a9f"
+project_hash = "ecb2c8eb007859cafc08ecfa6663355dca2b2d1e"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -327,9 +327,9 @@ weakdeps = ["SparseArrays"]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
 
 [[deps.ChunkCodecCore]]
-git-tree-sha1 = "1a3ad7e16a321667698a19e77362b35a1e94c544"
+git-tree-sha1 = "3496e2b359c27793d12bec54ec94be7983a6ceb2"
 uuid = "0b6fb165-00bc-4d37-ab8b-79f91016dbe1"
-version = "1.0.1"
+version = "1.0.2"
 
 [[deps.ChunkCodecLibZlib]]
 deps = ["ChunkCodecCore", "Zlib_jll"]
@@ -1778,8 +1778,6 @@ version = "0.24.13"
 [[deps.MakieControlPlots]]
 deps = ["CairoMakie", "GLMakie", "GridLayoutBase", "JLD2", "LaTeXStrings", "Makie", "Pkg", "PrecompileTools", "Printf", "StaticArraysCore"]
 git-tree-sha1 = "4ecdff65473591f3320bdaa4d6c4d4cd8b88ba58"
-repo-rev = "v0.1.16"
-repo-url = "https://github.com/OpenSourceAWE/MakieControlPlots.jl.git"
 uuid = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
 version = "0.1.16"
 weakdeps = ["ControlSystemsBase"]
@@ -3235,7 +3233,7 @@ version = "1.28.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkit", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "REPL", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "UnPack", "VortexStepMethod", "YAML"]
-git-tree-sha1 = "30ad67ec414bf0d81ba635e5c4c7ed2f5c0b3730"
+git-tree-sha1 = "8d11efb35f779e91be3745938907102e991c6f41"
 repo-rev = "beam-model"
 repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
