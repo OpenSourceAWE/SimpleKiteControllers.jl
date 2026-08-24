@@ -142,7 +142,7 @@ a fitted curve. The constant below has since been lowered to 0.107 (2026-08-21,
 commit `ee1ecbd`); that revision has not been re-measured or re-derived against the
 split above.
 """
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.107
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.105
 
 """
     awetrim_depower_to_v3kite(l_dp) -> Float64
