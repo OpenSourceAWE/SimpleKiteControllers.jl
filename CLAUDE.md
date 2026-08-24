@@ -110,10 +110,10 @@ the end of `examples/reelout_results.jl`) into another example that needs to be 
 on.
 
 `init` is called **without `cache_path`** on purpose. V3Kite's default puts the model
-where its `@compile_workload` compiled against it — its `data/` for a local checkout, a
-depot scratchspace for an installed copy — and deserializing any *other* model binary
-costs ~40 s of re-JIT per process, because the RuntimeGeneratedFunction id is part of the
-type the cached SciML specializations are keyed to.
+where its `@compile_workload` compiled against it — always a depot scratchspace now,
+for a local checkout as much as an installed copy — and deserializing any *other* model
+binary costs ~40 s of re-JIT per process, because the RuntimeGeneratedFunction id is part
+of the type the cached SciML specializations are keyed to.
 
 ## Environments
 
