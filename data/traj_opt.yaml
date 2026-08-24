@@ -143,16 +143,6 @@ traj_opt:
     # geometric one off yet — so raise it if a STARTUP path is refused for
     # curvature.
     turn_radius_headroom: 1.20
-    # Reel-out per lap assumed for the STARTUP request, in metres; 0.0 assumes none.
-    # Every later request measures that ratio off the previous reply, but the first
-    # one has no reply to measure - and it is where the ratio matters most, since
-    # the same dL is a bigger fraction of a short tether (35 m is 1.23 at 150 m
-    # against 1.09 at 380 m). One number works because the lap's reel-out barely
-    # depends on the length; it IS an assumption though - it is v_reelout times a
-    # lap, so it moves with the wind and the winch. At 0.0 the startup asks for the
-    # headroom alone, which is accepted but flies the tightest corner on the
-    # steering clamp until the first re-optimization replaces it.
-    turn_radius_lap_reelout_m: 30.0
     # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
     # any reel-out; 0.0 disables.
     #
