@@ -40,7 +40,7 @@ export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fiel
 export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
-export TrajOptSettings
+export TrajOptSettings, turn_radius_lap_reelout
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid

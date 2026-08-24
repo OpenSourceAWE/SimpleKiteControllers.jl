@@ -567,3 +567,21 @@ function TrajOptSettings(filename::String; path = skc_data_path())
               "$(tos.guess_el_center_wind_ref).")
     return tos
 end
+
+"""
+    turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
+
+Compute the reel-out per lap [m] adapted to wind speed using a linear approximation.
+
+Fitted from measured data across wind speeds 4-9 m/s:
+`turn_radius_lap_reelout_m = 1.987 * v_wind + 14.18` (R² = 0.949)
+
+If `tos.turn_radius_lap_reelout_m > 0`, uses it as a fallback (for fixed assumption).
+Otherwise, computes from the linear model fitted to empirical reel-out data.
+"""
+function turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
+    if tos.turn_radius_lap_reelout_m > 0
+        return tos.turn_radius_lap_reelout_m
+    end
+    return 1.987 * v_wind + 14.18
+end

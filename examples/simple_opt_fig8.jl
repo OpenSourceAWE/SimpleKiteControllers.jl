@@ -205,7 +205,8 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
 # so the geometric part cannot be measured off a previous reply the way
 # `simple_opt_reelout.jl` does it — it is assumed instead, from
 # `turn_radius_lap_reelout_m` over this run's length.
-opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l0) * tos.turn_radius_headroom
+turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
+opt_r_scale = (1 + turn_radius_reel / l0) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_box = pattern_limits_from(tos;
                               elevation_min = elevation_min_request(fcs, tos, l0))
@@ -217,7 +218,7 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                                 own, x %.3f for %.0f m of assumed reel-out per lap \
                                 and %.2f of headroom)",
                                 opt_r_min, tos.min_feasibility_margin, opt_r_scale,
-                                tos.turn_radius_lap_reelout_m, tos.turn_radius_headroom),
+                                turn_radius_reel, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 ensure_server(tos.base_url; autostart = tos.autostart_server)

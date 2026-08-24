@@ -499,7 +499,8 @@ ensure_server(tos.base_url; autostart = tos.autostart_server)
 # `turn_radius_lap_reelout_m` over the starting length. That is the largest ratio of
 # the run (35 m is 1.23 at 150 m against 1.09 at 380 m), which is why leaving it at
 # 0 shows up as a startup path flown near its curvature limit.
-opt_r_scale = (1 + tos.turn_radius_lap_reelout_m / l_set) * tos.turn_radius_headroom
+turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
+opt_r_scale = (1 + turn_radius_reel / l_set) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
 opt_box = pattern_limits_from(tos;
@@ -512,7 +513,7 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                                 own, x %.3f for %.0f m of assumed reel-out per lap \
                                 and %.2f of headroom)",
                                 opt_r_min, tos.min_feasibility_margin, opt_r_scale,
-                                tos.turn_radius_lap_reelout_m, tos.turn_radius_headroom),
+                                turn_radius_reel, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 # One row per depower value the optimizer reports back (startup solve, each
@@ -737,7 +738,7 @@ if opt_r_on && !isnothing(coeffs_startup)
                        margin_startup, tos.min_feasibility_margin, l_set,
                        opt_r_min_retry,
                        opt_r_min / opt_r_scale *
-                           (1 + tos.turn_radius_lap_reelout_m / l_set) *
+                           (1 + turn_radius_reel / l_set) *
                            tos.turn_radius_headroom,
                        margin_retry_target)
         t_retry = time()

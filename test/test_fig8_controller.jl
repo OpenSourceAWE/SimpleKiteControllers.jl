@@ -846,12 +846,14 @@ end
         # against 0.74 (2026-08-19). The exact value follows the measurement, so
         # only the inequality is pinned.
         @test tos.turn_radius_headroom > TrajOptSettings().turn_radius_headroom == 1.0
-        # The startup request's assumed reel-out per lap: off by default, and shipped
-        # at roughly what a lap actually reels out here (33.2 m at 150 m, 35.0 m at
-        # 380 m, 2026-08-20) — the ratio is measured from the reply for every later
-        # request. It is v_reelout times a lap, so it moves with the wind and the
-        # winch: only the bracket is pinned, not the shipped 30.0.
-        @test 0 < tos.turn_radius_lap_reelout_m <= 40.0
+        # The startup request's assumed reel-out per lap: off by default (0.0 in YAML
+        # and struct), but computed from wind speed using a linear fit (1.987*v + 14.18)
+        # when 0.0. A non-zero YAML value uses that as a fixed fallback instead of the
+        # wind-adapted formula, for backward compatibility. The measured reel-out per lap
+        # is v_reelout times a lap, so it varies with wind and winch; the turn_radius_request
+        # per length uses this assumption for the startup request only (no prior reply to
+        # measure it off), and later requests measure it from the replies.
+        @test tos.turn_radius_lap_reelout_m == 0.0  # YAML does not define it, uses default
         @test TrajOptSettings().turn_radius_lap_reelout_m == 0.0
         # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
         # carries whatever the last experiment needed.
