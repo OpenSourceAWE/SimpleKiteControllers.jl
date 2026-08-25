@@ -15,7 +15,7 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 
 The test scenario:
 - the kite is parked at zenith (keep it still above your head while in equilibrium)
-- than it is steered to the left and takes a dive
+- then it is steered to the left and takes a dive
 - then it is steered towards the planned figure-of-eight that promises the highest power
 - it flies figures of eight and reels out
 
