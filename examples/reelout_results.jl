@@ -655,7 +655,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
         "optimize_k_v" => (winch.optimize_k_v,
             "k_v sent as a design variable; the reply's value is then the one flown"),
-        "k_v_flown" => (round(rcs.kv; digits = 5),
+        # `rc.wcs`, not `rcs`: with DISABLE_UFC the controller reads a deepcopy, and
+        # the gain the RUN flew is the one in the object `calc_vro` looked at.
+        "k_v_flown" => (round(rc.wcs.kv; digits = 5),
             isempty(opt_kv_log) ?
                 "k_v the run actually flew; == k_v, the optimizer did not move it" :
                 @sprintf("k_v the run actually flew, last of %d optimizer change(s)%s",

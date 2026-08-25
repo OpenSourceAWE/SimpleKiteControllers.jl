@@ -216,53 +216,93 @@ server's own factor-2 bracket applies. A reply that ran into it is reported as
 to widen the bracket, and the reason to add the field is a measurement, not a
 guess.
 
-**MEASURED at 9 m/s, and it did NOT move the operating point.** The premise
-above — "the optimizer raises $k_v$ until the path fits" — is WRONG:
+**NOT YET VALIDLY MEASURED.** The 9 m/s run of 2026-08-25 20:43 flew with a bug
+and its numbers say nothing about this stage: `apply_optimized_kv!` wrote the
+gain to `wc.kv`, but with `DISABLE_UFC` set the controller is built from a
+DEEPCOPY (`rc_settings = deepcopy(rcs)`, to raise `f_high` on a copy) and
+`calc_vro` reads that copy. `rc.wcs === wc` was false, so the optimized gain
+never reached the winch. Power (30137 W against the baseline's 30260) and
+reel-out speed (2.91 m/s against 2.92) were unchanged because **nothing was
+applied**, not because the optimizer agreed with the seed. Fixed 2026-08-25:
+the gain is now written to `rc.wcs` as well, and `k_v_flown` reports the object
+`calc_vro` actually read.
 
-| | `optimize_k_v` | v09, fixed $k_v$ |
+What the run DOES show, from `opt_kv_log`, is that the premise above is the wrong
+way round. The optimizer did not raise $k_v$ — it drove it to the **lower** edge
+of its bracket and sat there:
+
+| t [s] | L [m] | $k_v$ | at bound |
+|--:|--:|--:|:--|
+| 0.0 | 150.0 | 0.02265 | |
+| 36.0 | 188.0 | 0.02159 | |
+| 45.6 | 223.7 | 0.02043 | |
+| 56.0 | 262.8 | **0.02041** | **yes** |
+| 56.0 | 262.8 | 0.03985 | |
+| 72.1 | 323.3 | 0.02059 | |
+| 72.1 | 323.3 | 0.04078 | |
+| 84.7 | 370.8 | 0.04078 | |
+
+The bracket is 0.0204 .. 0.0816 around the 0.0408 seed. For the first half of the
+run the optimizer wanted roughly HALF the seed gain — to reel out slower, not
+faster — and was held off by the bound. So:
+
+- **`k_v_bounds` IS wanted** after all. An earlier note here dismissed it by
+  reading only the final value; the bracket demonstrably binds.
+- The pairs sharing a timestamp (56.0, 72.1) are the two call sites firing inside
+  one re-optimization — the first reply, then the blend-fold retry. The first of
+  each pair is a candidate that was REJECTED and still moved the gain, because
+  both read-backs sit before the gates, where `input_depower`'s already was. That
+  is a bug for depower too, not just for $k_v$.
+
+**Re-measured on the fixed code, and `optimize_k_v` is OFF again as a result.**
+The gain reached the winch this time — reel-out speed fell from 3.66 to 2.30 m/s
+over the window where the optimizer held $k_v$ near its lower bound — and the
+result is worse on both axes that matter:
+
+| | `optimize_k_v` (fixed) | v09, fixed $k_v$ |
 |:--|--:|--:|
-| $k_v$ sent / flown | 0.0408 / **0.04078** | 0.0408 |
-| mean force, settled | 8042 N | 8070 N |
-| mean force, reeling | 7788 N | 7811 N |
-| peak force | 9287 N | 9418 N |
-| % of reel-out above `f_max` | 68.5 | 70.0 |
-| measured power | 30137 W | 30260 W |
+| mean force, settled | 9116 +- 1522 N | 8070 +- 866 N |
+| mean force, t = 30 .. 43 s | **11680 N** | 8068 N |
+| **peak force** | **12684 N** | 9418 N |
+| mean `v_ro`, t = 30 .. 43 s | 2.30 m/s | 3.66 m/s |
+| measured power | 29581 W | 30260 W |
 | verdict | all 9 passed | all 9 passed |
 
-The optimizer moved the gain 8 times and landed 0.05 % BELOW its seed. Nothing
-downstream shifted by more than noise.
+12684 N against a plant rated 8400 N — 51 % over — and 2 % LESS power. Every
+success criterion still passed, because they score tracking and pattern geometry
+and nothing scores force against the winch's rating.
 
-The reason is structural: **riding `f_max` IS the optimum it solves for.** Power
-is force times speed and its force model saturates SOFTLY at `f_max` rather than
-being penalised past it, so the maximum-power solution sits on the ceiling. Given
-$k_v$ as a free variable it simply confirmed that 0.0408 was already the right
-gain for that objective. That is a real result — the gain was never the problem —
-but it is not what this stage wanted.
+The mechanism is this plan's own subject, now with teeth. The optimizer's model
+is $T = (v_r/k_v)^2$ **soft-capped at `f_max`**: with a low $k_v$ the nominal
+force is enormous, the softplus clamps it to ~8000 N, and the solver concludes
+the winch will hold 8000 N at low speed for free. The plant has NO upper force
+limit at all — `DISABLE_UFC` — so nothing clamps anything and the force runs to
+12.7 kN. Reeling out slower does not shed force, it builds it.
 
-So the stage's own target, mean force at or below ~0.8·`f_max`, is not reachable
-through $k_v$ at all. **The only lever that sets it is the `f_max` sent in the
-request**, and it is a direct trade against power, not a free fix. Reopened on
-that basis:
+So `optimize_k_v` hands the optimizer a freedom that is only safe when something
+actually caps the force, and it is set `false` in `data/traj_opt.yaml` until that
+is true. The capability stays implemented and tested.
 
-### Stage 2b — `f_max` is the operating-point lever
+**This reorders the plan: stage 4 (`force_limit`) is a PREREQUISITE for stage 2,
+not a follow-up.** Enabling `optimize_k_v` again is only defensible either after
+a working limiter, or paired with an `f_max` low enough that even an unlimited
+plant stays under 8400 N — a deliberate experiment, not a resting state.
 
-Send an `f_max` BELOW the winch's real limit and let the optimizer re-solve the
-path and the gain beneath it. Open questions, in order:
+### Stage 2b — candidate levers, once Stage 2 has a valid measurement
 
-1. **Is it wanted at all?** Every wind speed passes its criteria today. The thing
-   that actually motivated this plan is the oscillation `DISABLE_UFC` works
-   around, and the concrete argument for pushing the operating point down is
-   SAFETY, not tracking: peak force is 9287 N at 9 m/s and 11657 N at 10 against
-   a plant rated 8400 N.
-2. **What does the margin cost?** One run at, say, `f_max` = 6500 N against this
-   run's 30137 W is the whole experiment. `f_high` in `wc_settings.yaml` feeds
-   both the request and the runtime limiter through `winch_from_wc`, so the two
-   move together by construction.
-3. Only then, whether `f_max` wants to be wind-dependent like `f_low` now is.
-
-`k_v_bounds` is NOT the missing piece and stays unimplemented: `k_v_at_bound`
-fired on one intermediate reply, yet the final gain sits nowhere near the
-factor-2 bracket (0.0204 .. 0.0816), so widening it would chase nothing.
+1. **Widen `k_v_bounds`.** The factor-2 bracket bound for half the run. Add the
+   field to `WinchParams` and send an explicit bracket, so what the optimizer
+   wants is visible rather than clipped.
+2. **Move both read-backs behind the gates**, so a rejected candidate stops
+   moving $k_v$ and `input_depower`.
+3. **`f_max` as the operating-point lever**, if the fixed run still rides the
+   ceiling. Send an `f_max` below the winch's real limit and let the optimizer
+   re-solve beneath it — a direct trade against power, not a free fix. The
+   argument for it is SAFETY rather than tracking: peak force is 9287 N at 9 m/s
+   and 11657 N at 10, against a plant rated 8400 N, while every wind speed passes
+   its criteria today. `f_high` in `wc_settings.yaml` feeds both the request and
+   the runtime limiter through `winch_from_wc`, so the two move together by
+   construction.
 
 ### Stage 3 — carry β on the wire
 

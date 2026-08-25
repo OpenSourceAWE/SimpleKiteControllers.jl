@@ -286,7 +286,14 @@ traj_opt:
     # reeling out faster sheds force — after the flat tuning measured 8394 N mean at
     # 9 m/s and 8150 N at 10 against f_max 8000 N. false keeps winch_kv(v_wind)'s
     # value fixed. A reply that hit the bracket edge is reported as k_v_at_bound.
-    optimize_k_v: true       # let the optimizer choose k_v; false = fixed        [-]
+    # OFF since 2026-08-25, and it must stay off until a force limiter actually
+    # runs: the optimizer's model soft-caps force at f_max, the plant with
+    # DISABLE_UFC caps it nowhere, so the low k_v it chooses (0.0205, HALF the seed,
+    # for the first 43 s at 9 m/s) reels out slowly and lets force build to 12684 N
+    # against a winch rated 8400 — while COSTING power, 29581 W against 30260. See
+    # PlanWinchSpeed.md stage 2: stage 4's force_limit is a prerequisite for this,
+    # not a follow-up.
+    optimize_k_v: false      # let the optimizer choose k_v; false = fixed        [-]
     reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
                              # reopt_blocking is false, wall-clock when true    [s]
     # Halt the loop while a solve runs, instead of flying on through it. A solve is

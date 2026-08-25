@@ -484,8 +484,10 @@ opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float
     apply_optimized_kv!(tab, t, l)
 
 Move the winch gain the optimizer chose out of a `/trajectory` reply and into
-`wc.kv`, which `calc_vro` reads live, so the run flies the `k_v` the path was
-solved for. A reply that did not optimize the gain carries no `k_v` under
+every `WCSettings` the run reads — `wc` for the entry guard and `rc.wcs` for the
+reel-out controller, which are the SAME object only when `DISABLE_UFC` is off —
+so the run flies the `k_v` the path was solved for. A reply that did not
+optimize the gain carries no `k_v` under
 `optimized_parameters` and this is then a no-op. A gain that ran into its own
 bracket is reported: the value is the edge of the box, not an optimum.
 """
@@ -504,7 +506,12 @@ function apply_optimized_kv!(tab, t, l)
                            to retune further than it was allowed, so this is the edge \
                            of the box rather than an optimum."
     end
-    wc.kv = k_v
+    wc.kv = k_v                      # `guard_lfc` reads this one
+    # `rc` holds a DEEPCOPY of `wc` whenever DISABLE_UFC raised `f_high` on a copy,
+    # and `calc_vro` reads the copy — so the gain must be written where the
+    # controller actually looks, not only where the summary reads it back. Its
+    # sub-controllers all share this one `wcs`, so a single assignment reaches them.
+    rc.wcs === wc || (rc.wcs.kv = k_v)
     # EVERY reply that carries a gain, not only the ones that moved it: the shape
     # of k_v across a run is what shows whether the optimizer is hunting, and the
     # step-held plot draws repeats correctly anyway.

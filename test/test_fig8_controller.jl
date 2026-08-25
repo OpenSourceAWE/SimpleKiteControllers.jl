@@ -955,10 +955,12 @@ end
         # -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held.
         @test tos.power_gate_wind_min == 4.0
         @test TrajOptSettings().power_gate_wind_min == 4.0
-        # k_v as a DESIGN VARIABLE: on in the file, off in the struct so an older
-        # project keeps a fixed gain. The lever for getting mean force under
-        # f_max — the flat tuning ran 8394 N at 9 m/s against f_max 8000.
-        @test tos.optimize_k_v
+        # k_v as a DESIGN VARIABLE. OFF in both since 2026-08-25: the optimizer's
+        # model soft-caps force at f_max and the plant with DISABLE_UFC caps it
+        # nowhere, so the low gain it chooses builds force to 12684 N against a
+        # winch rated 8400 while costing power. A force limiter is a prerequisite,
+        # so this must not be flipped back on without one — see the tuning log.
+        @test !tos.optimize_k_v
         @test !TrajOptSettings().optimize_k_v
         # The gate the example applies: BOTH conditions, so a positive prediction
         # is still gated at low wind and a negative one is still gated above it.

@@ -3479,6 +3479,52 @@ meaningless until 0.25 is re-identified the same way. `c1` and `delay`
 
 ## REEL_OUT winch (`examples/simple_reelout.jl`)
 
+### `optimize_k_v` is CLOSED until a force limiter runs (2026-08-25)
+
+Letting AWETrim solve for the winch gain (`TrajOptSettings.optimize_k_v`, sent as
+`WinchParams.optimize_k_v`, the reply's value assigned to the run's `WCSettings`)
+is implemented, tested, and switched **off**. At 9 m/s it drove the force 51 %
+over the winch's rating while COSTING power:
+
+| | `optimize_k_v` | v09, fixed `k_v` |
+|:--|--:|--:|
+| mean force, settled | 9116 +- 1522 N | 8070 +- 866 N |
+| mean force, t = 30 .. 43 s | **11680 N** | 8068 N |
+| **peak force** | **12684 N** | 9418 N |
+| mean `v_ro`, t = 30 .. 43 s | 2.30 m/s | 3.66 m/s |
+| measured power | 29581 W | 30260 W |
+| verdict | all 9 passed | all 9 passed |
+
+The optimizer wanted `k_v` **halved**, not raised — 0.02265 at the startup solve
+and 0.0205 by 35 s, against a 0.0408 seed and a factor-2 bracket floor of 0.0204
+it sat on. Its model is `T = (v_r/k_v)^2` soft-capped at `f_max`, so a low gain
+looks free: the softplus clamps the nominal force to ~8000 N and it reads a winch
+holding 8000 N at low speed. The plant caps nothing (`DISABLE_UFC`), so the force
+simply built to 12.7 kN. **Reeling out slower does not shed force, it builds it.**
+
+Every success criterion passed both runs — they score tracking and pattern
+geometry, and nothing scores force against the winch's rating. A run can be a
+pass and still be one that would break the drum.
+
+Two process notes worth more than the result:
+
+- **The first attempt measured a no-op and looked like a clean negative.** The
+  gain was written to `wc.kv`, but `DISABLE_UFC` builds the controller from
+  `deepcopy(rcs)` and `calc_vro` reads the copy, so nothing reached the winch.
+  Power and speed came back unchanged, which read as "the optimizer agrees with
+  the seed" and was nearly recorded as such. `rc.wcs === wc` was false. When a
+  change produces no effect, check that it was applied before concluding it does
+  not matter.
+- **Reading only the final logged value inverted the conclusion.** `k_v_flown`
+  ended at 0.0408, which said "the optimizer left the gain alone"; the per-reply
+  `k_v_optimized` trajectory said it had spent half the run at the bracket floor.
+  That is why the summary now lists every reply, and why the power figure plots
+  `k_v` step-held against its seed.
+
+Re-enable only after stage 4's `force_limit` gives the runtime a real upper
+limiter, or paired with an `f_max` low enough that an unlimited plant still stays
+under 8400 N. See `PlanWinchSpeed.md`.
+
 ### `f_low` 350 -> 700 N — it was sized for a 4000 N winch (2026-08-25)
 
 `f_low = 350` predates this winch. WinchControllers' own module docstring still
