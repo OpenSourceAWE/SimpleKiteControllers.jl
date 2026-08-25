@@ -143,3 +143,41 @@ in the table cell already use.
    toggler targets both; and independent cells can evaluate in parallel, so the toggler cell reads
    `nrow(overview_df)` purely to force the dependency graph to run it after `overview_table`.
 
+3. [x] Hide the `overview_table` cell's source in the export. It rendered as a full syntax-highlighted
+   Julia listing directly above the table — noise for a results page with no Julia behind it.
+   Done — tagged the cell `#%% code id=overview_table hidecode`
+   ([notebooks/results.jl:13](notebooks/results.jl#L13)), KaimonSlate's existing tag for this
+   (`_KNOWN_TAGS`, `src/engine.jl:294`; checked in the export at `src/server_export.jl:2537`).
+   Verified in a fresh export: the `overview_lines = split(...)`/`DataFrame(...)` listing no longer
+   appears, while the table (18 headers), the 9 inlined images and the toggler script are unchanged.
+
+4. [x] Make the exported table scroll horizontally. With Change 2 shipping all 18 columns
+   unconditionally, the table is reliably wider than the page, and KaimonSlate's own export CSS for
+   its wrapper — `.exp-tblwrap{width:fit-content;max-width:100%;margin:10px auto}`
+   (`src/server_export.jl:1470`) — clamps the box's width but never sets `overflow-x`, so there is
+   nothing to scroll within; content just overflows. The live notebook doesn't have this problem
+   because its own table wrapper already carries `.st-scroll{overflow-x:auto;max-width:100%}`
+   (`src/assets/notebook.css:802`) — the export's wrapper is simply missing that half of the same
+   rule.
+   Done — added a `css"""..."""` pane to `columns_toggle`
+   ([notebooks/results.jl:24-33](notebooks/results.jl#L24-L33)) with
+   `.exp-tblwrap { overflow-x: auto; }`, mirroring the live wrapper's own rule. Web-cell CSS ships
+   as a plain global `<style>` tag (`src/widgets.jl:2056`), not shadow-scoped, so it can target an
+   ancestor class outside the cell's own markup; it lands later in the page than Slate's built-in
+   rule, so at equal specificity it wins the cascade (verified by source position in the export).
+   Verified in a fresh export: both `.exp-tblwrap` rules are present, ours last, and the table (18
+   headers), 9 images and hidden source from steps 1–3 are all still unaffected.
+
+5. [x] Make the wind-speed slider's number readout dynamic and carry the unit. The export renders a
+   frozen `<output class="exp-ctl-val">3</output>` beside every slider (`_export_control_html`,
+   `src/server_export.jl:519`); `Slate.replay.wire` keeps that readout live by updating it itself
+   (`src/server_export.jl:1291`), but `wind_speed` is wired by hand in `pattern_plot` instead of
+   through `wire()`, so nothing was touching it — the "3" never moved and never carried units.
+   Done — added a `relabel(h, v)` helper in `pattern_plot`'s JS
+   ([notebooks/results.jl:89-104](notebooks/results.jl#L89-L104)) that writes `v + " m/s"` into the
+   host's sibling `.exp-ctl-val`, called once on load (so "3" becomes "3 m/s" immediately) and again
+   inside the existing `Slate.replay.listen` callback, next to `pick`.
+   Verified end-to-end rather than by inspecting markup: fetched the real export, loaded it into an
+   iframe in the live browser tab, and drove its actual script — readout read "3 m/s" on load;
+   after simulating the slider moving to 7, the readout updated to "7 m/s" and the pattern image
+   switched to `data-v="7"` in the same event.

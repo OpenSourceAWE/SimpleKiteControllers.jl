@@ -6,11 +6,10 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 """
 
 #%% code id=columns_bind
-@bind columns MultiCheckBox(["optimization", "force", "reel-out", "performance"],
-                            ["optimization", "force", "reel-out", "performance"];
+@bind columns MultiCheckBox(["optimization", "force", "reel-out", "performance"], String[];
                             label="Columns")
 
-#%% code id=overview_table
+#%% code id=overview_table hidecode
 using DataFrames
 
 overview_lines = split(@asset("notebooks/overview.md"), '\n')
@@ -25,6 +24,10 @@ slate_table(overview_df; align)
 @web(html"""
 <!-- reads overview_df so this cell runs after overview_table, not just after the checkboxes -->
 <span hidden>{{ nrow(overview_df) }}</span>
+""",
+css"""
+/* the exported table's own wrapper has no scroll of its own — mirrors the live table's .st-scroll */
+.exp-tblwrap { overflow-x: auto; }
 """,
 js"""
 const GROUPS = {
@@ -87,9 +90,16 @@ const pick = v => document.querySelectorAll("#pattern img")
     .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
 pick({{ wind_speed }});
 if (window.Slate && !Slate.isLive()) {
+  // Exported sliders freeze their ".exp-ctl-val" readout at the export-time value: nothing updates
+  // it unless the control is wired through Slate.replay.wire, and this one is wired by hand instead.
+  const relabel = (h, v) => {
+    const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
+    ro && (ro.textContent = v + " m/s");
+  };
   Slate.replay.hosts("wind_speed").forEach(h => {
     Slate.replay.enable(h, true);
-    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+    relabel(h, Slate.replay.read(h));
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
   });
 }
 """)
