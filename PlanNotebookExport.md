@@ -181,3 +181,11 @@ in the table cell already use.
    iframe in the live browser tab, and drove its actual script — readout read "3 m/s" on load;
    after simulating the slider moving to 7, the readout updated to "7 m/s" and the pattern image
    switched to `data-v="7"` in the same event.
+
+## TODO
+Publish the static html page on GitHub, using the repo https://github.com/OpenSourceAWE/SimulationResults
+
+Done — copied `output/results_export.html` to
+[SimulationResults/docs/index.html](https://github.com/OpenSourceAWE/SimulationResults/blob/main/docs/index.html),
+committed and pushed (`7e97a2e`), and enabled GitHub Pages on that repo (source: `main`
+branch, `/docs` folder). Live at <https://opensourceawe.github.io/SimulationResults/>.
