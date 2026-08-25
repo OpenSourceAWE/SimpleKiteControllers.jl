@@ -49,11 +49,14 @@ depower converted to the same units (`awetrim_depower_to_v3kite`, step-held
 between reopt solves), is added when `simple_opt_reelout.jl`'s
 `opt_depower_log` is in scope — silently skipped for a plain `simple_reelout.jl`
 run or a standalone replot of an older archive, neither of which has it. A sixth
-does the same for `k_v` from `opt_kv_log`, the winch gain against the seed it was
-bracketed around, when `optimize_k_v` made it a design variable. Neither rides a
-`var_` slot: all sixteen are taken, so both are Julia-side series carried in
-scope from the run rather than columns of the log, which is also why a replot of
-an archived Arrow shows neither.
+carries `k_v`, the winch gain the run flew, against the seed it was bracketed
+around when `optimize_k_v` made it a design variable; that one is ALWAYS drawn,
+flat when the gain was fixed.
+
+Neither rides a `var_` slot — all sixteen are taken. The depower is a Julia-side
+series that only a live run has, but `k_v` is read from the RUN SUMMARY
+(`traj_opt.guess.k_v_optimized`, `traj_opt.winch.k_v_flown`), which every archive
+carries, so an archived replot draws the `k_v` panel and not the depower one.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -144,11 +147,77 @@ syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 
 created_at = log_created_at(log_name; path = output_path)
+# The run summary, written by `reelout_results.jl` BEFORE the plots and copied
+# into every archive. It is the durable home of everything the Arrow cannot hold:
+# all sixteen `var_` slots are taken, so `k_v` and the optimizer's depower are not
+# columns and a replot has to read them from here.
+summary_file = joinpath(output_path, log_name * ".yaml")
+run_summary = isfile(summary_file) ? V3Kite.YAML.load_file(summary_file) : nothing
 # `project_set.v_wind` is the PROJECT's base value, not necessarily what was
 # actually flown if a WIND_SPEED override was in effect — a scenario's own run
 # summary is the only place the true value survives.
-flown_wind = isnothing(scenario_path) ? project_set.v_wind :
-    V3Kite.YAML.load_file(joinpath(output_path, log_name * ".yaml"))["simulation"]["wind_speed"]
+flown_wind = if isnothing(scenario_path)
+    project_set.v_wind
+elseif isnothing(run_summary)
+    error("No run summary at $summary_file; the flown wind speed only survives there.")
+else
+    run_summary["simulation"]["wind_speed"]
+end
+
+"""
+    kv_series(summary, times; live) -> (k_v, seed, moved)
+
+The winch gain over `times`, step-held between optimizer replies, for the power
+plot's `k_v` panel.
+
+Sourced from `opt_kv_log` when a live run left it in scope, and otherwise parsed
+out of the summary's `traj_opt.guess.k_v_optimized` — which is what an ARCHIVED
+replot has, since `k_v` is not a log column. `moved` is false when the optimizer
+never retuned the gain (`optimize_k_v` off), and the series is then the flat gain
+the run actually flew, read back from the winch the law used.
+
+`live = false` (a scenario replot) ignores `rc`/`winch`/`opt_kv_log` entirely and
+reads only the summary. Without that, replotting an archive from the REPL that
+just flew something else would draw THAT run's gain onto this run's plot — the
+globals outlive the run that set them.
+
+Entries sharing a timestamp are the two call sites of one re-optimization; they
+are ordered by their summary key so the retry wins, as it does live.
+"""
+function kv_series(summary, times; live::Bool)
+    traj = isnothing(summary) ? nothing : get(summary, "traj_opt", nothing)
+    wsum = isnothing(traj) ? nothing : get(traj, "winch", nothing)
+    seed = if live && @isdefined(winch) && hasproperty(winch, :k_v)
+        Float64(winch.k_v)
+    elseif !isnothing(wsum)
+        Float64(wsum["k_v"])
+    else
+        NaN
+    end
+    flown = if live && @isdefined(rc) && hasproperty(rc, :wcs)
+        Float64(rc.wcs.kv)
+    elseif !isnothing(wsum)
+        Float64(get(wsum, "k_v_flown", seed))
+    else
+        seed
+    end
+    t_kv, k_kv = if live && @isdefined(opt_kv_log) && !isempty(opt_kv_log)
+        (Float64[e.t for e in opt_kv_log], Float64[e.k_v for e in opt_kv_log])
+    else
+        guess = isnothing(traj) ? nothing : get(traj, "guess", nothing)
+        block = isnothing(guess) ? nothing : get(guess, "k_v_optimized", nothing)
+        rows = block isa AbstractDict ?
+            [(parse(Float64, m[1]), String(k), Float64(v))
+             for (k, v) in block
+             for m in (match(r"^t_([\d.]+)_s", String(k)),) if m !== nothing] :
+            Tuple{Float64, String, Float64}[]
+        sort!(rows; by = r -> (r[1], r[2]))
+        (Float64[r[1] for r in rows], Float64[r[3] for r in rows])
+    end
+    isempty(t_kv) && return fill(flown, length(times)), seed, false
+    idx = searchsortedlast.(Ref(t_kv), times)
+    ([i == 0 ? k_kv[1] : k_kv[i] for i in idx], seed, true)
+end
 fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
@@ -412,19 +481,19 @@ if "power" in plots
         push!(ylabels, L"u_d~[-]")
         push!(labels, [L"\mathrm{flown}", L"\mathrm{optimizer~(equiv.)}"])
     end
-    # The winch gain, when `optimize_k_v` made it a design variable. Step-held for
-    # the same reason as the depower above: the value applies from the reply that
-    # produced it until the next one. Drawn against the seed it was bracketed
-    # around, since what matters is whether the optimizer moved it at all.
-    if @isdefined(opt_kv_log) && !isempty(opt_kv_log)
-        t_kv = Float64[e.t for e in opt_kv_log]
-        k_kv = Float64[e.k_v for e in opt_kv_log]
-        idx_kv = searchsortedlast.(Ref(t_kv), Float64.(sl.time[rng]))
-        kv_opt = [i == 0 ? k_kv[1] : k_kv[i] for i in idx_kv]
-        kv_seed = fill(@isdefined(winch) ? winch.k_v : k_kv[1], length(kv_opt))
-        push!(panels, [kv_opt, kv_seed])
+    # The winch gain the run flew. ALWAYS drawn — a flat line is the honest
+    # picture of a fixed-gain run, and with `force_limit: "soft"` k_v sets the
+    # whole reel-out law, so which value was flown belongs on the plot either way.
+    # Against the seed only when the optimizer actually moved it; see `kv_series`
+    # for where the numbers come from on a replot.
+    kv_flown, kv_seed, kv_moved = kv_series(run_summary, Float64.(sl.time[rng]);
+                                            live = isnothing(scenario_path))
+    if any(isfinite, kv_flown)
+        push!(panels, kv_moved ? [kv_flown, fill(kv_seed, length(kv_flown))] : kv_flown)
         push!(ylabels, L"k_v~[-]")
-        push!(labels, [L"\mathrm{optimized}", L"\mathrm{seed}"])
+        # A bare label for the plain vector, as with p_label/e_label above.
+        push!(labels, kv_moved ? [L"\mathrm{optimized}", L"\mathrm{seed}"] :
+                                 L"k_v~\mathrm{flown~(fixed)}")
     end
 
     p4 = plotx(
