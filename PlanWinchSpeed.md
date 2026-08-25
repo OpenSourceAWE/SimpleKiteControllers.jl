@@ -456,6 +456,52 @@ NOT solve:
   553 W against v03's 587 N and 559 W, all 9 passed. 5 m/s is untested and takes
   `"hard"` conservatively.
 
+**Re-measured on the SHIPPED configuration (2026-08-26), and the oscillation
+verdict above is superseded.** With `force_limit_tau` 2.48 there is no limit
+cycle, and the 9 m/s peak does move. Both ends of the soft band, against their
+archived hard scenarios, all 9 criteria passed everywhere:
+
+| reel-out window | 9 soft | 9 hard | 10 soft | 10 hard |
+|:--|--:|--:|--:|--:|
+| mean force [N] | 7229 | 7811 | 7405 | 7804 |
+| **peak force [N]** | **9001** | 9418 | **12365** | 12366 |
+| % over the 8400 N rating | **3.9** | 49.1 | **8.4** | 19.7 |
+| power [W] | 29899 | 30260 | 37865 | 38942 |
+| power cost | -1.2 % | — | -2.8 % | — |
+
+**9 m/s is a clear win** — half the window over the rating became 3.9 %, the peak
+came down 417 N, for 1.2 % of the power, with tracking unchanged.
+
+**10 m/s is half a win: the duty cycle improves the same way, but the peak is
+identical to the newton — 12365 N against 12366 N** — and the power cost doubles.
+
+The cause is `force_limit_tau`, and nothing physical is binding. Both obvious
+suspects were checked and cleared: peak drum acceleration is 5.06 m/s^2 against
+the 8.0 `max_acc` (0.00 % of samples within 95 % of it), and commanded `v_set`
+peaks at 7.67 m/s against `v_sat` 8.0 without clipping. **At the 12365 N peak the
+law asks for only 3.37 m/s** — less than half what it commands elsewhere in the
+same run. It is not straining, it is BLIND: `calc_vro_soft` reads the FILTERED
+force, which at that instant is **6109 N**, attenuated 51 % from the raw 12365.
+A ~3.4 m/s command is the correct answer to 6109 N. Over the window the filtered
+force maxes at 8309 N and crosses `f_high` 5.8 % of the time, against the raw
+12365 N and 18.9 %.
+
+The excursion is a single **1.52 s** spike over 10 kN, against a 2.48 s time
+constant — a first-order lag halves it. The hard baseline carries the same spike
+(1.53 s, 2.2 % of the window either way), so it belongs to the PATH, not to the
+limiter.
+
+So this is a filter trade, not a limit of the approach: `tau` 1.0 controlled the
+force and rang at +-1.1 m/s, `tau` 0.2 is closed (rang at +-2.12), `tau` 2.48 is
+stable and blind. One first-order lag cannot do both at 2.48 s against a 1.52 s
+spike. The untried shape is a NON-lag one — an asymmetric filter, fast on rising
+force and slow on falling, would see the spike without giving the loop the phase
+that made it ring. That is the cheap experiment.
+
+Stage 2b item 3 (`f_max` in the request) still applies, aimed at the path that
+MAKES the spike rather than at the limiter reacting to it — but it is no longer
+the only lever, and it is the more expensive one.
+
 ## Implementation notes
 
 - **New fields go at the end of the `@with_kw WCSettings` block.** The positional

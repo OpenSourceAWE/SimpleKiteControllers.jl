@@ -3479,6 +3479,83 @@ meaningless until 0.25 is re-identified the same way. `c1` and `delay`
 
 ## REEL_OUT winch (`examples/simple_reelout.jl`)
 
+### The soft law at 9 vs 10 m/s: it cuts the DUTY CYCLE, not the PEAK (2026-08-26)
+
+The shipped configuration measured at both ends of the soft band, against the
+archived hard-limiter scenarios. Like-for-like on each side: same `k_v` from
+`winch_kv_table`, `optimize_k_v` off, `first_lap_force_frac` 1.0, `f_max` 8000 N
+sent in every request, `force_limit_tau` 2.48 s, 150 -> 380 m. Both runs passed
+all 9 criteria.
+
+| reel-out window | 9 m/s soft | 9 m/s hard | 10 m/s soft | 10 m/s hard |
+|:--|--:|--:|--:|--:|
+| mean force [N] | 7229 | 7811 | 7405 | 7804 |
+| 99th pct force [N] | 8731 | 8951 | 11804 | 11791 |
+| **peak force [N]** | **9001** | 9418 | **12365** | 12366 |
+| % of time over 8000 N | 26.9 | 70.0 | 18.9 | 56.2 |
+| **% over the 8400 N rating** | **3.9** | 49.1 | **8.4** | 19.7 |
+| measured power [W] | 29899 | 30260 | 37865 | 38942 |
+| power cost | **-1.2 %** | — | **-2.8 %** | — |
+| RMS d [deg] | 1.66 | 1.61 | 1.88 | 2.08 |
+| force crest factor | 1.16 | 1.12 | 1.61 | 1.50 |
+
+**At 9 m/s it is a clear win**: half the reel-out window sat over the winch's
+rating before, 3.9 % of it does now, and the peak comes down 417 N, for 1.2 % of
+the power. No sign of the limit cycle the first soft measurement found — that is
+`force_limit_tau` 2.48 doing its job. Tracking is unchanged.
+
+**At 10 m/s it is half a win.** The duty cycle improves the same way (19.7 % ->
+8.4 % over the rating) but **the peak does not move at all: 12365 N against
+12366 N**, identical to the newton, and the 99th percentile with it. The power
+cost more than doubles. Tracking improves, oddly, but that is not what the law
+is for.
+
+**Why the peak survives is `force_limit_tau`, and NOTHING else was binding.**
+Both obvious suspects were checked and cleared:
+
+| at the 10 m/s peak | value | limit |
+|:--|--:|--:|
+| drum acceleration, whole window | 5.06 m/s^2 | 8.0 (`max_acc`) |
+| samples at >= 95 % of the accel cap | 0.00 % | |
+| commanded `v_set`, whole window | 7.67 m/s | 8.0 (`v_sat`) |
+| **commanded `v_set` AT the 12365 N peak** | **3.37 m/s** | |
+
+The law is not clipped, not rate-limited, and not straining — at the peak it asks
+for 3.37 m/s, less than half what it commands elsewhere in the same run. It is
+BLIND, because `calc_vro_soft` is fed the FILTERED force and the filter deletes
+the excursion:
+
+| t = 26.0 s, the peak | |
+|:--|--:|
+| raw force | 12365 N |
+| **filtered force** | **6109 N** |
+| attenuation | 6256 N, **51 %** |
+
+At 6109 N a ~3.4 m/s command is the correct answer; the law never sees 12 kN.
+Over the whole window the filtered force maxes at 8309 N against the raw 12365,
+and crosses `f_high` only 5.8 % of the time against the raw 18.9 %.
+
+The excursion is a SINGLE 1.52 s spike over 10 kN — 1.52 s against a 2.48 s time
+constant, so a first-order lag halves it. The hard baseline has the same one
+(1.53 s, 2.2 % of the window either way), so the spike belongs to the path, not
+to the limiter.
+
+**So this is a filter trade, not a physical limit.** The winch has the authority
+to answer the peak; `force_limit_tau` is what stops it being asked to:
+
+- `tau` 1.0 — force controlled, +-1.1 m/s limit cycle at 2.63 s
+- `tau` 0.2 — CLOSED, amplified the ring to +-2.12 m/s
+- `tau` 2.48 — shipped, no oscillation, and blind to a 1.5 s spike
+
+One first-order lag cannot do both jobs at 2.48 s against a 1.52 s spike. What is
+worth trying is a shape that is not a single lag — an ASYMMETRIC filter, fast on
+rising force and slow on falling, would see the spike without handing the loop
+the phase that made it ring. Untested.
+
+The `f_max`-in-the-request lever (`PlanWinchSpeed.md` stage 2b) still applies to
+the path that MAKES the spike, but it is no longer the only option, and the
+cheaper experiment is the filter.
+
 ### `force_limit` is WIND-DEPENDENT — the soft law is undefined below ~5 m/s (2026-08-25)
 
 The soft limiter cannot be the law at every wind speed, and no amount of tuning
