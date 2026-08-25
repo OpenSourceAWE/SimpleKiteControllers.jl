@@ -88,6 +88,11 @@ The average mechanical power during reel-out, the force, and the speed are shown
 ![power curve](/n/results/asset/notebooks/powercurve.png)
 """
 
+#%% md id=wind_speed_hint
+@md"""
+The optimal trajectory of the kite, the shape of the figure of eight, depends on the tether length and on the wind speed. Below, use the slider to adjust the ground wind speed, and see the shape of the desired and actual trajectory the kite flies. For each figure-of-eight, the AWETrim quasi-static optimizer calculated the optimal trajectory.
+"""
+
 #%% code id=wind_speed_bind
 @bind wind_speed Slider(3:10; default=3, label="Wind speed [m/s]")
 
