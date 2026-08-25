@@ -110,7 +110,7 @@ The optimal trajectory of the kite, the shape of the figure of eight, depends on
 </div>
 """,
 css"""
-#pattern img { display: block; margin: 0 auto; }
+#pattern img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 #pattern img[hidden] { display: none; }
 """,
 js"""
@@ -163,7 +163,7 @@ state machine over the whole run. The first subplot, `d ', shows the distance be
 </div>
 """,
 css"""
-#time_series img { display: block; margin: 0 auto; }
+#time_series img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 #time_series img[hidden] { display: none; }
 """,
 js"""

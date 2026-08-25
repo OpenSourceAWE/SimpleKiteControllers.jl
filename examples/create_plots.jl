@@ -2,17 +2,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Batch-generate pattern and time-series PNG plots for every archived scenario in
-`output/scenarios/`, saving one `pattern_<scenario>.png` and one
-`time_series_<scenario>.png` per scenario folder into `notebooks/`.
+Batch-generate pattern, time-series, power and aerodynamics PNG plots for
+every archived scenario in `output/scenarios/`, saving one
+`pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`
+and `aerodynamics_<scenario>.png` per scenario folder into `notebooks/`.
 
 Each subfolder of `output/scenarios/` (`v08`, `v09`, ...) is a self-contained
 record of one `simple_opt_reelout.jl` run. This script loads each scenario's
 flight log and settings from its own folder and generates a pattern plot showing
 the flown azimuth/elevation path and the attractor reference (or optimizer's
-uncorrected path if available), plus a time-series plot of the tracking, tether
-and winch-state panels, then saves them to `notebooks/pattern_<scenario>.png`
-and `notebooks/time_series_<scenario>.png`.
+uncorrected path if available), a time-series plot of the tracking, tether and
+winch-state panels, a power plot of the winch force/speed/mechanical-power/
+energy panels, and an aerodynamics plot of the angle-of-attack/L/D/speed
+panels.
 
     include("create_plots.jl")
 """
@@ -117,5 +119,85 @@ function create_time_series_plots()
     @info "Time-series plot generation complete"
 end
 
+"""
+    create_power_plots()
+
+Scan `output/scenarios/` for non-empty scenario folders, generate a power plot
+for each one using `plot_power_scenario`, and save as
+`notebooks/power_<name>.png`. Folders with no files are skipped. Each plot is
+shown (`disp=true`) so `MakieControlPlots.savefig` captures the right figure,
+then the window is closed immediately via `MakieControlPlots.close`.
+"""
+function create_power_plots()
+    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+
+    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+        isdir(dir) && !isempty(readdir(dir))
+    end
+    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+
+    mkpath(NOTEBOOKS_DIR)
+
+    @info "Generating power plots for $(length(dirs)) scenario(s)..."
+
+    for scenario_dir in sort(dirs)
+        scenario_name = basename(scenario_dir)
+        try
+            p = plot_power_scenario(scenario_dir; disp = true)
+
+            png_file = joinpath(NOTEBOOKS_DIR, "power_$(scenario_name).png")
+            savefig(png_file)
+            MakieControlPlots.close(p.fig)
+
+            @info "Saved power plot" png_file
+        catch e
+            @warn "Failed to process scenario $scenario_name: $e"
+        end
+    end
+
+    @info "Power plot generation complete"
+end
+
+"""
+    create_aerodynamics_plots()
+
+Scan `output/scenarios/` for non-empty scenario folders, generate an
+aerodynamics plot for each one using `plot_aerodynamics_scenario`, and save as
+`notebooks/aerodynamics_<name>.png`. Folders with no files are skipped. Each
+plot is shown (`disp=true`) so `MakieControlPlots.savefig` captures the right
+figure, then the window is closed immediately via `MakieControlPlots.close`.
+"""
+function create_aerodynamics_plots()
+    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+
+    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+        isdir(dir) && !isempty(readdir(dir))
+    end
+    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+
+    mkpath(NOTEBOOKS_DIR)
+
+    @info "Generating aerodynamics plots for $(length(dirs)) scenario(s)..."
+
+    for scenario_dir in sort(dirs)
+        scenario_name = basename(scenario_dir)
+        try
+            p = plot_aerodynamics_scenario(scenario_dir; disp = true)
+
+            png_file = joinpath(NOTEBOOKS_DIR, "aerodynamics_$(scenario_name).png")
+            savefig(png_file)
+            MakieControlPlots.close(p.fig)
+
+            @info "Saved aerodynamics plot" png_file
+        catch e
+            @warn "Failed to process scenario $scenario_name: $e"
+        end
+    end
+
+    @info "Aerodynamics plot generation complete"
+end
+
 create_pattern_plots()
 create_time_series_plots()
+create_power_plots()
+create_aerodynamics_plots()
