@@ -167,9 +167,9 @@ end
     create_overview()
 
 Scan `SimulationResults/scenarios/` and write `overview.md` there, one row
-per scenario ordered by wind speed, mirror `overview.md` and the power curve
-PNG into `notebooks/` for `notebooks/results.jl` to embed, then display the
-same table as a pop-up in the default browser.
+per scenario ordered by wind speed, mirror `overview.md` into `notebooks/`
+and the power curve PNG into `notebooks/images/` for `notebooks/results.jl`
+to embed, then display the same table as a pop-up in the default browser.
 """
 function create_overview()
     isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
@@ -191,7 +191,9 @@ function create_overview()
     @info "Wrote overview" notebooks_file rows=length(rows)
 
     png_file = powercurve_png(rows)
-    notebooks_png_file = joinpath(notebooks_dir, "powercurve.png")
+    notebooks_images_dir = joinpath(notebooks_dir, "images")
+    mkpath(notebooks_images_dir)
+    notebooks_png_file = joinpath(notebooks_images_dir, "powercurve.png")
     cp(png_file, notebooks_png_file; force = true)
     @info "Wrote power curve" notebooks_png_file
 

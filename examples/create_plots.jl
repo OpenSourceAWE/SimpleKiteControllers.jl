@@ -5,7 +5,7 @@
 Batch-generate pattern, time-series, power and aerodynamics PNG plots for
 every archived scenario in `output/scenarios/`, saving one
 `pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`
-and `aerodynamics_<scenario>.png` per scenario folder into `notebooks/`.
+and `aerodynamics_<scenario>.png` per scenario folder into `notebooks/images/`.
 
 Each subfolder of `output/scenarios/` (`v08`, `v09`, ...) is a self-contained
 record of one `simple_opt_reelout.jl` run. This script loads each scenario's
@@ -35,13 +35,13 @@ using SimpleKiteControllers: project_file
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 
 const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "output", "scenarios"))
-const NOTEBOOKS_DIR = normpath(joinpath(@__DIR__, "..", "notebooks"))
+const NOTEBOOKS_DIR = normpath(joinpath(@__DIR__, "..", "notebooks", "images"))
 
 """
     create_pattern_plots()
 
 Scan `output/scenarios/` for non-empty scenario folders, generate a pattern plot
-for each one using `plot_pattern_scenario`, and save as `notebooks/pattern_<name>.png`.
+for each one using `plot_pattern_scenario`, and save as `notebooks/images/pattern_<name>.png`.
 Folders with no files are skipped. Each plot is shown (`disp=true`) so
 `MakieControlPlots.savefig` captures the right figure, then the window is
 closed immediately via `MakieControlPlots.close`.
@@ -85,7 +85,7 @@ end
 
 Scan `output/scenarios/` for non-empty scenario folders, generate a
 time-series plot for each one using `plot_time_series_scenario`, and save as
-`notebooks/time_series_<name>.png`. Folders with no files are skipped. Each
+`notebooks/images/time_series_<name>.png`. Folders with no files are skipped. Each
 plot is shown (`disp=true`) so `MakieControlPlots.savefig` captures the right
 figure, then the window is closed immediately via `MakieControlPlots.close`.
 """
@@ -124,7 +124,7 @@ end
 
 Scan `output/scenarios/` for non-empty scenario folders, generate a power plot
 for each one using `plot_power_scenario`, and save as
-`notebooks/power_<name>.png`. Folders with no files are skipped. Each plot is
+`notebooks/images/power_<name>.png`. Folders with no files are skipped. Each plot is
 shown (`disp=true`) so `MakieControlPlots.savefig` captures the right figure,
 then the window is closed immediately via `MakieControlPlots.close`.
 """
@@ -163,7 +163,7 @@ end
 
 Scan `output/scenarios/` for non-empty scenario folders, generate an
 aerodynamics plot for each one using `plot_aerodynamics_scenario`, and save as
-`notebooks/aerodynamics_<name>.png`. Folders with no files are skipped. Each
+`notebooks/images/aerodynamics_<name>.png`. Folders with no files are skipped. Each
 plot is shown (`disp=true`) so `MakieControlPlots.savefig` captures the right
 figure, then the window is closed immediately via `MakieControlPlots.close`.
 """

@@ -96,9 +96,9 @@ function plot_powercurve()
           title = "V3 reel-out power curve", scatter = true, disp = true,
           fig = "powercurve")
     
-    # Save the plot to PNG file in notebooks folder
-    notebooks_dir = normpath(joinpath(@__DIR__, "..", "notebooks"))
-    ispath(notebooks_dir) || mkdir(notebooks_dir)
+    # Save the plot to PNG file in notebooks/images folder
+    notebooks_dir = normpath(joinpath(@__DIR__, "..", "notebooks", "images"))
+    ispath(notebooks_dir) || mkpath(notebooks_dir)
     png_file = joinpath(notebooks_dir, "powercurve.png")
     savefig(png_file)
 end
