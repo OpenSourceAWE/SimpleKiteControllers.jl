@@ -183,9 +183,44 @@ in the table cell already use.
    switched to `data-v="7"` in the same event.
 
 ## TODO
-Publish the static html page on GitHub, using the repo https://github.com/OpenSourceAWE/SimulationResults
+- [x] Publish the static html page on GitHub, using the repo https://github.com/OpenSourceAWE/SimulationResults
 
 Done — copied `output/results_export.html` to
 [SimulationResults/docs/index.html](https://github.com/OpenSourceAWE/SimulationResults/blob/main/docs/index.html),
 committed and pushed (`7e97a2e`), and enabled GitHub Pages on that repo (source: `main`
 branch, `/docs` folder). Live at <https://opensourceawe.github.io/SimulationResults/>.
+
+- [x] Add the time_series_vXXX plots from the notebooks folder to the notebook in the same way as the pattern_vXXX plots, using the same wind speed from the slider.
+
+Done — added `time_series_hint` (md) and `time_series_plot` (web) cells to
+[notebooks/results.jl](notebooks/results.jl), right after `pattern_plot`. `time_series_plot` is the
+same idiom as change 1: eight literal `<img>` tags (`time_series_v03.png` … `time_series_v10.png`),
+toggled by a `pick(v)` that hides all but the selected `data-v`, with its own
+`Slate.replay.hosts("wind_speed")` listener — a second, independent host on the same control,
+alongside `pattern_plot`'s (which already keeps the slider's `.exp-ctl-val` readout live, so this
+cell only needs to swap its own image, not repeat `relabel`).
+Verified live (all 13 cells `fresh`, browser console clean via `slate_diag`) and in a fresh export:
+`output/results_export.html` grew to 17 inlined `data:image/png` URIs (8 pattern + 8 time-series +
+the powercurve) and carries two independent `Slate.replay.hosts("wind_speed")` listeners, one per
+plot.
+
+- [x] Fix step 5's readout wiring for the now-shared `wind_speed` control: with TWO cells declaring
+  `controls=wind_speed`, the export renders TWO independent slider copies (one embedded per
+  consuming cell), and `pattern_plot`'s original wiring only ever discovered one of them.
+
+  Root cause, found by loading the real export into an iframe and driving it (same method as step
+  5): each web cell's inline `<script>` runs as the parser reaches it, so `pattern_plot`'s script —
+  positioned before `time_series_plot` in the document — called `Slate.replay.hosts("wind_speed")`
+  before `time_series_plot`'s slider copy existed in the DOM at all. It therefore attached its
+  `enable`/`relabel`/`listen` to only the first copy. Confirmed with the iframe test: dragging the
+  *second* slider swapped the time-series image but left the pattern image, both readouts, and the
+  first slider's handle all stale.
+
+  Done — both cells now defer their `Slate.replay.hosts(...)` wiring to `DOMContentLoaded` (running
+  immediately instead if `document.readyState` is already past `"loading"`), so both slider copies
+  exist by the time either cell looks for hosts. `pattern_plot`'s `sync(v)` now also writes every
+  host's `.value` (not just the one that changed) alongside its readout, so both copies' handles
+  and text move together regardless of which one the reader drags.
+  Verified with the same export+iframe method as step 5, this time dragging EACH copy in turn:
+  moving either slider now moves both handles to the same value, both `.exp-ctl-val` readouts read
+  e.g. "9 m/s", and both the pattern and time-series images switch to the matching `data-v`.

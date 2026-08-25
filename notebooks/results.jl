@@ -117,19 +117,70 @@ js"""
 const pick = v => document.querySelectorAll("#pattern img")
     .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
 pick({{ wind_speed }});
-if (window.Slate && !Slate.isLive()) {
+function wire() {
+  if (!(window.Slate && !Slate.isLive())) return;
+  // wind_speed is `controls=` for two cells (pattern_plot, time_series_plot), so the export
+  // renders TWO independent slider copies. Deferred to DOMContentLoaded so both exist by the
+  // time hosts() runs — this script sits earlier in the document than time_series_plot's copy,
+  // and hosts() only sees what has been parsed into the DOM so far.
+  const hosts = Slate.replay.hosts("wind_speed");
   // Exported sliders freeze their ".exp-ctl-val" readout at the export-time value: nothing updates
   // it unless the control is wired through Slate.replay.wire, and this one is wired by hand instead.
   const relabel = (h, v) => {
     const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
     ro && (ro.textContent = v + " m/s");
   };
+  // Keep every copy's handle position and readout in sync, not just the one the reader moved.
+  const sync = v => hosts.forEach(h => { h.value = v; relabel(h, v); });
+  hosts.forEach(h => {
+    Slate.replay.enable(h, true);
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); sync(v); });
+  });
+  sync(Slate.replay.read(hosts[0]));
+}
+document.readyState === "loading" ?
+  document.addEventListener("DOMContentLoaded", wire) : wire();
+""")
+
+#%% md id=time_series_hint
+@md"""
+The time series below show, for the same wind speed selected above, the cross-track error, elevation,
+course/heading tracking, steering, tether force and length, reel-out speed, depower, and the entry
+state machine over the whole run. The first subplot, `d ', shows the distance between the actual and planned trajectory in degrees.
+"""
+
+#%% web id=time_series_plot controls=wind_speed
+@web(html"""
+<div id="time_series">
+  <img data-v="3" src="/n/results/asset/notebooks/time_series_v03.png" alt="time series, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/time_series_v04.png" alt="time series, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/time_series_v05.png" alt="time series, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/time_series_v06.png" alt="time series, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/time_series_v07.png" alt="time series, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/time_series_v08.png" alt="time series, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/time_series_v09.png" alt="time series, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/time_series_v10.png" alt="time series, 10 m/s">
+</div>
+""",
+css"""
+#time_series img { display: block; margin: 0 auto; }
+#time_series img[hidden] { display: none; }
+""",
+js"""
+const pick = v => document.querySelectorAll("#time_series img")
+    .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
+pick({{ wind_speed }});
+function wire() {
+  if (!(window.Slate && !Slate.isLive())) return;
+  // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
+  // sync; this cell only needs to swap its own image on any of them changing.
   Slate.replay.hosts("wind_speed").forEach(h => {
     Slate.replay.enable(h, true);
-    relabel(h, Slate.replay.read(h));
-    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
+    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
   });
 }
+document.readyState === "loading" ?
+  document.addEventListener("DOMContentLoaded", wire) : wire();
 """)
 
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
