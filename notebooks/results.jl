@@ -18,13 +18,44 @@ header = strip.(split(strip(overview_lines[1], '|'), '|'))
 rows = [strip.(split(strip(l, '|'), '|')) for l in overview_lines[3:end] if !isempty(strip(l))]
 overview_df = DataFrame([header[i] => [something(tryparse(Float64, r[i]), r[i]) for r in rows] for i in eachindex(header)])
 
-"optimization" in columns || select!(overview_df, Not([:opt_requests, :opts_installed]))
-"force" in columns || select!(overview_df, Not([:min_force, :av_force, :max_force]))
-"reel-out" in columns || select!(overview_df, Not(names(overview_df, r"^v_ro")))
-"performance" in columns || select!(overview_df, Not([:total_time, :rt_factor]))
-
-align = Dict(c => :center for c in (:opt_requests, :opts_installed) if c in propertynames(overview_df))
+align = Dict(:opt_requests => :center, :opts_installed => :center)
 slate_table(overview_df; align)
+
+#%% web id=columns_toggle controls=columns
+@web(html"""
+<!-- reads overview_df so this cell runs after overview_table, not just after the checkboxes -->
+<span hidden>{{ nrow(overview_df) }}</span>
+""",
+js"""
+const GROUPS = {
+  optimization: ["opt_requests", "opts_installed"],
+  force: ["min_force", "av_force", "max_force"],
+  "reel-out": ["v_ro_min", "v_ro_av", "v_ro_max"],
+  performance: ["total_time", "rt_factor"],
+};
+const groupOf = name => Object.keys(GROUPS).find(g => GROUPS[g].includes(name));
+const apply = checked => {
+  document.querySelectorAll("table.st-table, table.exp-table").forEach(table => {
+    table.querySelectorAll("thead th").forEach((th, i) => {
+      const g = groupOf(th.dataset.label || th.textContent.trim());
+      if (!g) return;
+      const show = checked.includes(g);
+      th.hidden = !show;
+      table.querySelectorAll("tbody tr").forEach(tr => {
+        const td = tr.children[i];
+        td && (td.hidden = !show);
+      });
+    });
+  });
+};
+apply({{ columns }});
+if (window.Slate && !Slate.isLive()) {
+  Slate.replay.hosts("columns").forEach(h => {
+    Slate.replay.enable(h, true);
+    Slate.replay.listen(h, () => apply(Slate.replay.read(h)));
+  });
+}
+""")
 
 #%% md id=powercurve_plot
 @md"""
