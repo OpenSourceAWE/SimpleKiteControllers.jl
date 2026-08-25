@@ -183,6 +183,97 @@ document.readyState === "loading" ?
   document.addEventListener("DOMContentLoaded", wire) : wire();
 """)
 
+#%% md id=power_hint
+@md"""
+The plots below show, for the same wind speed selected above, the tether force, reel-out speed and
+mechanical power over the whole run, and the cumulative mechanical energy.
+"""
+
+#%% web id=power_plot controls=wind_speed
+@web(html"""
+<div id="power">
+  <img data-v="3" src="/n/results/asset/notebooks/power_v03.png" alt="power, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/power_v04.png" alt="power, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/power_v05.png" alt="power, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/power_v06.png" alt="power, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/power_v07.png" alt="power, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/power_v08.png" alt="power, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/power_v09.png" alt="power, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/power_v10.png" alt="power, 10 m/s">
+</div>
+""",
+css"""
+#power img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+#power img[hidden] { display: none; }
+""",
+js"""
+const pick = v => document.querySelectorAll("#power img")
+    .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
+pick({{ wind_speed }});
+function wire() {
+  if (!(window.Slate && !Slate.isLive())) return;
+  // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
+  // sync; this cell only needs to swap its own image on any of them changing.
+  Slate.replay.hosts("wind_speed").forEach(h => {
+    Slate.replay.enable(h, true);
+    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+  });
+}
+document.readyState === "loading" ?
+  document.addEventListener("DOMContentLoaded", wire) : wire();
+""")
+
+#%% md id=aerodynamics_hint
+@md"""
+The plots below show, for the same wind speed selected above, the angle of attack (at the wing
+centre and the span mean), the wing and effective lift-to-drag ratio, and the apparent wind and
+kite speed over the whole run.
+"""
+
+#%% web id=aerodynamics_plot controls=wind_speed
+@web(html"""
+<div id="aerodynamics">
+  <img data-v="3" src="/n/results/asset/notebooks/aerodynamics_v03.png" alt="aerodynamics, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/aerodynamics_v04.png" alt="aerodynamics, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/aerodynamics_v05.png" alt="aerodynamics, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/aerodynamics_v06.png" alt="aerodynamics, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/aerodynamics_v07.png" alt="aerodynamics, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/aerodynamics_v08.png" alt="aerodynamics, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/aerodynamics_v09.png" alt="aerodynamics, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/aerodynamics_v10.png" alt="aerodynamics, 10 m/s">
+</div>
+""",
+css"""
+#aerodynamics img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+#aerodynamics img[hidden] { display: none; }
+""",
+js"""
+const pick = v => document.querySelectorAll("#aerodynamics img")
+    .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
+pick({{ wind_speed }});
+function wire() {
+  if (!(window.Slate && !Slate.isLive())) return;
+  // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
+  // sync; this cell only needs to swap its own image on any of them changing.
+  Slate.replay.hosts("wind_speed").forEach(h => {
+    Slate.replay.enable(h, true);
+    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+  });
+}
+document.readyState === "loading" ?
+  document.addEventListener("DOMContentLoaded", wire) : wire();
+""")
+
+#%% md id=acknowledgements
+@md"""
+These results were achieved using the following research software:
+
+- [SimpleKiteControllers.jl](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl), path-following kite control software by Uwe Fechner, Delft, 2026
+- [AWETrim](https://github.com/awegroup/AWETrim/tree/develop) was used to provide optimal flight paths, depending on the inflow conditions, written by Oriol Canyon, Delft, 2026
+- [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) was used as detailed, validated
+kite model of the V3 kite of TU Delft. It was developed by Jelle Poland, Rotterdam, The Netherlands and Bart van de Lint, Delft, The Netherlands, 2026
+"""
+
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
 #   docid = b94b3a69-a369-4ec8-bcb0-c8230e4ff1d3
 # ╚═╡

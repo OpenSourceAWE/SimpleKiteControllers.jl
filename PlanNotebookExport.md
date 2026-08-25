@@ -224,3 +224,39 @@ plot.
   Verified with the same export+iframe method as step 5, this time dragging EACH copy in turn:
   moving either slider now moves both handles to the same value, both `.exp-ctl-val` readouts read
   e.g. "9 m/s", and both the pattern and time-series images switch to the matching `data-v`.
+
+- [x] Add the plots starting with power_ in the same way
+
+Done — added `power_hint` (md) and `power_plot` (web) cells to
+[notebooks/results.jl](notebooks/results.jl), right after `time_series_plot`. Same idiom as the
+other two: eight literal `<img>` tags (`power_v03.png` … `power_v10.png`), toggled by `pick(v)`, with
+its own deferred `Slate.replay.hosts("wind_speed")` listener that only swaps its own image (`sync`
+and `.exp-ctl-val` upkeep already belongs to `pattern_plot`).
+Verified live (all 15 cells `fresh`, browser console clean via `slate_diag`) and in a fresh export
+fetched straight from `/api/results/export.html`: `output/results_export.html` grew to 25 inlined
+`data:image/png` URIs (8 pattern + 8 time-series + 8 power + the powercurve) and carries three
+independent `Slate.replay.hosts("wind_speed")` listeners, one per plot.
+
+- [x] Add the plots starting with aerodynamics_ in the same way
+
+Done — added `aerodynamics_hint` (md) and `aerodynamics_plot` (web) cells to
+[notebooks/results.jl](notebooks/results.jl), right after `power_plot`. Same idiom again: eight
+literal `<img>` tags (`aerodynamics_v03.png` … `aerodynamics_v10.png`), toggled by `pick(v)`, with
+its own deferred `Slate.replay.hosts("wind_speed")` listener that only swaps its own image.
+Verified live (all 17 cells `fresh`, browser console clean via `slate_diag`) and in a fresh export
+fetched from `/api/results/export.html`: `output/results_export.html` grew to 33 inlined
+`data:image/png` URIs (8 pattern + 8 time-series + 8 power + 8 aerodynamics + the powercurve) and
+carries four independent `Slate.replay.hosts("wind_speed")` listeners, one per plot.
+
+- [x] Can you add a text with the following content at the end:
+
+These results were achieved using the following research software:
+
+- [SimpleKiteControllers.jl](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl), path-following kite control software by Uwe Fechner, Delft, 2026
+- [AWETrim](https://github.com/awegroup/AWETrim/tree/develop) was used to provide optimal flight paths, depending on the inflow conditions, written by Oriol Canyon, Delft, 2026
+- [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) was used as detailed, validated
+kite model of the V3 kite of TU Delft. It was developed by Jelle Poland, Rotterdam, The Netherlands and Bart van de Lint, Delft, The Netherlands, 2026
+
+Done — added an `acknowledgements` md cell to [notebooks/results.jl](notebooks/results.jl) at the
+very end, right before the `Slate.config` marker. Verified live (18 cells, `fresh`) and in a fresh
+export: the text and all three GitHub links render correctly in `output/results_export.html`.
