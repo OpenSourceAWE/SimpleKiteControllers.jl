@@ -288,20 +288,34 @@ not a follow-up.** Enabling `optimize_k_v` again is only defensible either after
 a working limiter, or paired with an `f_max` low enough that even an unlimited
 plant stays under 8400 N — a deliberate experiment, not a resting state.
 
-Stage 4 is now implemented, shipped and measured, and it does NOT clear this gate.
-At 9 m/s it cut time above the plant's 8400 N rating from 58 % of the reeling
-window to 13 %, but peak force only fell 9418 -> 9166 N and it rings at +-1.1 m/s.
-`optimize_k_v` needs a limiter that is STABLE, not merely present: a solver free to
-lower `k_v` under a limiter that already oscillates has more room to build force,
-not less. The gate stays a measured run with peak force under 8400 N.
+Stage 4 is now implemented, shipped and measured at `tau` 2.48, and the limiter is
+both present AND stable — 0 % of the steady window above 8400 N. `optimize_k_v` was
+then re-tried against it on 2026-08-25 (`output/archives/2026-08-25_231835`) and is
+**still CLOSED, for a mechanism this plan had not identified**:
+
+The soft law sheds force by reeling out FASTER, and its whole speed scale is
+`k_v*sqrt(T)`. Halving `k_v` halves the limiter's authority. `optimize_k_v` does
+not merely bypass the cap — it turns down the gain of the loop that enforces it,
+exactly when the solver has chosen to sit on the cap. Measured: the steady window
+is indistinguishable from fixed gain (7841 +- 278 N vs 7803 +- 313, both 0.0 % over
+8400), but the solver flew `k_v` = 0.02237 (-45 %) from t = 0 and peak force reached
+**11242 N** at t = 36.0 s, with every over-limit sample inside t = 25.2 .. 41.6 s.
+Power 28999 W against 29737.
+
+So a better limiter does not open this lever, because the lever attacks the limiter.
+Reopening needs stage 2b item 2 (read-backs behind the gates) AND a bracket that
+cannot halve `k_v` — not merely a stable cap.
 
 ### Stage 2b — candidate levers, once Stage 2 has a valid measurement
 
-1. **Widen `k_v_bounds`.** The factor-2 bracket bound for half the run. Add the
-   field to `WinchParams` and send an explicit bracket, so what the optimizer
-   wants is visible rather than clipped.
+1. **`k_v_bounds`** — already IN THE SERVER SCHEMA (`schemas.py:201`, with the
+   factor-2 default documented there); only the Julia `WinchParams` is missing it.
+   But the 2026-08-25 re-test says the wanted direction is a FLOOR under `k_v`,
+   not a wider bracket: the solver's low-gain excursions are what break the
+   limiter, so the bracket should be narrowed from below, not widened.
 2. **Move both read-backs behind the gates**, so a rejected candidate stops
-   moving $k_v$ and `input_depower`.
+   moving $k_v$ and `input_depower`. CONFIRMED live on 2026-08-25: at t = 67.9 s a
+   rejected candidate moved the gain to 0.02383 and only the retry put it back.
 3. **`f_max` as the operating-point lever**, if the fixed run still rides the
    ceiling. Send an `f_max` below the winch's real limit and let the optimizer
    re-solve beneath it — a direct trade against power, not a free fix. The
@@ -311,16 +325,31 @@ not less. The gate stays a measured run with peak force under 8400 N.
    the runtime limiter through `winch_from_wc`, so the two move together by
    construction.
 
-### Stage 3 — carry β on the wire
+### Stage 3 — carry β on the wire — DONE (2026-08-25), but the β it was FOR is closed
 
-Add `softplus_beta` / `softminus_beta` to `WinchParams` in
-`examples/awetrim_client.jl` and send them. Set $\beta^{-} = 5\cdot10^{-3}$ so
-the optimizer's floor is 706 N rather than 1103 N. $\beta^{+}$ stays at
-$10^{-3}$, where 8000 >> 1000 makes the smoothing harmless.
+The wire half is implemented in both repos and is worth having on its own:
+`WinchParams.softplus_beta`/`softminus_beta` in `examples/awetrim_client.jl`, sent
+by `winch_from_wc` from `WCSettings`, honoured server-side in
+`_apply_winch_params` before its `setdefault(1e-3)` fallbacks — AWETrim branch
+`add_winch_beta`, commit `254dd9e`. Both fields optional, so omitting them
+reproduces the old behaviour exactly. Without it the server's default won
+regardless of what was configured locally, and the controller's inverse would
+silently bias if that default ever moved. **The runtime server must now be on that
+branch**: the Julia client sends the fields unconditionally and a `develop` server
+422s them.
 
-Without this the server's `setdefault(1e-3)` wins regardless of what is
-configured locally, and the controller's inverse silently biases if the server's
-default ever changes.
+**The reason this stage existed — setting $\beta^{-} = 5\cdot10^{-3}$ to lower the
+optimizer's floor — is FALSIFIED.** Measured on a 3 m/s startup request: 5e-3 and
+2e-3 both make the phase residual solve fail (422, `Max_Iterations_Exceeded` at
+node 0) where 1e-3 converges. The smoothing is part of what conditions the NLP, and
+3 m/s is the marginal case. Worse, the floor is $\ge \ln 2/\beta$ = 693 N for ANY
+`f_min` at the only β the solver accepts, against a 3 m/s force range of
+587 ± 165 N — so this is structural, not a tuning miss.
+
+$\beta^{-}$ stays at $10^{-3}$. The 3 m/s problem was solved instead by making
+`force_limit` wind-dependent (a `force_limit` column in `data/winch_kv_table.yaml`,
+`"hard"` below 6 m/s), since the soft law is a HIGH-WIND tool and there is no
+upper-force problem at 3 m/s at all.
 
 ### Stage 4 — `force_limit = "soft" | "hard"` — DONE and MEASURED (2026-08-25)
 
@@ -390,13 +419,42 @@ phase closing the loop. It did the opposite: `v_ro` swing +-2.12 m/s (from +-1.1
 peak force 9900 N (from 9166, and worse than the baseline's 9418), `v_ro` peak
 8.09 m/s hard against `v_sat`, power 27671 W (from 29279), `zeta` 0.001. The
 diagnostic is that the ring got SLOWER (2.63 -> 3.55 s): the filter was attenuating
-loop GAIN, not adding the destabilising phase. Reverted to 1.0.
+loop GAIN, not adding the destabilising phase.
 
-Left, in order: **`force_limit_tau` LONGER** (2-3 s — the direction the data points,
-bounded by the ~8 s lap period), then **stage 2b item 3, lowering `f_high`**. The
-second is not self-evident either: the knee sits AT `f_high`, so lowering it moves
-the knee down with the operating point, and it only helps if the optimizer re-solves
-onto a path that pulls enough less to leave margin.
+**Sweeping `tau` UPWARD instead SOLVED IT — `force_limit_tau: 2.48` is shipped.**
+Eight runs in +20 % steps (full table in `docs/fig8_tuning_log.md`); the limit cycle
+is gone and nothing was traded for it:
+
+| | `tau` 1.0 | **`tau` 2.48** | v09 (`"hard"`) |
+|:--|--:|--:|--:|
+| `v_ro` std, mid-window | 1.10 m/s | **0.19 m/s** | 0.05 m/s |
+| mean force | 7459 +- 1076 N | 7803 +- 313 N | 8521 +- 188 N |
+| peak, mid-window | 9024 N | **8381 N** | 8771 N |
+| % over the plant's 8400 N | 13.0 % | **0.0 %** | 73.7 % |
+| power | 29279 W | **29737 W** | 30260 W |
+
+`2.07` is where the steady window stops touching 8400 N; past it the curve is a
+plateau, and 2.48 was taken as its middle rather than 2.98 at its unmapped edge.
+Confirmed a no-op at 6 m/s (3451 +- 436 N vs v06's 3423 +- 414, power within 0.3 %).
+
+So stage 4 has DELIVERED its goal in the steady window: 0 % of it above the plant's
+rating, against 73.7 % for the baseline, at a 1.7 % power cost. Two things it did
+NOT solve:
+
+- **The ENTRY transient.** Whole-run peak is pinned at 9001 N for `tau` 2.07, 2.48
+  and 2.98 alike — the limiter is still charging its filter there, and no value of
+  this parameter touches it. This is now the binding constraint on peak load, and
+  stage 2b item 3 (`f_high`) would be aimed here rather than at the steady window.
+- **3 m/s — SOLVED, but by excluding it.** The prediction held: the effective floor
+  is 884 N against a 587 +- 165 N force range, so the law commands a standstill.
+  Raising `softminus_beta` to move the floor is closed (see stage 3), and the floor
+  cannot go below 693 N for any `f_min` anyway. `force_limit` is therefore
+  WIND-DEPENDENT now — a `force_limit` column in `data/winch_kv_table.yaml` beside
+  `kv` and `f_low`, `"hard"` at 3-4 m/s and `"soft"` from 6 up, with
+  `data/wc_settings.yaml` shipping `"hard"` so nothing that skips the table can
+  silently stall the winch. 3 m/s re-measured on it and back to baseline: 583 N and
+  553 W against v03's 587 N and 559 W, all 9 passed. 5 m/s is untested and takes
+  `"hard"` conservatively.
 
 ## Implementation notes
 
@@ -431,9 +489,17 @@ the wind speeds that discriminate; 5–8 m/s will look identical either way.
 
 ## Open questions
 
-- Is the 883 N floor worth reporting upstream? `min_tether_force = 350` with
+- **Is the 883 N floor worth reporting upstream? YES — and it is now known to be
+  structural, not a bad default.** `min_tether_force = 350` with
   `softminus_beta = 1e-3` gives an effective floor 2.5x the requested value, and
-  the optimizer plans against it. The in-repo AWETrim examples use
-  `min_tether_force: 1500`, where the artifact is much smaller.
+  the optimizer plans against it; the in-repo AWETrim examples use
+  `min_tether_force: 1500`, where the artifact is much smaller, which is probably
+  why it went unnoticed. What makes it worth raising upstream is that the obvious
+  fix does not work: the floor is $\ge \ln 2/\beta$ = 693 N for ANY `f_min`, and
+  raising $\beta$ to lower it makes the solve FAIL at low wind (measured: 2e-3 and
+  5e-3 both 422 at 3 m/s). So a low-wind reel-out cannot be represented by this
+  winch model at all, and the 1.48 power ratio at 3 m/s is the visible symptom.
+  A softminus that saturates toward `f_min` without the $\ln 2/\beta$ offset — or
+  simply allowing the pair to be disabled — would be the upstream ask.
 - Does raising $k_v$ at 9 m/s (stage 2) cost more power than the force headroom
   is worth? That trade has not been measured.

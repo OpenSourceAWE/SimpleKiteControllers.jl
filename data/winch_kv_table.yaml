@@ -23,16 +23,50 @@
 #          The 3 m/s row is therefore 350 and everything from 4 m/s up is 700.
 #          NOT the entry guard's floor: that is `FC_Settings.entry_f_min`, which
 #          is bounded by what a DEPOWERED wing can pull and does not scale here.
+#
+# force_limit — `WCSettings.force_limit`, read by `winch_force_limit(v_wind)`.
+#          NOT interpolated: it is a step, the value of the last row at or below
+#          the wind speed. `data/wc_settings.yaml` says "hard" so a script that
+#          never consults this table gets the safe law.
+#
+#          "soft" makes the reel-out law itself the upper force limiter, by
+#          inverting the optimizer's own saturating tension curve. It is a
+#          HIGH-WIND tool and is only defined over part of the range:
+#
+#            - Its effective floor is sp(beta*f_low)/beta, 884 N at f_low 350, and
+#              at beta 1e-3 no f_low puts that below ln2/beta = 693 N. The 3 m/s
+#              force range is 587 +- 165 N — entirely BELOW the floor, where the
+#              law commands a standstill. Raising beta is closed: 2e-3 and 5e-3
+#              both make the 3 m/s solve fail (422). So 3 m/s must be "hard".
+#            - At 4 m/s the mean force (1350 N) sits just above the 1104 N floor,
+#              where the inverse is steep; the loop-gain estimate there is 1.16,
+#              the worst of any wind speed. "hard" until measured otherwise.
+#            - Measured at 6 m/s: a NO-OP (3451 +- 436 N vs 3423 +- 414 hard,
+#              power within 0.3 %), so it is safe from there up.
+#            - Measured at 9 m/s: the win it exists for — 0 % of the steady window
+#              over the plant's 8400 N rating against 73.7 %, at 1.7 % power.
+#
+#          5 m/s is untested and takes the 4 m/s row's "hard" by the step rule.
 entries:
   - v_wind: 3.0
     kv: 0.0408
     f_low: 350.0
+    force_limit: "hard"
   - v_wind: 4.0
     kv: 0.0408
     f_low: 700.0
+    force_limit: "hard"
+  # Neutral for kv and f_low (both already flat from 4 to 9); the row exists to
+  # put the hard -> soft step at the lowest wind speed where soft was measured.
+  - v_wind: 6.0
+    kv: 0.0408
+    f_low: 700.0
+    force_limit: "soft"
   - v_wind: 9.0
     kv: 0.0408
     f_low: 700.0
+    force_limit: "soft"
   - v_wind: 10.0
     kv: 0.0558
     f_low: 700.0
+    force_limit: "soft"

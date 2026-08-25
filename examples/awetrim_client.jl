@@ -98,6 +98,14 @@ Base.@kwdef struct WinchParams
     # it are optimized together. The reply's `k_v` is then the OPTIMIZED one and the
     # path is not flyable with the value sent in — see `apply_optimized_kv!`.
     optimize_k_v::Bool = false
+    # Corner sharpness of the two soft saturations the server applies to the
+    # tension curve [1/N]; larger is sharper, the transition spanning a band of
+    # order 1/beta. Sent because `WCSettings.force_limit = "soft"` INVERTS that
+    # curve to command a reel-out speed: the controller and the optimizer must use
+    # one law, and before this they agreed only because both defaulted to 1e-3.
+    # `nothing` leaves the server on its own default.
+    softplus_beta::Union{Float64, Nothing} = nothing
+    softminus_beta::Union{Float64, Nothing} = nothing
 end
 
 "The four-field winch of the original contract; `v_max`/`p_max` stay unset."
@@ -690,9 +698,16 @@ end
 
 The winch law of a run, from the `WinchControllers.WCSettings` its
 `WinchController` is built from: `kv`, `f_low` and `f_high` of
-`data/wc_settings.yaml`. The optimizer maps `v_set = kv*sqrt(force)` onto its
-radial force model, so these three numbers are what makes the optimized path the
-path for THIS ground station.
+`data/wc_settings.yaml`, plus the two `beta`s that set how softly the server
+saturates its tension curve at those limits. The optimizer maps
+`v_set = kv*sqrt(force)` onto its radial force model, so these numbers are what
+makes the optimized path the path for THIS ground station.
+
+The `beta`s matter more than they look. The server's effective force FLOOR is
+`sp(beta*f_min)/beta`, not `f_min`: at the historical 1e-3 a 350 N `f_min` acts as
+884 N, which is above the entire force range a 3 m/s run ever reaches. They also
+have to match `calc_vro_soft`'s, which inverts this exact curve under
+`force_limit = "soft"` — the two sides used to agree only by coincidence.
 
 A winch too stiff to reach the optimal reel-out speed within `f_high` makes the
 problem infeasible and the server answers 422 — `kv*sqrt(f_high)` is the speed
@@ -711,7 +726,12 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low, f_max = wc.f_high,
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),
-                optimize_k_v = Bool(optimize_k_v))
+                optimize_k_v = Bool(optimize_k_v),
+                # Sent unconditionally, not only under `force_limit = "soft"`: the
+                # server's floor is `sp(beta*f_min)/beta`, so beta shapes the path
+                # it plans whatever the runtime winch then does with it.
+                softplus_beta = Float64(wc.softplus_beta),
+                softminus_beta = Float64(wc.softminus_beta))
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,

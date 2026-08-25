@@ -56,3 +56,46 @@ which is `FC_Settings.entry_f_min`; see `docs/fig8_tuning_log.md`.
 """
 winch_f_low(v_wind; project = project_file()) =
     winch_table_lookup(v_wind, "f_low"; project)
+
+"""
+    winch_table_select(v_wind, key; project = project_file()) -> Any
+
+Step-lookup of column `key`: the value of the LAST row at or below `v_wind`,
+clamped to the first row below the identified range. The counterpart of
+[`winch_table_lookup`](@ref) for columns that cannot be interpolated — a setting
+is one thing or another at a given wind speed, never 40 % of the way between them.
+"""
+function winch_table_select(v_wind, key; project = project_file())
+    file = joinpath(skc_data_path(), winch_kv_table_file(project))
+    raw = YAML.load_file(file)
+    rows = raw["entries"]
+    all(r -> haskey(r, key), rows) ||
+        error("$file: every entry needs a \"$key\" column.")
+    entries = sort([(Float64(r["v_wind"]), r[key]) for r in rows]; by = first)
+    i = searchsortedlast(first.(entries), Float64(v_wind))
+    return last(entries[max(i, 1)])
+end
+
+"""
+    winch_force_limit(v_wind; project = project_file()) -> String
+
+Wind-speed-dependent `WCSettings.force_limit`, `"hard"` or `"soft"`, from the
+`force_limit` column of the project's `winch_kv_table` file (see
+[`winch_table_select`](@ref)). Overrides the flat value of `data/wc_settings.yaml`,
+which is `"hard"` so that a script not consulting this table gets the safe law.
+
+It has to be wind-dependent because the soft law is only DEFINED over part of the
+range. It inverts the optimizer's tension curve, whose effective floor is
+`sp(beta*f_low)/beta` — 884 N at `f_low` 350 — and at `beta` 1e-3 that floor cannot
+go below `ln(2)/beta` = 693 N for ANY `f_low`. The whole 3 m/s force range is
+587 +- 165 N, i.e. below the floor, where the law commands a standstill and the run
+reels in instead of out. Raising `beta` to move the floor is CLOSED: 2e-3 and 5e-3
+both make the 3 m/s solve fail outright. So low wind gets the hard law, and the
+soft law is used where it was measured — see `docs/fig8_tuning_log.md`.
+"""
+function winch_force_limit(v_wind; project = project_file())
+    value = String(winch_table_select(v_wind, "force_limit"; project))
+    value in ("hard", "soft") ||
+        error("winch_kv_table: force_limit must be \"hard\" or \"soft\", got \"$value\".")
+    return value
+end

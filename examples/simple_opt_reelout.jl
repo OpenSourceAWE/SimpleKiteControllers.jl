@@ -402,6 +402,11 @@ wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, se
 # Wind-dependent too, and for the same reason: one flat floor cannot serve 3 and
 # 10 m/s. NOT the entry guard's floor — that is fcs.entry_f_min.
 wc.f_low = winch_f_low(project_set.v_wind; project)
+# Wind-dependent for a different reason: the soft law is only DEFINED above about
+# 5 m/s. Its floor is `sp(beta*f_low)/beta`, which at beta 1e-3 cannot go below
+# 693 N for any f_low, while the whole 3 m/s force range is 587 +- 165 N — the law
+# would command a standstill there. See `winch_force_limit`'s docstring.
+wc.force_limit = winch_force_limit(project_set.v_wind; project)
 rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 

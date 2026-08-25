@@ -29,7 +29,7 @@ export V3_TURN_RATE_COEFFS, turn_rate_coeffs, V3_TURN_RATE_C1, V3_TURN_RATE_C2
 export reload_turn_rate_table!
 
 # Wind-speed-dependent winch law lookup table
-export winch_kv, winch_f_low, winch_table_lookup
+export winch_kv, winch_f_low, winch_force_limit, winch_table_lookup, winch_table_select
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing

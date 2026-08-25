@@ -668,6 +668,46 @@ end
         @test issorted([winch_kv(v; project = p) for v in 3:0.5:11])
         @test issorted([winch_f_low(v; project = p) for v in 3:0.5:11])
 
+        # The 6 m/s row exists only to place the force_limit step; it must be
+        # NEUTRAL for the two interpolated columns, which are flat 4 -> 9.
+        @test winch_kv(5.0; project = p) ≈ 0.0408
+        @test winch_kv(7.0; project = p) ≈ 0.0408
+        @test winch_f_low(5.0; project = p) == 700.0
+        @test winch_f_low(7.0; project = p) == 700.0
+
+        # force_limit: a STEP, not an interpolation — a setting is one thing or
+        # the other at a given wind speed. "hard" below 6 m/s because the soft
+        # law's floor (>= ln2/beta = 693 N at beta 1e-3, for ANY f_low) sits above
+        # the whole 3 m/s force range of 587 +- 165 N, where it would command a
+        # standstill; raising beta to move it makes the 3 m/s solve fail outright.
+        @test winch_force_limit(3.0; project = p) == "hard"
+        @test winch_force_limit(4.0; project = p) == "hard"
+        @test winch_force_limit(5.0; project = p) == "hard"   # untested, takes 4's row
+        @test winch_force_limit(5.9; project = p) == "hard"
+        @test winch_force_limit(6.0; project = p) == "soft"   # lowest measured safe
+        @test winch_force_limit(9.0; project = p) == "soft"
+        @test winch_force_limit(10.0; project = p) == "soft"
+        # Clamped below the range like the interpolated columns, and never
+        # interpolated INTO a value that is neither.
+        @test winch_force_limit(0.5; project = p) == "hard"
+        @test winch_force_limit(50.0; project = p) == "soft"
+        @test all(v -> winch_force_limit(v; project = p) in ("hard", "soft"),
+                  0.5:0.25:12.0)
+        # Once it goes soft it stays soft: a run must not drop back to the hard
+        # law as the wind rises.
+        let fl = [winch_force_limit(v; project = p) for v in 0.5:0.25:12.0]
+            @test issorted(fl .== "soft")
+        end
+
+        # The flat value in wc_settings.yaml is the SAFE one, so a script that
+        # never reads this table cannot silently fly the soft law at a wind speed
+        # where it is undefined. (Read from the YAML, not from a WCSettings:
+        # WinchControllers is a dep of examples/, not of this package.)
+        let wcs_file = joinpath(skc_data_path(),
+                                YAML.load_file(p)["system"]["wc_settings"])
+            @test YAML.load_file(wcs_file)["wc_settings"]["force_limit"] == "hard"
+        end
+
         # Integer input is converted, like turn_rate_coeffs'.
         @test winch_f_low(4; project = p) == winch_f_low(4.0; project = p)
 
