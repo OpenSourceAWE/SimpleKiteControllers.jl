@@ -637,6 +637,58 @@ end
         @test_throws ErrorException winch_force_gains(fcs)
     end
 
+    @testset "winch_kv_table" begin
+        p = project_file("system_reelout_150m.yaml")
+
+        # kv: flat at the identified 0.0408 up to 9 m/s, rising to 0.0558 at 10.
+        # The 3 and 4 m/s rows were added for f_low on 2026-08-25 and repeat
+        # 0.0408 precisely so this curve did not move; that is what these pin.
+        @test winch_kv(9.0; project = p) ≈ 0.0408
+        @test winch_kv(3.0; project = p) ≈ 0.0408
+        @test winch_kv(6.0; project = p) ≈ 0.0408
+        @test winch_kv(10.0; project = p) ≈ 0.0558
+        @test winch_kv(9.5; project = p) ≈ 0.0483   # midpoint of the only real ramp
+
+        # f_low: 350 N at 3 m/s, 700 N from 4 m/s up, linear between. One flat
+        # value cannot serve both — at 3 m/s a 700 N floor put the limiter in
+        # control 63 % of the run and failed max d (2026-08-25).
+        @test winch_f_low(3.0; project = p) == 350.0
+        @test winch_f_low(4.0; project = p) == 700.0
+        @test winch_f_low(3.5; project = p) ≈ 525.0
+        @test winch_f_low(9.0; project = p) == 700.0
+
+        # Clamped outside the identified range, NEVER extrapolated: below the
+        # first row and above the last, the end value is returned unchanged.
+        @test winch_kv(0.5; project = p) == winch_kv(3.0; project = p)
+        @test winch_kv(50.0; project = p) == winch_kv(10.0; project = p)
+        @test winch_f_low(0.5; project = p) == winch_f_low(3.0; project = p)
+        @test winch_f_low(50.0; project = p) == winch_f_low(10.0; project = p)
+
+        # Monotone in wind speed, which is the property both curves are for.
+        @test issorted([winch_kv(v; project = p) for v in 3:0.5:11])
+        @test issorted([winch_f_low(v; project = p) for v in 3:0.5:11])
+
+        # Integer input is converted, like turn_rate_coeffs'.
+        @test winch_f_low(4; project = p) == winch_f_low(4.0; project = p)
+
+        # Both read the SAME file through one lookup, so a row can never carry a
+        # kv without an f_low.
+        @test winch_table_lookup(6.0, "kv"; project = p) == winch_kv(6.0; project = p)
+        @test winch_table_lookup(6.0, "f_low"; project = p) == winch_f_low(6.0; project = p)
+        # A column the table does not have is named in the error, not a KeyError
+        # from inside the comprehension.
+        @test_throws ErrorException winch_table_lookup(6.0, "no_such_column"; project = p)
+        # Only reel-out projects carry a winch_kv_table entry.
+        @test_throws Exception winch_kv(6.0; project = project_file())
+
+        # NOT the entry guard's floor: that one is bounded by what a DEPOWERED
+        # wing can pull, does not scale with the winch, and lives in FC_Settings.
+        # Sharing one value crashed the 4 m/s run (2026-08-25).
+        @test hasfield(FC_Settings, :entry_f_min)
+        @test FC_Settings().entry_f_min == 350.0
+        @test !hasfield(FC_Settings, :f_low)
+    end
+
     @testset "pattern_height" begin
         fec = _make_test_controller(el_center = 20.0)
         el_min = minimum(fec.el_path)
@@ -896,6 +948,21 @@ end
         # The DEFAULT is the behaviour before the ramp existed: input_depower
         # whatever the wind.
         @test TrajOptSettings().input_depower_per_wind == 0.0
+        # Below this mean wind a NEGATIVE prediction bypasses both power gates:
+        # the optimizer's winch model is out of its domain there (a ~883 N
+        # representable force floor against a 585 N mean at 3 m/s), so the number
+        # reports the model, not the path. Measured 2026-08-25 at 3 m/s:
+        # -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held.
+        @test tos.power_gate_wind_min == 4.0
+        @test TrajOptSettings().power_gate_wind_min == 4.0
+        # The gate the example applies: BOTH conditions, so a positive prediction
+        # is still gated at low wind and a negative one is still gated above it.
+        let off(pred, v) = pred < 0 && v < tos.power_gate_wind_min
+            @test off(-397.0, 3.0)
+            @test !off(-397.0, 9.0)
+            @test !off(45.0, 3.0)
+            @test !off(45.0, 9.0)
+        end
 
         mktempdir() do dir
             good = joinpath(dir, "t.yaml")
@@ -926,6 +993,15 @@ end
             back = joinpath(dir, "r.yaml")
             write(back, "traj_opt:\n    turn_radius_lap_reelout_m: -1.0\n")
             @test_throws ErrorException TrajOptSettings(back)
+            gate = joinpath(dir, "g.yaml")
+            write(gate, "traj_opt:\n    power_gate_wind_min: -1.0\n")
+            @test_throws ErrorException TrajOptSettings(gate)
+            # 0.0 is the documented "off": no wind is below it, so nothing bypasses.
+            @test TrajOptSettings(begin
+                off = joinpath(dir, "o.yaml")
+                write(off, "traj_opt:\n    power_gate_wind_min: 0.0\n")
+                off
+            end).power_gate_wind_min == 0.0
         end
     end
 
