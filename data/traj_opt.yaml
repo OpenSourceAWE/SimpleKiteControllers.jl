@@ -286,17 +286,20 @@ traj_opt:
     # reeling out faster sheds force — after the flat tuning measured 8394 N mean at
     # 9 m/s and 8150 N at 10 against f_max 8000 N. false keeps winch_kv(v_wind)'s
     # value fixed. A reply that hit the bracket edge is reported as k_v_at_bound.
-    # OFF since 2026-08-25, and it must stay off until a force limiter has been
-    # MEASURED working: the optimizer's model soft-caps force at f_max, the plant
-    # then capped it nowhere, so the low k_v it chose (0.0205, HALF the seed, for
-    # the first 43 s at 9 m/s) reeled out slowly and let force build to 12684 N
-    # against a winch rated 8400 — while COSTING power, 29581 W against 30260.
-    # wc_settings.yaml's force_limit: "soft" is the limiter this was waiting on.
-    # Flown 2026-08-25 at 9 m/s: it cut time over the plant's 8400 N rating from
-    # 58 % to 13 % of the reeling window, but peak force only fell 9418 -> 9166 N
-    # and it rings at +-1.1 m/s (2.63 s limit cycle). Not stable enough to reopen
-    # this: a solver free to lower k_v under a limiter that already oscillates has
-    # MORE room to build force, not less. See PlanWinchSpeed.md stages 2 and 4.
+    # OFF since 2026-08-25. It was first closed because the plant capped force
+    # nowhere, so the low k_v the solver chose built 12684 N against a winch rated
+    # 8400 while COSTING power. force_limit: "soft" (tau 2.48) now caps it — and
+    # re-measured against that limiter on 2026-08-25 it is STILL wrong, for a
+    # sharper reason: the soft law sheds force by reeling out FASTER, and its whole
+    # speed scale is k_v*sqrt(T), so halving k_v halves the limiter's authority.
+    # optimize_k_v does not merely bypass the cap, it turns down the gain of the
+    # loop that enforces it. Measured: steady state indistinguishable from fixed
+    # gain (7841 +- 278 N vs 7803 +- 313, both 0 % over 8400), but the solver flew
+    # k_v = 0.02237 (-45 %) from t = 0 and peak force hit 11242 N at t = 36.0 s,
+    # every over-limit sample inside t = 25.2 .. 41.6 s, power 28999 vs 29737 W.
+    # Reopening this needs the read-backs moved behind the gates (stage 2b item 2 —
+    # a REJECTED candidate still moved k_v at t = 67.9 s in that run) and a bracket
+    # that cannot halve the limiter. See PlanWinchSpeed.md stages 2 and 4.
     optimize_k_v: false      # let the optimizer choose k_v; false = fixed        [-]
     reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
                              # reopt_blocking is false, wall-clock when true    [s]
