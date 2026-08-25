@@ -955,6 +955,11 @@ end
         # -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held.
         @test tos.power_gate_wind_min == 4.0
         @test TrajOptSettings().power_gate_wind_min == 4.0
+        # k_v as a DESIGN VARIABLE: on in the file, off in the struct so an older
+        # project keeps a fixed gain. The lever for getting mean force under
+        # f_max — the flat tuning ran 8394 N at 9 m/s against f_max 8000.
+        @test tos.optimize_k_v
+        @test !TrajOptSettings().optimize_k_v
         # The gate the example applies: BOTH conditions, so a positive prediction
         # is still gated at low wind and a negative one is still gated above it.
         let off(pred, v) = pred < 0 && v < tos.power_gate_wind_min

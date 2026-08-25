@@ -458,6 +458,22 @@ multi-modal, so the guess is a choice about the answer.
     """
     power_gate_wind_min = 4.0
     """
+    Send `k_v` as a DESIGN VARIABLE rather than a constant, so the optimizer
+    solves for the winch gain and the path together under its own saturating
+    tension curve. The server brackets it a factor `K_V_BRACKET_FACTOR` (2.0)
+    either side of the value sent and returns the optimized one, which the run
+    then flies — a path solved for one gain is not flyable with another.
+
+    The lever for getting mean force under `f_max`: reeling out faster sheds
+    force, so at high wind the optimizer raises `k_v` until the path fits inside
+    the bound it was given. Measured before this existed, the flat
+    `kv`/`winch_kv_table` tuning ran 8394 N mean at 9 m/s and 8150 N at 10
+    against an `f_max` of 8000 N, i.e. the request was for a path the winch law
+    could not hold. `false` keeps the gain fixed at whatever
+    `winch_kv(v_wind)` supplies.
+    """
+    optimize_k_v::Bool = false
+    """
     Seconds between `/status` polls while a solve is running. SIMULATED seconds
     when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
     simulated then). The solve takes 7-13 s of wall time (measured), so polling

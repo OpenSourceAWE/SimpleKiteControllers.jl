@@ -475,7 +475,42 @@ fec = FigureEightController(FigureEightSettings(;
 # is the same WCSettings object the reel-out WinchController is built from, so
 # the optimizer is given the winch law that is actually flown.
 inflow = inflow_from_settings(project_set)
-winch = winch_from_wc(rcs)
+winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v)
+# Every reply's optimized gain lands here, so the summary can report what was
+# actually flown rather than only what was sent.
+opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]
+
+"""
+    apply_optimized_kv!(tab, t, l)
+
+Move the winch gain the optimizer chose out of a `/trajectory` reply and into
+`wc.kv`, which `calc_vro` reads live, so the run flies the `k_v` the path was
+solved for. A reply that did not optimize the gain carries no `k_v` under
+`optimized_parameters` and this is then a no-op. A gain that ran into its own
+bracket is reported: the value is the edge of the box, not an optimum.
+"""
+function apply_optimized_kv!(tab, t, l)
+    tos.optimize_k_v || return
+    params = get(tab, "optimized_parameters", nothing)
+    raw = params === nothing ? nothing : get(params, "k_v", nothing)
+    raw === nothing && return
+    k_v = Float64(raw)
+    k_v > 0 || return
+    at_bound = something(get(params, "k_v_at_bound", false), false)
+    if isempty(opt_kv_log) || abs(k_v - last(opt_kv_log).k_v) > 1e-9
+        @info @sprintf("  ... optimizer chose k_v = %.5f at L = %.0f m (was %.5f)%s",
+                       k_v, l, wc.kv, at_bound ? " — AT ITS BRACKET EDGE" : "")
+        at_bound && @warn "k_v hit the K_V_BRACKET_FACTOR bound: the optimizer wanted \
+                           to retune further than it was allowed, so this is the edge \
+                           of the box rather than an optimum."
+    end
+    wc.kv = k_v
+    # EVERY reply that carries a gain, not only the ones that moved it: the shape
+    # of k_v across a run is what shows whether the optimizer is hunting, and the
+    # step-held plot draws repeats correctly anyway.
+    push!(opt_kv_log, (; t, l, k_v, at_bound))
+    return
+end
 @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
                 z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N | \
                 depower seed %.3f m%s.",
@@ -693,6 +728,7 @@ opt_paths_raw = [install_optimized_path!(opt_result)]
 # not caught by anything downstream: the kite would fly the optimizer's curve,
 # but backwards, which is not the trajectory that was optimized.
 opt_table = opt_trajectory(; url = tos.base_url)
+apply_optimized_kv!(opt_table, 0.0, l_tether)
 opt_downloops = opt_table["spline"]["downloops"]
 opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
 # The geometric half of the request correction, now that there is a reply to
@@ -768,6 +804,9 @@ if opt_r_on && !isnothing(coeffs_startup)
             if margin_retry > margin_startup
                 global opt_result = retry_result
                 global opt_table = retry_table
+                # Only here: the retry is flown solely when it beats the startup
+                # margin, so its gain must not move `wc.kv` when it is discarded.
+                apply_optimized_kv!(retry_table, 0.0, l_set)
                 global opt_downloops = retry_table["spline"]["downloops"]
                 global opt_power_pred = Float64(retry_table["metrics"]["avg_power_W"])
                 global opt_paths_raw = [retry_raw]
@@ -1443,6 +1482,7 @@ try
                             global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
                             push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                         end
+                        apply_optimized_kv!(tab, t, l_now)
                     # The whole prospective blend to a converged reply is checked
                     # (`blend_folds`) before it is ever installed, and a folded one
                     # is not flown at all: a fresh reply is requested instead,
@@ -1552,6 +1592,7 @@ try
                                 global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
                                 push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                             end
+                            apply_optimized_kv!(tab, t, l_now)
                         end
                         # Re-measure the anchor correction for the NEXT request off
                         # the reply that just landed: the lap's reel-out is a

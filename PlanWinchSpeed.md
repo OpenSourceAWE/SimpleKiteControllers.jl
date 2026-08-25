@@ -161,30 +161,108 @@ of one.
 
 ## Plan
 
-### Stage 1 — right-size the lower limit
+### Stage 1 — right-size the lower limit — DONE (2026-08-25)
 
-`f_low` 350 -> 700 N in `data/wc_settings.yaml`. Independent of everything else.
-Re-run 3 and 4 m/s; expect the `LowerForceController` share to rise at 3 m/s
-(currently 20.6%) and the 4 m/s operating point to move off the model floor.
+Shipped as a WIND-DEPENDENT `f_low`, not the flat 350 -> 700 N this plan first
+proposed: 350 N at 3 m/s and 700 N from 4 m/s up, interpolated, in the `f_low`
+column of `data/winch_kv_table.yaml` beside `kv`, read by `winch_f_low(v_wind)`.
+One flat value cannot serve the range — the winch's rating does not move with
+the wind and the kite's force goes with its square. A flat 700 N passed 4 m/s
+(limiter share 1.1 %) and FAILED 3 m/s (63.2 %, mean force pinned at 725 N
+against the floor, `max d` 8.02°). Both ends now pass; 5–10 m/s are inert, their
+limiter share was already 0.0.
 
-### Stage 2 — get the operating point under `f_max`
+It also turned up a bug this plan had not anticipated: `f_low` was **two limits
+sharing a name**. The entry guard (`guard_lfc`, phases 0-2) took the same
+setpoint, and 700 N is unreachable during the depowered dive, so its PID wound
+up and ran the drum to -6.3 m/s until the tether snapped taut at 7912 N and the
+solver failed. Split into `FC_Settings.entry_f_min` (350 N), which is bounded by
+what a DEPOWERED wing can pull and does not scale with the winch. Full
+measurements in `docs/fig8_tuning_log.md`.
+
+### Stage 2 — get the operating point under `f_max` — DONE (2026-08-25)
 
 Target mean force at or below ~0.8·`f_max`, so a limiter is a backstop rather
-than a continuous fight. Levers, in order of preference:
+than a continuous fight. This stage is what actually addresses the oscillation;
+stages 3 and 4 are worth little without it.
 
-1. **`optimize_k_v`.** The server supports it (`K_V_BRACKET_FACTOR = 2.0`,
-   `k_v_bounds`), and this repo does not use it anywhere. Letting the optimizer
-   choose $k_v$ subject to its own saturating tension curve is the principled
-   fix — it will raise $k_v$ at high wind until the force fits.
-2. **Extend `data/winch_kv_table.yaml`.** $k_v$ already rises 0.0408 -> 0.0558
-   between 9 and 10 m/s; the 9 m/s value looks too low given a mean force of
-   8394 N. Costs power — reeling out faster moves off the optimal operating
-   point — so quantify the trade.
-3. **More depower at high wind.** `av_depower` is 0.269 at 9–10 m/s against
-   0.294 at 3 m/s.
+**`optimize_k_v`, and that is the whole stage.** $k_v$ goes out as a design
+variable, the server brackets it a factor `K_V_BRACKET_FACTOR` (2.0) either side
+of the value sent and solves for it under its own saturating tension curve, and
+the run flies the gain that comes back — a path solved for one gain is not
+flyable with another. Reeling out faster sheds force, so at high wind the
+optimizer raises $k_v$ until the path fits inside the `f_max` it was given.
+`TrajOptSettings.optimize_k_v`, on in `data/traj_opt.yaml`, off in the struct
+default.
 
-This stage is what actually addresses the oscillation. Stages 3 and 4 are worth
-little without it.
+The two hand-tuning levers this plan originally listed beside it are **CLOSED**,
+because the optimizer now sets both values itself:
+
+- ~~Extend `data/winch_kv_table.yaml`~~ — $k_v$ is the optimizer's to choose.
+  The table is NOT dead and must not be deleted: its `kv` column still supplies
+  the **seed** the server brackets around, and `simple_reelout.jl` (the
+  lemniscate baseline, which never talks to the optimizer) still flies it flat.
+  Its `f_low` column is fully live either way — that is Stage 1's, not this
+  one's.
+- ~~More depower at high wind~~ — already optimized and already read back:
+  `depower_mode: "optimize"` in the request, and
+  `optimized_parameters["input_depower"]` lands in `depower_flown_opt` on every
+  converged reply. Hand-tuning `depower_setpoint` against it would fight the
+  solver, not help it.
+
+What is left undone here, deliberately: **`k_v_bounds` is not implemented.** The
+server's own factor-2 bracket applies. A reply that ran into it is reported as
+`k_v_at_bound` in the summary and warned about at runtime — that is the signal
+to widen the bracket, and the reason to add the field is a measurement, not a
+guess.
+
+**MEASURED at 9 m/s, and it did NOT move the operating point.** The premise
+above — "the optimizer raises $k_v$ until the path fits" — is WRONG:
+
+| | `optimize_k_v` | v09, fixed $k_v$ |
+|:--|--:|--:|
+| $k_v$ sent / flown | 0.0408 / **0.04078** | 0.0408 |
+| mean force, settled | 8042 N | 8070 N |
+| mean force, reeling | 7788 N | 7811 N |
+| peak force | 9287 N | 9418 N |
+| % of reel-out above `f_max` | 68.5 | 70.0 |
+| measured power | 30137 W | 30260 W |
+| verdict | all 9 passed | all 9 passed |
+
+The optimizer moved the gain 8 times and landed 0.05 % BELOW its seed. Nothing
+downstream shifted by more than noise.
+
+The reason is structural: **riding `f_max` IS the optimum it solves for.** Power
+is force times speed and its force model saturates SOFTLY at `f_max` rather than
+being penalised past it, so the maximum-power solution sits on the ceiling. Given
+$k_v$ as a free variable it simply confirmed that 0.0408 was already the right
+gain for that objective. That is a real result — the gain was never the problem —
+but it is not what this stage wanted.
+
+So the stage's own target, mean force at or below ~0.8·`f_max`, is not reachable
+through $k_v$ at all. **The only lever that sets it is the `f_max` sent in the
+request**, and it is a direct trade against power, not a free fix. Reopened on
+that basis:
+
+### Stage 2b — `f_max` is the operating-point lever
+
+Send an `f_max` BELOW the winch's real limit and let the optimizer re-solve the
+path and the gain beneath it. Open questions, in order:
+
+1. **Is it wanted at all?** Every wind speed passes its criteria today. The thing
+   that actually motivated this plan is the oscillation `DISABLE_UFC` works
+   around, and the concrete argument for pushing the operating point down is
+   SAFETY, not tracking: peak force is 9287 N at 9 m/s and 11657 N at 10 against
+   a plant rated 8400 N.
+2. **What does the margin cost?** One run at, say, `f_max` = 6500 N against this
+   run's 30137 W is the whole experiment. `f_high` in `wc_settings.yaml` feeds
+   both the request and the runtime limiter through `winch_from_wc`, so the two
+   move together by construction.
+3. Only then, whether `f_max` wants to be wind-dependent like `f_low` now is.
+
+`k_v_bounds` is NOT the missing piece and stays unimplemented: `k_v_at_bound`
+fired on one intermediate reply, yet the final gain sits nowhere near the
+factor-2 bracket (0.0204 .. 0.0816), so widening it would chase nothing.
 
 ### Stage 3 — carry β on the wire
 

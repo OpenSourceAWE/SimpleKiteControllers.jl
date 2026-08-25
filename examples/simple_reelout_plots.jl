@@ -48,7 +48,12 @@ A fifth panel, flown `rel_depower` (`var_14`) against the optimizer's own
 depower converted to the same units (`awetrim_depower_to_v3kite`, step-held
 between reopt solves), is added when `simple_opt_reelout.jl`'s
 `opt_depower_log` is in scope — silently skipped for a plain `simple_reelout.jl`
-run or a standalone replot of an older archive, neither of which has it.
+run or a standalone replot of an older archive, neither of which has it. A sixth
+does the same for `k_v` from `opt_kv_log`, the winch gain against the seed it was
+bracketed around, when `optimize_k_v` made it a design variable. Neither rides a
+`var_` slot: all sixteen are taken, so both are Julia-side series carried in
+scope from the run rather than columns of the log, which is also why a replot of
+an archived Arrow shows neither.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -406,6 +411,20 @@ if "power" in plots
         push!(panels, [Float64.(sl.var_14[rng]), u_p_opt])
         push!(ylabels, L"u_d~[-]")
         push!(labels, [L"\mathrm{flown}", L"\mathrm{optimizer~(equiv.)}"])
+    end
+    # The winch gain, when `optimize_k_v` made it a design variable. Step-held for
+    # the same reason as the depower above: the value applies from the reply that
+    # produced it until the next one. Drawn against the seed it was bracketed
+    # around, since what matters is whether the optimizer moved it at all.
+    if @isdefined(opt_kv_log) && !isempty(opt_kv_log)
+        t_kv = Float64[e.t for e in opt_kv_log]
+        k_kv = Float64[e.k_v for e in opt_kv_log]
+        idx_kv = searchsortedlast.(Ref(t_kv), Float64.(sl.time[rng]))
+        kv_opt = [i == 0 ? k_kv[1] : k_kv[i] for i in idx_kv]
+        kv_seed = fill(@isdefined(winch) ? winch.k_v : k_kv[1], length(kv_opt))
+        push!(panels, [kv_opt, kv_seed])
+        push!(ylabels, L"k_v~[-]")
+        push!(labels, [L"\mathrm{optimized}", L"\mathrm{seed}"])
     end
 
     p4 = plotx(

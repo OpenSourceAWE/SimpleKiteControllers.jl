@@ -92,6 +92,12 @@ Base.@kwdef struct WinchParams
     # kv = 0.0408 and f_high = 8000 N is never reached (3.65 m/s).
     v_max::Union{Float64, Nothing} = nothing   # maximum reel-out speed [m/s]
     p_max::Union{Float64, Nothing} = nothing   # maximum winch power [W]; v_max = p_max/f_max
+    # Make `k_v` a DESIGN VARIABLE instead of a constant: the server brackets it a
+    # factor `K_V_BRACKET_FACTOR` (2.0) either side of the value sent and solves for
+    # it under its own saturating tension curve, so the path and the gain that flies
+    # it are optimized together. The reply's `k_v` is then the OPTIMIZED one and the
+    # path is not flyable with the value sent in — see `apply_optimized_kv!`.
+    optimize_k_v::Bool = false
 end
 
 "The four-field winch of the original contract; `v_max`/`p_max` stay unset."
@@ -338,7 +344,7 @@ function opt_request_key(p::InitParams)
     d = p.depower
     b = p.pattern_limits
     h = hash((p.length, p.input_depower, p.reg_weight, p.detect_simple_bounds,
-              w.mode, w.k_v, w.f_min, w.f_max, w.v_max, w.p_max,
+              w.mode, w.k_v, w.f_min, w.f_max, w.v_max, w.p_max, w.optimize_k_v,
               c.wind_speed, c.wind_direction, c.profile_law, c.alpha, c.z0,
               c.turbulence, c.heights, c.speeds,
               p.trajectory.azimuth, p.trajectory.elevation,
@@ -496,7 +502,8 @@ opt_float(d, key) = (v = opt_get(d, key); v === nothing ? nothing : Float64(v))
 as_winch(d) = WinchParams(; mode = d["mode"], k_v = d["k_v"],
                           f_min = d["f_min"], f_max = d["f_max"],
                           v_max = opt_float(d, "v_max"),
-                          p_max = opt_float(d, "p_max"))
+                          p_max = opt_float(d, "p_max"),
+                          optimize_k_v = something(opt_get(d, "optimize_k_v"), false))
 
 function as_depower(d)
     d === nothing && return nothing
@@ -700,10 +707,11 @@ optimizer's own 10 m/s bound instead, which with `kv = 0.0408` and
 `f_high = 8000 N` the square-root law never reaches anyway (3.65 m/s), so this
 only starts to matter on a softer winch.
 """
-winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) =
+winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low, f_max = wc.f_high,
                 v_max = v_max === nothing ? nothing : Float64(v_max),
-                p_max = p_max === nothing ? nothing : Float64(p_max))
+                p_max = p_max === nothing ? nothing : Float64(p_max),
+                optimize_k_v = Bool(optimize_k_v))
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,

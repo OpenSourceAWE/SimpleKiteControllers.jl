@@ -279,6 +279,14 @@ traj_opt:
     # against a 198 W startup, 3 retries, 8 s held, old path kept). A POSITIVE
     # prediction is still gated at any wind. See PlanWinchSpeed.md.
     power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses  [m/s]
+    # Solve for the winch gain and the path TOGETHER: k_v goes out as a design
+    # variable, the server brackets it a factor 2 either side of the value sent, and
+    # the run flies the k_v that comes back (a path solved for one gain is not
+    # flyable with another). This is the lever for getting mean force under f_max —
+    # reeling out faster sheds force — after the flat tuning measured 8394 N mean at
+    # 9 m/s and 8150 N at 10 against f_max 8000 N. false keeps winch_kv(v_wind)'s
+    # value fixed. A reply that hit the bracket edge is reported as k_v_at_bound.
+    optimize_k_v: true       # let the optimizer choose k_v; false = fixed        [-]
     reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
                              # reopt_blocking is false, wall-clock when true    [s]
     # Halt the loop while a solve runs, instead of flying on through it. A solve is

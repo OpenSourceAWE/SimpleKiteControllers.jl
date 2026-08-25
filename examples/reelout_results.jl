@@ -459,6 +459,20 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                               e.u_p_equiv, fcs.depower_setpoint))
             end
             dp
+        end,
+        "k_v_optimized" => let seen = Dict{String, Int}(), kv = OrderedDict{String, Any}()
+            for e in opt_kv_log
+                k = @sprintf("t_%05.1f_s", e.t)
+                n = get(seen, k, 0) + 1
+                seen[k] = n
+                kv[n == 1 ? k : "$(k)_$n"] =
+                    (round(e.k_v; digits = 5),
+                     @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
+                               seed winch_kv(v_wind) supplied%s",
+                              e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
+                              e.at_bound ? "; AT ITS BRACKET EDGE" : ""))
+            end
+            kv
         end),
     "path" => OrderedDict(
         "points" => (n_path_initial, "points of the path installed before the run"),
@@ -639,6 +653,15 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "profile_law" => (inflow.profile_law, "0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4-6=CUSTOM_*")),
     "winch" => OrderedDict(
         "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
+        "optimize_k_v" => (winch.optimize_k_v,
+            "k_v sent as a design variable; the reply's value is then the one flown"),
+        "k_v_flown" => (round(rcs.kv; digits = 5),
+            isempty(opt_kv_log) ?
+                "k_v the run actually flew; == k_v, the optimizer did not move it" :
+                @sprintf("k_v the run actually flew, last of %d optimizer change(s)%s",
+                         length(opt_kv_log),
+                         any(e -> e.at_bound, opt_kv_log) ?
+                             "; one hit the bracket edge, widen it to chase further" : "")),
         "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
         "f_max_N" => (winch.f_max, "maximum winch force sent [N]")))
 
