@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Utility functions for pattern plotting — extracted from simple_reelout_plots.jl
-to enable batch processing in create_plots.jl while keeping the interactive
-script's structure intact.
+Utility functions for pattern and time-series plotting — extracted from
+simple_reelout_plots.jl to enable batch processing in create_plots.jl while
+keeping the interactive script's structure intact.
 """
 
 # These imports are assumed to be available in the including script's context
@@ -86,6 +86,119 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                  [L"\mathrm{flown}", L"\mathrm{attractor}"] :
                  [L"\mathrm{flown}", L"\mathrm{optimizer,~uncorrected}"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
+        disp = disp,
+    )
+    return p
+end
+
+"""
+    plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                             project::Union{Nothing, AbstractString} = nothing,
+                             log_name::Union{Nothing, AbstractString} = nothing) -> Figure
+
+Plot the time-series panels (cross-track error, elevation, course/heading,
+tracking error, steering, tether force, tether length vs. lap count, reel-out
+speed, depower vs. winch-controller state, and the entry phase) for a scenario
+in `scenario_dir`. Loads the flight log from `scenario_dir`, the same way
+`plot_pattern_scenario` does — see its docstring for `project`/`log_name`/
+`disp` semantics.
+"""
+function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                                   project::Union{Nothing, AbstractString} = nothing,
+                                   log_name::Union{Nothing, AbstractString} = nothing)
+    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
+
+    # Find and load the .arrow log file
+    if isnothing(log_name)
+        arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
+        isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
+        log_name = replace(only(arrow_files), ".arrow" => "")
+    end
+    syslog = load_log(log_name; path = scenario_dir)
+    sl = syslog.syslog
+
+    # Compute wind speed from the run summary YAML
+    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "")
+
+    # Skip t=0 (guidance slots filled from first step! onward)
+    rng = 2:length(sl.time)
+
+    el_deg = rad2deg.(sl.elevation[rng])
+
+    # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
+    unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
+    onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
+
+    psi    = Float64.(sl.heading[rng])
+    # +π puts the logged course into the same convention as heading (0 = zenith).
+    chi    = wrap_to_pi.(Float64.(sl.course[rng]) .+ pi)
+    chiset = Float64.(sl.bearing[rng])   # chi_cmd, the course actually tracked
+    chi_u  = unwrap_angle(chi)
+
+    # Both wrapped to ±180°; the offset between them is the kite's drift angle.
+    err_course  = rad2deg.(wrap_to_pi.(chi .- chiset))
+    err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
+
+    # `getindex` because l_tether/v_reelout are one entry per tether and the V3 has one.
+    l_tether = getindex.(sl.l_tether[rng], 1)
+    v_reelout = getindex.(sl.v_reelout[rng], 1)
+    v_set = Float64.(sl.var_11[rng])
+    u_d = Float64.(sl.var_14[rng])            # commanded rel_depower, filled by step! itself
+    # WinchController state (0 lower-force, 1 speed, 2 upper-force). Logged every
+    # step, but `rc` is only stepped from phase 3 on, so everything before that is
+    # an unstepped controller's state and says nothing — NaN blanks it rather than
+    # drawing a flat line the eye reads as a measurement.
+    wc_state = [sl.sys_state[i] >= 3 ? Float64(sl.var_12[i]) : NaN for i in rng]
+    # Entry state machine; the codes stay 0-based, other scripts search for `>= 3`.
+    state = Float64.(sl.sys_state[rng])
+    fig8 = Float64.(sl.fig_8[rng])
+
+    p = plotx(
+        sl.time[rng],
+        sl.var_01[rng],
+        [el_deg, Float64.(sl.var_03[rng])],
+        [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
+         rad2deg.(onto(chi_u, chi, chiset))],
+        [err_course, err_heading, Float64.(sl.var_06[rng])],
+        (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
+        getindex.(sl.winch_force[rng], 1),
+        [l_tether, fig8],
+        [v_reelout, v_set],
+        [u_d, wc_state],
+        state;
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 16,
+        ylabels = [
+            L"d~[°]",
+            L"\mathrm{elevation}~[°]",
+            L"\psi,~\chi~[°]",
+            L"\Delta\chi~[°]",
+            L"u_{\mathrm{s}}~[\%]",
+            L"F_{\mathrm{tether}}~[\mathrm{N}]",
+            [L"l_{\mathrm{tether}}~[\mathrm{m}]", L"\mathrm{cycle}~[-]"],
+            L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
+            [L"u_{\mathrm{d}}~[-]", L"\mathrm{wc~state}~[-]"],
+            L"\mathrm{state}~[-]",
+        ],
+        labels = [
+            nothing,
+            [L"\mathrm{kite}", L"\mathrm{attractor}"],
+            [L"\psi", L"\chi", L"\chi_{\mathrm{set}}"],
+            [L"\chi - \chi_{\mathrm{set}}", L"\psi - \chi_{\mathrm{set}}",
+             L"\psi' - \psi'_{\mathrm{set}}"],
+            [L"u_{\mathrm{s}}", L"u_{\mathrm{s,set}}"],
+            nothing,
+            [L"l_{\mathrm{tether}}", L"\mathrm{cycle}"],
+            [L"v_{\mathrm{ro}}", L"v_{\mathrm{set}}"],
+            [L"u_{\mathrm{d}}",
+             L"\mathrm{wc}:~0=f_{\mathrm{low}},~1=v,~2=f_{\mathrm{high}}"],
+            # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
+            L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8},~5=\mathrm{final}",
+        ],
+        fig = replace(fig_name, "Reel-out" => project_name) * " – time series",
         disp = disp,
     )
     return p
