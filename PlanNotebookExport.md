@@ -35,11 +35,11 @@ Three properties decide whether it can be used here:
 
 ## Consequence: neither goal is reachable with `@replay`
 
-**The column checkboxes.** Blocked twice over. Four `Checkbox`es are four controls, so at most one of
-them could drive the table (2 above), and hiding a column changes the column count, which a replayed
-table refuses outright (3 above). `select!(overview_df, Not(...))` is exactly the operation the
-mechanism cannot carry. Consolidating the four into one `MultiCheckBox` fixes the control-count half
-and still hits the column-count error.
+**The column checkboxes.** The four boxes are bound as one `MultiCheckBox`, so the control is already
+the right shape for a sweep: a single control with a finite domain (the power set of its four options,
+16 positions). Finding 2 is what blocks it. Hiding a column changes the column count, and a replayed
+table refuses that outright — `select!(overview_df, Not(...))` is exactly the operation the mechanism
+cannot carry, whatever drives it.
 
 **The pattern plot.** The cell is a `#%% web` cell interpolating the wind speed into an image URL.
 Nothing replays a web cell's `{{ }}`, so the `src` freezes at whatever `wind_speed` was set to during
@@ -59,7 +59,7 @@ The exported page ships `Slate.replay` as a general control API, independent of 
 shipped for a given control (`src/server_export.jl:1185`):
 
 - `Slate.replay.hosts(name)` — every DOM node bound to that control (a control can render more than once)
-- `.read(h)` — its current value, in the same shape Julia's domain uses (a `Bool` for a checkbox, a set for a multi-check)
+- `.read(h)` — its current value, in the same shape Julia's domain uses (a number for a slider, an array of checked values for a multi-check)
 - `.listen(h, run)` — fire on change
 - `.enable(h, true)` — **required**: every exported control renders disabled, and only `wire()` enables
   one. A control we drive ourselves must be enabled by our own code.
@@ -111,8 +111,7 @@ Ship the table **once, with every column**, and hide columns in the browser. Sam
 a `WebPage` cell (or a web cell) next to the table whose JS maps the header text to a column index and
 sets `display:none` on that `<th>` and its `<td>`s.
 
-This keeps the four checkboxes as four independent controls — there is no domain to sweep, so nothing
-constrains them — and ships no per-position data at all.
+No sweep runs and no per-position data ships: the `columns` value is read straight from the DOM.
 
 The two things to settle while implementing it:
 
@@ -122,31 +121,22 @@ The two things to settle while implementing it:
   names in `results.jl` already select on, rather than on a fixed index — the index shifts as soon as
   another group is hidden.
 
-Each of the four checkboxes needs its own `Slate.replay.enable` + `listen`, as in change 1.
-
-### Change 3 — decide what the table does with `wind_speed`
-
-Independent of the above: the table currently filters itself to one row with
-`filter!(:v_wind => ==(Float64(wind_speed)), overview_df)`. Since the table is not being replayed,
-that filter simply freezes at the export's wind speed — the slider will move the plot and not the
-table, which reads as a bug.
-
-**Recommendation: drop the filter and show all eight wind speeds.** That makes the table an overview
-across wind speeds, which is what `notebooks/overview.md` is, and it removes the only remaining
-coupling between the two controls. The alternative — keeping a one-row table — needs the row selection
-to move client-side too, which is a third instance of the same JS and buys little.
+The `columns` control needs one `Slate.replay.enable` + `listen`, as in change 1.
+`Slate.replay.read` on a `multicheck` host hands back the array of checked values
+(`src/server_export.jl:1207`), so the JS can compare against the same option strings the Julia guards
+in the table cell already use.
 
 ## Fallback if the client-side route proves fragile
 
 If the hand-written JS turns out not to survive the export (script ordering, controls not enabling),
 there is a fully-supported alternative for the table: **transpose it** — metrics as rows, the eight
-wind speeds as columns — and replace the four checkboxes with one `MultiCheckBox` over the four metric
-groups. Hiding a group then removes *rows*, which is exactly what a replayed table does, and a
-4-option `MultiCheckBox` sweeps 16 positions (`bind_domain`, `lib/SlateExtensionsBase/src/controls.jl:376`),
-well inside every cap. The mark is written by hand in the table cell:
+wind speeds as columns. Hiding a group then removes *rows*, which is exactly what a replayed table
+does, and the `columns` control needs no change at all: a 4-option `MultiCheckBox` sweeps 16 positions
+(`bind_domain`, `lib/SlateExtensionsBase/src/controls.jl:376`), well inside every cap. All this route
+adds is a mark written by hand in the table cell:
 
 ```julia
-@replay(groups, slate_table(rows_for(groups); align))
+@replay(columns, slate_table(rows_for(columns); align))
 ```
 
 Build the DataFrame in its own cell and use non-mutating `select` inside the closure — `select!`/`filter!`
@@ -159,7 +149,6 @@ This costs the table's current layout, which is why it is the fallback and not t
 1. Apply change 1 and export. Confirm in the exported HTML that eight `data:image/png` URIs are
    present and the slider moves the image. This is the cheapest test of the whole client-side
    premise — if it holds, change 2 is the same code again.
-2. Apply change 3 (drop the wind-speed filter from the table).
-3. Apply change 2 and export. Confirm all four checkboxes hide their column groups.
-4. If step 1 fails, take the fallback for the table and reconsider the plot — a replayed ECharts
+2. Apply change 2 and export. Confirm each box of the `columns` control hides its column group.
+3. If step 1 fails, take the fallback for the table and reconsider the plot — a replayed ECharts
    figure of the pattern (azimuth/elevation from the flight log) is replayable natively, unlike a PNG.
