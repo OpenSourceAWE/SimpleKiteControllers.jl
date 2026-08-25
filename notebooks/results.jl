@@ -6,7 +6,7 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 """
 
 #%% code id=columns_bind
-@bind columns MultiCheckBox(["optimization", "force", "reel-out", "performance"], String[];
+@bind columns MultiCheckBox(["optimization", "force", "reel-out speeds", "performance"], String[];
                             label="Columns")
 
 #%% md id=overview_table_heading
@@ -33,6 +33,11 @@ overview_df = DataFrame([header[i] => [something(tryparse(Float64, r[i]), r[i]) 
 align = Dict(:opt_requests => :center, :opts_installed => :center)
 slate_table(overview_df; align)
 
+#%% md id=columns_hint
+@md"""
+Click on one of the labels to show an additional column group, ctrl+click to deselect, shift+click for multi-select.
+"""
+
 #%% web id=columns_toggle controls=columns
 @web(html"""
 <!-- reads overview_df so this cell runs after overview_table, not just after the checkboxes -->
@@ -46,7 +51,7 @@ js"""
 const GROUPS = {
   optimization: ["opt_requests", "opts_installed"],
   force: ["min_force", "av_force", "max_force"],
-  "reel-out": ["v_ro_min", "v_ro_av", "v_ro_max"],
+  "reel-out speeds": ["v_ro_min", "v_ro_av", "v_ro_max"],
   performance: ["total_time", "rt_factor"],
 };
 const groupOf = name => Object.keys(GROUPS).find(g => GROUPS[g].includes(name));
@@ -72,6 +77,11 @@ if (window.Slate && !Slate.isLive()) {
   });
 }
 """)
+
+#%% md id=powercurve_hint
+@md"""
+The average mechanical power during reel-out, the force, and the speed are shown in the following plot. At about <span style="white-space: nowrap">9 m/s</span> the maximal force of 8400 N is reached. From this wind speed onwards the force is limited by reeling out faster.
+"""
 
 #%% md id=powercurve_plot
 @md"""
