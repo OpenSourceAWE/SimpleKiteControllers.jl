@@ -34,12 +34,33 @@ slate_table(overview_df; align)
 #%% code id=wind_speed_bind
 @bind wind_speed Slider(3:10; default=3, label="Wind speed [m/s]")
 
-#%% web id=pattern_plot
+#%% web id=pattern_plot controls=wind_speed
 @web(html"""
-<img src="/n/results/asset/notebooks/pattern_v{{ lpad(wind_speed, 2, '0') }}.png" alt="flight pattern">
+<div id="pattern">
+  <img data-v="3" src="/n/results/asset/notebooks/pattern_v03.png" alt="flight pattern, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/pattern_v04.png" alt="flight pattern, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/pattern_v05.png" alt="flight pattern, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/pattern_v06.png" alt="flight pattern, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/pattern_v07.png" alt="flight pattern, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/pattern_v08.png" alt="flight pattern, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/pattern_v09.png" alt="flight pattern, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/pattern_v10.png" alt="flight pattern, 10 m/s">
+</div>
 """,
 css"""
-img { display: block; margin: 0 auto; }
+#pattern img { display: block; margin: 0 auto; }
+#pattern img[hidden] { display: none; }
+""",
+js"""
+const pick = v => document.querySelectorAll("#pattern img")
+    .forEach(im => im.hidden = Number(im.dataset.v) !== Number(v));
+pick({{ wind_speed }});
+if (window.Slate && !Slate.isLive()) {
+  Slate.replay.hosts("wind_speed").forEach(h => {
+    Slate.replay.enable(h, true);
+    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+  });
+}
 """)
 
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
