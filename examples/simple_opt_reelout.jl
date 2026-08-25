@@ -435,6 +435,12 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
 # The file's `dt` is a placeholder; the plant's own timestep is the real one.
 rcs.dt = s.dt
 rc = WinchController(rcs)
+# The nominal upper force limit, captured BEFORE the first-lap reduction can move
+# `rcs.f_high`. `winch_from_wc` below sends this one to the optimizer: the request
+# is for a path, not for a time window, so the ceiling the run dips during lap 1
+# is a runtime measure only.
+const F_HIGH_NOMINAL = rcs.f_high
+first_lap_f_high_applied = false
 stop_criteria = fcs.n_fig_eight > 0 ?
     @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
     @sprintf("%.0f m", fcs.reelout_l_max)
@@ -473,6 +479,14 @@ fec = FigureEightController(FigureEightSettings(;
 # the optimizer is given the winch law that is actually flown.
 inflow = inflow_from_settings(project_set)
 winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v)
+# The STARTUP path is the one flown during lap 1, where `first_lap_force_frac`
+# holds the runtime ceiling down — so it is solved against that same ceiling
+# rather than against one the winch will not give it. Re-optimization replies are
+# installed from lap 2 on and keep `winch`, the nominal one. Note this lowers the
+# request's speed ceiling `kv*sqrt(f_max)` too; see `winch_from_wc`'s docstring.
+winch_first_lap = fcs.first_lap_force_frac < 1 ?
+    winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
+                  f_max = F_HIGH_NOMINAL * fcs.first_lap_force_frac) : winch
 # Every reply's optimized gain lands here, so the summary can report what was
 # actually flown rather than only what was sent.
 opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]
@@ -576,7 +590,7 @@ opt_depower_log = NamedTuple[]
 depower_flown_opt = fcs.depower_setpoint
 
 start_params = InitParams(; name = tos.name, length = l_set,
-                          winch_params = winch, inflow_conditions = inflow,
+                          winch_params = winch_first_lap, inflow_conditions = inflow,
                           trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                           input_depower = depower_seed(tos, inflow.wind_speed),
                           reg_weight = tos.reg_weight,
@@ -793,7 +807,8 @@ if opt_r_on && !isnothing(coeffs_startup)
                        margin_retry_target)
         t_retry = time()
         try
-            retry_result = opt_step(StepParams(; length = l_set, winch_params = winch,
+            retry_result = opt_step(StepParams(; length = l_set,
+                                               winch_params = winch_first_lap,
                                                min_turn_radius = opt_r_min_retry);
                                     url = tos.base_url)
             retry_table = opt_trajectory(; url = tos.base_url)
@@ -1091,6 +1106,14 @@ try
             if fig8_n == 0
                 global fig8_n = 1
                 global fig8_idx_prev = fec.last_idx
+                if fcs.first_lap_force_frac < 1
+                    rcs.f_high = F_HIGH_NOMINAL * fcs.first_lap_force_frac
+                    global first_lap_f_high_applied = true
+                    @info @sprintf("Lap 1: upper force limit held at %.0f N \
+                                    (%.0f %% of %.0f N) for this lap.",
+                                   rcs.f_high, 100 * fcs.first_lap_force_frac,
+                                   F_HIGH_NOMINAL)
+                end
             else
                 delta = fec.last_idx - fig8_idx_prev
                 delta < -(n_path ÷ 2) && (delta += n_path)
@@ -1101,6 +1124,16 @@ try
                 global fig8_idx_prev = fec.last_idx
                 lap_before = fig8_n
                 global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)
+                # Lap 1 only: hold the upper force limit down while the pattern is
+                # still converging onto the reference and the winch has just
+                # engaged. `calc_vro_soft` reads `f_high` live, so writing it here
+                # is enough; `F_HIGH_NOMINAL` is what goes back on lap 2.
+                if fcs.first_lap_force_frac < 1 && fig8_n > 1 && first_lap_f_high_applied
+                    rcs.f_high = F_HIGH_NOMINAL
+                    global first_lap_f_high_applied = false
+                    @info @sprintf("Lap %d: upper force limit back to %.0f N.",
+                                   fig8_n, F_HIGH_NOMINAL)
+                end
                 # One update per completed lap, per azimuth band: a whole lap
                 # averages out the part of the error the kite cannot follow and
                 # leaves what the reference can be moved to fix.

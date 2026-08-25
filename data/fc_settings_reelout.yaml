@@ -145,6 +145,13 @@ fc_settings:
   # a depowered wing can pull during the dive. A setpoint the entry cannot reach
   # winds the guard's PID up and runs the drum away.
   entry_f_min:        350.0    # Force floor of the entry guard, phases 0-2        [N]
+  # Idea: the first lap is flown into an unsettled force state — the pattern is
+  # still converging and the winch has just engaged — so hold the ceiling down for
+  # it. Set back to 1.0 (OFF) before it was ever measured; the machinery is in
+  # place, so raising it is a one-line experiment. Only bites under
+  # force_limit: "soft", where calc_vro_soft reads f_high live, and it moves the
+  # STARTUP request's f_max with it, since that is the path lap 1 flies.
+  first_lap_force_frac: 1.0    # f_high x this during the first figure of eight    [-]
   v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]
   # 6.5 since 2026-08-18, down from 10: an externally optimized path descends lower

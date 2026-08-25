@@ -510,6 +510,28 @@ Add new findings there, not here.
     entry_f_min = 350.0
 
     """
+    Fraction of `WCSettings.f_high` the upper force limit is held at during the
+    FIRST figure of eight (`fig_8 == 1`, from the first step at phase 4 until one
+    full traversal of the reference path), restored to `f_high` for every lap
+    after. The first lap is flown into an unsettled force state — the pattern is
+    still converging onto the reference and the winch has just engaged — so it
+    carries the run's worst force excursions; a lower ceiling there costs a little
+    reel-out speed over one lap and takes the peak off the drum.
+
+    Only bites under `force_limit = "soft"`, where `calc_vro_soft` reads
+    `f_high` live, and it also shifts `force_release`, which blends over
+    `f_low .. f_high`. Under `"hard"` the `UpperForceController` copied `f_high`
+    into its own setpoint when it was built, so this does not move it. The
+    STARTUP request's `f_max` moves with it too — that path is the one lap 1
+    flies — while re-optimization replies, installed from lap 2 on, keep the
+    nominal ceiling.
+
+    `1.0` is OFF and is the default: the idea has not been measured, so a run
+    gets the plain ceiling unless it asks for otherwise.
+    """
+    first_lap_force_frac = 1.0
+
+    """
     Abort guard: stop the run above this apparent wind speed [m/s], so an
     overspeed is reported as itself rather than as an opaque solver abort.
     """

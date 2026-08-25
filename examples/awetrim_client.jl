@@ -463,6 +463,49 @@ function stale_conn_error(err, depth = 0)
            occursin("connection reset", msg) || occursin("unexpected EOF", msg)
 end
 
+"""
+    report_status_error(path, err::HTTP.StatusError)
+
+Log the RESPONSE BODY of a failed request. `HTTP.StatusError`'s own message
+carries only the status line, so a 422 otherwise arrives as
+`http status error: 422 for POST .../init` with no reason — and the reason is
+exactly what distinguishes the two kinds of 422 this server sends:
+
+- a **validation** 422, whose `detail` is a list of `{loc, msg}` entries naming
+  the offending field. Every request model is `extra="forbid"`, so a field this
+  client sends and the server does not know lands here. That is a CLIENT BUG and
+  is logged as a warning.
+- an **infeasibility** 422, whose `detail` is a plain string. Routine — a solve
+  that cannot satisfy its constraints, which `record_opt_failure!` exists to
+  remember — so it is logged at info level.
+
+Never throws: a diagnostic must not replace the error it is diagnosing. The
+caller rethrows `err` unchanged, so `exc isa HTTP.StatusError && exc.status == 422`
+downstream keeps working.
+"""
+function report_status_error(path, err)
+    detail, validation = try
+        parsed = JSON3.read(String(copy(err.response.body)), Dict{String, Any})
+        d = get(parsed, "detail", parsed)
+        if d isa AbstractVector
+            (join(("  " * join(string.(get(e, "loc", [])), ".") * ": " *
+                   string(get(e, "msg", e)) for e in d), "\n"), true)
+        else
+            (string(d), false)
+        end
+    catch
+        (try first(split(String(copy(err.response.body)), '\n')) catch; "<no body>" end, false)
+    end
+    if validation
+        @warn "POST $path -> HTTP $(err.status), the server REJECTED the request \
+               (a field it does not accept, or one out of range — the models are \
+               extra=\"forbid\"):\n$detail"
+    else
+        @info "POST $path -> HTTP $(err.status): $detail"
+    end
+    return nothing
+end
+
 function post(path, payload; url = AWETRIM_URL, timeout = 600, attempts = 3)
     # The server closes idle keep-alive connections long before the run's next
     # request (a re-optimization is one lap apart, ~13 s), so a pooled socket is
@@ -488,6 +531,7 @@ function post(path, payload; url = AWETRIM_URL, timeout = 600, attempts = 3)
                                  retry_non_idempotent = true)
             return response.body
         catch err
+            err isa HTTP.StatusError && report_status_error(path, err)
             (attempt < attempts && stale_conn_error(err)) || rethrow()
             @info "POST $path: $(first(split(sprint(showerror, err), '\n'))) on \
                    attempt $attempt of $attempts — the pooled socket was dead. \
@@ -721,9 +765,17 @@ ground station can actually fly. Pass `v_max = nothing` to fall back to the
 optimizer's own 10 m/s bound instead, which with `kv = 0.0408` and
 `f_high = 8000 N` the square-root law never reaches anyway (3.65 m/s), so this
 only starts to matter on a softer winch.
+
+`f_max` defaults to `wc.f_high` and is overridable so a request can be solved
+against the ceiling that will actually be in force while its path is flown —
+`fcs.first_lap_force_frac` holds the runtime limit down for the first figure of
+eight, and the startup path is the one flown there. Lowering it also lowers the
+speed ceiling `kv*sqrt(f_max)` referred to above.
 """
-winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false) =
-    WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low, f_max = wc.f_high,
+winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
+              f_max = wc.f_high) =
+    WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
+                f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),
                 optimize_k_v = Bool(optimize_k_v),
