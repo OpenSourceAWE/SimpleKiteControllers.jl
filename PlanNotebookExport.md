@@ -126,29 +126,20 @@ The `columns` control needs one `Slate.replay.enable` + `listen`, as in change 1
 (`src/server_export.jl:1207`), so the JS can compare against the same option strings the Julia guards
 in the table cell already use.
 
-## Fallback if the client-side route proves fragile
-
-If the hand-written JS turns out not to survive the export (script ordering, controls not enabling),
-there is a fully-supported alternative for the table: **transpose it** — metrics as rows, the eight
-wind speeds as columns. Hiding a group then removes *rows*, which is exactly what a replayed table
-does, and the `columns` control needs no change at all: a 4-option `MultiCheckBox` sweeps 16 positions
-(`bind_domain`, `lib/SlateExtensionsBase/src/controls.jl:376`), well inside every cap. All this route
-adds is a mark written by hand in the table cell:
-
-```julia
-@replay(columns, slate_table(rows_for(columns); align))
-```
-
-Build the DataFrame in its own cell and use non-mutating `select` inside the closure — `select!`/`filter!`
-would compound across the sixteen sweep evaluations.
-
-This costs the table's current layout, which is why it is the fallback and not the plan.
 
 ## Steps
 
-1. Apply change 1 and export. Confirm in the exported HTML that eight `data:image/png` URIs are
+1. [x] Apply change 1 and export. Confirm in the exported HTML that eight `data:image/png` URIs are
    present and the slider moves the image. This is the cheapest test of the whole client-side
    premise — if it holds, change 2 is the same code again.
-2. Apply change 2 and export. Confirm each box of the `columns` control hides its column group.
-3. If step 1 fails, take the fallback for the table and reconsider the plot — a replayed ECharts
-   figure of the pattern (azimuth/elevation from the flight log) is replayable natively, unlike a PNG.
+   Done — `output/results_export.html` carries all 8 pattern PNGs (+ the powercurve, 9 total)
+   inlined as base64, and the `Slate.replay` wiring for `wind_speed` survived the export intact.
+2. [x] Apply change 2 and export. Confirm each box of the `columns` control hides its column group.
+   Done — `overview_table` now ships every column unconditionally; the `columns_toggle` web cell
+   hides them client-side, verified live (unchecking "force" hid exactly `min_force`/`av_force`/
+   `max_force` in both header and matching row cells) and in the export (18 headers, toggler JS
+   intact). It also turned up a wrinkle the plan didn't anticipate: the live table
+   (`table.st-table`) and the exported one (`table.exp-table`) are different DOM structures, so the
+   toggler targets both; and independent cells can evaluate in parallel, so the toggler cell reads
+   `nrow(overview_df)` purely to force the dependency graph to run it after `overview_table`.
+
