@@ -9,6 +9,19 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 @bind columns MultiCheckBox(["optimization", "force", "reel-out", "performance"], String[];
                             label="Columns")
 
+#%% md id=overview_table_heading
+@md"""
+### Overview of reel-out runs per wind speed
+
+The test scenario:
+- the kite is parked at zenith (keep it still above your head while in equilibrium)
+- than it is steered to the left and takes a dive
+- then it is steered towards the planned figure-of-eight that promises the highest power
+- it flies figures of eight and reels out
+
+The initial tether length is 150 m, the final length 380 m. The wind speed is the ground wind speed, measured at a height of 6 m, using a vertical wind profile law combining the exponential and logarithmic laws, matched to measurements at a near-shore site in Maasvlakte, NL.
+"""
+
 #%% code id=overview_table hidecode
 using DataFrames
 
