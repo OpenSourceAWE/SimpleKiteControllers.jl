@@ -11,10 +11,16 @@ commits and pushes it there. The checkout path defaults to `../../SimulationResu
 this package; override with the `SIMRESULTS_REPO` environment variable. Does nothing beyond
 the export if `docs/index.html` comes out byte-identical to what is already committed.
 
+Before exporting, checks the served notebook's `/api/<id>/state` for 0 cells, any non-fresh
+cell, or a source file newer than what the server last loaded, and refuses to publish if so —
+a notebook server that was reopened without re-running still answers requests but exports a
+near-empty stub page. Close and reopen the notebook, let it finish running, then publish again.
+
     include("publish.jl")
 """
 
 using Dates
+using Downloads
 
 const SIMRESULTS_REPO = get(ENV, "SIMRESULTS_REPO",
                              normpath(joinpath(@__DIR__, "..", "..", "SimulationResults")))
@@ -23,6 +29,31 @@ const INDEX_HTML = joinpath(SIMRESULTS_REPO, "docs", "index.html")
 isdir(joinpath(SIMRESULTS_REPO, ".git")) ||
     error("No SimulationResults checkout at $SIMRESULTS_REPO — clone it there, or set " *
           "SIMRESULTS_REPO to point at an existing one.")
+
+notebook = get(ENV, "SLATE_NOTEBOOK", "results")
+hub_url = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765")
+state_url = "$hub_url/api/$notebook/state"
+
+state = try
+    io = IOBuffer()
+    Downloads.download(state_url, io)
+    String(take!(io))
+catch e
+    error("Could not reach the `$notebook` notebook at $state_url — open it in Kaimon Slate " *
+          "first. Underlying error: $e")
+end
+
+cell_states = [m.captures[1] for m in eachmatch(r"\"state\":\"(\w+)\"", state)]
+isempty(cell_states) &&
+    error("Notebook `$notebook` reports 0 cells — it was likely reopened without reloading " *
+          "$notebook.jl. Close and reopen it, let it run, then publish again.")
+stale = filter(!=("fresh"), cell_states)
+isempty(stale) ||
+    error("Notebook `$notebook` has $(length(stale)) non-fresh cell(s) " *
+          "($(join(sort(unique(stale)), ", "))) — run all cells before publishing.")
+occursin("\"src_stale\":true", state) &&
+    error("Notebook `$notebook` is stale relative to $notebook.jl on disk — close and " *
+          "reopen it so it re-parses the file, then run it before publishing.")
 
 include(joinpath(@__DIR__, "export_html.jl"))   # produces OUTPUT_PATH
 
