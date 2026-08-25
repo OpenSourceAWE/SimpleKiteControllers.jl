@@ -271,6 +271,14 @@ traj_opt:
     # re-anchoring may legitimately predict far less than the startup solve (200 ->
     # 116 W at 3 m/s), while every later step measured stays above 0.95.
     min_power_frac_prev: 0.7 # fraction of the previous install's power; 0 is off [-]
+    # Below this mean wind BOTH gates above are bypassed for a NEGATIVE prediction.
+    # The optimizer's winch model is out of its domain there — its softminus floor
+    # puts the representable force at ~883 N against a 585 N mean at 3 m/s — so a
+    # negative number means the model cannot represent the regime, not that the path
+    # is bad, and the retry chain only burns wall time (3 m/s: -342/-397/-328 W
+    # against a 198 W startup, 3 retries, 8 s held, old path kept). A POSITIVE
+    # prediction is still gated at any wind. See PlanWinchSpeed.md.
+    power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses  [m/s]
     reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
                              # reopt_blocking is false, wall-clock when true    [s]
     # Halt the loop while a solve runs, instead of flying on through it. A solve is

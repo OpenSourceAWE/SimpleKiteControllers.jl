@@ -446,6 +446,18 @@ multi-modal, so the guess is a choice about the answer.
     """
     min_power_frac_prev = 0.7
     """
+    Mean wind [m/s] below which BOTH power gates are bypassed for a candidate
+    whose predicted power is NEGATIVE. Below it the optimizer's winch model is
+    out of its own domain — its softminus floor puts the representable tether
+    force at ~883 N against a measured 585 N mean at 3 m/s — so a negative
+    prediction says the model cannot represent the regime, not that the path is
+    bad, and the retry chain only burns wall time (measured 2026-08-25 at 3 m/s:
+    -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held, old path
+    kept). A POSITIVE prediction is still gated at any wind, and nothing changes
+    at or above this speed. `0.0` is off. See `PlanWinchSpeed.md`.
+    """
+    power_gate_wind_min = 4.0
+    """
     Seconds between `/status` polls while a solve is running. SIMULATED seconds
     when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
     simulated then). The solve takes 7-13 s of wall time (measured), so polling
@@ -558,6 +570,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     0 <= tos.min_power_frac_prev <= 1 ||
         error("min_power_frac_prev must be in [0, 1], got "*
               "$(tos.min_power_frac_prev).")
+    tos.power_gate_wind_min >= 0 ||
+        error("power_gate_wind_min must be >= 0, got $(tos.power_gate_wind_min).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     tos.guess_el_center_high >= 0 ||

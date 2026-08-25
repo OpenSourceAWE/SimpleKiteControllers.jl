@@ -499,6 +499,17 @@ Add new findings there, not here.
     entry_cut_margin = 30.0
 
     """
+    Force floor [N] of the standalone entry guard (`guard_lfc`, phases 0-2 of
+    the reel-out examples), which reels in to catch a tether sag during the
+    depowered dive. Deliberately NOT `WCSettings.f_low`: that one is the
+    reel-out limiter's floor and scales with the winch, while this one is
+    bounded by what a DEPOWERED wing can pull and does not. A setpoint the
+    entry cannot reach makes the guard's PID wind up and run the drum away —
+    see `docs/fig8_tuning_log.md`, "`f_low` 350 -> 700 N".
+    """
+    entry_f_min = 350.0
+
+    """
     Abort guard: stop the run above this apparent wind speed [m/s], so an
     overspeed is reported as itself rather than as an opaque solver abort.
     """

@@ -306,6 +306,17 @@ default_v_wind = project_set.v_wind
 apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
 
+"""
+    power_gate_off(pred) -> Bool
+
+Whether `min_power_frac`/`min_power_frac_prev` are bypassed for a candidate
+predicting `pred` watts: only below `tos.power_gate_wind_min` mean wind AND only
+for a NEGATIVE prediction, where the number reports the optimizer's winch model
+leaving its own domain rather than a bad path. Defined after the wind override,
+so it gates on the speed actually flown.
+"""
+power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
+
 # Reel-out speed scales with the wind (more force -> faster reel-out), so a
 # slower override needs proportionally more time to cover the same tether
 # length and a faster one needs less: effective sim_time (the selected value,
@@ -394,6 +405,9 @@ fcs.compliance == 0 ||
 dt0 = 1 / project_set.sample_freq
 wc = load_wc_settings(wc_settings(project); dt = dt0)
 wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, see data/winch_kv_table.yaml
+# Wind-dependent too, and for the same reason: one flat floor cannot serve 3 and
+# 10 m/s. NOT the entry guard's floor — that is fcs.entry_f_min.
+wc.f_low = winch_f_low(project_set.v_wind; project)
 rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
@@ -1770,8 +1784,9 @@ try
                                      detail = reason * retried(blend_attempt))
                             break
                         elseif cand_folds ||
-                               new_pred < tos.min_power_frac * opt_power_pred ||
-                               new_pred < tos.min_power_frac_prev * prev_install_pred
+                               (!power_gate_off(new_pred) &&
+                                (new_pred < tos.min_power_frac * opt_power_pred ||
+                                 new_pred < tos.min_power_frac_prev * prev_install_pred))
                             reason = if cand_folds
                                 "blend folds"
                             elseif new_pred < tos.min_power_frac * opt_power_pred
@@ -1795,6 +1810,12 @@ try
                                                        reason, tos.blend_max_retries))
                             break
                         else
+                            power_gate_off(new_pred) &&
+                                @info @sprintf("  ... power gate bypassed at L = %.0f m \
+                                                (%.0f W predicted, %.1f m/s < \
+                                                power_gate_wind_min %.1f): installing anyway.",
+                                               l_now, new_pred, project_set.v_wind,
+                                               tos.power_gate_wind_min)
                             global blend_from = cand_from
                             global blend_to = (cand_az, cand_el)
                             # Here, not before the gates: a REJECTED reply is not
@@ -2005,13 +2026,13 @@ try
         elseif phase < 3
             # Force floor BEFORE reel-out starts. `l_set` is otherwise held flat
             # at the settled length here, but the dive can sag tether force well
-            # below `rcs.f_low` (measured: ~50 N at t ~ 5.2 s, entry_depower
+            # below `fcs.entry_f_min` (measured: ~50 N at t ~ 5.2 s, entry_depower
             # unloading the wing) with nothing to catch it. `guard_lfc` (built
             # above, deliberately NOT `rc` — see the comment there) is stepped
             # by hand through the same setters `calc_v_set` uses internally.
             set_reset(guard_lfc, false)
-            set_f_set(guard_lfc, rcs.f_low)
-            set_v_sw(guard_lfc, calc_vro(rcs, rcs.f_low) * 1.05)
+            set_f_set(guard_lfc, fcs.entry_f_min)
+            set_v_sw(guard_lfc, calc_vro(rcs, fcs.entry_f_min) * 1.05)
             set_v_act(guard_lfc, reel_out_speed(s))
             set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
             set_force(guard_lfc, winch_force(s))

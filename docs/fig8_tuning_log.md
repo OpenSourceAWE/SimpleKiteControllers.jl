@@ -3479,6 +3479,121 @@ meaningless until 0.25 is re-identified the same way. `c1` and `delay`
 
 ## REEL_OUT winch (`examples/simple_reelout.jl`)
 
+### `f_low` 350 -> 700 N — it was sized for a 4000 N winch (2026-08-25)
+
+`f_low = 350` predates this winch. WinchControllers' own module docstring still
+describes the plant it was tuned against — "20 kW winch, 4000 N max force" — and
+350 N is 8.75 % of that. Against this winch's `f_high` = 8000 N (plant max 8400 N)
+the same fraction is 700 N.
+
+The number does not stay local: `winch_from_wc` sends `f_min = wc.f_low` to
+AWETrim, which saturates its tension curve with a *softminus* of width `1/beta`
+(`softminus_beta` = 1e-3, i.e. 1000 N). Because `1/beta` is LARGER than `f_min`
+itself, the smoothing dominates the limit it smooths — the effective floor the
+optimizer plans against is `sp(beta*f_min)/beta`, not `f_min`:
+
+| `f_min` | beta=1e-3 | beta=2e-3 | beta=5e-3 |
+|--:|--:|--:|--:|
+| 350 | 883 (+152 %) | 552 (+58 %) | 382 (+9 %) |
+| 700 | 1103 (+58 %) | 810 (+16 %) | **706 (+1 %)** |
+| 2000 | 2127 (+6 %) | 2009 (+0 %) | 2000 (+0 %) |
+
+The 3 m/s run is the evidence that this bites: its entire force range
+(249 .. 1000 N, mean 585) lies below the 883 N floor, and it is the only wind
+speed whose `power_ratio` is badly wrong — 1.44, against 0.97 .. 1.02 for
+4 .. 10 m/s. The optimizer's model cannot represent the operating point, so it
+does not predict it.
+
+Raising `f_low` alone does NOT close this: at beta = 1e-3, `f_min` = 700 still
+gives an 1103 N floor. Sending `softminus_beta` = 5e-3 as well (706 N) needs a
+beta field on `WinchParams`, which the contract does not carry — AWETrim applies
+`setdefault(1e-3)` to both betas, so the two sides agree today only by
+coincidence of defaults. See `PlanWinchSpeed.md` stage 3.
+
+What moves at runtime, all in `examples/simple_opt_reelout.jl`: the
+`LowerForceController` setpoint, the `guard_lfc` force floor for phases 0-2, and
+the `force_release` blend that bypasses `reelout_softstart` (0 at `f_low`, 1 at
+`f_high`). `f_reelin` (700 N, unused here) now equals `f_low`; re-derive it if a
+reel-in phase is ever flown.
+
+**Raising `f_low` alone CRASHED 4 m/s — `f_low` was two limits sharing a name.**
+The first run after the change diverged at t = 41.5 s (`next_step!` failed). The
+cause was not the reel-out limiter but `guard_lfc`, the standalone entry force
+floor for phases 0-2, which took its setpoint from `rcs.f_low` and, when active,
+drives the drum directly (`v_set = v_guard`, reel-in only). During the depowered
+dive the wing pulls a few hundred N and **cannot reach 700 N**, so the guard's
+PID never released, wound up, and ran the reel-in away. Same window, v04 archive
+(`f_low` = 350, completed) against the failing run:
+
+| t [s] | phase | old F / v_ro | new F / v_ro |
+|--:|--:|--:|--:|
+| 18.0 | 1 | 319 N / **-1.87** | 605 N / **-4.82** |
+| 20.2 | 2 | 322 N / -2.05 | 617 N / **-5.42** |
+| 22 .. 25 | 3 | 119 .. 250 N / +0.7 | **4 .. 10 N** / +1.6 |
+| 34.4 | 3 | 590 N / +1.05 | 1500 N / **-6.31** |
+| 35.3 | 3 | — | **7912 N** |
+
+The old run's force sits at ~320 N, just under its 350 N setpoint — the guard
+idling against a floor it can reach. The new one sits at ~605 N under a 700 N
+setpoint it cannot, reels in to 6.3 m/s, slackens the tether to 4 N, and the
+kite falls until the tether snaps taut at 7912 N. Reeling in *raises* force at
+first (605 > 319), which is why the runaway is stable right up to the point the
+kite can no longer follow.
+
+So `f_low` conflated two floors, and only one of them scales with the winch:
+the **reel-out** limiter's floor does, the **entry slack-tether guard** is
+bounded by what a DEPOWERED wing can pull and does not. Split on 2026-08-25:
+`f_low` = 700 keeps the reel-out job, and the guard takes the new
+`FC_Settings.entry_f_min` (350 N, `data/fc_settings_reelout.yaml`) in both
+`simple_reelout.jl` and `simple_opt_reelout.jl`. The two objects were already
+deliberately separate — only the setpoint was shared.
+
+**Measured after the split, and `f_low` is now WIND-DEPENDENT.** 4 m/s passed
+and 3 m/s did not, which settled the question of whether one flat floor can
+serve the range:
+
+| | 3 m/s, 350 (v03) | 3 m/s, 700 | 4 m/s, 700 | 4 m/s, 350 (v04) |
+|:--|--:|--:|--:|--:|
+| measured power [W] | 559 | **675** | **2043** | 1926 |
+| mean force [N] | 587 +- 165 | 725 +- 129 | 1312 +- 196 | 1296 +- 188 |
+| `lower_force_pct` | 20.6 | **63.2** | **1.1** | 3.5 |
+| RMS d / max d [deg] | 1.95 / 5.54 | 1.73 / **8.02** | — | — |
+| verdict | all 9 passed | **FAILED max d** | all 9 passed | passed |
+
+At 4 m/s the higher floor is plainly right — the limiter share FELL, 3.5 -> 1.1 %,
+because the settled force (1312 N) is far above either value and the 3.5 % was
+mostly transient. At 3 m/s it is plainly wrong: mean force sits at 725 N against
+a 700 N floor, so the limiter, not `kv*sqrt(F)`, is setting the operating point
+for 63 % of the run. Tracking failed `max d` by 0.02° while RMS and mean d both
+IMPROVED — a single transient excursion, consistent with the reel-out/reel-in
+transitions a limiter running two thirds of the time forces on the pattern.
+
+Power at 3 m/s rose 21 % (559 -> 675 W), so the higher floor is not simply worse.
+But it buys that in a mode the tuning was never designed around, and the entry
+in this log exists to say so rather than to bank the number.
+
+The two things `f_low` sits between scale differently — the winch's rating does
+not move with the wind, the kite's force goes with its square — so it moved into
+`data/winch_kv_table.yaml` beside `kv` (350 N at 3 m/s, 700 N from 4 m/s up,
+interpolated, clamped outside), read by `winch_f_low(v_wind)` and assigned to
+`WCSettings.f_low` in `simple_opt_reelout.jl` exactly as `kv` already was. The
+`kv` column is unchanged in value at every wind speed. `simple_reelout.jl` still
+uses the flat file values for both, as it already did for `kv`.
+
+Confirmed at 3 m/s after the table change: `all 9 passed`, and v03 reproduced
+almost exactly — `max d` 5.53° against 5.54°, mean force 582 N against 587,
+`lower_force_pct` 22.1 % against 20.6, power 553 W against 559. The archived
+`winch_kv_table.yaml` of that run carries `f_low: 350.0` on its 3 m/s row, so
+the lookup is doing the work and not a stale flat value.
+
+So the range is now covered at both ends by measurement: 3 m/s passes on 350 N,
+4 m/s passes on 700 N, and 5 .. 10 m/s keep the 700 N they were already flying
+(`lower_force_pct` 0.0 everywhere above 4, so the floor is not binding there and
+the change is inert for them). The one number given up is the 675 W the 3 m/s
+run made at 700 N, 21 % above the 553 W it makes at 350 — available only in a
+mode where the limiter flies the winch 63 % of the time and `max d` fails. If
+that power is ever wanted, the lever is the pattern or `kv`, not the floor.
+
 ### Lagging the square-root law is CLOSED — it costs the force regulation (2026-08-14)
 
 `v_set = kv*sqrt(F)` on the INSTANTANEOUS measured force looks like a loop worth

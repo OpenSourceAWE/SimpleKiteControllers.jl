@@ -141,6 +141,10 @@ fc_settings:
   entry_cut_margin:   30.0     # Distance from ±180° where chi_set's sign is noise [deg]
 
   # --- guards and metrics ---------------------------------------------------
+  # NOT wc_settings' f_low: that floor scales with the winch, this one with what
+  # a depowered wing can pull during the dive. A setpoint the entry cannot reach
+  # winds the guard's PID up and runs the drum away.
+  entry_f_min:        350.0    # Force floor of the entry guard, phases 0-2        [N]
   v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]
   # 6.5 since 2026-08-18, down from 10: an externally optimized path descends lower

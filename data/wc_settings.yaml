@@ -64,7 +64,9 @@ wc_settings:
   nf_low:        7.0       # derivative filter N of the lower force controller  [-]
   kbf_low:       1.0       # anti-windup back-calculation, lower force ctrl     [-]
   ktf_low:       8.0       # tracking constant, lower force controller          [-]
-  f_low:         350.0     # below: LowerForceController reels in, not the law  [N]
+  f_low:         700.0     # below: LowerForceController reels in, not the law  [N]
+                           # simple_opt_reelout.jl overrides this from
+                           # winch_kv_table.yaml, like kv; 700 is its value at 4+ m/s
   f_reelin:      700.0     # set force during a plain reel-in phase (unused here) [N]
   f_high:        8000.0    # upper limit; keep below the plant's max_force (8400) [N]
   pf_high:       0.00023040 # P constant of the upper force controller          [-]

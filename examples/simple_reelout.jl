@@ -76,7 +76,7 @@ through `var_09` are as in `simple_fig8.jl`):
 
 `var_12`/`var_13` only mean anything from phase 3 on, when `rc` (the full
 `WinchController`) is actually stepped. Before that, `l_set` is otherwise held
-at the settled length, but the dive can sag tether force well below `rcs.f_low`
+at the settled length, but the dive can sag tether force well below `entry_f_min`
 (measured: ~50 N) — a SEPARATE, standalone `LowerForceController` (`guard_lfc`,
 deliberately not `rc`, see its construction comment) monitors force throughout
 phases 0-2 and reels in when needed, logged into `var_10`/`var_11` same as the
@@ -503,8 +503,8 @@ try
             # above, deliberately NOT `rc` — see the comment there) is stepped
             # by hand through the same setters `calc_v_set` uses internally.
             set_reset(guard_lfc, false)
-            set_f_set(guard_lfc, rcs.f_low)
-            set_v_sw(guard_lfc, calc_vro(rcs, rcs.f_low) * 1.05)
+            set_f_set(guard_lfc, fcs.entry_f_min)
+            set_v_sw(guard_lfc, calc_vro(rcs, fcs.entry_f_min) * 1.05)
             set_v_act(guard_lfc, reel_out_speed(s))
             set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
             set_force(guard_lfc, winch_force(s))

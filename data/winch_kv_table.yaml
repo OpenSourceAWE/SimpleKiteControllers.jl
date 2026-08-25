@@ -1,12 +1,38 @@
-# Wind-speed-dependent `kv` for WinchControllers.jl's reel-out law
-# `v_set = kv * sqrt(force)` (the `kv` field of data/wc_settings.yaml).
-# `winch_kv(v_wind)` linearly interpolates between rows and CLAMPS outside
-# the identified range (0.0408 at/below 9 m/s, 0.0508 at/above 10 m/s) rather
-# than extrapolating, since only these two points have been tuned. Add a row
-# and re-identify the curve here, not a new key elsewhere, when another wind
-# speed is tuned.
+# Wind-dependent winch-law parameters, interpolated linearly between rows and
+# CLAMPED outside the identified range rather than extrapolated. Read by
+# `winch_kv(v_wind)` and `winch_f_low(v_wind)`; each overrides the flat value of
+# the same name in data/wc_settings.yaml. Add a row and re-identify the curve
+# here, not a new key elsewhere, when another wind speed is tuned.
+#
+# kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 up to 9 m/s, rising to
+#          0.0558 at 10 m/s; only those two points have been tuned, so the rows
+#          at 3 and 4 m/s repeat 0.0408 to keep the curve flat below 9.
+#
+# f_low  — force floor [N] below which the LowerForceController reels in. It has
+#          to move with the wind because the winch's rating does not and the
+#          kite's force does (with the square of the wind speed), so one value
+#          cannot serve both ends: 350 N was sized for a 4000 N winch and is too
+#          low for this one from 4 m/s up, while 700 N takes over the run at
+#          3 m/s. Measured 2026-08-25 at 150 m:
+#
+#            v_wind  f_low  limiter share  max d    power   verdict
+#              3.0    350       20.6 %     5.54°    559 W   all 9 passed
+#              3.0    700       63.2 %     8.02°    675 W   FAILED max d
+#              4.0    700        1.1 %      —      2043 W   all 9 passed
+#
+#          The 3 m/s row is therefore 350 and everything from 4 m/s up is 700.
+#          NOT the entry guard's floor: that is `FC_Settings.entry_f_min`, which
+#          is bounded by what a DEPOWERED wing can pull and does not scale here.
 entries:
+  - v_wind: 3.0
+    kv: 0.0408
+    f_low: 350.0
+  - v_wind: 4.0
+    kv: 0.0408
+    f_low: 700.0
   - v_wind: 9.0
     kv: 0.0408
+    f_low: 700.0
   - v_wind: 10.0
     kv: 0.0558
+    f_low: 700.0

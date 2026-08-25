@@ -94,7 +94,7 @@ The optimal trajectory of the kite, the shape of the figure of eight, depends on
 """
 
 #%% code id=wind_speed_bind
-@bind wind_speed Slider(3:10; default=3, label="Wind speed [m/s]")
+@bind wind_speed Slider(3:10; default=3, label="Wind")
 
 #%% web id=pattern_plot controls=wind_speed
 @web(html"""
