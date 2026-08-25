@@ -264,8 +264,15 @@ rc = WinchController(rcs)
 stop_criteria = fcs.n_fig_eight > 0 ?
     @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
     @sprintf("%.0f m", fcs.reelout_l_max)
-@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %s.",
-               rcs.kv, stop_criteria)
+@info @sprintf("Winch: REEL_OUT mode — %s, stopping at %s.",
+               rcs.force_limit == "soft" ?
+                   @sprintf("soft force limit inverting kv = %.4f saturated at [%.0f, %.0f] N \
+                             (beta %.0e/%.0e, force filtered at tau = %.2f s); the \
+                             UpperForceController is held in reset",
+                            rcs.kv, rcs.f_low, rcs.f_high, rcs.softminus_beta,
+                            rcs.softplus_beta, rcs.force_limit_tau) :
+                   @sprintf("v_set = %.3f * sqrt(force)", rcs.kv),
+               stop_criteria)
 
 # Standalone force-floor guard for phases 0-2 (park/dive/hold) — deliberately
 # NOT `rc`. `WinchController`'s own SpeedController is ACTIVE (its integrator

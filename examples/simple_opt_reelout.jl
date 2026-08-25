@@ -275,12 +275,6 @@ PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection f
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind
-# Debug toggle: disables the RUNTIME UpperForceController only (`rc` below), by
-# building it from a copy of `wc_settings.yaml`'s f_high raised far out of reach.
-# `rcs`/`wc` itself is untouched, so `winch_from_wc(rcs)` still sends the
-# optimizer the f_high the file actually ships — this does not loosen what the
-# path is optimized for, only what the runtime winch is allowed to do with it.
-DISABLE_UFC = true
 @info "simple_opt_reelout.jl: project = $PROJECT, sim_time = $(isnothing(SIM_TIME) ? "default" : "$SIM_TIME s"), \
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
@@ -435,21 +429,19 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
 # used to need two files in two schemas, and since the merge they share one.
 # The file's `dt` is a placeholder; the plant's own timestep is the real one.
 rcs.dt = s.dt
-if DISABLE_UFC
-    rc_settings = deepcopy(rcs)
-    rc_settings.f_high = 1.0e6   # never trips; rcs itself keeps the real f_high
-    rc = WinchController(rc_settings)
-    @warn "DISABLE_UFC is set: the runtime UpperForceController will not engage \
-           at any force. The optimizer still solves under the real f_high = \
-           $(rcs.f_high) N — this is a runtime-only override."
-else
-    rc = WinchController(rcs)
-end
+rc = WinchController(rcs)
 stop_criteria = fcs.n_fig_eight > 0 ?
     @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
     @sprintf("%.0f m", fcs.reelout_l_max)
-@info @sprintf("Winch: REEL_OUT mode — v_set = %.3f * sqrt(force), stopping at %s.",
-               rcs.kv, stop_criteria)
+@info @sprintf("Winch: REEL_OUT mode — %s, stopping at %s.",
+               rcs.force_limit == "soft" ?
+                   @sprintf("soft force limit inverting kv = %.4f saturated at [%.0f, %.0f] N \
+                             (beta %.0e/%.0e, force filtered at tau = %.2f s); the \
+                             UpperForceController is held in reset",
+                            rcs.kv, rcs.f_low, rcs.f_high, rcs.softminus_beta,
+                            rcs.softplus_beta, rcs.force_limit_tau) :
+                   @sprintf("v_set = %.3f * sqrt(force)", rcs.kv),
+               stop_criteria)
 
 # Standalone force-floor guard for phases 0-2 (park/dive/hold)
 # `WinchController`'s own SpeedController is ACTIVE (its integrator
@@ -483,13 +475,13 @@ opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float
 """
     apply_optimized_kv!(tab, t, l)
 
-Move the winch gain the optimizer chose out of a `/trajectory` reply and into
-every `WCSettings` the run reads — `wc` for the entry guard and `rc.wcs` for the
-reel-out controller, which are the SAME object only when `DISABLE_UFC` is off —
-so the run flies the `k_v` the path was solved for. A reply that did not
-optimize the gain carries no `k_v` under
-`optimized_parameters` and this is then a no-op. A gain that ran into its own
-bracket is reported: the value is the edge of the box, not an optimum.
+Move the winch gain the optimizer chose out of a `/trajectory` reply and into the
+`WCSettings` the run reads, so it flies the `k_v` the path was solved for. `wc`,
+`rcs` and `rc.wcs` are one object, and every sub-controller of `rc` holds a
+reference to it, so a single assignment reaches all of them. A reply that did not
+optimize the gain carries no `k_v` under `optimized_parameters` and this is then a
+no-op. A gain that ran into its own bracket is reported: the value is the edge of
+the box, not an optimum.
 """
 function apply_optimized_kv!(tab, t, l)
     tos.optimize_k_v || return
@@ -506,12 +498,8 @@ function apply_optimized_kv!(tab, t, l)
                            to retune further than it was allowed, so this is the edge \
                            of the box rather than an optimum."
     end
-    wc.kv = k_v                      # `guard_lfc` reads this one
-    # `rc` holds a DEEPCOPY of `wc` whenever DISABLE_UFC raised `f_high` on a copy,
-    # and `calc_vro` reads the copy — so the gain must be written where the
-    # controller actually looks, not only where the summary reads it back. Its
-    # sub-controllers all share this one `wcs`, so a single assignment reaches them.
-    rc.wcs === wc || (rc.wcs.kv = k_v)
+    wc.kv = k_v
+    @assert rc.wcs === wc "the reel-out controller must read the WCSettings the gain is written to"
     # EVERY reply that carries a gain, not only the ones that moved it: the shape
     # of k_v across a run is what shows whether the optimizer is hunting, and the
     # step-held plot draws repeats correctly anyway.
@@ -2009,10 +1997,12 @@ try
                       0.0, 1.0) : 1.0
             # ...but the soft-start must not override the tether's own protection:
             # at 8 m/s ground wind the entry swoop drives the force to 10.7 kN
-            # (41 % over f_high) while the UpperForceController sits pinned at
+            # (41 % over f_high) while the force limiter sits pinned at
             # v_sat = 8 m/s and this ramp, still only 0.21 at t = 28.5 s, hands
             # the drum 1.7 m/s of it. An OPEN-LOOP timer beating a CLOSED-LOOP
-            # force limiter. Release the ramp in proportion to tether load
+            # force limiter — measured against the UpperForceController, and the
+            # soft law rails at v_sat above f_high in exactly the same way.
+            # Release the ramp in proportion to tether load
             # instead: inert below f_low (so the engagement transient the ramp
             # exists for is unchanged at 5-6 m/s, where the limiter never fires
             # during entry), fully bypassed at f_high. Continuous in the force,

@@ -3479,6 +3479,155 @@ meaningless until 0.25 is re-identified the same way. `c1` and `delay`
 
 ## REEL_OUT winch (`examples/simple_reelout.jl`)
 
+### `force_limit: "soft"` — buys the force, pays a limit cycle (2026-08-25)
+
+**Measured at 9 m/s. It works on force and it OSCILLATES.** Sustained overload
+collapses; the dead-steady reel-out speed does not survive. Shipped in
+`data/wc_settings.yaml` and left ON, because the force result is the larger of the
+two effects and the oscillation has an untested cheap fix — but read the numbers
+below before comparing any run from this date on against an earlier archived
+scenario.
+
+Run `output/archives/2026-08-25_221525`, against `output/scenarios/v09`. Clean
+like-for-like: 9 m/s, no turbulence on either side, same `k_v` 0.0408,
+`optimize_k_v` off in both, same 150 -> 380 m. The ONLY difference is the limiter.
+
+Mid-run window, 31 s of steady reel-out clear of the entry ring and the
+soft-stop — this is where the two laws actually differ:
+
+| | `"soft"` | v09 baseline (`"hard"`, UFC off) |
+|:--|--:|--:|
+| `v_ro` | 4.21 +- **1.10** m/s (2.05 .. 7.09) | 3.77 +- **0.05** m/s (3.62 .. 3.83) |
+| mean force | **7459** +- 1076 N | 8521 +- 188 N |
+| % of window over the plant's 8400 N | **13.0 %** | 73.7 % |
+| `v_ro` swing period | **2.63 s** | none |
+
+Whole run:
+
+| | `"soft"` | v09 |
+|:--|--:|--:|
+| peak force | 9166 N | 9418 N |
+| % of reeling window over 8400 N | **13.3 %** | 58.1 % |
+| measured power | 29279 W | 30260 W |
+| power ratio | 0.94 | 0.97 |
+| ringing `zeta` | **0.005** | 0.072 |
+| criteria | all 9 passed | all 9 passed |
+
+What it buys: the mean force falls 1062 N and time above the winch's RATING drops
+from three quarters of the window to an eighth. That is the thing the stage
+existed for and it is not a small effect.
+
+What it costs: the baseline held 3.77 +- 0.05 m/s — dead steady — and the soft law
+replaces that with a +-1.1 m/s limit cycle at a fixed 2.63 s period running the
+WHOLE mid-window. `zeta` 0.005 is undamped, not slowly-settling. Peak force barely
+moves (-2.7 %) because the oscillation manufactures its own peaks, and power is
+down 3.2 %. Every criterion still passes, because none of them scores this.
+
+Why, from the law's own local gain at the flown operating point:
+
+| force [N] | 6000 | 7000 | **7459** | 7900 | 7990 |
+|:--|--:|--:|--:|--:|--:|
+| `dv/dF` [(m/s)/kN] | 0.30 | 0.37 | **0.53** | 2.10 | 17.21 |
+| nominal `kv*sqrt(F)` | 0.26 | 0.24 | 0.24 | 0.23 | 0.23 |
+
+At 7459 +- 1076 N every lap sweeps from the flat region into the near-vertical one
+and back. `PlanWinchSpeed.md`'s own loop-gain table predicted exactly this ("soft
+law ... railed" at 9-10 m/s) before the code existed.
+
+Two levers checked and CLOSED for this:
+
+- **`softplus_beta` is not the fix.** A softer corner makes it WORSE at this
+  operating point, not better: `dv/dF` at 7459 N goes 0.53 -> 0.85 (5e-4) ->
+  1.29 (2.5e-4), because a wider corner starts bending earlier. Sharper keeps the
+  curve flat longer but goes vertical closer to `f_high`. Neither helps here, and
+  neither can move at all without stage 3.
+- **Raising `f_high`** would only move the knee, not remove it, and the plant's
+  rating is 8400 N.
+
+`optimize_k_v` stays OFF: this run does not clear it. A limiter that rings at
++-1.1 m/s is not the stable force cap that gate was waiting for.
+
+### `force_limit_tau` 1.0 -> 0.2 is CLOSED — it AMPLIFIES the ring (2026-08-25)
+
+Hypothesis, from the entry above: the 1 s force filter is the phase that closes
+the loop, since a first-order 1 s lag is 67 deg at the measured 2.63 s period.
+**Wrong, and wrong in a way worth keeping.** Run
+`output/archives/2026-08-25_223245`, same 9 m/s / no turbulence / `k_v` 0.0408 /
+`optimize_k_v` off as the other two. Mid-run window:
+
+| | `tau` 0.2 | `tau` 1.0 | v09 baseline (`"hard"`) |
+|:--|--:|--:|--:|
+| `v_ro` | 4.76 +- **2.12** m/s | 4.21 +- 1.10 m/s | 3.77 +- **0.05** m/s |
+| mean force | 6327 +- **2075** N | 7459 +- 1076 N | 8521 +- **188** N |
+| peak force in window | **9900** N | 9024 N | 8771 N |
+| % over the plant's 8400 N | 24.5 % | **13.0 %** | 73.7 % |
+| ring period | **3.55 s** | 2.63 s | none |
+
+Whole run: peak force **9900** N (vs 9166 at `tau` 1.0 and 9418 for the baseline —
+so this is the worst of the three), `v_ro` peak **8.09 m/s** i.e. hard against
+`v_sat`, power **27671 W** (vs 29279 and 30260), ratio 0.90 (vs 0.94, 0.97),
+`zeta` **0.001** (vs 0.005, 0.072). All 9 criteria still passed, which by now says
+more about the criteria than about the run.
+
+Worse on every axis, and the DIAGNOSTIC is the period: it went UP, 2.63 -> 3.55 s.
+If the filter's phase lag were setting the loop, taking lag out would raise the
+ring frequency. It fell. So the filter is not the destabilising phase — it is
+attenuating loop GAIN at the ring frequency, and removing it handed the loop that
+gain back. The 67 deg argument treated the low-pass as pure phase in an otherwise
+fixed loop and ignored that it also cuts magnitude, which was the dominant effect.
+
+Reverted to 1.0. Note the mean force falls monotonically as the filter shortens
+(8521 -> 7459 -> 6327 N) — the law really is shedding mean force, but it buys that
+with a limit cycle whose PEAKS are worse than the steady overload it replaced.
+`force_limit_tau` is therefore a real knob trading mean force against oscillation,
+just not in the direction the hypothesis assumed.
+
+What that leaves, in order:
+
+1. **`force_limit_tau` LONGER** (2-3 s), the direction the data actually points.
+   One run. The ceiling is the lap period (~8 s at 9 m/s): a filter approaching it
+   cannot track within-lap force at all, and the limiter stops limiting.
+2. **Lower `f_high`** — `PlanWinchSpeed.md` stage 2b item 3, feeding both the
+   request and the runtime law through `winch_from_wc` so the two move together.
+   NOT self-evidently a fix: the knee sits AT `f_high`, so lowering it moves the
+   knee down along with the operating point. It only helps if the optimizer
+   re-solves onto a path that pulls enough less that the mean lands below the new
+   `f_high` with margin. That is stage 2's premise and it is still untested.
+
+**How it works.** `WCSettings.force_limit` (WinchControllers, new; `"hard"` is the struct default
+and reproduces the old behaviour bit for bit) selects HOW the limits are
+enforced, orthogonally to `mode`, which selects the law's shape. Under `"soft"`
+the reel-out speed comes from `calc_vro_soft`, the exact inverse of the
+soft-saturating tension curve the trajectory optimizer already plans against, so
+the runtime winch and the optimizer's winch model are one law instead of two.
+The `UpperForceController` is held in reset for the whole run — it *is* the
+thing this replaces, and it is what `DISABLE_UFC` had been switching off by hand
+since it oscillated. `DISABLE_UFC` is gone.
+
+Three consequences worth knowing before reading a summary from this setting:
+
+- `winch_state.upper_force_pct` is **0 by construction**. State 2 cannot occur.
+  The `optimize_fig8.jl` side condition built on it is vacuous here.
+- The effective force FLOOR is not `f_low`. `1/softminus_beta` = 1000 N is larger
+  than `f_low` itself, so the smoothing dominates the limit it smooths: 700 N
+  acts as an 1103 N floor, and below that the law commands a standstill and hands
+  over to the `LowerForceController` (which stays — the soft law never reels in).
+- Above `f_high` the law commands `v_sat` flat out. Measured at 9 m/s the law does
+  pull the mean down to 7459 N, BELOW `f_high` — but with a 1076 N std, so it is
+  in and out of the rail every lap rather than pinned to it. That is the
+  operating-point problem of `PlanWinchSpeed.md` stage 2, which this does not
+  solve and was never going to.
+
+The force is low-passed (`force_limit_tau`, 1.0 s) before it is inverted, because
+`dv/dF` rises by roughly 50x over the last kN below `f_high` against a per-lap
+force std of order 1 kN. That filter is itself the prime suspect for the 2.63 s
+limit cycle above — the reason it exists and the reason it may have to shrink are
+the same number.
+
+Both `beta`s must equal the server's, which applies `setdefault(1e-3)` and does
+not read them off the wire — carrying them is stage 3 and is not done. Both sides
+say 1e-3 today; that agreement is a coincidence, not a contract.
+
 ### `optimize_k_v` is CLOSED until a force limiter runs (2026-08-25)
 
 Letting AWETrim solve for the winch gain (`TrajOptSettings.optimize_k_v`, sent as

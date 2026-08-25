@@ -338,6 +338,10 @@ by `examples/simple_reelout.jl`): `lower_force_pct` (state 0, the
 the `v_set = kv*sqrt(force)` law itself) and `upper_force_pct` (state 2, the
 `UpperForceController` capping the force at `WCSettings.f_high`).
 
+Under `WCSettings.force_limit = "soft"` the law itself is the upper limiter and
+the `UpperForceController` is held in reset, so `upper_force_pct` is then 0 for
+any log — read the force against `f_high` directly instead.
+
 Scored over the same window as [`reelout_power`](@ref) — the samples where the
 length setpoint was still growing — because `var_12` only means anything while
 the controller is being stepped: before reel-out engages it still reads whatever

@@ -27,7 +27,9 @@ but never ranked (`data/optimization.yaml` holds both limits):
   - **The upper force controller must never engage.** Its share of the reel-out
     window is `reelout.winch_state.upper_force_pct` in the run summary. A shape
     that pulls harder than `f_high` (`data/wc_settings.yaml`) has its power set by the force cap,
-    so what would be ranked is the limiter, not the shape.
+    so what would be ranked is the limiter, not the shape. VACUOUS under
+    `force_limit: "soft"`, where the law is the limiter and state 2 never occurs
+    — a sweep on that setting has to score the force against `f_high` itself.
   - **`pct_time_within_2pct_of_peak` ≤ 5 %.** The share of the settled window the
     steering command spends within 2 % of its own peak, i.e. clamped against
     `max_steering`. A shape only flyable at full steering has no margin left for

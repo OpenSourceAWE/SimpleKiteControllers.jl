@@ -80,3 +80,27 @@ wc_settings:
   damage_factor: 0.2       # winch damage weighting (unused here)               [-]
   jerk_factor:   0.9       # jerk weighting in the damage calculation (unused here) [-]
   kv:            0.0408    # v_set = kv * sqrt(force) 0.0408 for optimal performance [-]
+
+  # --- SPEED: how the force limits are enforced (PlanWinchSpeed.md, stage 4) --
+  # "soft" inverts the SAME saturating tension curve the trajectory optimizer
+  # plans against, so the runtime winch and the optimizer's winch model are one
+  # law rather than two. It replaces the UpperForceController, which is then held
+  # in reset for the whole run — it oscillated, and this is the structure that
+  # removes the switching it oscillated on. "hard" restores the two-limiter
+  # behaviour and is the struct default, so other projects are unaffected.
+  force_limit:      "soft" # "soft" | "hard"
+  softplus_beta:    0.001  # corner sharpness of the UPPER limit; larger = sharper [1/N]
+  softminus_beta:   0.001  # corner sharpness of the LOWER limit                   [1/N]
+                           # both MUST match the optimizer's, which defaults to 1e-3
+                           # and does not carry them on the wire yet (stage 3).
+                           # 1/beta = 1000 N > f_low, so the smoothing dominates the
+                           # limit it smooths: f_low 700 N acts as a 1103 N floor.
+  force_limit_tau:  2.48   # low-pass on the force before inverting; 0 = off        [s]
+                           # dv/dF rises ~50x over the last kN below f_high, against
+                           # a per-lap force std of ~1 kN at 9 m/s — that is why the
+                           # filter exists. Do NOT shorten it to damp the limit cycle:
+                           # 0.2 s was MEASURED worse on every axis (v_ro swing +-2.12
+                           # vs +-1.10 m/s, peak force 9900 vs 9166 N, power 27671 vs
+                           # 29279 W) and the ring got SLOWER, not faster. The filter
+                           # attenuates loop gain; it is not the destabilising phase.
+                           # See docs/fig8_tuning_log.md.

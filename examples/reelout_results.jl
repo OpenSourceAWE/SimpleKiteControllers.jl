@@ -655,8 +655,8 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
         "optimize_k_v" => (winch.optimize_k_v,
             "k_v sent as a design variable; the reply's value is then the one flown"),
-        # `rc.wcs`, not `rcs`: with DISABLE_UFC the controller reads a deepcopy, and
-        # the gain the RUN flew is the one in the object `calc_vro` looked at.
+        # `rc.wcs`: the gain the RUN flew is the one in the object the reel-out
+        # law actually read, not the one the summary would like it to be.
         "k_v_flown" => (round(rc.wcs.kv; digits = 5),
             isempty(opt_kv_log) ?
                 "k_v the run actually flew; == k_v, the optimizer did not move it" :
@@ -665,7 +665,15 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                          any(e -> e.at_bound, opt_kv_log) ?
                              "; one hit the bracket edge, widen it to chase further" : "")),
         "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
-        "f_max_N" => (winch.f_max, "maximum winch force sent [N]")))
+        "f_max_N" => (winch.f_max, "maximum winch force sent [N]"),
+        "force_limit" => (rc.wcs.force_limit,
+            rc.wcs.force_limit == "soft" ?
+                @sprintf("the reel-out law itself limits the force, inverting the \
+                          optimizer's own saturating tension curve (beta %.0e/%.0e, \
+                          force filtered at tau = %.2f s); the UpperForceController is \
+                          held in reset, so upper_force_pct is 0 by construction",
+                         rc.wcs.softminus_beta, rc.wcs.softplus_beta, rc.wcs.force_limit_tau) :
+                "bare kv*sqrt(force) with the two force controllers switching in at the limits")))
 
 # Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
 if t_sim > 0

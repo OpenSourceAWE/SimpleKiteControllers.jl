@@ -286,13 +286,17 @@ traj_opt:
     # reeling out faster sheds force — after the flat tuning measured 8394 N mean at
     # 9 m/s and 8150 N at 10 against f_max 8000 N. false keeps winch_kv(v_wind)'s
     # value fixed. A reply that hit the bracket edge is reported as k_v_at_bound.
-    # OFF since 2026-08-25, and it must stay off until a force limiter actually
-    # runs: the optimizer's model soft-caps force at f_max, the plant with
-    # DISABLE_UFC caps it nowhere, so the low k_v it chooses (0.0205, HALF the seed,
-    # for the first 43 s at 9 m/s) reels out slowly and lets force build to 12684 N
-    # against a winch rated 8400 — while COSTING power, 29581 W against 30260. See
-    # PlanWinchSpeed.md stage 2: stage 4's force_limit is a prerequisite for this,
-    # not a follow-up.
+    # OFF since 2026-08-25, and it must stay off until a force limiter has been
+    # MEASURED working: the optimizer's model soft-caps force at f_max, the plant
+    # then capped it nowhere, so the low k_v it chose (0.0205, HALF the seed, for
+    # the first 43 s at 9 m/s) reeled out slowly and let force build to 12684 N
+    # against a winch rated 8400 — while COSTING power, 29581 W against 30260.
+    # wc_settings.yaml's force_limit: "soft" is the limiter this was waiting on.
+    # Flown 2026-08-25 at 9 m/s: it cut time over the plant's 8400 N rating from
+    # 58 % to 13 % of the reeling window, but peak force only fell 9418 -> 9166 N
+    # and it rings at +-1.1 m/s (2.63 s limit cycle). Not stable enough to reopen
+    # this: a solver free to lower k_v under a limiter that already oscillates has
+    # MORE room to build force, not less. See PlanWinchSpeed.md stages 2 and 4.
     optimize_k_v: false      # let the optimizer choose k_v; false = fixed        [-]
     reopt_poll_interval: 0.5 # seconds between /status polls; simulated when
                              # reopt_blocking is false, wall-clock when true    [s]

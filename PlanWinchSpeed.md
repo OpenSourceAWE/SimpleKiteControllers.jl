@@ -288,6 +288,13 @@ not a follow-up.** Enabling `optimize_k_v` again is only defensible either after
 a working limiter, or paired with an `f_max` low enough that even an unlimited
 plant stays under 8400 N — a deliberate experiment, not a resting state.
 
+Stage 4 is now implemented, shipped and measured, and it does NOT clear this gate.
+At 9 m/s it cut time above the plant's 8400 N rating from 58 % of the reeling
+window to 13 %, but peak force only fell 9418 -> 9166 N and it rings at +-1.1 m/s.
+`optimize_k_v` needs a limiter that is STABLE, not merely present: a solver free to
+lower `k_v` under a limiter that already oscillates has more room to build force,
+not less. The gate stays a measured run with peak force under 8400 N.
+
 ### Stage 2b — candidate levers, once Stage 2 has a valid measurement
 
 1. **Widen `k_v_bounds`.** The factor-2 bracket bound for half the run. Add the
@@ -315,11 +322,81 @@ Without this the server's `setdefault(1e-3)` wins regardless of what is
 configured locally, and the controller's inverse silently biases if the server's
 default ever changes.
 
-### Stage 4 — `force_limit = "soft" | "hard"`
+### Stage 4 — `force_limit = "soft" | "hard"` — DONE and MEASURED (2026-08-25)
 
 New `WCSettings` key, separate from `mode`: `mode` selects the law's shape
 (`"piecewise"` / `"reelout"`), `force_limit` selects how the limits are
-enforced. `"hard"` is the default and reproduces today's behaviour exactly.
+enforced. `"hard"` is the struct default and reproduces today's behaviour
+exactly; `data/wc_settings.yaml` ships `"soft"`.
+
+Shipped in WinchControllers (local checkout, `0.6.0`):
+
+- `calc_vro_soft(wcs, force, f_low)` in `wc_components.jl`, the exact inverse of
+  the plan's forward law. Round-trips against an independently written forward
+  curve in `test/test_soft_limit.jl` (49 assertions), and reproduces the plan's
+  table to the digit: 1176.0 / 2520.4 / 5341.3 / 7506.7 N at 1 / 2 / 3 / 3.75 m/s,
+  883.2 N floor.
+- `calc_vro` is UNCHANGED and stays the nominal law. Both `v_sw` call sites read
+  it under either setting, which is what the implementation note demanded.
+- `WCSettings.force_limit`, `softplus_beta`, `softminus_beta`, `force_limit_tau`,
+  all at the end of the block.
+- `LowPass` in `components.jl`, the force filter, `tau = 0` a pass-through. It
+  lives in `CalcVSetIn` and only runs on the soft path.
+- The `UpperForceController` is held in reset by the `WinchController` constructor
+  under `"soft"` and its `nlsolve` is skipped every timestep. The
+  `LowerForceController` is untouched.
+- `WinchController` errors on `force_limit = "soft"` with `mode = "piecewise"`:
+  the inverse is of the reel-out law and means nothing against the other shape.
+
+And in this repo: `DISABLE_UFC` is gone from `examples/simple_opt_reelout.jl`
+(superseded — `rc` is now built from `rcs` itself, so the deepcopy that swallowed
+the optimized `k_v` cannot come back), the summary carries `winch.force_limit`,
+and `winch_state.upper_force_pct` is 0 by construction on this setting — noted at
+`fig8_metrics.jl`'s `winch_state_pct` and at `optimize_fig8.jl`'s side condition,
+which the setting makes vacuous.
+
+**Measured at 9 m/s** (`output/archives/2026-08-25_221525` against
+`output/scenarios/v09`; same wind, no turbulence either side, same `k_v`,
+`optimize_k_v` off in both — the limiter is the only difference). Full numbers in
+`docs/fig8_tuning_log.md`; the verdict is that it works on force and oscillates:
+
+| mid-run window, 31 s | `"soft"` | v09 (`"hard"`, UFC off) |
+|:--|--:|--:|
+| mean force | **7459** +- 1076 N | 8521 +- 188 N |
+| % over the plant's 8400 N | **13.0 %** | 73.7 % |
+| `v_ro` | 4.21 +- **1.10** m/s | 3.77 +- **0.05** m/s |
+| `v_ro` swing period | **2.63 s** | none |
+
+Whole run: peak force 9166 N (was 9418), 13.3 % of the reeling window over 8400 N
+(was 58.1), power 29279 W (was 30260, -3.2 %), ringing `zeta` 0.005 (was 0.072),
+all 9 criteria passed both times.
+
+So the section "Why this alone will not stop the oscillation" was right, and is now
+measured. The soft law removed the sustained overload — that part is a big, real
+win — and relocated the fight into a +-1.1 m/s limit cycle at a fixed 2.63 s
+period, running the whole window rather than switching on and off. Peak force
+barely moved, because the oscillation makes its own peaks.
+
+The mechanism is the law's own local gain: `dv/dF` is 0.53 (m/s)/kN at the flown
+7459 N mean against the nominal law's 0.24, 2.1 at 7900 N and 17.2 at 7990 N, so a
+1076 N std sweeps through the near-vertical region every lap.
+
+`softplus_beta` is NOT the lever — a softer corner raises `dv/dF` at this operating
+point (0.53 -> 0.85 at 5e-4 -> 1.29 at 2.5e-4) because it starts bending earlier.
+
+**`force_limit_tau: 0.2` was tried and is CLOSED** (2026-08-25,
+`output/archives/2026-08-25_223245`). The idea was that the 1 s filter supplied the
+phase closing the loop. It did the opposite: `v_ro` swing +-2.12 m/s (from +-1.10),
+peak force 9900 N (from 9166, and worse than the baseline's 9418), `v_ro` peak
+8.09 m/s hard against `v_sat`, power 27671 W (from 29279), `zeta` 0.001. The
+diagnostic is that the ring got SLOWER (2.63 -> 3.55 s): the filter was attenuating
+loop GAIN, not adding the destabilising phase. Reverted to 1.0.
+
+Left, in order: **`force_limit_tau` LONGER** (2-3 s — the direction the data points,
+bounded by the ~8 s lap period), then **stage 2b item 3, lowering `f_high`**. The
+second is not self-evident either: the knee sits AT `f_high`, so lowering it moves
+the knee down with the operating point, and it only helps if the optimizer re-solves
+onto a path that pulls enough less to leave margin.
 
 ## Implementation notes
 
