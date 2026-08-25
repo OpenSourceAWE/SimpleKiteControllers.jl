@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Utility functions for pattern and time-series plotting — extracted from
-simple_reelout_plots.jl to enable batch processing in create_plots.jl while
-keeping the interactive script's structure intact.
+Utility functions for pattern, time-series, power and aerodynamics plotting —
+extracted from simple_reelout_plots.jl to enable batch processing in
+create_plots.jl while keeping the interactive script's structure intact.
 """
 
 # These imports are assumed to be available in the including script's context
@@ -199,6 +199,155 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
             L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8},~5=\mathrm{final}",
         ],
         fig = replace(fig_name, "Reel-out" => project_name) * " – time series",
+        disp = disp,
+    )
+    return p
+end
+
+"""
+    plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                       project::Union{Nothing, AbstractString} = nothing,
+                       log_name::Union{Nothing, AbstractString} = nothing,
+                       opt_depower_log = nothing) -> Figure
+
+Plot the winch power panels (`F_tether`, `v_reelout`, their product
+`P_mech = F * v_ro` and its running integral `E_mech`) for a scenario in
+`scenario_dir`. The legends carry the scores from `reelout_power`: mean power
+and energy over the reel-out window, and the whole-run energy `E_mech` ends
+on. Loads the flight log the same way `plot_pattern_scenario` does — see its
+docstring for `project`/`log_name`/`disp` semantics. Pass `opt_depower_log`
+(as recorded by `simple_opt_reelout.jl`) to add a fifth panel comparing flown
+`rel_depower` against the optimizer's own depower.
+"""
+function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                             project::Union{Nothing, AbstractString} = nothing,
+                             log_name::Union{Nothing, AbstractString} = nothing,
+                             opt_depower_log = nothing)
+    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
+
+    if isnothing(log_name)
+        arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
+        isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
+        log_name = replace(only(arrow_files), ".arrow" => "")
+    end
+    syslog = load_log(log_name; path = scenario_dir)
+    sl = syslog.syslog
+
+    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "")
+
+    rng = 2:length(sl.time)
+
+    f_tether = getindex.(sl.winch_force[rng], 1)
+    v_ro = getindex.(sl.v_reelout[rng], 1)
+    # Sign included: reeling in against the tether is negative mechanical power.
+    p_mech = f_tether .* v_ro ./ 1000
+    # Running integral of the SAME series, so the curve ends on `energy_run`.
+    dt_log = Float64(sl.time[2]) - Float64(sl.time[1])
+    e_mech = cumsum(p_mech) .* dt_log
+    # Mean and the two totals; the window is the one `reelout_power` scores.
+    pm = reelout_power(sl)
+    p_label = isnothing(pm) ? L"P_{\mathrm{mech}}" :
+              latexstring("\\overline{P}_{\\mathrm{reel-out}} = " *
+                          string(round(pm.mean_power / 1000, digits = 1)) *
+                          "~\\mathrm{kW~over~}" *
+                          string(round(pm.duration, digits = 1)) * "~\\mathrm{s}")
+    e_label = isnothing(pm) ? L"E" :
+              latexstring("E_{\\mathrm{run}} = " *
+                          string(round(pm.energy_run / 1000)) * "~\\mathrm{kJ},~" *
+                          "E_{\\mathrm{reel-out}} = " *
+                          string(round(pm.energy / 1000)) * "~\\mathrm{kJ}")
+    panels = Any[f_tether, v_ro, p_mech, e_mech]
+    ylabels = Any[
+        L"F_{\mathrm{tether}}~[\mathrm{N}]",
+        L"v_{\mathrm{ro}}~[\mathrm{m/s}]",
+        L"P_{\mathrm{mech}}~[\mathrm{kW}]",
+        L"E_{\mathrm{mech}}~[\mathrm{kJ}]",
+    ]
+    labels = Any[
+        nothing,
+        nothing,
+        p_label,
+        e_label,
+    ]
+    if !isnothing(opt_depower_log) && !isempty(opt_depower_log)
+        t_dp = Float64[e.t for e in opt_depower_log]
+        u_dp = Float64[e.u_p_equiv for e in opt_depower_log]
+        # Right-continuous step hold: the optimizer's value applies from the
+        # reopt that produced it until the next one.
+        idx = searchsortedlast.(Ref(t_dp), Float64.(sl.time[rng]))
+        u_p_opt = [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
+        push!(panels, [Float64.(sl.var_14[rng]), u_p_opt])
+        push!(ylabels, L"u_d~[-]")
+        push!(labels, [L"\mathrm{flown}", L"\mathrm{optimizer~(equiv.)}"])
+    end
+
+    p = plotx(
+        sl.time[rng],
+        panels...;
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 16,
+        ylabels = ylabels,
+        labels = labels,
+        fig = replace(fig_name, "Reel-out" => project_name) * " – power",
+        disp = disp,
+    )
+    return p
+end
+
+"""
+    plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                              project::Union{Nothing, AbstractString} = nothing,
+                              log_name::Union{Nothing, AbstractString} = nothing) -> Figure
+
+Plot the aerodynamics panels (angle of attack at centre vs. span-mean, L/D of
+the wing vs. effective, and apparent vs. kite speed) for a scenario in
+`scenario_dir`. Loads the flight log the same way `plot_pattern_scenario`
+does — see its docstring for `project`/`log_name`/`disp` semantics.
+"""
+function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = true,
+                                    project::Union{Nothing, AbstractString} = nothing,
+                                    log_name::Union{Nothing, AbstractString} = nothing)
+    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
+
+    if isnothing(log_name)
+        arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
+        isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
+        log_name = replace(only(arrow_files), ".arrow" => "")
+    end
+    syslog = load_log(log_name; path = scenario_dir)
+    sl = syslog.syslog
+
+    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "")
+
+    rng = 2:length(sl.time)
+
+    # Written out rather than `norm.` so this function needs no LinearAlgebra import.
+    v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
+
+    p = plotx(
+        sl.time[rng],
+        [rad2deg.(Float64.(sl.AoA[rng])), Float64.(sl.var_09[rng])],
+        [Float64.(sl.var_15[rng]), Float64.(sl.var_16[rng])],
+        [Float64.(sl.v_app[rng]), v_kite];
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        legendsize = 20,
+        ylabels = [
+            L"\alpha~[°]",
+            L"L/D~[-]",
+            L"v~[\mathrm{m/s}]",
+        ],
+        labels = [
+            [L"\alpha_{\mathrm{centre}}", L"\alpha_{\mathrm{span~mean}}"],
+            [L"\mathrm{wing}", L"\mathrm{effective}"],
+            [L"v_{\mathrm{app}}", L"|v_{\mathrm{kite}}|"],
+        ],
+        fig = replace(fig_name, "Reel-out" => project_name) * " – aerodynamics",
         disp = disp,
     )
     return p
