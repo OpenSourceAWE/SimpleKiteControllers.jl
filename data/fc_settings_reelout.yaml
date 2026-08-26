@@ -71,7 +71,7 @@ fc_settings:
   depower_blend_time: 2.5      # Seconds over which `rel_depower` ramps to a new phase-ladder target
                                # instead of stepping to it. `0` restores the hard switch.     [s]
   reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
-  reelout_softstop:   2.0      # Linear decel trigger at the OTHER end; being tuned
+  reelout_softstop:   1.5      # Linear decel trigger at the OTHER end; being tuned
                                # against the power undershoot — see the log        [s]
   reelout_delay:      4.2      # Wait after phase 3 before reel-out starts          [s]
   reelout_f_trigger:  7000.0   # force that releases reel-out EARLY, ignoring the delay [N]
@@ -164,7 +164,7 @@ fc_settings:
   # force_limit: "soft", where calc_vro_soft reads f_high live, and it moves the
   # STARTUP request's f_max with it, since that is the path lap 1 flies.
   first_lap_force_frac: 1.0    # f_high x this during the first figure of eight    [-]
-  v_app_abort:        45.0     # Stop the run above this apparent wind speed      [m/s]
+  v_app_abort:        55.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]
   # 6.5 since 2026-08-18, down from 10: an externally optimized path descends lower
   # than the lemniscate does, because AWETrim constrains HEIGHT (>= 50 m) and not

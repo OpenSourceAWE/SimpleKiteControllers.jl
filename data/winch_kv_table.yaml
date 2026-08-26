@@ -33,6 +33,19 @@
 #          before power starts falling fast. 0.1122 is UNSAFE, not just a worse
 #          trade: v_app hit the 45 m/s overspeed guard and the run aborted.
 #
+#          12 m/s has NO row: it is currently OUT OF ENVELOPE, and kv is not
+#          the fix. Measured 2026-08-26, +-5/10 % around the clamped 0.0738 —
+#          EVERY run hit the v_app overspeed guard (>45 m/s) and aborted before
+#          2.5-3 of the intended laps, `stop_reason: "none"` in all five. Raising
+#          kv still traded force for power the same way it did at 11 m/s
+#          (%>8400N 34.9 %->6.2 % from 0.0664->0.0812), but none of those runs
+#          completed, so the numbers describe a truncated flight, not a steady
+#          one. v_app_ref is already exceeded by +22-23 % at 12 m/s (+20 % at
+#          11); the next lever is the PATTERN/depower (v_app_ref itself, or
+#          more depower at high wind), not the winch law. Until that is fixed,
+#          12 m/s clamps to the 11 m/s row — untested, and likely still too
+#          fast, but there is no measurement yet that says otherwise.
+#
 # f_low  — force floor [N] below which the LowerForceController reels in. It has
 #          to move with the wind because the winch's rating does not and the
 #          kite's force does (with the square of the wind speed), so one value
@@ -97,5 +110,9 @@ entries:
     force_limit: "soft"
   - v_wind: 11.0
     kv: 0.0738
+    f_low: 700.0
+    force_limit: "soft"
+  - v_wind: 12.0
+    kv: 0.0812
     f_low: 700.0
     force_limit: "soft"
