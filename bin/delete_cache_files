@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Delete the V3Kite cache files: the compiled model binary (model_*.bin), the
-# settled-geometry binaries (settled_*.bin) and the settling log
+# settled-geometry files (settled_*.bin, settled_*.arrow) and the settling log
 # (settle_particle_dynamics_wing.arrow). They are pure caches - the next run
 # regenerates them, at the price of one model compilation plus one settling run
 # per configuration.
@@ -21,7 +21,7 @@
 #   - the scratchspace keyed by V3Kite's UUID, used by a Pkg-INSTALLED V3Kite
 #   - data/ of a local V3Kite checkout, used by a `dev`ed V3Kite, plus data/ of
 #     this repository
-# Only the three cache patterns are removed; other .arrow files in those
+# Only these cache patterns are removed; other .arrow files in those
 # directories are simulation output and are left alone.
 #
 # Usage: bin/delete_cache_files [path-to-checkout]
@@ -96,6 +96,7 @@ for dir in "${DIRS[@]}"; do
         N_VICTIMS=$((N_VICTIMS + 1))
     done < <(find "$dir" -maxdepth 1 -type f \
         \( -name 'model_*.bin' -o -name 'settled_*.bin' \
+           -o -name 'settled_*.arrow' \
            -o -name 'settle_particle_dynamics_wing.arrow' \
            -o -name '*.bin.error.log' \) -print0)
 done
