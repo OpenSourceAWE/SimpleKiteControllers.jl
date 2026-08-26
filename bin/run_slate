@@ -1,0 +1,92 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+#
+# Start/stop the Kaimon Slate notebook server as a background service.
+#
+# Usage: bin/run_slate [start|stop|restart|help]
+#
+# The server serves the notebooks/ directory at http://127.0.0.1:8765/
+# (override with SLATE_HUB_URL). The PID is stored in output/slate.pid and
+# the log in output/slate.log.
+
+set -u
+
+if [[ $(basename "$(pwd)") == "bin" ]]; then
+    cd ..
+fi
+
+PID_FILE="output/slate.pid"
+LOG_FILE="output/slate.log"
+NOTEBOOKS_DIR="notebooks"
+
+is_running() {
+    [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+start_server() {
+    if is_running; then
+        echo "Slate already running (PID $(cat "$PID_FILE"))."
+        return 0
+    fi
+    rm -f "$PID_FILE"
+    mkdir -p output
+    # KaimonSlate lives in its own app environment, not in this project.
+    SLATE_ENV="${SLATE_ENV:-$HOME/.julia/environments/apps/KaimonSlate}"
+    julia --project="$SLATE_ENV" -e "using KaimonSlate; KaimonSlate.serve_notebook(\"$NOTEBOOKS_DIR\")" \
+        > "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    # First start may need to precompile; give it more than 2 s before
+    # declaring failure, but keep is_running as the liveness check.
+    for _ in $(seq 1 30); do
+        kill -0 "$(cat "$PID_FILE")" 2>/dev/null || break
+        sleep 1
+    done
+    if is_running; then
+        echo "Slate started (PID $(cat "$PID_FILE")), log: $LOG_FILE."
+        echo "Open your web browser at http://127.0.0.1:8765/"
+    else
+        echo "Slate failed to start — see $LOG_FILE:" >&2
+        tail -n 20 "$LOG_FILE" >&2
+        rm -f "$PID_FILE"
+        return 1
+    fi
+}
+
+stop_server() {
+    if ! is_running; then
+        echo "Slate is not running."
+        rm -f "$PID_FILE"
+        return 0
+    fi
+    local pid
+    pid=$(cat "$PID_FILE")
+    kill "$pid"
+    for _ in $(seq 1 20); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.5
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid"
+    fi
+    rm -f "$PID_FILE"
+    echo "Slate stopped."
+}
+
+usage() {
+    echo "Usage: bin/run_slate [start|stop|restart|help]"
+    echo ""
+    echo "Commands:"
+    echo "  start    start the Kaimon Slate notebook server in the background"
+    echo "  stop     stop a running server"
+    echo "  restart  stop, then start again"
+    echo "  help     show this message"
+}
+
+case "${1:-help}" in
+    start)   start_server ;;
+    stop)    stop_server ;;
+    restart) stop_server; start_server ;;
+    help|-h|--help) usage ;;
+    *) echo "Unknown command: $1" >&2; usage; exit 1 ;;
+esac
