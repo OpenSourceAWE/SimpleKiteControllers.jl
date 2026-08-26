@@ -51,7 +51,7 @@ wc_settings:
                             # does NOT ramp v_set, see reelout_softstart's docstring [s]
   t_blend:       0.25      # blending time of the 3-channel mixer               [s]
   v_sat_error:   1.0       # input saturation of the speed controller        [m/s]
-  v_sat:         3.8       # reel-out speed limit; also step!'s speed_limit  [m/s]
+  v_sat:         3.5       # reel-out speed limit; also step!'s speed_limit  [m/s]
   v_ri_max:      8.0       # maximal reel-in speed                           [m/s]
   p_speed:       0.125     # P value of the speed controller                    [-]
   i_speed:       4.0       # I value of the speed controller                    [-]
