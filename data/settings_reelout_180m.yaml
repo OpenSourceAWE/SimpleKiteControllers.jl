@@ -58,7 +58,7 @@ kcu:
 tether:
   # Bosch et al. 2014 used k = AE/L = 4.52E3 N/m for the bridles of the V3
   # Bosch et al. 2014 used C = 251.7 Ns/m for bridles of the V3
-  d_tether: 4.0      # tether diameter [mm]
+  d_tether: 8.0      # tether diameter [mm]
   cd_tether: 1.1     # was: 0.958; drag coefficient of the tether
   damping: 473.0     # unit damping coefficient        [Ns]
   c_spring: 614600.0 # unit spring constant coefficient [N]
