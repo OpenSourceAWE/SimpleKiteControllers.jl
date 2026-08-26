@@ -41,7 +41,7 @@ Click on one of the labels to show an additional column group, ctrl+click to des
 #%% web id=columns_toggle controls=columns
 @web(html"""
 <!-- reads overview_df so this cell runs after overview_table, not just after the checkboxes -->
-<span hidden>{{ nrow(overview_df) }}</span>
+<span hidden>{{ size(overview_df, 1) }}</span>
 """,
 css"""
 /* the exported table's own wrapper has no scroll of its own — mirrors the live table's .st-scroll */
@@ -274,6 +274,9 @@ These results were achieved using the following research software:
 kite model of the V3 kite of TU Delft. It was developed by Jelle Poland, Rotterdam, The Netherlands and Bart van de Lint, Delft, The Netherlands, 2026
 """
 
+# ╔═╡ Slate.env · notebook packages (auto-maintained — manage via the package panel)
+#   DataFrames 1.8.2 a93c6f00-e57d-5684-b7b6-d8193f3e46c0
+# ╚═╡
 # ╔═╡ Slate.config · per-notebook settings (Settings panel)
 #   docid = b94b3a69-a369-4ec8-bcb0-c8230e4ff1d3
 # ╚═╡
