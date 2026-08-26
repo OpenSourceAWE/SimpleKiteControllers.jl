@@ -146,17 +146,27 @@ struct DepowerReply
 end
 
 """
-Total offset [rel_depower units] between the two models at equal power, measured
-2026-08-18 (`docs/steering_depower.md`): V3Kite (VSM) needed 0.12 MORE `rel_depower`
-than AWETrim's ROM for the same power (slopes -15.2 vs -17.8 per unit, matched at
-6538 W: u_p = 0.2915 against u_p = 0.1699), of which 0.08 (0.4 m of tape) was the two
-models' own tape-length zero (`0.6 + 5*u_p` here, `0.2 + 5*u_p` in V3Kite) and 0.04
-(0.2 m) genuine, unexplained aerodynamic disagreement — a single measured point, not
-a fitted curve. The constant below has since been lowered to 0.107 (2026-08-21,
-commit `ee1ecbd`); that revision has not been re-measured or re-derived against the
-split above.
+Total offset [rel_depower units] between the two models at equal power,
+recalibrated 2026-08-26 by sweeping the offset in steps while rerunning
+`simple_opt_reelout.jl` at 6 m/s (8 mm tether, predictor at AWETrim `a745914`):
+
+| offset | measured − predicted [W] | power_ratio |
+|--------|--------------------------|-------------|
+| 0.105  | −578                     | 0.92        |
+| 0.100  | −68                      | 0.99        |
+| 0.0985 | +67                      | 1.01        |
+| 0.095  | +451                     | 1.06        |
+
+Linear to first order (~0.14 ratio per 0.005); zero crossing at offset
+≈ 0.0992. Calibrated value: **0.099**, one run each, single wind. The earlier
+history: 0.12 measured 2026-08-18 (`docs/steering_depower.md`, VSM needing
+0.12 more rel_depower than the ROM for equal power, of which 0.08 was the two
+tape-length zeros and 0.04 genuine aero disagreement), lowered to 0.107 by
+commit `ee1ecbd` without re-measurement, then (post-8 mm tether) to this
+value. RE-MEASURE after any change to either model's depower axis or aero:
+the response is steep, ~150 W measured per 0.001 here.
 """
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.105
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.099
 
 """
     awetrim_depower_to_v3kite(l_dp) -> Float64
@@ -164,8 +174,8 @@ const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.105
 Convert an AWETrim `l_dp` [m] (`input_depower`, `l_dp = 0.6 + 5*u_p`) into the
 V3Kite `rel_depower` expected to fly at the SAME power, i.e. `(l_dp - 0.6)/5 +
 `[`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref). This is the FULL correction — do not
-also subtract the 0.4 m calibration offset separately, it is already inside the
-0.12.
+also subtract the 0.4 m calibration offset separately, it is already inside
+the original 0.12 split (0.08 tape zero + 0.04 aero).
 """
 awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
 
