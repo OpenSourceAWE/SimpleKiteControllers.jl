@@ -7,7 +7,8 @@ Export the running `results` KaimonSlate notebook and publish it to the
 
 Runs `export_html.jl` (needs the `results` notebook already open and served — see its own
 docstring), copies the result over `docs/index.html` in a SimulationResults checkout, then
-commits and pushes it there. The checkout path defaults to `../../SimulationResults` next to
+commits and pushes it there. If no Slate server answers, it is started first with
+`bin/run_slate start`. The checkout path defaults to `../../SimulationResults` next to
 this package; override with the `SIMRESULTS_REPO` environment variable. Does nothing beyond
 the export if `docs/index.html` comes out byte-identical to what is already committed.
 
@@ -33,15 +34,63 @@ isdir(joinpath(SIMRESULTS_REPO, ".git")) ||
 notebook = get(ENV, "SLATE_NOTEBOOK", "results")
 hub_url = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765")
 state_url = "$hub_url/api/$notebook/state"
+open_url = "$hub_url/api/open"
 
-state = try
+fetch_body(url) = try
     io = IOBuffer()
-    Downloads.download(state_url, io)
+    Downloads.download(url, io)
+    String(take!(io))
+catch
+    nothing
+end
+
+post_json(url, body) = try
+    io = IOBuffer()
+    Downloads.request(url; method = "POST",
+                      headers = Dict("Content-Type" => "application/json"),
+                      input = IOBuffer(body), output = io)
     String(take!(io))
 catch e
-    error("Could not reach the `$notebook` notebook at $state_url — open it in Kaimon Slate " *
-          "first. Underlying error: $e")
+    error("POST $url failed: $e")
 end
+
+notebook_path = normpath(joinpath(@__DIR__, "$notebook.jl"))
+
+# Start the Slate server via bin/run_slate if it is not reachable yet.
+reachable = fetch_body(state_url) !== nothing || fetch_body("$hub_url/api/version") !== nothing
+if !reachable
+    run_slate = normpath(joinpath(@__DIR__, "..", "bin", "run_slate"))
+    isfile(run_slate) || error("Slate not reachable at $hub_url and no $run_slate found.")
+    println("Slate not reachable — starting it with bin/run_slate ...")
+    run(`$run_slate start`)
+    # Wait until the hub answers (up to ~120 s; first start compiles KaimonSlate).
+    for _ in 1:120
+        sleep(1)
+        if fetch_body("$hub_url/api/version") !== nothing
+            global reachable = true
+            break
+        end
+    end
+end
+reachable ||
+    error("Started Slate but the hub is still not reachable at $hub_url.")
+
+# The hub may be up without this notebook open (e.g. the Kaimon slate extension's
+# shared hub) — open it via the API instead of asking the user to do it.
+if fetch_body(state_url) === nothing
+    println("Notebook `$notebook` not open on the hub — opening $(notebook_path) ...")
+    reply = post_json(open_url, "{\"path\":$(repr(notebook_path))}")
+    occursin("\"id\"", reply) ||
+        error("Could not open `$notebook` on the hub at $hub_url — reply: $reply")
+end
+
+# Run all cells so every cell reports fresh (publish refuses stale notebooks).
+println("Running all cells of `$notebook` ...")
+post_json("$hub_url/api/$notebook/run", "")
+
+state = fetch_body(state_url)
+state === nothing &&
+    error("Could not reach the `$notebook` notebook at $state_url after opening it.")
 
 cell_states = [m.captures[1] for m in eachmatch(r"\"state\":\"(\w+)\"", state)]
 isempty(cell_states) &&

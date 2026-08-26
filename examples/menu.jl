@@ -56,6 +56,7 @@ const EXAMPLES = [
     "optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
     "create_overview.jl      - write SimulationResults/scenarios/overview.md across wind speeds" => "create_overview.jl",
+    "publish.jl              - export the results notebook and push it to the SimulationResults site" => "../notebooks/publish.jl",
     "plot_powercurve.jl      - plot mean reel-out power vs wind speed across archived scenarios" => "plot_powercurve.jl",
 ]
 
