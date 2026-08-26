@@ -5,8 +5,33 @@
 # here, not a new key elsewhere, when another wind speed is tuned.
 #
 # kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 up to 9 m/s, rising to
-#          0.0558 at 10 m/s; only those two points have been tuned, so the rows
-#          at 3 and 4 m/s repeat 0.0408 to keep the curve flat below 9.
+#          0.0558 at 10 m/s and 0.0738 at 11 m/s; only those three points have
+#          been tuned, so the rows at 3 and 4 m/s repeat 0.0408 to keep the
+#          curve flat below 9.
+#
+#          11 m/s needed its own row: force_limit_tau does almost nothing there
+#          (measured 2026-08-26, tau 2.48 -> 3.49 at the clamped kv 0.0558 —
+#          v_ro std only 1.60 -> 1.55 m/s, %>8400N stuck at 38-40 %), because
+#          `calc_vro_soft` pins the command at v_sat once force >= f_high
+#          regardless of kv, and at 11 m/s the run spends ~40 % of its time
+#          there — a duty-cycle problem tau cannot filter away. kv is the lever
+#          that actually works, by reeling out faster BEFORE force reaches
+#          f_high so less of the run falls into that pinned region. Sweep at
+#          tau 2.48 (150 -> 380 m, no turbulence):
+#
+#            kv      mean F   std F   peak F   %>8400N  power    verdict
+#            0.0558   7884 N  1468 N  10615 N   40.4 %  46354 W  all 9 passed
+#            0.0642   7840 N   792 N  10075 N   18.3 %  46776 W  FAILED phase 5
+#            0.0738   7299 N   691 N   9771 N    5.1 %  44975 W  all 9 passed
+#            0.0849   6600 N   706 N   9829 N    4.2 %  42188 W  all 9 passed
+#            0.0976   5867 N   788 N   9086 N    1.4 %  38874 W  all 9 passed
+#            0.1122   5275 N  1103 N   9038 N    1.2 %  35401 W  FAILED — overspeed
+#                                                                  abort, run diverged
+#
+#          0.0738 shipped: force std roughly halves and the over-rating duty
+#          cycle drops 40.4 % -> 5.1 % for a 3 % power cost — the best point
+#          before power starts falling fast. 0.1122 is UNSAFE, not just a worse
+#          trade: v_app hit the 45 m/s overspeed guard and the run aborted.
 #
 # f_low  — force floor [N] below which the LowerForceController reels in. It has
 #          to move with the wind because the winch's rating does not and the
@@ -68,5 +93,9 @@ entries:
     force_limit: "soft"
   - v_wind: 10.0
     kv: 0.0558
+    f_low: 700.0
+    force_limit: "soft"
+  - v_wind: 11.0
+    kv: 0.0738
     f_low: 700.0
     force_limit: "soft"
