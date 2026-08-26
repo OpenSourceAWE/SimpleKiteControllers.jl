@@ -73,7 +73,7 @@ fc_settings:
   reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
   reelout_softstop:   2.0      # Linear decel trigger at the OTHER end; being tuned
                                # against the power undershoot — see the log        [s]
-  reelout_delay:      4.0      # Wait after phase 3 before reel-out starts          [s]
+  reelout_delay:      4.2      # Wait after phase 3 before reel-out starts          [s]
   reelout_f_trigger:  7000.0   # force that releases reel-out EARLY, ignoring the delay [N]
                                # The delay trades harvest for settling, which is the wrong
                                # trade while the entry swoop is loading the tether: the
