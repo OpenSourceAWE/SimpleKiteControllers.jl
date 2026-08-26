@@ -246,6 +246,32 @@ multi-modal, so the guess is a choice about the answer.
     """
     turn_radius_lap_reelout_m = 0.0
     """
+    Corrected startup re-solves allowed when the first reply falls short of
+    [`min_feasibility_margin`](@ref). Each is a warm `/step` under a raised turn
+    radius — the same solve under a better-measured constraint, never a different
+    seed. `0` flies the first short path straight to the gates, as before
+    2026-08-26; `2` costs at most two extra converged solves (~3 s each).
+    """
+    startup_retries_max = 2
+    """
+    First-attempt target margin of a startup retry, as this multiple of the
+    INSTALLED path's measured margin. Combined with [`startup_retry_slack`](@ref)
+    into `max(startup_retry_step * margin, startup_retry_slack *
+    min_feasibility_margin)`; `1.05` keeps the historical fixed +5 % step.
+    """
+    startup_retry_step = 1.05
+    """
+    Floor on every retry's target margin, as a factor on
+    [`min_feasibility_margin`](@ref): the request never aims at or below the very
+    number the gate accepts. Aiming exactly AT the gate lost the rounding on
+    2026-08-26 — 0.82 targeted, 0.8199 delivered, refused — while aiming far above
+    it overshoots, because replies land wider than asked (2026-08-21: 0.72 ->
+    0.90 against a 0.82 target) and a wider pattern risks ground clearance.
+    `1.03` leaves ~3 % of daylight. Raise it if retries converge from below more
+    than once or twice.
+    """
+    startup_retry_slack = 1.03
+    """
     Ground clearance [m] the returned path must have at the tether length it is
     flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
 

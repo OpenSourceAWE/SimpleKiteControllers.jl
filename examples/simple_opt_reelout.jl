@@ -770,81 +770,154 @@ isnothing(opt_r_min) ||
                    maximum(Float64.(opt_table["table"]["distance_radial"])),
                    tos.turn_radius_headroom)
 
-# ---- One corrected retry of the STARTUP solve -------------------------- #
+# ---- Corrected retries of the STARTUP solve ---------------------------- #
 # The startup request is the only one that goes out with an ASSUMED reel-out per
 # lap (`turn_radius_lap_reelout_m`); the ratio is now MEASURED, off the reply that
 # just landed. When the assumption was short the installed path is one the run
 # flies below its own gate — measured 2026-08-20 at 150 m: 9.20 m asked for where
 # 11.23 m was right, 11.91 m delivered, and 0.90 of margin at the anchor.
 #
-# So: one warm `/step` at the same length under the corrected radius, and only when
-# the installed path is short of `min_feasibility_margin`. Not a different SEED —
-# the startup deliberately never retries with one of those, since a guess that
-# merely converges is a different optimum flown silently — the same solve under the
-# constraint it should have carried. A retry that fails or comes back no better
-# changes nothing: the first path stays installed and the gates below judge it as
-# they always did.
+# So: up to `tos.startup_retries_max` warm `/step` solves at the same length,
+# while the installed path falls short. Never a different SEED — a guess that
+# merely converges is a different optimum flown silently — always the same solve
+# under an increasingly well-measured constraint. Since 2026-08-26 the loop is
+# closed and scores the whole gate set:
 #
-# The retry asks for margin_startup*1.05, not the full min_feasibility_margin: the
-# request already carries `turn_radius_headroom` on top of the target, so jumping
-# straight to the gate's margin overshoots it at the reply (measured 2026-08-21,
-# 150 m: 0.72 -> 0.90 against a target of 0.82) and the wider turn radius narrows
-# the installed pattern enough to fail ground clearance instead. A 5 % step keeps
-# the correction close to what was actually missing.
+#   * attempt 1 asks for max(startup_retry_step * margin, startup_retry_slack *
+#     min_feasibility_margin), converted to metres as usual; any later attempt
+#     scales the PREVIOUS REQUEST by target/measured, clamped to [1.0,
+#     RETRY_GAIN_MAX] — the solver's response is measured, not guessed;
+#   * targets stay a few percent ABOVE the gate (aiming exactly at it lost the
+#     rounding on 2026-08-26: 0.82 aimed, ~0.8199 flown, refused) but no higher,
+#     because replies overshoot their target (2026-08-21: 0.72 -> 0.90);
+#   * every candidate is scored against elevation floor, ground clearance AND
+#     curvature; one that buys margin by dropping below a floor stops the loop —
+#     wider cannot recover clearance;
+#   * the first fully-clearing candidate is flown; absent one, the best strict
+#     improvement that still clears the floors; failures leave the incumbent
+#     installed unchanged.
+const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
+
 if opt_r_on && !isnothing(coeffs_startup)
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
                                             c1 = coeffs_startup.c1, prn = false).margin
     if margin_startup < tos.min_feasibility_margin
-        margin_retry_target = min(1.05 * margin_startup, tos.min_feasibility_margin)
-        opt_r_min_retry = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                                  margin = margin_retry_target)
-        @info @sprintf("The startup path is at margin %.2f, below \
-                        min_feasibility_margin = %.2f: re-solving once at L = %.1f m \
-                        under the corrected turn radius (%.2f m, was %.2f m), \
-                        targeting margin %.2f (+5 %%).",
-                       margin_startup, tos.min_feasibility_margin, l_set,
-                       opt_r_min_retry,
-                       opt_r_min / opt_r_scale *
-                           (1 + turn_radius_reel / l_set) *
-                           tos.turn_radius_headroom,
-                       margin_retry_target)
-        t_retry = time()
-        try
-            retry_result = opt_step(StepParams(; length = l_set,
-                                               winch_params = winch_first_lap,
-                                               min_turn_radius = opt_r_min_retry);
-                                    url = tos.base_url)
-            retry_table = opt_trajectory(; url = tos.base_url)
-            retry_raw = install_optimized_path!(retry_result)
-            margin_retry = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                                  c1 = coeffs_startup.c1,
-                                                  prn = false).margin
-            if margin_retry > margin_startup
-                global opt_result = retry_result
-                global opt_table = retry_table
-                # Only here: the retry is flown solely when it beats the startup
-                # margin, so its gain must not move `wc.kv` when it is discarded.
-                apply_optimized_kv!(retry_table, 0.0, l_set)
-                global opt_downloops = retry_table["spline"]["downloops"]
-                global opt_power_pred = Float64(retry_table["metrics"]["avg_power_W"])
-                global opt_paths_raw = [retry_raw]
-                global opt_r_scale = reelout_anchor_ratio(retry_table) *
-                                     tos.turn_radius_headroom
-                global opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
-                @info @sprintf("Startup re-solve: margin %.2f -> %.2f, predicted power \
-                                %.0f W, %.1f s of wall time.",
-                               margin_startup, margin_retry, opt_power_pred,
-                               time() - t_retry)
-            else
-                install_optimized_path!(opt_result)   # put the first path back
-                @info @sprintf("Startup re-solve gave margin %.2f, no better than \
-                                %.2f — keeping the first path (%.1f s).",
-                               margin_retry, margin_startup, time() - t_retry)
+        # All three startup gates, on whatever path sits in `fec` right now.
+        # Scoring the WHOLE set — not curvature alone — is what stops a widening
+        # retry from trading ground clearance for turn margin unnoticed.
+        el_floor_start = fcs.min_elevation + tos.candidate_elevation_margin
+        score_installed() = begin
+            margin = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+                                            c1 = coeffs_startup.c1, prn = false).margin
+            el_ok = minimum(fec.el_path) >= el_floor_start
+            height = NaN
+            clr_ok = true
+            if tos.min_height > 0
+                clr = check_pattern_height(fec, l_tether, tos.min_height; prn = false)
+                height = clr.height
+                clr_ok = clr.ok
             end
-        catch exc
-            exc isa HTTP.StatusError && exc.status == 422 || rethrow()
-            @warn "The corrected startup re-solve was refused; flying the first \
-                   path." exception = exc
+            (; margin, el_ok, clr_ok, height,
+               ok = margin >= tos.min_feasibility_margin && el_ok && clr_ok)
+        end
+        incumbent_score = score_installed()
+        inc_result, inc_table, inc_raw = opt_result, opt_table, opt_paths_raw[1]
+        r_asked = NaN                        # turn radius whose reply was asked last
+        m_reply = incumbent_score.margin     # measured margin of that reply
+        t_retries = time()
+        for attempt in 1:max(Int(tos.startup_retries_max), 0)
+            # Top-level soft scope: these are script globals written inside the
+            # loop; without the declaration each becomes a fresh local and the
+            # carried-over state (`m_reply`'s last measurement, the incumbent)
+            # would be lost or undefined between attempts.
+            global opt_result, opt_table, opt_downloops, opt_power_pred
+            global opt_paths_raw, opt_r_scale, opt_r_min
+            global incumbent_score, inc_result, inc_table, inc_raw
+            global r_asked, m_reply
+            target = max(tos.startup_retry_step * m_reply,
+                         tos.startup_retry_slack * tos.min_feasibility_margin)
+            # Attempt 1 corrects the ASSUMED lap reel-out of the original request;
+            # later ones scale the previous REQUEST by target/measured, clamped so
+            # one converged solve can move the ask by at most RETRY_GAIN_MAX.
+            prev_ask = attempt == 1 ?
+                       opt_r_min / opt_r_scale * (1 + turn_radius_reel / l_set) *
+                       tos.turn_radius_headroom : r_asked
+            r_ask = attempt == 1 ?
+                    min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                            margin = target) :
+                    r_asked * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
+            @info @sprintf("The startup path is at margin %.3f, below \
+                            min_feasibility_margin = %.2f: retry %d/%d at L = %.1f m \
+                            under a corrected turn radius (%.2f m, was %.2f m), \
+                            targeting margin %.3f.",
+                           incumbent_score.margin, tos.min_feasibility_margin,
+                           attempt, Int(tos.startup_retries_max), l_set, r_ask,
+                           prev_ask, target)
+            t_attempt = time()
+            local att_result, att_table, att_raw, att_score
+            try
+                att_result = opt_step(StepParams(; length = l_set,
+                                                 winch_params = winch_first_lap,
+                                                 min_turn_radius = r_ask);
+                                      url = tos.base_url)
+                att_table = opt_trajectory(; url = tos.base_url)
+                att_raw = install_optimized_path!(att_result)
+                att_score = score_installed()
+            catch exc
+                exc isa HTTP.StatusError && exc.status == 422 || rethrow()
+                @warn "Startup retry $attempt was refused; flying the incumbent." exception = exc
+                break
+            end
+            @info @sprintf("Startup retry %d measured: margin %.3f%s, lowest point \
+                            %.1f m (floor %.0f m), elevation %s, predicted power \
+                            %.0f W, %.1f s.",
+                           attempt, att_score.margin,
+                           att_score.ok ? " clearing all gates" : "",
+                           att_score.height, tos.min_height,
+                           att_score.el_ok ? "ok" : "BELOW FLOOR",
+                           Float64(att_table["metrics"]["avg_power_W"]),
+                           time() - t_attempt)
+            takes_over = att_score.ok ||
+                         (att_score.el_ok && att_score.clr_ok &&
+                          att_score.margin > incumbent_score.margin)
+            if !takes_over && att_score.margin > incumbent_score.margin &&
+               (!att_score.el_ok || !att_score.clr_ok)
+                install_optimized_path!(inc_result)     # incumbent stays flown
+                @warn @sprintf("Startup retry %d reached margin %.3f but dropped \
+                                below a floor (clearance %s, elevation %s); wider \
+                                cannot recover clearance — retries stop here.",
+                               attempt, att_score.margin,
+                               att_score.clr_ok ? "ok" : "MISSED",
+                               att_score.el_ok ? "ok" : "MISSED")
+                break
+            elseif takes_over
+                incumbent_score = att_score
+                inc_result, inc_table, inc_raw = att_result, att_table, att_raw
+                apply_optimized_kv!(inc_table, 0.0, l_set)
+                # Only adoption moves these: a discarded retry must leave every
+                # piece of `opt_*` state the run reads downstream untouched.
+                opt_result = inc_result
+                opt_table = inc_table
+                opt_downloops = inc_table["spline"]["downloops"]
+                opt_power_pred = Float64(inc_table["metrics"]["avg_power_W"])
+                opt_paths_raw = [inc_raw]
+                opt_r_scale = reelout_anchor_ratio(inc_table) *
+                              tos.turn_radius_headroom
+                opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+                if att_score.ok
+                    @info @sprintf("Startup path clears the gates at margin %.3f \
+                                    after %d solves (%.1f s of wall time).",
+                                   incumbent_score.margin, attempt, time() - t_retries)
+                    break
+                end
+                @info "Kept retry $attempt as the best-so-far; trying again."
+            else
+                install_optimized_path!(inc_result)     # put the incumbent back
+                @info @sprintf("Startup retry %d gave margin %.3f, no better than \
+                                %.3f — keeping the incumbent.",
+                               attempt, att_score.margin, incumbent_score.margin)
+            end
+            r_asked, m_reply = r_ask, att_score.margin
         end
     end
 end

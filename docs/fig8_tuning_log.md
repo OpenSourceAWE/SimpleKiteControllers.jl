@@ -4195,3 +4195,50 @@ unchanged since it already carries 9-30 s of margin there (measured at
 the underlying LowerForceController stalling means more sim_time should let
 3 m/s finish, but does not make the run efficient, and a longer stall episode
 than the one measured could still leave it short.
+
+### Startup retries: one open-loop 5 % re-solve becomes a closed loop that scores every gate (2026-08-26)
+
+The 10 m/s run of this date died at the install gate after BOTH margins printed
+"0.82": the corrected single retry had been accepted because its margin beat the
+startup's — by an epsilon too small for `%.2f` to show (~0.8199 against the
+0.82 gate) — and `reelout_feasibility.jl` then refused what was flown. Three
+defects compounded there: acceptance meant "better than before" rather than
+"clears the gate"; the target capped at EXACTLY `min_feasibility_margin`, a
+zero-slack aim against finite-difference noise; and the whole thing was one
+guessed `+5 %` step, even though the previous solve had just MEASURED how much
+margin a given ask buys.
+
+The replacement keeps the founding principle — never a different seed, always
+the same solve under an increasingly well-measured constraint — and fixes the
+mechanics:
+
+- Targets never sit at or below the gate: `max(startup_retry_step * margin,
+  startup_retry_slack * min_feasibility_margin)` with defaults 1.05 / 1.03.
+  Aiming at the bar loses the rounding (this date's evidence); overshooting far
+  risks ground clearance, which the scorer below now catches directly instead
+  of being prevented only by timidity.
+- Attempt 1 converts the target to metres as before. Any later attempt scales
+  the PREVIOUS REQUEST by `target/measured`, clamped per attempt to [1.0,
+  1.15] — closed-loop on the reply's own response, not another percentage off
+  the same wrong assumption.
+- Every candidate is scored against ALL three startup gates (elevation floor,
+  ground clearance via `check_pattern_height`, curvature margin) rather than
+  curvature alone. A candidate that buys margin while dropping below a floor is
+  reverted AND ends the loop — wider cannot recover clearance.
+- Adoption: first fully-clearing candidate wins outright; otherwise the best
+  strict improvement over the incumbent that still clears the floors. Anything
+  else leaves the incumbent installed and untouched (`opt_*` state included).
+- Budget: `tos.startup_retries_max = 2` warm `/step` solves beyond the
+  original, i.e. at most ~7 s of extra blocking pre-loop at today's server
+  latency (3.4 s measured for the equivalent re-solve).
+
+New `TrajOptSettings` fields: `startup_retries_max` (0 restores old
+single-shot behaviour), `startup_retry_step`, `startup_retry_slack`; the
+1.15 gain clamp is script-local (`RETRY_GAIN_MAX`), mechanics not tuning.
+Margins in the retry logs now print to three decimals so another 0.0005
+defeat cannot hide again.
+
+Status: syntax-checked, YAML round-trip verified (shipped `traj_opt.yaml`
+carries none of the new keys and falls back to these defaults); NOT yet
+flown. The 2 pre-existing failures in `test_fig8_controller.jl` reproduce on
+clean HEAD and are unrelated.
