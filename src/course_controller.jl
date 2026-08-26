@@ -82,6 +82,11 @@ default, matching [`FigureEightSettings`](@ref).
     entry_depower = 0.34
     "Depower flown once phase 5 (\"final\", reel-out finished) is reached [-]"
     depower_final = 0.328
+    """
+    Seconds over which `rel_depower` ramps to a new phase-ladder target
+    instead of stepping to it. `0` restores the hard switch.
+    """
+    depower_blend_time = 4.0
 end
 
 """
@@ -106,7 +111,7 @@ function CourseControllerSettings(fcs::FC_Settings; dt)
         dive_el_margin = fcs.dive_el_margin, el_center = fcs.el_center,
         fig8_d_gate = fcs.fig8_d_gate,
         depower_setpoint = fcs.depower_setpoint, entry_depower = fcs.entry_depower,
-        depower_final = fcs.depower_final)
+        depower_final = fcs.depower_final, depower_blend_time = fcs.depower_blend_time)
 end
 
 """
@@ -135,13 +140,21 @@ mutable struct CourseController
     w_course::Float64
     "[rad] regulated error (`psi_prime - chi_cmd`) of the last `calc_steering` call"
     err::Float64
+    "Phase-ladder depower TARGET of the last `calc_steering` call, `NaN` before the first one"
+    depower_target::Float64
+    "[-] depower value the current blend started from"
+    depower_from::Float64
+    "[s] sim time the current depower blend started"
+    depower_t0::Float64
+    "[-] rel_depower actually commanded (post-blend) of the last `calc_steering` call"
+    depower_cmd::Float64
 end
 
 function CourseController(ccs::CourseControllerSettings)
     pid = DiscretePID(; K = ccs.heading_p, Ti = ccs.heading_i, Td = ccs.heading_d,
                       N = ccs.heading_d_n, Ts = ccs.dt,
                       umin = -ccs.max_steering, umax = ccs.max_steering)
-    CourseController(ccs, pid, 0, NaN, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    CourseController(ccs, pid, 0, NaN, 0, 0.0, 0.0, 0.0, 0.0, 0.0, NaN, NaN, NaN, NaN)
 end
 
 """
@@ -193,9 +206,10 @@ The feedback angle ψ' blends `heading` and `course` by `v_kite` [m/s] between
 scheduled by `v_app` [m/s] as `K = heading_p * v_app_ref / max(v_app, v_app_min)`,
 and by phase (`entry_gain` below 3, full gain from 3); the PID output is
 bypassed to `0.0` at `phase == 0` (park), though it is still stepped so
-engagement stays bumpless. `rel_depower` is `ccs.entry_depower` during the
-dive and hold, `ccs.depower_final` at phase 5, `ccs.depower_setpoint`
-otherwise.
+engagement stays bumpless. `rel_depower`'s TARGET is `ccs.entry_depower`
+during the dive and hold, `ccs.depower_final` at phase 5, `ccs.depower_setpoint`
+otherwise; a target change ramps `rel_depower` to it over `ccs.depower_blend_time`
+(`0` steps instead), rather than at the phase-ladder's own boundary.
 
 `chi_cmd`, the limiter weight, ψ', the blend weight and the regulated error
 are left on `cc` as [`chi_cmd`](@ref CourseController)/`w_lim`/`psi_prime`/
@@ -259,12 +273,25 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     else
         cc.pid(0.0, err, 0.0)
     end
-    rel_depower = if phase == 1 || phase == 2
+    depower_target = if phase == 1 || phase == 2
         ccs.entry_depower
     elseif phase == 5
         ccs.depower_final
     else
         ccs.depower_setpoint
     end
+    if isnan(cc.depower_target)
+        # Bootstrap: nothing has flown yet, so there is no value to ramp from.
+        cc.depower_from = depower_target
+        cc.depower_t0 = t
+    elseif depower_target != cc.depower_target
+        cc.depower_from = cc.depower_cmd
+        cc.depower_t0 = t
+    end
+    cc.depower_target = depower_target
+    w_dp = ccs.depower_blend_time > 0 ?
+           clamp((t - cc.depower_t0) / ccs.depower_blend_time, 0.0, 1.0) : 1.0
+    rel_depower = (1 - w_dp) * cc.depower_from + w_dp * depower_target
+    cc.depower_cmd = rel_depower
     return rel_steering, rel_depower, phase
 end

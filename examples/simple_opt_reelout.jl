@@ -519,9 +519,11 @@ function apply_optimized_kv!(tab, t, l)
     end
     wc.kv = k_v
     @assert rc.wcs === wc "the reel-out controller must read the WCSettings the gain is written to"
-    # EVERY reply that carries a gain, not only the ones that moved it: the shape
-    # of k_v across a run is what shows whether the optimizer is hunting, and the
-    # step-held plot draws repeats correctly anyway.
+    # EVERY accepted install that carries a gain, not only the ones that moved
+    # it: the shape of k_v across a run is what shows whether the optimizer is
+    # hunting, and the step-held plot draws repeats correctly anyway. A
+    # rejected or retried candidate never reaches this function at all — see
+    # the call site in the accept gate.
     push!(opt_kv_log, (; t, l, k_v, at_bound))
     return
 end
@@ -580,9 +582,10 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 # One row per depower value the optimizer reports back (startup solve, each
-# reopt), for the run summary and the power plot: `t` [s], `l_dp` [m] on
-# AWETrim's own scale, and `u_p_equiv`, the V3Kite `rel_depower` expected to fly
-# at the same power (`awetrim_depower_to_v3kite`, docs/steering_depower.md).
+# ACCEPTED reopt — a rejected or retried candidate is never logged here), for
+# the run summary and the power plot: `t` [s], `l_dp` [m] on AWETrim's own
+# scale, and `u_p_equiv`, the V3Kite `rel_depower` expected to fly at the same
+# power (`awetrim_depower_to_v3kite`, docs/steering_depower.md).
 opt_depower_log = NamedTuple[]
 # What phase 4 flies when `tos.fly_opt_depower` is on, kept in step with
 # `opt_depower_log`'s latest `u_p_equiv`; falls back to the fixed setpoint
@@ -899,6 +902,9 @@ stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN =
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
+reelout_started = false     # true once the gate below has opened; LATCHED, never re-closes
+reelout_start_t = NaN       # [s] time it opened; the soft-start ramp counts from here
+reelout_trigger_fired = false # true if the FORCE trigger opened it, not the timer
 reelout_done = false        # true once either stop criterion has ended reel-out
 stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
@@ -996,6 +1002,12 @@ el_min_extra = 0.0
 blend_from = nothing
 blend_to = nothing
 blend_t0 = NaN
+# Same mechanism, scalar, for the optimizer's rel_depower override: ramps over
+# tos.path_blend_time instead of stepping the instant a reply lands.
+depower_flown = depower_flown_opt    # current blended output
+depower_blend_from = depower_flown
+depower_blend_to = nothing
+depower_blend_t0 = NaN
 
 """
     blend_folds(az0, el0, az1, el1) -> Bool
@@ -1048,9 +1060,24 @@ try
             dmin, tangent = path_tangent(fec))
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Overrides calc_steering's fixed fcs.depower_setpoint with the optimizer's
-        # own converted depower, kept current by the push!(opt_depower_log, ...)
-        # sites above; phase 5 below still wins with fcs.depower_final.
-        tos.fly_opt_depower && phase == 4 && (rel_depower = depower_flown_opt)
+        # own converted depower, ramped over tos.path_blend_time same as a path
+        # install; phase 5 below still wins with fcs.depower_final.
+        if tos.fly_opt_depower && phase == 4
+            # The entry ladder's own depower (already in `rel_depower`) is the
+            # FROM endpoint the first time this fires, so the 3->4 hand-over
+            # ramps too, not just a later reopt's update.
+            if phase_before != 4 && isnothing(depower_blend_to)
+                global depower_blend_from = rel_depower
+                global depower_blend_to = depower_flown_opt
+                global depower_blend_t0 = t
+            end
+            local w_dp = isnothing(depower_blend_to) ? 1.0 :
+                clamp((t - depower_blend_t0) / tos.path_blend_time, 0.0, 1.0)
+            global depower_flown = isnothing(depower_blend_to) ? depower_flown_opt :
+                (1 - w_dp) * depower_blend_from + w_dp * depower_blend_to
+            w_dp >= 1.0 && (global depower_blend_to = nothing)
+            rel_depower = depower_flown
+        end
         # Separate from the ladder inside calc_steering so it can fire the SAME
         # step as a 3->4 transition: reel-out finishing does not wait for settling.
         if phase in (3, 4) && reelout_done
@@ -1511,11 +1538,11 @@ try
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = opt_trajectory(; url = tos.base_url)
-                        let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
-                            global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
-                            push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
-                        end
-                        apply_optimized_kv!(tab, t, l_now)
+                        # k_v and input_depower are read back and applied only in the
+                        # accept gate below, from whichever `tab` passes it: reading
+                        # them here moved both onto a candidate that could still be
+                        # rejected or retried, leaving a rejected reply's values
+                        # applied with nothing to revert them.
                     # The whole prospective blend to a converged reply is checked
                     # (`blend_folds`) before it is ever installed, and a folded one
                     # is not flown at all: a fresh reply is requested instead,
@@ -1621,11 +1648,9 @@ try
                                 break
                             end
                             tab = opt_trajectory(; url = tos.base_url)
-                            let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
-                                global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
-                                push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
-                            end
-                            apply_optimized_kv!(tab, t, l_now)
+                            # See the comment at the first `tab = opt_trajectory(...)`
+                            # above: k_v and input_depower are applied only in the
+                            # accept gate below, from whichever `tab` passes it.
                         end
                         # Re-measure the anchor correction for the NEXT request off
                         # the reply that just landed: the lap's reel-out is a
@@ -1897,6 +1922,17 @@ try
                             # draws these as what it flew, undistorted.
                             push!(opt_paths_raw, cand_raw)
                             global blend_t0 = t
+                            # k_v and input_depower move only for the `tab` that made
+                            # it here: a candidate rejected or spent on a retry above
+                            # must not leave either applied with nothing to revert it.
+                            let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
+                                global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
+                                global depower_blend_from = depower_flown
+                                global depower_blend_to = depower_flown_opt
+                                global depower_blend_t0 = t
+                                push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
+                            end
+                            apply_optimized_kv!(tab, t, l_now)
                             # What went in, which is the target only when the
                             # spread survived the gate above; the remainder stays
                             # in `el_delta` for the in-air route to retry.
@@ -2020,8 +2056,27 @@ try
         # reelout_l_max. Once it does, l_set simply stops growing and the rest of
         # the run is flown exactly like the constant-length example.
         local v_set = 0.0
-        if phase >= 3 && t - transition_start >= fcs.reelout_delay &&
-           !reelout_done
+        # The gate LATCHES: `reelout_f_trigger` opens it early when the entry swoop
+        # loads the tether, and once open it never re-closes — the force it fired
+        # on is the force the winch is about to shed, so a re-closing gate would
+        # lock the drum again mid-excursion.
+        if phase >= 3 && !reelout_started
+            by_timer = t - transition_start >= fcs.reelout_delay
+            by_force = winch_force(s) >= fcs.reelout_f_trigger
+            if by_timer || by_force
+                global reelout_started = true
+                global reelout_start_t = t
+                global reelout_trigger_fired = by_force && !by_timer
+                by_force && !by_timer &&
+                    @info @sprintf("  ... reel-out released EARLY at t = %.1f s by \
+                                    force %.0f N >= %.0f N (%.1f s before the \
+                                    %.1f s delay would have).",
+                                   t, winch_force(s), fcs.reelout_f_trigger,
+                                   transition_start + fcs.reelout_delay - t,
+                                   fcs.reelout_delay)
+            end
+        end
+        if reelout_started && !reelout_done
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
             # docs/fig8_tuning_log.md.
@@ -2030,9 +2085,11 @@ try
             # force limiters) sees the true v_raw throughout, only the value
             # handed to l_set/v_ff is scaled. `t_startup` does not do this — see
             # its docstring in `src/fc_settings.jl`.
+            # From when the gate OPENED, not from transition_start + reelout_delay:
+            # identical to within one step on the timer path, and correct when the
+            # force trigger opened it early instead.
             ramp = fcs.reelout_softstart > 0 ?
-                clamp((t - transition_start - fcs.reelout_delay) / fcs.reelout_softstart,
-                      0.0, 1.0) : 1.0
+                clamp((t - reelout_start_t) / fcs.reelout_softstart, 0.0, 1.0) : 1.0
             # ...but the soft-start must not override the tether's own protection:
             # at 8 m/s ground wind the entry swoop drives the force to 10.7 kN
             # (41 % over f_high) while the force limiter sits pinned at

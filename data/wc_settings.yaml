@@ -127,3 +127,13 @@ wc_settings:
                            # 29279 W) and the ring got SLOWER, not faster. The filter
                            # attenuates loop gain; it is not the destabilising phase.
                            # See docs/fig8_tuning_log.md.
+  force_limit_tau_rise: .nan # same low-pass while the force is RISING; NaN = symmetric [s]
+                           # SYMMETRIC, and a fast attack is CLOSED. 0.25 s (against
+                           # 2.48 s falling) was measured at 10 m/s and lost on every
+                           # count: the limit cycle came BACK (v_ro std 0.11 -> 1.38 m/s,
+                           # zeta 0.096 -> 0.009), power fell 37864 -> 35682 W (-5.8 %),
+                           # and the per-lap excursions it was aimed at got WORSE
+                           # (max 8618 -> 8799 N, steady window 0.0 -> 2.2 % over 8400).
+                           # Same mechanism as force_limit_tau 0.2: the filter stabilises
+                           # the loop by ATTENUATING GAIN, and a fast attack hands that
+                           # gain back on every rising half-cycle. See the tuning log.

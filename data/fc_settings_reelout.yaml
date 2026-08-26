@@ -68,10 +68,22 @@ fc_settings:
   n_fig_eight:        0        # Laps after which reel-out stops; 0 = length only [-]
   depower_final:      0.35     # Flown from phase 5 (final), once l_max is reached; tuned
                                # to hold ~3458 N, the reel-out mean force — see the log   [-]
+  depower_blend_time: 2.5      # Seconds over which `rel_depower` ramps to a new phase-ladder target
+                               # instead of stepping to it. `0` restores the hard switch.     [s]
   reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
   reelout_softstop:   2.0      # Linear decel trigger at the OTHER end; being tuned
                                # against the power undershoot — see the log        [s]
   reelout_delay:      4.0      # Wait after phase 3 before reel-out starts          [s]
+  reelout_f_trigger:  6500.0   # force that releases reel-out EARLY, ignoring the delay [N]
+                               # The delay trades harvest for settling, which is the wrong
+                               # trade while the entry swoop is loading the tether: the
+                               # winch is commanded to exactly ZERO until it expires, so
+                               # no force limiter is running at all. Measured at 10 m/s:
+                               # force was 9811 N when the timer released the drum and
+                               # peaked at 12365 N (47 % over the plant's 8400 N rating).
+                               # 5000 N fires ~1.0 s early there and is inert at 6 m/s and
+                               # below, where the entry never reaches it — so a normal run
+                               # still gets its full settling delay. Inf disables it.
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
   chi_dive:           -95.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]

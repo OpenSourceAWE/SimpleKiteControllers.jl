@@ -158,6 +158,25 @@ Add new findings there, not here.
     delaying further only shortens the run's harvest.
     """
     reelout_delay = 0.0
+    """
+    Force [N] at which reel-out engages REGARDLESS of `reelout_delay`, latching
+    once and never re-closing. `Inf` (the default) disables it, leaving reel-out
+    purely on the timer.
+
+    `reelout_delay` trades harvest for settling, which is a fair trade at moderate
+    load and a bad one when the entry swoop is loading the tether: the winch is
+    commanded to exactly zero while the force builds, so no force limiter of any
+    kind is running. Measured at 10 m/s with `reelout_delay` 4.0 s: force reached
+    9811 N by the moment the timer released the drum and peaked at 12365 N 0.8 s
+    later, 47 % over the plant's 8400 N rating. That peak is untouchable by winch
+    tuning — `force_limit`, `force_limit_tau` and a fast attack were all measured
+    and none of them moves it, because the controller has no output at all until
+    this gate opens.
+
+    Set it below the force the entry reaches but above anything a settled pattern
+    produces, so a normal run still gets its full settling delay.
+    """
+    reelout_f_trigger = Inf
 
     # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
     """
@@ -454,6 +473,12 @@ Add new findings there, not here.
     changing the tape there would inject the transient the park exists to decay.
     """
     entry_depower = 0.34
+    """
+    Seconds over which `rel_depower` ramps to a new phase-ladder target
+    (`entry_depower`, `depower_setpoint` or `depower_final`) instead of
+    stepping to it, in [`calc_steering`](@ref). `0` restores the hard switch.
+    """
+    depower_blend_time = 4.0
 
     # ---- Feedback: heading when slow, course when fast, on |vel_kite| ------- #
     "[m/s] at/below: pure heading feedback"
