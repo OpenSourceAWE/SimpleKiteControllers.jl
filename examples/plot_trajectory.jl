@@ -32,11 +32,13 @@ using LaTeXStrings
 
 const TRAJ_DIR = joinpath(@__DIR__, "..", "trajectories")
 
+TRAJ_FILE = "startup_retry3_2026-08-27_1700.yaml"
+
 isdir(TRAJ_DIR) || error("No trajectories folder at $TRAJ_DIR — nothing has been saved yet.")
 
 # The newest saved trajectory, unless the caller pinned one.
 traj_file = if @isdefined(TRAJ_FILE)
-    TRAJ_FILE
+    joinpath(TRAJ_DIR, TRAJ_FILE)
 else
     files = filter(f -> endswith(f, ".yaml"), readdir(TRAJ_DIR; join = true))
     isempty(files) && error("No .yaml files in $TRAJ_DIR.")
