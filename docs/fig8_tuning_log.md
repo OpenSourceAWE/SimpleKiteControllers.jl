@@ -4242,3 +4242,43 @@ Status: syntax-checked, YAML round-trip verified (shipped `traj_opt.yaml`
 carries none of the new keys and falls back to these defaults); NOT yet
 flown. The 2 pre-existing failures in `test_fig8_controller.jl` reproduce on
 clean HEAD and are unrelated.
+
+## sim_time budget at wind-speed overrides — why 10 m/s never reached phase 5 (2026-08-27)
+
+`EFFECTIVE_SIM_TIME` scaled the project's 150 s by `default_v_wind / WIND_SPEED`,
+i.e. it assumed reel-out speed grows linearly with wind. It does, up to ~9 m/s:
+the winch law is `v_set = kv*sqrt(force)` and tension keeps rising. At 10 m/s the
+drum saturates at `v_sat = 3.5`, so measured whole-window reel speed STOPPED
+growing (3.29 m/s at v09 vs 3.30 m/s at v10) while the budget kept shrinking
+another 10 %. Result: 90 s budget, reeling covers only 217 of the needed 230 m,
+`stop_reason: "none"`, criteria FAILED "phase 5 reached". Not a one-off: the
+archived v10 shows the identical signature (368.8 m, none). Both ends of the
+sweep failed the same way (3 m/s got 474 s via BELOW_DEFAULT_EXPONENT=1.66 and
+still came up short at 369.4 m).
+
+**Fix (option 2): physics-based budget above a knot.** At or above
+`V_BUDGET_KNOT = 6.0` m/s:
+
+    T = BUDGET_ENTRY_S + (l_max - l_start)/(REEL_MARGIN * v_reel) + BUDGET_TAIL_S
+
+with `v_reel = min(kv(w)*sqrt(F_BUDGET_COEF*w²), v_sat)` evaluated against the
+table-interpolated `winch_kv` and the file's own `wc_settings.v_sat` (no copied
+constant). Constants calibrated on all five archived scenarios: F_BUDGET_COEF 80
+(the low side of the mean-force fits 3085/36=86, 5667/64=88, 6535/81=81,
+6425/100=64 — biased generous), REEL_MARGIN 0.9 for rings and soft-start, entry
+25 s, tail 10 s. Below the knot the sqrt-law MISpredicts because the force-floor
+guard duty-cycles reel-in/reel-out there, so the legacy steepened ratio stays.
+
+Validated before flying: predicted budgets 151.7 / 122.5 / 112.8 / 108.0 s at
+6/8/9/10 m/s — no passer loses time (v09 had under 2 % slack and gains 12.8 s),
+and 10/11 m/s flatten exactly where the drum does. Flown at 10 m/s the same day:
+380.0 m reached, `stopped by: length`, phase 5 entered, in exactly the predicted
+108.0 s.
+
+**The remaining verdict line is pre-existing, not new:** "max force <= 8400 N"
+has NEVER passed at 10 m/s — archived v10 shows the same ~6.4 kN mean with cf
+1.38 (peak ≈ 8.9 kN); it just predates commit c8c4c28 that added the max-force
+check to the criteria string. Fixing the budget made the existing behaviour
+fully reportable; bringing peak force within limit at 10 m/s is the kv-table
+question (see the 2026-08-26 sweep notes at the top of data/winch_kv_table.yaml),
+not a timing question.

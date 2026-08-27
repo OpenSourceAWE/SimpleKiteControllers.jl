@@ -311,24 +311,58 @@ so it gates on the speed actually flown.
 """
 power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 
-# Reel-out speed scales with the wind (more force -> faster reel-out), so a
-# slower override needs proportionally more time to cover the same tether
-# length and a faster one needs less: effective sim_time (the selected value,
-# or the project's own default) scales by default_v_wind / WIND_SPEED, steepened
-# by BELOW_DEFAULT_EXPONENT below default_v_wind since that ratio undershoots
-# there (see docs/fig8_tuning_log.md, 2026-08-20). Without an override sim_time
-# is unaffected.
+# Reel-out speed scales with the wind (more force -> faster reel-out), so the
+# effective sim_time must follow the speed the winch will actually give, not a
+# linear ratio. Three regimes, decided on the OVERRIDE wind (no override leaves
+# the selected/project sim_time verbatim):
+#
+# - At or above V_BUDGET_KNOT the sqrt-law holds and the budget is PHYSICS-BASED:
+#       T = ENTRY + (l_max - l_start)/(REEL_MARGIN * v_reel) + TAIL,
+#   v_reel = min(kv(w)*sqrt(F_BUDGET_COEF*w^2), v_sat) — the winch law evaluated
+#   at a conservative mean-tension fit and capped at the drum limit. Validated
+#   against every archived scenario (docs/fig8_tuning_log.md, 2026-08-27): the
+#   law reproduces the measured whole-window reel speeds at 6/8/9 m/s within
+#   2-5 %, and correctly caps at v_sat from 10 m/s up — where linear ratio
+#   scaling kept shrinking the budget although the reel speed had stopped
+#   growing (the 90 s budget fell 12.6 m short; v09 passes with under 2 % slack).
+# - Below the knot the sqrt-law MISpredicts: the force-floor guard duty-cycles
+#   reel-in/reel-out there (even 474 s failed at 3 m/s), so the legacy steepened
+#   ratio scaling is kept instead.
 BELOW_DEFAULT_EXPONENT = 1.66 # 1.5 undershot 3 m/s; see docs/fig8_tuning_log.md, 2026-08-20
+V_BUDGET_KNOT = 6.0           # [m/s] sqrt-law valid at/above; legacy scaling below
+F_BUDGET_COEF = 80.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w²;
+                              # measured 3085/36=85.7, 5667/64=88.5, 6535/81=80.7,
+                              # 6425/100=64.3 -> low bias keeps the budget generous
+REEL_MARGIN = 0.9             # achievable fraction of nominal speed (rings, soft-start)
+BUDGET_ENTRY_S = 25.0         # park + dive + hold + reelout_delay [s]
+BUDGET_TAIL_S = 10.0          # soft-stop ramp + phase-5 hold after length stop [s]
+# The v_sat CAP must be the file's, not a copy: it is the drum limit the winch
+# actually enforces, and the budget has to move when someone retunes it.
+v_budget_cap =
+    load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq).v_sat
+"Reel-out speed the budget assumes [m/s] at mean wind `w`: the winch's own law
+at a conservative tension estimate, capped by the drum's speed limit."
+v_reel_nominal(w) = min(winch_kv(w; project) * sqrt(F_BUDGET_COEF * w^2), v_budget_cap)
 EFFECTIVE_SIM_TIME = if isnothing(WIND_SPEED)
     SIM_TIME
-else
+elseif WIND_SPEED < V_BUDGET_KNOT
     wind_ratio = default_v_wind / WIND_SPEED
     scale = wind_ratio <= 1 ? wind_ratio : wind_ratio^BELOW_DEFAULT_EXPONENT
     something(SIM_TIME, project_set.sim_time) * scale
+else
+    l_reel = fcs.reelout_l_max - l_tether
+    BUDGET_ENTRY_S + l_reel / (REEL_MARGIN * v_reel_nominal(project_set.v_wind)) +
+        BUDGET_TAIL_S
 end
-isnothing(WIND_SPEED) ||
-    @info "simple_opt_reelout.jl: wind-speed override active, sim_time scaled to \
-           $(round(EFFECTIVE_SIM_TIME; digits = 1)) s."
+isnothing(WIND_SPEED) || @info @sprintf("simple_opt_reelout.jl: wind-speed override active, \
+                                        %s",
+    WIND_SPEED < V_BUDGET_KNOT ?
+    @sprintf("sim_time scaled to %.1f s.", EFFECTIVE_SIM_TIME) :
+    @sprintf("reel-out budget %.1f s (%.0f s entry + %.0f m at %.2f m/s of %.2f nominal \
+              + %.0f s tail)",
+             EFFECTIVE_SIM_TIME, BUDGET_ENTRY_S, fcs.reelout_l_max - l_tether,
+             v_reel_nominal(project_set.v_wind) * REEL_MARGIN,
+             v_reel_nominal(project_set.v_wind), BUDGET_TAIL_S))
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 # OUTPUT_PATH redirects them, so that parallel runs of this script (the sweep)
