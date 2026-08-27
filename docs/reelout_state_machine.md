@@ -84,7 +84,11 @@ script — it is a single reel-out, not a pumping cycle.
   (`entry_chi_max`, weighted by `w_lim`) applies wherever the guidance is far
   off the path, and is not itself phase-gated.
 - **Depower.** `entry_depower` in phases 1-2, `depower_final` in phase 5,
-  `depower_setpoint` otherwise (0, 3, 4).
+  `depower_setpoint` otherwise (0, 3, 4). In the optimizer runs
+  (`fly_opt_depower`, `simple_opt_reelout.jl`) this script overrides that ladder
+  from phase 3 on, ramping to the optimizer's converted `u_d` instead — so the
+  flown depower matches what the path was solved for across the whole reeling
+  window.
 - **Winch.** See below.
 
 ## 2. Winch: reel-out gating

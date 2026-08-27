@@ -123,9 +123,10 @@ multi-modal, so the guess is a choice about the answer.
     """
     input_depower_seed_max = 0.0
     """
-    Fly the optimizer's own depower during phase 4 (fig8) instead of the fixed
-    `fcs.depower_setpoint`, converted with `awetrim_depower_to_v3kite`. Updated at
-    startup and after every re-optimization that installs a path
+    Fly the optimizer's own depower from phase 3 (transition, where reel-out
+    begins) through phase 4 (fig8) instead of the fixed `fcs.depower_setpoint`,
+    converted with `awetrim_depower_to_v3kite`. Updated at startup and after
+    every re-optimization that installs a path
     (`examples/simple_opt_reelout.jl`'s `depower_flown_opt`); phase 5 always flies
     `fcs.depower_final` regardless of this flag.
 

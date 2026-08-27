@@ -90,11 +90,12 @@ traj_opt:
     # 8 m/s and above rather than extending it - a wind past 10 m/s is untested,
     # so this cap should move with the next measurement, not just this one.
     input_depower_seed_max:  1.85  # ramp ceiling, below the server's 2.3 m  [m]
-    # Fly the optimizer's own depower in phase 4 (fig8) instead of the fixed
-    # fcs.depower_setpoint, converted with awetrim_depower_to_v3kite. See
-    # PlanStrongWind.md's "depower question" — untested against the curvature
-    # ceiling, not clamped to it.
-    fly_opt_depower:   true  # phase 4 flies the optimizer's converted u_d     [-]
+    # Fly the optimizer's own depower from phase 3 (transition, where reel-out
+    # starts) through phase 4 instead of the fixed fcs.depower_setpoint,
+    # converted with awetrim_depower_to_v3kite. See PlanStrongWind.md's
+    # "depower question" — untested against the curvature ceiling, not clamped
+    # to it.
+    fly_opt_depower:   true  # phases >= 3 fly the optimizer's converted u_d  [-]
     reg_weight:        1.0   # regularization weight                           [-]
     detect_simple_bounds: true   # IPOPT flag
 

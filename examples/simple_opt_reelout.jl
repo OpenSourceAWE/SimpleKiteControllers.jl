@@ -587,7 +587,7 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
 # scale, and `u_p_equiv`, the V3Kite `rel_depower` expected to fly at the same
 # power (`awetrim_depower_to_v3kite`, docs/steering_depower.md).
 opt_depower_log = NamedTuple[]
-# What phase 4 flies when `tos.fly_opt_depower` is on, kept in step with
+# What phases 3+ fly when `tos.fly_opt_depower` is on, kept in step with
 # `opt_depower_log`'s latest `u_p_equiv`; falls back to the fixed setpoint
 # before the first optimizer answer.
 depower_flown_opt = fcs.depower_setpoint
@@ -1132,13 +1132,15 @@ try
             dmin, tangent = path_tangent(fec))
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Overrides calc_steering's fixed fcs.depower_setpoint with the optimizer's
-        # own converted depower, ramped over tos.path_blend_time same as a path
-        # install; phase 5 below still wins with fcs.depower_final.
-        if tos.fly_opt_depower && phase == 4
+        # own converted depower from the transition (phase 3) on — reel-out begins
+        # there, and the prediction assumes the flown u_d over the WHOLE reeling
+        # window. Ramped over tos.path_blend_time same as a path install; phase 5
+        # below still wins with fcs.depower_final.
+        if tos.fly_opt_depower && phase in (3, 4)
             # The entry ladder's own depower (already in `rel_depower`) is the
-            # FROM endpoint the first time this fires, so the 3->4 hand-over
+            # FROM endpoint the first time this fires, so the 2->3 hand-over
             # ramps too, not just a later reopt's update.
-            if phase_before != 4 && isnothing(depower_blend_to)
+            if phase_before < 3 && isnothing(depower_blend_to)
                 global depower_blend_from = rel_depower
                 global depower_blend_to = depower_flown_opt
                 global depower_blend_t0 = t
