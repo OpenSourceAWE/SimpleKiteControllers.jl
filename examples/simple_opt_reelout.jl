@@ -831,9 +831,13 @@ isnothing(opt_r_min) ||
 #     installed unchanged.
 const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
 
+# The startup path's curvature margin, read at TOP level: the retry block below
+# defines `incumbent_score` only when it runs (first reply short of the gate),
+# and the failed-trajectory save further down must also work when it doesn't.
+margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+                                        c1 = c1_startup, prn = false).margin
+
 if opt_r_on && !isnan(c1_startup)
-    margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                            c1 = c1_startup, prn = false).margin
     if margin_startup < tos.min_feasibility_margin
         # All three startup gates, on whatever path sits in `fec` right now.
         # Scoring the WHOLE set — not curvature alone — is what stops a widening
@@ -983,10 +987,11 @@ if opt_r_on && !isnan(c1_startup)
     end
 end
 
-if incumbent_score.margin < tos.min_feasibility_margin
+if margin_startup < tos.min_feasibility_margin
     # The incumbent is what the gates will refuse; every rejected retry was
     # saved as it was measured, inside the loop above — here only the
-    # incumbent itself is still missing.
+    # incumbent itself is still missing. `incumbent_score` exists exactly when
+    # this can fire: the retry block ran, i.e. the first reply was short.
     save_failed_trajectory("startup_incumbent", inc_raw[1], inc_raw[2];
                            margin = incumbent_score.margin,
                            power = opt_power_pred)

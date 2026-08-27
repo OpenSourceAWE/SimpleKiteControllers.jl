@@ -180,7 +180,8 @@ the original 0.12 split (0.08 tape zero + 0.04 aero).
 awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
 
 """
-    PatternLimits(; azimuth_max, elevation_min, elevation_max, azimuth_amplitude_min)
+    PatternLimits(; azimuth_max, elevation_min, elevation_max,
+                  azimuth_amplitude_min, elevation_amplitude_max)
 
 A box, in DEGREES, on where the optimized pattern may go. The server bounds the
 B-spline's control coefficients, so by the convex-hull property the limits hold
@@ -190,7 +191,10 @@ Every field is optional and `nothing` keeps the optimizer's own default for it
 (|azimuth| <= 45.8°, 0.6° <= elevation <= 51.6°, no amplitude floor).
 `azimuth_amplitude_min` is the figure's half-width and guards the degenerate
 zero-width collapse; `elevation_max` guards the run-away-to-zenith basin — the
-two bad basins a failed re-optimization falls into. On `/step` the struct
+two bad basins a failed re-optimization falls into. `elevation_amplitude_max`
+caps the figure's elevation HALF-SPAN with one smooth row (mean squared
+deviation from the mean elevation <= value²/2) — where `elevation_max` only
+caps where the path may sit, this caps how TALL it is. On `/step` the struct
 replaces the session's limits as a whole, so an all-`nothing` `PatternLimits()`
 CLEARS them.
 """
@@ -199,6 +203,7 @@ Base.@kwdef struct PatternLimits
     elevation_min::Union{Float64, Nothing} = nothing         # elevation >= this [deg]
     elevation_max::Union{Float64, Nothing} = nothing         # elevation <= this [deg]
     azimuth_amplitude_min::Union{Float64, Nothing} = nothing # half-width >= this [deg]
+    elevation_amplitude_max::Union{Float64, Nothing} = nothing # half-span <= this [deg]
 end
 
 "Metrics of one solve; `turn_radius_min_m` is the tightest PHYSICAL turn radius
@@ -369,7 +374,8 @@ function opt_request_key(p::InitParams)
               d === nothing ? nothing : (d.mode, d.value),
               p.min_turn_radius,
               b === nothing ? nothing : (b.azimuth_max, b.elevation_min,
-                                         b.elevation_max, b.azimuth_amplitude_min)))
+                                         b.elevation_max, b.azimuth_amplitude_min,
+                                         b.elevation_amplitude_max)))
     return "v2-" * string(h; base = 16)
 end
 
@@ -579,7 +585,8 @@ function as_pattern_limits(d)
     return PatternLimits(; azimuth_max = opt_float(d, "azimuth_max"),
                          elevation_min = opt_float(d, "elevation_min"),
                          elevation_max = opt_float(d, "elevation_max"),
-                         azimuth_amplitude_min = opt_float(d, "azimuth_amplitude_min"))
+                         azimuth_amplitude_min = opt_float(d, "azimuth_amplitude_min"),
+                         elevation_amplitude_max = opt_float(d, "elevation_amplitude_max"))
 end
 
 as_metrics(d) = SolveMetrics(; energy_J = d["energy_J"],
@@ -1014,7 +1021,7 @@ end
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
 `data/traj_opt.yaml`; each is in degrees and each is off at `0.0`. `nothing` when
-all four are off, which leaves the optimizer's own defaults alone.
+all five are off, which leaves the optimizer's own defaults alone.
 
 `elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
 of [`elevation_min_request`](@ref), which depends on the length being asked for and
@@ -1026,9 +1033,11 @@ function pattern_limits_from(tos; elevation_min = nothing)
                            elevation_min = on(something(elevation_min,
                                                         tos.pattern_elevation_min)),
                            elevation_max = on(tos.pattern_elevation_max),
-                           azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min))
+                           azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min),
+                           elevation_amplitude_max = on(tos.pattern_elevation_amplitude_max))
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
-                    limits.azimuth_amplitude_min)) && return nothing
+                    limits.azimuth_amplitude_min, limits.elevation_amplitude_max)) &&
+        return nothing
     return limits
 end
 

@@ -360,6 +360,14 @@ multi-modal, so the guess is a choice about the answer.
     Guards the OTHER bad basin: the pattern collapsing to zero amplitude.
     """
     pattern_azimuth_amplitude_min = 0.0
+    """
+    Largest elevation half-span [deg] the optimized figure may have; `0.0` is off.
+    One smooth NLP row (mean squared deviation of the elevation from its own mean
+    <= value²/2), the mirror of the server's `min_azimuth_amplitude`. Where
+    `pattern_elevation_max` only caps where the path may SIT, this caps how TALL
+    the figure is — the span is what the curvature margin reads.
+    """
+    pattern_elevation_amplitude_max = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """
@@ -573,7 +581,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
                           ("pattern_elevation_max", tos.pattern_elevation_max),
                           ("pattern_azimuth_max", tos.pattern_azimuth_max),
                           ("pattern_azimuth_amplitude_min",
-                           tos.pattern_azimuth_amplitude_min))
+                           tos.pattern_azimuth_amplitude_min),
+                          ("pattern_elevation_amplitude_max",
+                           tos.pattern_elevation_amplitude_max))
         0 <= value <= 90 || error("$name must be in [0, 90], got $value.")
     end
     tos.pattern_elevation_max == 0 ||
