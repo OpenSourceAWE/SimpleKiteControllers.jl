@@ -208,11 +208,11 @@ pattern's centre (the dive target, and `var_04`) and its extent (the size criter
 of `fig8_metrics`) are measured off the installed path instead.
 
 Two blocks are `include`d rather than written out here, both at the point they
-used to sit at: `reelout_feasibility.jl` (the gates on the installed path and the
-turn-rate coefficients they are read against, defining `el_floor`, `c1_at` and
-`phase5_margin`) and `reelout_results.jl` (scoring, the summary YAML, the
-archive, the plots and the finished-run marker). Both run at top level in the
-same scope, so they see and set this script's globals exactly as inline code did.
+used to sit at: `reelout_feasibility.jl` (the abort/warn policy on the gates of
+[`check_reelout_feasibility`](@ref), defining `feas`, `c1_at` and `phase5_margin`)
+and `reelout_results.jl` (scoring, the summary YAML, the archive, the plots and
+the finished-run marker). Both run at top level in the same scope, so they see and
+set this script's globals exactly as inline code did.
 
 Logs to `output/<log_file>_opt.arrow` and `_opt.yaml` — the `_opt` suffix keeps
 the lemniscate run's log and summary intact, so the two are comparable after the
@@ -708,16 +708,9 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
-# The turn-rate law the gates read a path against, looked up here because the retry
-# below has to know whether the startup path clears it. `reelout_feasibility.jl`
-# looks it up again and reports it; a cell the table cannot serve costs the retry,
-# not the run, so this one stays quiet.
-coeffs_startup = try
-    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-catch exc
-    exc isa ArgumentError || rethrow()
-    nothing
-end
+# The turn-rate law the retry below reads a path against comes from
+# `reelout_feasibility.jl` (`feas.c1`), looked up and reported there; a cell the
+# table cannot serve costs the retry, not the run.
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
@@ -798,9 +791,9 @@ isnothing(opt_r_min) ||
 #     installed unchanged.
 const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
 
-if opt_r_on && !isnothing(coeffs_startup)
+if opt_r_on && !isnan(feas.c1)
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                            c1 = coeffs_startup.c1, prn = false).margin
+                                            c1 = feas.c1, prn = false).margin
     if margin_startup < tos.min_feasibility_margin
         # All three startup gates, on whatever path sits in `fec` right now.
         # Scoring the WHOLE set — not curvature alone — is what stops a widening
@@ -808,7 +801,7 @@ if opt_r_on && !isnothing(coeffs_startup)
         el_floor_start = fcs.min_elevation + tos.candidate_elevation_margin
         score_installed() = begin
             margin = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                            c1 = coeffs_startup.c1, prn = false).margin
+                                            c1 = feas.c1, prn = false).margin
             el_ok = minimum(fec.el_path) >= el_floor_start
             height = NaN
             clr_ok = true
@@ -1046,7 +1039,7 @@ droop_sag = zeros(n_droop_bins)     # [deg] kite below the path at Q
 # walks away from it; each re-optimization re-anchors it to the length being
 # flown. The request is queued (`wait = false`), `/status` is polled, and the
 # result is collected when it is there. While a solve runs, and after one that
-# failed, the server keeps serving the previous path, so "not ready yet" needs no
+# fails, the server keeps serving the previous path, so "not ready yet" needs no
 # special case here either.
 #
 # `tos.reopt_blocking` decides what the loop does meanwhile. `false` flies on
@@ -1877,9 +1870,9 @@ try
                         # What is FLOWN is resampled to the run's own `n_path`, so
                         # the point count never changes mid-run: `fig8_idx_progress`
                         # counts points, and a path with a different count silently
-                        # rescales the lap counter. The guidance itself is
-                        # indifferent — it walks arc length, and the extra points sit
-                        # on the same curve.
+                        # rescales the lap counter under it —
+                        # 4 -> 13 in the run of 2026-08-18, before the flown path
+                        # was pinned to one resolution.
                         chk_az, chk_el = prepare_path(new_az, new_el;
                             resample = n_native, up_loops = fcs.up_loops)
                         global chk_points = n_native
@@ -2045,15 +2038,15 @@ try
                             global fig8_idx_progress *= n_path_new / n_path
                             global n_path = n_path_new
                             push!(pred_timeline, (t = t, power = new_pred))
-                            global margin5_flown = phase5_margin(chk_az, chk_el)
+                            global margin5.margin = phase5_margin(chk_az, chk_el)
                             # Not a rejection reason: this path is accepted for the
                             # reel-out laps it was solved for, and refusing the
                             # best-power curve over the handful of laps after it
                             # would cost more than it buys. Said out loud instead,
                             # once, so a phase 5 flown on the clamp is not a surprise.
-                            if !isnan(margin5_flown) &&
-                               margin5_flown < tos.min_feasibility_margin && !margin5_warned
-                                global margin5_warned = true
+                            if !isnan(margin5.margin) &&
+                               margin5.margin < tos.min_feasibility_margin && !margin5.warned
+                                global margin5.warned = true
                                 @warn @sprintf("The path installed at %.0f m has a \
                                                 curvature margin of %.2f at \
                                                 depower_final (%.2f here at \
@@ -2061,7 +2054,7 @@ try
                                                 min_feasibility_margin = %.2f: phase 5 \
                                                 will fly it with less turn authority \
                                                 than any gate has checked.",
-                                               l_now, margin5_flown, margin,
+                                               l_now, margin5.margin, margin,
                                                tos.min_feasibility_margin)
                             end
                             event = (; t, l = l_now, status = "installed",
@@ -2073,9 +2066,9 @@ try
                                                                      at %.0f %%)",
                                                                     100 * bias_frac,
                                                                     100 * wing_frac) : "",
-                                                       isnan(margin5_flown) ? "" :
+                                                       isnan(margin5.margin) ? "" :
                                                            @sprintf(" (phase 5: %.2f at %.0f m)",
-                                                                    margin5_flown,
+                                                                    margin5.margin,
                                                                     fcs.reelout_l_max),
                                                        clearance, new_pred))
                             break

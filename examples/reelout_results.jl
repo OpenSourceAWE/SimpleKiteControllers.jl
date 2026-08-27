@@ -413,22 +413,22 @@ feasibility_block = OrderedDict{String, Any}(
     "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
         "reel-out per lap ASSUMED for the startup request, the only one with no \
          reply to measure it off [m]"))
-if !isnothing(coeffs)
-    feasibility_block["margin_start"] = (round(feas_start.margin; digits = 2),
+if !isnan(feas.c1)
+    feasibility_block["margin_start"] = (round(feas.feas_start.margin; digits = 2),
         "curvature margin at the starting length; the worst case only when one \
          path is flown throughout — see the docstring [-]")
-    feasibility_block["margin_end"] = (round(feas_end.margin; digits = 2),
+    feasibility_block["margin_end"] = (round(feas.feas_end.margin; digits = 2),
         "curvature margin at reelout_l_max [-]")
 end
-if !isnothing(feas_final)
-    feasibility_block["c1_final"] = (round(c1_final; digits = 4),
+if !isnothing(feas.feas_final)
+    feasibility_block["c1_final"] = (round(feas.c1_final; digits = 4),
         "turn-rate gain at depower_final [1/m]")
-    feasibility_block["margin_final"] = (round(feas_final.margin; digits = 2),
+    feasibility_block["margin_final"] = (round(feas.feas_final.margin; digits = 2),
         "curvature margin phase 5 flies with: depower_final's c1, at \
          reelout_l_max, on the STARTING path lifted by el_offset_final [-]")
-    isnan(margin5_flown) ||
+    isnan(margin5.margin) ||
         (feasibility_block["margin_final_flown"] =
-            (round(margin5_flown; digits = 2),
+            (round(margin5.margin; digits = 2),
              "the same, for the last path the re-optimizer installed — the one \
               phase 5 actually inherited [-]"))
 end

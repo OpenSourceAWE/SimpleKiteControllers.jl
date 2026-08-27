@@ -42,6 +42,10 @@ export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
 export TrajOptSettings, turn_radius_lap_reelout
 
+# Reel-out feasibility gates (examples/simple_opt_reelout.jl)
+export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
+export check_reelout_feasibility
+
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
 export with_file_lock, init_results_file, record_result!, load_results
@@ -79,6 +83,8 @@ include("course_controller.jl")
 include("optimization.jl")
 # After fc_settings.jl too: TrajOptSettings is loaded through load_yaml_fields!.
 include("traj_opt_settings.jl")
+# After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.
+include("reelout_feasibility.jl")
 
 function __init__()
     reload_turn_rate_table!()
