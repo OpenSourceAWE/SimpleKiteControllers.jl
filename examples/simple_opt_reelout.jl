@@ -882,13 +882,6 @@ if opt_r_on && !isnan(c1_startup)
         inc_result, inc_table, inc_raw = opt_result, opt_table, opt_paths_raw[1]
         r_asked = NaN                        # turn radius whose reply was asked last
         m_reply = incumbent_score.margin     # measured margin of that reply
-        # Each startup retry raises the elevation floor asked of the optimizer
-        # by this much, on top of the previous ask: a wider turn radius alone
-        # kept landing the same margin (measured 2026-08-27), and lifting the
-        # pattern is the other lever the optimizer has — a higher path turns
-        # easier (cos(elevation) widens the azimuth axis) and clears more.
-        startup_retry_el_step = 5.0   # [deg] per retry
-        el_extra = 0.0                # elevation floor raised by, so far [deg]
         t_retries = time()
         for attempt in 1:max(Int(tos.startup_retries_max), 0)
             # Top-level soft scope: these are script globals written inside the
@@ -898,8 +891,7 @@ if opt_r_on && !isnan(c1_startup)
             global opt_result, opt_table, opt_downloops, opt_power_pred
             global opt_paths_raw, opt_r_scale, opt_r_min
             global incumbent_score, inc_result, inc_table, inc_raw
-            global r_asked, m_reply, el_extra
-            el_extra += startup_retry_el_step
+            global r_asked, m_reply
             target = max(tos.startup_retry_step * m_reply,
                          tos.startup_retry_slack * tos.min_feasibility_margin)
             # Attempt 1 corrects the ASSUMED lap reel-out of the original request;
@@ -915,23 +907,16 @@ if opt_r_on && !isnan(c1_startup)
             @info @sprintf("The startup path is at margin %.3f, below \
                             min_feasibility_margin = %.2f: retry %d/%d at L = %.1f m \
                             under a corrected turn radius (%.2f m, was %.2f m), \
-                            elevation floor +%.1f° (%.2f° asked), targeting margin %.3f.",
+                            targeting margin %.3f.",
                            incumbent_score.margin, tos.min_feasibility_margin,
                            attempt, Int(tos.startup_retries_max), l_set, r_ask,
-                           prev_ask, startup_retry_el_step,
-                           something(elevation_min_request(fcs, tos, l_set;
-                                      extra = el_extra), 0.0), target)
+                           prev_ask, target)
             t_attempt = time()
             local att_result, att_table, att_raw, att_score
             try
                 att_result = opt_step(StepParams(; length = l_set,
                                                  winch_params = winch_first_lap,
-                                                 min_turn_radius = r_ask,
-                                                 pattern_limits =
-                                                     pattern_limits_from(tos;
-                                                         elevation_min =
-                                                             elevation_min_request(fcs, tos, l_set;
-                                                                 extra = el_extra)));
+                                                 min_turn_radius = r_ask);
                                       url = tos.base_url)
                 att_table = opt_trajectory(; url = tos.base_url)
                 att_raw = install_optimized_path!(att_result)

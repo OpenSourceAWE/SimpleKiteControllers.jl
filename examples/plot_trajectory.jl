@@ -32,7 +32,7 @@ using LaTeXStrings
 
 const TRAJ_DIR = joinpath(@__DIR__, "..", "trajectories")
 
-TRAJ_FILE = "startup_retry3_2026-08-27_1700.yaml"
+# TRAJ_FILE = "startup_retry3_2026-08-27_1700.yaml"
 
 isdir(TRAJ_DIR) || error("No trajectories folder at $TRAJ_DIR — nothing has been saved yet.")
 
