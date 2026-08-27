@@ -640,14 +640,14 @@ end
     @testset "winch_kv_table" begin
         p = project_file("system_reelout_150m.yaml")
 
-        # kv: flat at the identified 0.0408 up to 9 m/s, rising to 0.0558 at 10.
-        # The 3 and 4 m/s rows were added for f_low on 2026-08-25 and repeat
-        # 0.0408 precisely so this curve did not move; that is what these pin.
+        # kv: flat at the identified 0.0408 up to 11 m/s. The 10 and 12 m/s rows
+        # were pinned to 0.0408 on 2026-08-26 (the 11 m/s re-tuning kept kv flat
+        # and moved the pattern instead); that is what these pin.
         @test winch_kv(9.0; project = p) ≈ 0.0408
         @test winch_kv(3.0; project = p) ≈ 0.0408
         @test winch_kv(6.0; project = p) ≈ 0.0408
-        @test winch_kv(10.0; project = p) ≈ 0.0558
-        @test winch_kv(9.5; project = p) ≈ 0.0483   # midpoint of the only real ramp
+        @test winch_kv(10.0; project = p) ≈ 0.0408
+        @test winch_kv(9.5; project = p) ≈ 0.0408   # still inside the flat stretch
 
         # f_low: 350 N at 3 m/s, 700 N from 4 m/s up, linear between. One flat
         # value cannot serve both — at 3 m/s a 700 N floor put the limiter in
@@ -1080,5 +1080,34 @@ end
         @test settings_dict["environment"]["v_wind"] > 0
         # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
+    end
+
+    @testset "reelout_feasibility" begin
+        using SimpleKiteControllers: ReeloutFeasibility, Phase5MarginState, c1_at,
+                                     phase5_margin
+        coeffs = turn_rate_coeffs([10.0, 10.0, 40.0], 0.25)
+
+        # c1_at falls back to the pattern's c1 before phase 5 and when the final
+        # lookup failed (NaN), and switches to depower_final's from phase 5 on.
+        feas = ReeloutFeasibility(; c1 = 0.25, c2 = coeffs.c2, delay = coeffs.delay,
+                                  c1_final = 0.20)
+        @test c1_at(feas, 4) == 0.25
+        @test c1_at(feas, 5) == 0.20
+        @test c1_at(feas, 7) == 0.20
+        fallback = ReeloutFeasibility(; c1 = 0.25)   # c1_final = NaN
+        @test isnan(fallback.c1_final)
+        @test c1_at(fallback, 5) == 0.25
+
+        # phase5_margin is NaN without a final coefficient, otherwise it is the
+        # curvature margin at the given length.
+        az, el = figure_eight_path(30.0, 12.0, 40.0, 15.0, 0.0, 26.0, 0.0, 60)
+        @test isnan(phase5_margin(fallback, az, el, 380.0, 0.32))
+        m = phase5_margin(feas, az, el, 380.0, 0.32)
+        @test m ≈ check_pattern_feasible(az, el, 380.0, 0.32;
+                                         c1 = 0.20, prn = false).margin
+
+        # Phase-5 state starts unwarned with no margin recorded.
+        st = Phase5MarginState()
+        @test isnan(st.margin) && !st.warned
     end
 end
