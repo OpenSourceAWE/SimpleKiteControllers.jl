@@ -455,6 +455,30 @@ end
                                                 az_amplitude = amp[1:end-1])
     end
 
+    @testset "metrics_max_force" begin
+        # The winch-rating criterion: opt-in via `max_force`, checked over the
+        # WHOLE run like the elevation floor — a transient overload still counts.
+        dt = 0.05
+        tt = collect(0.0:dt:60.0)
+        n = length(tt)
+        mk(f) = (; time = tt,
+                 azimuth = Float32.(deg2rad.(40 .* sin.(2pi .* tt ./ 10))),
+                 elevation = fill(Float32(deg2rad(45)), n),
+                 heading = zeros(Float32, n), var_01 = zeros(Float32, n),
+                 set_steering = zeros(Float32, n), steering = zeros(Float32, n),
+                 winch_force = [Float32[100 + 20f, 0, 0, 0] for _ in 1:n])
+        over = print_fig8_metrics(mk(1); settle_time = 0.0, max_force = 110)
+        ok = print_fig8_metrics(mk(0); settle_time = 0.0, max_force = 110)
+        # Explicit lambda: `occursin("max force")` is Base's 1-arg haystack form
+        # (argument order swapped), not a "contains" predicate.
+        has_force_criterion = m -> any(s -> occursin("max force", s), m.criteria_failed)
+        @test has_force_criterion(over)
+        @test !has_force_criterion(ok)
+        # Off by default: no force criterion without the keyword.
+        bare = print_fig8_metrics(mk(1); settle_time = 0.0)
+        @test !has_force_criterion(bare)
+    end
+
     @testset "turn_rate_coeffs" begin
         # Body damping changes the steering response by 5.6x: keyed on it, never guessed.
         @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31038589289512725

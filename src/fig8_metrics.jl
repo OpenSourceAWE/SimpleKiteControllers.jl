@@ -510,6 +510,12 @@ only, whose entry state machine has that phase; a plain `simple_fig8.jl` run's
 default off. Checks that reel-out actually FINISHED within the run — by either
 of its two stop criteria, `l_set` reaching `reelout_l_max` or `n_fig_eight` laps
 completed — not just that the pattern was tracked well.
+
+Pass `max_force = f` (in N) to also check that the logged tether force never
+exceeds `f` — the winch's rating from the `winch:` section of the settings YAML
+(`max_force`, 8400 N for the V3). Checked over the WHOLE run, like the elevation
+floor: a brief overload during the entry transient still counts. Off by default,
+since the limit is plant-specific and only known where the settings file is read.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,
@@ -519,7 +525,8 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             lap_frac = 0.5, min_excursion = deg2rad(5.0),
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
-                            v_steering = 0.2, require_final::Bool = false)
+                            v_steering = 0.2, require_final::Bool = false,
+                            max_force = nothing)
     m = fig8_metrics(sl; t_start, settle_time, settle_d_threshold, hf_window,
                      lap_frac, min_excursion,
                      az_center, az_amplitude, el_height, v_steering)
@@ -581,6 +588,13 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
     end
     if require_final
         push!(checks, ("phase 5 (final) reached", any(==(5), Int.(sl.sys_state))))
+    end
+    if max_force !== nothing
+        # Whole run, like the elevation floor: the winch rating does not pause
+        # during the entry transient either.
+        peak = maximum(Float64.(getindex.(sl.winch_force, 1)))
+        push!(checks,
+              (@sprintf("max force <= %.0f N (whole run)", max_force), peak <= max_force))
     end
     failed = [name for (name, ok) in checks if !ok]
     if isempty(failed)

@@ -96,7 +96,8 @@ el_h_log = have_geom ? on_log(t_log, geom_t, geom_el_h) : el_height_path
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = az_c_log,
                    az_amplitude = az_amp_log, el_height = el_h_log,
-                   min_span_frac = fcs.min_span_frac, require_final = true)
+                   min_span_frac = fcs.min_span_frac, require_final = true,
+                   max_force = project_set.max_force)
 # A run that stopped before the metrics window scores nothing, and every line
 # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
 isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_log[end], digits = 1),

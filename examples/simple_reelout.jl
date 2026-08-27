@@ -629,7 +629,8 @@ sl = syslog.syslog
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = 0.0,
                    az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
-                   min_span_frac = fcs.min_span_frac, require_final = true)
+                   min_span_frac = fcs.min_span_frac, require_final = true,
+                   max_force = project_set.max_force)
 
 summary = OrderedDict{String, Any}()
 # The FIRST key of the file, the same words the console logs as "Success criteria:
