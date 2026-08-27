@@ -143,7 +143,7 @@ traj_opt:
     # The startup /init gets this factor ALONE — there is no reply to measure the
     # geometric one off yet — so raise it if a STARTUP path is refused for
     # curvature.
-    turn_radius_headroom: 1.20
+    turn_radius_headroom: 1.25
     # Ground clearance the returned path must have AT THE ANCHOR RADIUS, i.e. before
     # any reel-out; 0.0 disables.
     #
@@ -258,6 +258,16 @@ traj_opt:
     # question would change. Exhausting them keeps flying the CURRENT path and
     # falls back to the ordinary reopt_every_n_laps schedule.
     blend_max_retries: 3     # fresh solves per rejected reply                   [-]
+
+    # Corrected startup re-solves allowed when the first reply falls short of
+    # min_feasibility_margin: each is a warm /step under a raised turn radius
+    # (the same solve under a better-measured constraint, never a different
+    # seed). 0 flies the first short path straight to the gates; 2 costs at
+    # most two extra converged solves (~3 s each). Companion dials, on struct
+    # defaults: startup_retry_step = 1.05 (first-attempt target as a multiple of
+    # the measured margin) and startup_retry_slack = 1.03 (floor as a factor on
+    # min_feasibility_margin).
+    startup_retries_max: 3
     # A pattern collapsed to near-zero amplitude clears curvature, clearance and
     # blend_folds trivially — there is almost no pattern left to be tight, low or
     # foldable — and was installed anyway at 2094 W against ~22000 W everywhere else
