@@ -15,8 +15,12 @@ read via `c1_at(feas, phase)` and `phase5_margin(feas, az, el, ...)`) and
 `margin5`, the [`Phase5MarginState`](@ref) of the in-air phase-5 check.
 """
 
+# The thin wrappers below ADD METHODS to the package's `c1_at`/`phase5_margin`,
+# so they must be imported, not merely used: `using` binds them read-only and a
+# fresh definition in Main would try to extend them without permission.
+import SimpleKiteControllers: c1_at, phase5_margin
 using SimpleKiteControllers: check_reelout_feasibility, ReeloutFeasibility,
-                             Phase5MarginState, c1_at, phase5_margin
+                             Phase5MarginState
 
 # The ELEVATION floor is a refusal, not a warning: this repo's own criterion is an
 # angle and `fig8_metrics` fails a run that breaks it.

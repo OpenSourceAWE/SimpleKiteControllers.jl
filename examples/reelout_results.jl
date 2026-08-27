@@ -726,8 +726,12 @@ summary_block = OrderedDict{String, Any}(
     "wind_speed_gnd" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
 if !isnothing(opt_power_meas)
     summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
-        "measured / predicted mean reel-out power, against the weighted prediction")
+        "measured / predicted reel-out power [-]")
 end
+summary_block["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
+    isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
+    "FAILED: " * join(fig8m.criteria_failed, ", "),
+    "pass/fail verdict vs V3Kite's success criteria")
 if t_sim > 0
     summary_block["total_wall_time_s"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
     summary_block["realtime_factor"] = (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),

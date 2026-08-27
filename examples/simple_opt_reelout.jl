@@ -708,9 +708,15 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
-# The turn-rate law the retry below reads a path against comes from
-# `reelout_feasibility.jl` (`feas.c1`), looked up and reported there; a cell the
-# table cannot serve costs the retry, not the run.
+# The turn-rate law the retry below reads a path against, looked up HERE because
+# the retry runs BEFORE `reelout_feasibility.jl` (which looks it up again and
+# reports it); a cell the table cannot serve costs the retry, not the run.
+c1_startup = try
+    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
+catch exc
+    exc isa ArgumentError || rethrow()
+    NaN
+end
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
@@ -791,9 +797,9 @@ isnothing(opt_r_min) ||
 #     installed unchanged.
 const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
 
-if opt_r_on && !isnan(feas.c1)
+if opt_r_on && !isnan(c1_startup)
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                            c1 = feas.c1, prn = false).margin
+                                            c1 = c1_startup, prn = false).margin
     if margin_startup < tos.min_feasibility_margin
         # All three startup gates, on whatever path sits in `fec` right now.
         # Scoring the WHOLE set — not curvature alone — is what stops a widening
@@ -801,7 +807,7 @@ if opt_r_on && !isnan(feas.c1)
         el_floor_start = fcs.min_elevation + tos.candidate_elevation_margin
         score_installed() = begin
             margin = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                            c1 = feas.c1, prn = false).margin
+                                            c1 = c1_startup, prn = false).margin
             el_ok = minimum(fec.el_path) >= el_floor_start
             height = NaN
             clr_ok = true
@@ -1343,7 +1349,7 @@ try
                 shifted_by(fm, fd) = fec.el_path .+
                     bias_lift(fec.az_path, fm * d_mean .+ fd .* d_dev)
                 function shift_margin(e)
-                    isnothing(coeffs) && return Inf
+                    isnan(feas.c1) && return Inf
                     a, b = prepare_path(fec.az_path, e; resample = chk_n,
                                         up_loops = fcs.up_loops)
                     check_pattern_feasible(a, b, Float64(s.sys_state.l_tether[1]),
@@ -1770,7 +1776,7 @@ try
                                          bias_lift(new_az, el_mean .+ fs .* el_dev) .+
                                          fw .* wing_delta
                         function lifted_margin(e)
-                            isnothing(coeffs) && return Inf
+                            isnan(feas.c1) && return Inf
                             a, b = prepare_path(new_az, e; resample = n_native,
                                                 up_loops = fcs.up_loops)
                             check_pattern_feasible(a, b, l_now, fcs.max_steering;
@@ -1887,7 +1893,7 @@ try
                         cand_from = prepare_path(fec.az_path, fec.el_path;
                             resample = n_path, up_loops = fcs.up_loops)
                         # At the CURRENT length, which is what it will be flown at.
-                        margin = isnothing(coeffs) ? Inf :
+                        margin = isnan(feas.c1) ? Inf :
                             check_pattern_feasible(chk_az, chk_el, l_now,
                                 fcs.max_steering; c1 = c1_at(phase), prn = false).margin
                         clearance = path_min_height(chk_az, chk_el, l_now)
