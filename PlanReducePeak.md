@@ -3,6 +3,23 @@ The force must ALWAYS stay below 8400 N. That is not the case for 9 m/s wind spe
 
 Try to reduce the peak force, currently about 8590 N.
 
+## RESULT (2026-08-27)
+
+SOLVED with knob 1 alone: `reelout_f_trigger` 7000 -> 6400 N in
+`data/fc_settings_reelout.yaml`.
+
+| reelout_f_trigger [N] | peak force [N] | t_peak [s] |
+|----------------------:|---------------:|-----------:|
+| 7000 (baseline)       | 8592           | 25.3       |
+| 6800                  | 8437           | 25.2       |
+| 6600                  | 8235           | 25.2       |
+| 6400                  | 8122           | 27.9       |
+
+The full-length run (150 -> 380 m, 113 s) at 6400 N confirms the same peak,
+8122 N, 278 N of margin under the 8400 N rating. Knobs 2-4 were not needed.
+The 6200 N step was started but cancelled once 6400 was already under the
+limit; the file was left at 6400.
+
 ## Knobs, in the order to try them
 
 The peak comes from the entry swoop loading the tether while the winch is still
