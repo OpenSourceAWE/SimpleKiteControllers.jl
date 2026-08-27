@@ -226,8 +226,10 @@ end
 # Skip t=0: the guidance slots are filled from the first `step!` onward.
 rng = 2:length(sl.time)
 
-az_deg = rad2deg.(sl.azimuth[rng])
-el_deg = rad2deg.(sl.elevation[rng])
+# Phase 5 (final descent after the winch stops) is masked out so it does not
+# distort the pattern plot.
+az_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
+el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
 # Written out rather than `norm.` so this script needs no LinearAlgebra import.
 v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
@@ -261,7 +263,7 @@ end
 # the way the flown trajectory's own laps already do. Each loop is closed by
 # repeating its first point, since a reply need not repeat it.
 opt_raw = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
-             !isempty(OPT_PATHS_RAW)
+             !isempty(OPT_PATHS_RAW) && !any(==(5), sl.sys_state[rng])
     oaz = Float64[]; oel = Float64[]
     for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
         k > 1 && (push!(oaz, NaN); push!(oel, NaN))
@@ -289,9 +291,10 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 
 if "pattern" in plots
     @info "Plotting the pattern..."
-    # Construct opt_raw from OPT_PATHS_RAW if available (from simple_opt_reelout.jl)
+    # Construct opt_raw from OPT_PATHS_RAW if available (from simple_opt_reelout.jl);
+    # dropped entirely when the run reached phase 5, matching the masked flown curve.
     opt_raw_for_plot = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
-                          !isempty(OPT_PATHS_RAW)
+                          !isempty(OPT_PATHS_RAW) && !any(==(5), sl.sys_state[rng])
         oaz = Float64[]; oel = Float64[]
         for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
             k > 1 && (push!(oaz, NaN); push!(oel, NaN))

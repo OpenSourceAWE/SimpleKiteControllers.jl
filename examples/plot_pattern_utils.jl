@@ -61,9 +61,10 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     # Skip t=0 (guidance slots filled from first step! onward)
     rng = 2:length(sl.time)
 
-    # Azimuth and elevation over the flight phase
-    az_deg = rad2deg.(sl.azimuth[rng])
-    el_deg = rad2deg.(sl.elevation[rng])
+    # Azimuth and elevation over the flight phase; phase 5 (final descent after
+    # the winch stops) is masked out so it does not distort the pattern plot
+    az_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
+    el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
     # Reference path: the logged attractor (live, walking every path under re-opt)
     # or fallback to the lemniscate
