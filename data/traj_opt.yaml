@@ -267,7 +267,7 @@ traj_opt:
     # defaults: startup_retry_step = 1.05 (first-attempt target as a multiple of
     # the measured margin) and startup_retry_slack = 1.03 (floor as a factor on
     # min_feasibility_margin).
-    startup_retries_max: 3
+    startup_retries_max: 4
     # A pattern collapsed to near-zero amplitude clears curvature, clearance and
     # blend_folds trivially — there is almost no pattern left to be tight, low or
     # foldable — and was installed anyway at 2094 W against ~22000 W everywhere else

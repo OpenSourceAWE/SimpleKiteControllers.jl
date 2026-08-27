@@ -853,6 +853,31 @@ if opt_r_on && !isnan(c1_startup)
             (; margin, el_ok, clr_ok, height,
                ok = margin >= tos.min_feasibility_margin && el_ok && clr_ok)
         end
+        # Defined BEFORE the retry loop that calls it: in a script's soft scope
+        # a call inside `for` resolves before a later top-level definition.
+        # The feasibility gates below REFUSE the run when the incumbent's margin
+        # is below min_feasibility_margin, and retries demonstrably cannot always
+        # fix that (measured 2026-08-27: four retries, best 0.794 against 0.82).
+        # The rejected curves are the evidence for WHY — save them, as plain
+        # (azimuth, elevation) tables, before the error ends the run. Plot the
+        # last one with examples/plot_trajectory.jl.
+        save_failed_trajectory(name, az, el; margin = NaN, power = NaN) = begin
+            dir = joinpath(@__DIR__, "..", "trajectories")
+            mkpath(dir)
+            stamp = replace(string(now()), r"[:.]" => "", "T" => "_")[1:15]
+            file = joinpath(dir, "$(name)_$stamp.yaml")
+            YAML.write_file(file, Dict(
+                "name" => name,
+                "date" => string(now()),
+                "l_tether" => l_tether,
+                "min_feasibility_margin" => tos.min_feasibility_margin,
+                "margin" => margin,
+                "predicted_power_W" => power,
+                "azimuth_deg" => collect(Float64.(az)),
+                "elevation_deg" => collect(Float64.(el)),
+            ))
+            @info "Saved failed trajectory to $file (margin $margin)."
+        end
         incumbent_score = score_installed()
         inc_result, inc_table, inc_raw = opt_result, opt_table, opt_paths_raw[1]
         r_asked = NaN                        # turn radius whose reply was asked last
@@ -946,6 +971,9 @@ if opt_r_on && !isnan(c1_startup)
                 @info "Kept retry $attempt as the best-so-far; trying again."
             else
                 install_optimized_path!(inc_result)     # put the incumbent back
+                save_failed_trajectory("startup_retry$attempt", att_raw[1],
+                                       att_raw[2]; margin = att_score.margin,
+                                       power = Float64(att_table["metrics"]["avg_power_W"]))
                 @info @sprintf("Startup retry %d gave margin %.3f, no better than \
                                 %.3f — keeping the incumbent.",
                                attempt, att_score.margin, incumbent_score.margin)
@@ -953,6 +981,15 @@ if opt_r_on && !isnan(c1_startup)
             r_asked, m_reply = r_ask, att_score.margin
         end
     end
+end
+
+if incumbent_score.margin < tos.min_feasibility_margin
+    # The incumbent is what the gates will refuse; every rejected retry was
+    # saved as it was measured, inside the loop above — here only the
+    # incumbent itself is still missing.
+    save_failed_trajectory("startup_incumbent", inc_raw[1], inc_raw[2];
+                           margin = incumbent_score.margin,
+                           power = opt_power_pred)
 end
 
 if !isnothing(opt_result.depower)
