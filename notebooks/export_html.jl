@@ -15,10 +15,16 @@ using Downloads
 
 # Plain globals instead of consts so this file can be included repeatedly into
 # Main (e.g. by publish.jl after a direct include) without "already declared"
-# constant errors.
-isdefined(Main, :NOTEBOOK) || (NOTEBOOK = get(ENV, "SLATE_NOTEBOOK", "results"))
-isdefined(Main, :HUB_URL) || (HUB_URL = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"))
-isdefined(Main, :OUTPUT_PATH) || (OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "$(NOTEBOOK)_export.html"))
+# constant errors. `=== nothing` counts as unset: simple_reelout.jl and
+# simple_opt_reelout.jl leave OUTPUT_PATH = nothing behind in Main (the
+# read-and-clear pattern for their sweep overrides), and a bare isdefined guard
+# would keep that `nothing` and crash on dirname() below.
+isdefined(Main, :NOTEBOOK) && NOTEBOOK !== nothing ||
+    (NOTEBOOK = get(ENV, "SLATE_NOTEBOOK", "results"))
+isdefined(Main, :HUB_URL) && HUB_URL !== nothing ||
+    (HUB_URL = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"))
+isdefined(Main, :OUTPUT_PATH) && OUTPUT_PATH !== nothing ||
+    (OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "$(NOTEBOOK)_export.html"))
 
 url = "$HUB_URL/api/$NOTEBOOK/export.html?dl=1"
 mkpath(dirname(OUTPUT_PATH))
