@@ -664,14 +664,14 @@ end
     @testset "winch_kv_table" begin
         p = project_file("system_reelout_150m.yaml")
 
-        # kv: flat at the identified 0.0408 up to 11 m/s. The 10 and 12 m/s rows
-        # were pinned to 0.0408 on 2026-08-26 (the 11 m/s re-tuning kept kv flat
-        # and moved the pattern instead); that is what these pin.
+        # kv: flat at the identified 0.0408 from 3 to 9 m/s. The 10 m/s row was
+        # re-identified to 0.039 on 2026-08-27 (sweep in data/winch_kv_table.yaml,
+        # +5.5% power); 11 and 12 m/s still carry the untested legacy 0.0408.
         @test winch_kv(9.0; project = p) ≈ 0.0408
         @test winch_kv(3.0; project = p) ≈ 0.0408
         @test winch_kv(6.0; project = p) ≈ 0.0408
-        @test winch_kv(10.0; project = p) ≈ 0.0408
-        @test winch_kv(9.5; project = p) ≈ 0.0408   # still inside the flat stretch
+        @test winch_kv(10.0; project = p) ≈ 0.039
+        @test winch_kv(9.5; project = p) ≈ 0.0399   # interpolated 9 -> 10 knee
 
         # f_low: 350 N at 3 m/s, 700 N from 4 m/s up, linear between. One flat
         # value cannot serve both — at 3 m/s a 700 N floor put the limiter in
@@ -684,12 +684,13 @@ end
         # Clamped outside the identified range, NEVER extrapolated: below the
         # first row and above the last, the end value is returned unchanged.
         @test winch_kv(0.5; project = p) == winch_kv(3.0; project = p)
-        @test winch_kv(50.0; project = p) == winch_kv(10.0; project = p)
+        @test winch_kv(50.0; project = p) == winch_kv(12.0; project = p)
         @test winch_f_low(0.5; project = p) == winch_f_low(3.0; project = p)
         @test winch_f_low(50.0; project = p) == winch_f_low(10.0; project = p)
 
-        # Monotone in wind speed, which is the property both curves are for.
-        @test issorted([winch_kv(v; project = p) for v in 3:0.5:11])
+        # Monotone (non-increasing) in wind speed over the identified 3-10 m/s
+        # range; 11 and 12 m/s carry an untested legacy value that breaks it.
+        @test issorted([winch_kv(v; project = p) for v in 3:0.5:10]; rev = true)
         @test issorted([winch_f_low(v; project = p) for v in 3:0.5:11])
 
         # The 6 m/s row exists only to place the force_limit step; it must be
