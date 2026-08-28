@@ -19,7 +19,10 @@ The test scenario:
 - then it is steered towards the planned figure-of-eight that promises the highest power
 - it flies figures of eight and reels out
 
-The initial tether length is 150 m, the final length 380 m. The wind speed is the ground wind speed, measured at a height of 6 m, using a vertical wind profile law combining the exponential and logarithmic laws, matched to measurements at a near-shore site in Maasvlakte, NL.
+The initial tether length is 150 m, the final length 380 m. The wind speed is the ground wind speed, 
+measured at a height of 6 m, using a vertical wind profile law combining the exponential and logarithmic laws, 
+matched to measurements at a near-shore site in Maasvlakte, NL. A ground-station with 20 kW nominal power and
+30 kW peak power is assumed. The nominal reel-out speed is 3.5 m/s, the maximum force 8400 N.
 """
 
 #%% code id=overview_table hidecode
