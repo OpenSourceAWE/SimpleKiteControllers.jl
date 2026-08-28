@@ -88,8 +88,7 @@ wc_settings:
   # in reset for the whole run — it oscillated, and this is the structure that
   # removes the switching it oscillated on. "hard" restores the two-limiter
   # behaviour and is the struct default, so other projects are unaffected.
-  force_limit:      "hard" # "soft" | "hard"
-                           # SAFE DEFAULT, deliberately not "soft":
+  force_limit:      "soft" # "soft" | "hard"
                            # simple_opt_reelout.jl overrides this per wind speed
                            # from winch_kv_table.yaml's force_limit column, like kv
                            # and f_low, and the soft law is only DEFINED above
@@ -101,23 +100,17 @@ wc_settings:
                            # Left at 1e-3: f_high 8000 >> 1/beta 1000 makes the
                            # smoothing harmless there, and this is the knee the
                            # force_limit_tau sweep was tuned against.
-  softminus_beta:   0.001  # corner sharpness of the LOWER limit                   [1/N]
-                           # DO NOT RAISE THIS TO FIX THE 3 m/s FLOOR — measured
-                           # 2026-08-25: 2e-3 and 5e-3 both make the 3 m/s startup
-                           # solve FAIL (422, Max_Iterations_Exceeded), 1e-3
-                           # converges. The smoothing is part of what conditions the
-                           # NLP, and 3 m/s is the marginal case. See the tuning log.
-                           # The floor is sp(beta*f_low)/beta = 884 N at f_low 350,
-                           # and at 1e-3 it can never go below ln2/beta = 693 N for
-                           # ANY f_low — above the whole 3 m/s force range
-                           # (587 +- 165 N). force_limit: "soft" is therefore NOT
-                           # usable at 3 m/s by any beta the solver accepts.
-                           # Both betas ARE now sent to the optimizer by
-                           # winch_from_wc, so its curve and calc_vro_soft's inverse
-                           # can no longer drift apart by coincidence. This NEEDS an
-                           # AWETrim carrying the WinchParams beta fields — branch
-                           # add_winch_beta, commit 254dd9e. An older server rejects
-                           # them with a 422, since they are sent unconditionally.
+  softminus_beta:   0.03   # corner sharpness of the LOWER limit [1/N]; needs * f_low >= 8
+                           # Sharpened for soft_lfc below (0.03 * f_low 350 = 10.5 >= 8).
+                           # SAFE to sharpen locally now: AWETrim always sees a fixed
+                           # AWETRIM_SOFTMINUS_BETA = 1e-3 (examples/awetrim_client.jl),
+                           # never this value — measured 2026-08-25, 2e-3/5e-3 already
+                           # make the 3 m/s solve FAIL (422, Max_Iterations_Exceeded),
+                           # so this field driving the server directly is what the pin
+                           # exists to prevent. See the tuning log.
+  soft_lfc:         true   # also replace the LowerForceController with a reel-in line
+  v_reel_in:        -2.0   # reel-in speed at zero force [m/s]
+  reel_in_beta:     2.0    # sharpness of the smooth line/curve handover [s/m]
   force_limit_tau:  2.48   # low-pass on the force before inverting; 0 = off        [s]
                            # dv/dF rises ~50x over the last kN below f_high, against
                            # a per-lap force std of ~1 kN at 9 m/s — that is why the

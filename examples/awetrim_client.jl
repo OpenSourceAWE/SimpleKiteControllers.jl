@@ -755,6 +755,15 @@ function inflow_from_settings(set)
 end
 
 """
+The `softminus_beta` always sent to AWETrim, independent of the local winch's own
+`wc.softminus_beta` — measured 2026-08-25: `2e-3`/`5e-3` both make the 3 m/s
+solve FAIL (422, Max_Iterations_Exceeded), `1e-3` converges. Kept fixed here so a
+local `soft_lfc` sharpening (which needs `softminus_beta * f_low >= 8`, e.g.
+`0.03` at `f_low = 350`) never reaches the server. See `data/wc_settings.yaml`.
+"""
+const AWETRIM_SOFTMINUS_BETA = 1e-3
+
+"""
     winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) -> WinchParams
 
 The winch law of a run, from the `WinchControllers.WCSettings` its
@@ -789,16 +798,14 @@ against the ceiling that will actually be in force while its path is flown —
 eight, and the startup path is the one flown there. Lowering it also lowers the
 speed ceiling `kv*sqrt(f_max)` referred to above.
 
-`softplus_beta`/`softminus_beta` default to `wc.softplus_beta`/`wc.softminus_beta`
-but are separately overridable so a run can sharpen `wc`'s OWN corner for a
-LOCAL-only law (`WinchControllers.WCSettings.soft_lfc`, which needs
-`softminus_beta * f_low >= 8` — far sharper than what the server tolerates at
-3 m/s, see `data/winch_kv_table.yaml`) without also sharpening the server's,
-which was measured to fail its 3 m/s solve above 1e-3.
+`softminus_beta` sent to the server is pinned to `AWETRIM_SOFTMINUS_BETA`, NOT
+read off `wc`: `wc.softminus_beta` may be sharpened locally for
+`WinchControllers.WCSettings.soft_lfc` (which needs `softminus_beta * f_low >=
+8`, far sharper than the server tolerates), and that must never reach AWETrim
+— see `AWETRIM_SOFTMINUS_BETA`'s docstring.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
-              f_max = wc.f_high, softplus_beta = wc.softplus_beta,
-              softminus_beta = wc.softminus_beta) =
+              f_max = wc.f_high) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
@@ -807,8 +814,8 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
                 # Sent unconditionally, not only under `force_limit = "soft"`: the
                 # server's floor is `sp(beta*f_min)/beta`, so beta shapes the path
                 # it plans whatever the runtime winch then does with it.
-                softplus_beta = Float64(softplus_beta),
-                softminus_beta = Float64(softminus_beta))
+                softplus_beta = Float64(wc.softplus_beta),
+                softminus_beta = Float64(AWETRIM_SOFTMINUS_BETA))
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,

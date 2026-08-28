@@ -76,7 +76,7 @@ entries:
   - v_wind: 3.0
     kv: 0.0408
     f_low: 350.0
-    force_limit: "hard"
+    force_limit: "soft"
   - v_wind: 4.0
     kv: 0.0408
     f_low: 700.0
