@@ -4,47 +4,34 @@
 # the same name in data/wc_settings.yaml. Add a row and re-identify the curve
 # here, not a new key elsewhere, when another wind speed is tuned.
 #
-# kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 up to 9 m/s, rising to
-#          0.0558 at 10 m/s and 0.0738 at 11 m/s; only those three points have
-#          been tuned, so the rows at 3 and 4 m/s repeat 0.0408 to keep the
-#          curve flat below 9.
+# kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 from 3 to 9 m/s; the
+#          10 m/s row is 0.039, identified 2026-08-27 (sweep below). 11 and
+#          12 m/s carry 0.0408 UNTESTED at the current tether and winch
+#          controller: the 2026-08-26 notes that used to live here (0.0558 at
+#          10, 0.0738 shipped at 11, 12 m/s out of envelope) described a
+#          DIFFERENT tether and winch controller and no longer apply to this
+#          table. Their text remains in git history; see also the 2026-08-27
+#          entry in docs/fig8_tuning_log.md.
 #
-#          11 m/s needed its own row: force_limit_tau does almost nothing there
-#          (measured 2026-08-26, tau 2.48 -> 3.49 at the clamped kv 0.0558 —
-#          v_ro std only 1.60 -> 1.55 m/s, %>8400N stuck at 38-40 %), because
-#          `calc_vro_soft` pins the command at v_sat once force >= f_high
-#          regardless of kv, and at 11 m/s the run spends ~40 % of its time
-#          there — a duty-cycle problem tau cannot filter away. kv is the lever
-#          that actually works, by reeling out faster BEFORE force reaches
-#          f_high so less of the run falls into that pinned region. Sweep at
-#          tau 2.48 (150 -> 380 m, no turbulence):
+#          Lower kv reels out slower, the kite keeps more of the wind, and
+#          force and power both rise — until the plant's 8400 N rating is
+#          reached. Sweep at 10 m/s (150 -> 380 m, no turbulence; phase-4
+#          peak force against the 8400 N limit):
 #
-#            kv      mean F   std F   peak F   %>8400N  power    verdict
-#            0.0558   7884 N  1468 N  10615 N   40.4 %  46354 W  all 9 passed
-#            0.0642   7840 N   792 N  10075 N   18.3 %  46776 W  FAILED phase 5
-#            0.0738   7299 N   691 N   9771 N    5.1 %  44975 W  all 9 passed
-#            0.0849   6600 N   706 N   9829 N    4.2 %  42188 W  all 9 passed
-#            0.0976   5867 N   788 N   9086 N    1.4 %  38874 W  all 9 passed
-#            0.1122   5275 N  1103 N   9038 N    1.2 %  35401 W  FAILED — overspeed
-#                                                                  abort, run diverged
+#            kv      mean F   peak F   power    ratio   verdict
+#            0.0408   6332 N   7294 N  20051 W   0.85   all 10 passed
+#            0.039    6690 N   7901 N  21161 W   0.84   all 10 passed
+#            0.0385   6759 N   8411 N  21247 W   0.85   FAILED max force
+#            0.036    7223 N   9371 N  22543 W   0.85   FAILED max force
 #
-#          0.0738 shipped: force std roughly halves and the over-rating duty
-#          cycle drops 40.4 % -> 5.1 % for a 3 % power cost — the best point
-#          before power starts falling fast. 0.1122 is UNSAFE, not just a worse
-#          trade: v_app hit the 45 m/s overspeed guard and the run aborted.
-#
-#          12 m/s has NO row: it is currently OUT OF ENVELOPE, and kv is not
-#          the fix. Measured 2026-08-26, +-5/10 % around the clamped 0.0738 —
-#          EVERY run hit the v_app overspeed guard (>45 m/s) and aborted before
-#          2.5-3 of the intended laps, `stop_reason: "none"` in all five. Raising
-#          kv still traded force for power the same way it did at 11 m/s
-#          (%>8400N 34.9 %->6.2 % from 0.0664->0.0812), but none of those runs
-#          completed, so the numbers describe a truncated flight, not a steady
-#          one. v_app_ref is already exceeded by +22-23 % at 12 m/s (+20 % at
-#          11); the next lever is the PATTERN/depower (v_app_ref itself, or
-#          more depower at high wind), not the winch law. Until that is fixed,
-#          12 m/s clamps to the 11 m/s row — untested, and likely still too
-#          fast, but there is no measurement yet that says otherwise.
+#          0.039 shipped: +5.5 % power for a phase-4 peak 499 N under the
+#          limit. It is the knee: below it the gain collapses while the peak
+#          keeps climbing (0.0385 bought 86 W and crossed the limit by 11 N)
+#          because the soft law starts clamping against f_high 8000 N — mean
+#          force 6690 N, peaks 7901 N. Force is far more kv-sensitive here
+#          than the retired 11 m/s sweep suggested. power_ratio stays at
+#          0.84-0.85 throughout: predicted and measured power scale together
+#          with kv, so kv moves the power LEVEL, not the plant-model gap.
 #
 # f_low  — force floor [N] below which the LowerForceController reels in. It has
 #          to move with the wind because the winch's rating does not and the
@@ -105,7 +92,7 @@ entries:
     f_low: 700.0
     force_limit: "soft"
   - v_wind: 10.0
-    kv: 0.0408
+    kv: 0.039
     f_low: 700.0
     force_limit: "soft"
   - v_wind: 11.0
