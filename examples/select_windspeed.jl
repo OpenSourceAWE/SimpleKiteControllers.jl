@@ -18,6 +18,7 @@ with no matching cached field makes the next run generate one (~1.2 GB, tens
 of seconds), same as picking a new turbulence level.
 """
 
+using REPL
 using REPL.TerminalMenus
 
 include(joinpath(@__DIR__, "gui_state.jl"))

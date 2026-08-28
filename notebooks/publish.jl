@@ -104,11 +104,11 @@ occursin("\"src_stale\":true", state) &&
     error("Notebook `$notebook` is stale relative to $notebook.jl on disk — close and " *
           "reopen it so it re-parses the file, then run it before publishing.")
 
-include(joinpath(@__DIR__, "export_html.jl"))   # produces OUTPUT_PATH
+include(joinpath(@__DIR__, "export_html.jl"))   # produces EXPORT_OUTPUT_PATH
 
 git(args) = Cmd(`git $args`; dir = SIMRESULTS_REPO)
 
-cp(OUTPUT_PATH, INDEX_HTML; force = true)
+cp(EXPORT_OUTPUT_PATH, INDEX_HTML; force = true)
 
 if isempty(read(git(`status --porcelain -- docs/index.html`), String))
     println("Nothing to publish — docs/index.html already matches the export.")
