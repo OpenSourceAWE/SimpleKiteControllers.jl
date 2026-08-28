@@ -94,7 +94,7 @@ The optimal trajectory of the kite, the shape of the figure of eight, depends on
 """
 
 #%% code id=wind_speed_bind
-@bind wind_speed Slider(3:10; default=3, label="Wind")
+@bind wind_speed Slider(3:11; default=3, label="Wind")
 
 #%% web id=pattern_plot controls=wind_speed
 @web(html"""
@@ -107,6 +107,7 @@ The optimal trajectory of the kite, the shape of the figure of eight, depends on
   <img data-v="8" src="/n/results/asset/notebooks/images/pattern_v08.png" alt="flight pattern, 8 m/s">
   <img data-v="9" src="/n/results/asset/notebooks/images/pattern_v09.png" alt="flight pattern, 9 m/s">
   <img data-v="10" src="/n/results/asset/notebooks/images/pattern_v10.png" alt="flight pattern, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/pattern_v11.png" alt="flight pattern, 11 m/s">
 </div>
 """,
 css"""
@@ -160,6 +161,7 @@ state machine over the whole run. The first subplot, `d ', shows the distance be
   <img data-v="8" src="/n/results/asset/notebooks/images/time_series_v08.png" alt="time series, 8 m/s">
   <img data-v="9" src="/n/results/asset/notebooks/images/time_series_v09.png" alt="time series, 9 m/s">
   <img data-v="10" src="/n/results/asset/notebooks/images/time_series_v10.png" alt="time series, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/time_series_v11.png" alt="time series, 11 m/s">
 </div>
 """,
 css"""
@@ -200,6 +202,7 @@ mechanical power over the whole run, and the cumulative mechanical energy.
   <img data-v="8" src="/n/results/asset/notebooks/images/power_v08.png" alt="power, 8 m/s">
   <img data-v="9" src="/n/results/asset/notebooks/images/power_v09.png" alt="power, 9 m/s">
   <img data-v="10" src="/n/results/asset/notebooks/images/power_v10.png" alt="power, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/power_v11.png" alt="power, 11 m/s">
 </div>
 """,
 css"""
@@ -241,6 +244,7 @@ kite speed over the whole run.
   <img data-v="8" src="/n/results/asset/notebooks/images/aerodynamics_v08.png" alt="aerodynamics, 8 m/s">
   <img data-v="9" src="/n/results/asset/notebooks/images/aerodynamics_v09.png" alt="aerodynamics, 9 m/s">
   <img data-v="10" src="/n/results/asset/notebooks/images/aerodynamics_v10.png" alt="aerodynamics, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/aerodynamics_v11.png" alt="aerodynamics, 11 m/s">
 </div>
 """,
 css"""
