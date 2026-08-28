@@ -106,6 +106,21 @@ Base.@kwdef struct WinchParams
     # `nothing` leaves the server on its own default.
     softplus_beta::Union{Float64, Nothing} = nothing
     softminus_beta::Union{Float64, Nothing} = nothing
+    # Blend factor in [0, 1] towards a reel-in-capable server winch law
+    # (Winch.tension_curve's use_awe_trim, AWETrim/src/awetrim/system/winch.py):
+    # 0 (default) is the server's plain quadratic law above, unchanged; 1
+    # replaces it below f_min with a straight line through (0, f_min) and
+    # (v_reel_in, 0), handed to the quadratic law by a smooth maximum. Mirrors
+    # calc_vro_soft's own use_awe_trim (WinchControllers.jl), which blends the
+    # OTHER direction (force -> speed; the server computes speed -> force).
+    use_awe_trim::Float64 = 0.0
+    # use_awe_trim only: reel-in speed [m/s] at zero force (< 0) and handover
+    # sharpness [s/m]. `nothing` keeps the server's own defaults (-2.0, 20.0).
+    # Unlike softminus_beta above, reel_in_beta has no matching sharpness
+    # requirement against f_min/k_v to worry about on the server side -- see
+    # WinchParams.reel_in_beta's docstring in AWETrim's schemas.py.
+    v_reel_in::Union{Float64, Nothing} = nothing
+    reel_in_beta::Union{Float64, Nothing} = nothing
 end
 
 "The four-field winch of the original contract; `v_max`/`p_max` stay unset."
@@ -758,8 +773,12 @@ end
 The `softminus_beta` always sent to AWETrim, independent of the local winch's own
 `wc.softminus_beta` — measured 2026-08-25: `2e-3`/`5e-3` both make the 3 m/s
 solve FAIL (422, Max_Iterations_Exceeded), `1e-3` converges. Kept fixed here so a
-local `soft_lfc` sharpening (which needs `softminus_beta * f_low >= 8`, e.g.
-`0.03` at `f_low = 350`) never reaches the server. See `data/wc_settings.yaml`.
+local sharpening of the plain `force_limit = "soft"` law WITHOUT `soft_lfc`
+(which needs `softminus_beta * f_low >= 8`, e.g. `0.03` at `f_low = 350`)
+never reaches the server. With `soft_lfc = true` this value is not even read
+locally any more — `calc_vro_soft` hard-clamps at `f_low` instead, see
+`use_awe_trim` on `winch_from_wc` for what governs that curve's server-side
+counterpart. See `data/wc_settings.yaml`.
 """
 const AWETRIM_SOFTMINUS_BETA = 1e-3
 
@@ -769,7 +788,8 @@ const AWETRIM_SOFTMINUS_BETA = 1e-3
 The winch law of a run, from the `WinchControllers.WCSettings` its
 `WinchController` is built from: `kv`, `f_low` and `f_high` of
 `data/wc_settings.yaml`, plus the two `beta`s that set how softly the server
-saturates its tension curve at those limits. The optimizer maps
+saturates its tension curve at those limits, and `use_awe_trim`/`v_reel_in`/
+`reel_in_beta` for the reel-in-capable blend. The optimizer maps
 `v_set = kv*sqrt(force)` onto its radial force model, so these numbers are what
 makes the optimized path the path for THIS ground station.
 
@@ -799,10 +819,21 @@ eight, and the startup path is the one flown there. Lowering it also lowers the
 speed ceiling `kv*sqrt(f_max)` referred to above.
 
 `softminus_beta` sent to the server is pinned to `AWETRIM_SOFTMINUS_BETA`, NOT
-read off `wc`: `wc.softminus_beta` may be sharpened locally for
-`WinchControllers.WCSettings.soft_lfc` (which needs `softminus_beta * f_low >=
-8`, far sharper than the server tolerates), and that must never reach AWETrim
-— see `AWETRIM_SOFTMINUS_BETA`'s docstring.
+read off `wc`: `wc.softminus_beta` may be sharpened locally for the plain
+`force_limit = "soft"` law WITHOUT `soft_lfc` (which needs `softminus_beta *
+f_low >= 8`, far sharper than the server tolerates) — with `soft_lfc = true`,
+`calc_vro_soft` hard-clamps at `f_low` locally instead and never reads
+`softminus_beta` at all, but the pin stays unconditional so a run that flips
+`soft_lfc` back off is still covered. See `AWETRIM_SOFTMINUS_BETA`'s
+docstring.
+
+`use_awe_trim`/`v_reel_in`/`reel_in_beta` are read straight off `wc` (unlike
+the `beta`s above, they need no pinning: the server-side sharpness
+requirement on `reel_in_beta` is far more forgiving than the local one, since
+`Winch.tension_curve` blends in the forward direction — see its docstring),
+so a run that reels in locally optimizes against a server winch model that
+can do the same. `wc.use_awe_trim` defaults to `0.0`, leaving the server's
+plain law unchanged unless `data/wc_settings.yaml` opts in.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
               f_max = wc.f_high) =
@@ -811,6 +842,9 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),
                 optimize_k_v = Bool(optimize_k_v),
+                use_awe_trim = Float64(wc.use_awe_trim),
+                v_reel_in = Float64(wc.v_reel_in),
+                reel_in_beta = Float64(wc.reel_in_beta),
                 # Sent unconditionally, not only under `force_limit = "soft"`: the
                 # server's floor is `sp(beta*f_min)/beta`, so beta shapes the path
                 # it plans whatever the runtime winch then does with it.
