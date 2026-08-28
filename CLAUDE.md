@@ -48,6 +48,20 @@ afterwards, and that is what the ~2x realtime above assumes: with the packages
 precompiled and both caches present the run is fast, the very first one is minutes
 slower. A `body_damping` the settling cache has not seen pays that cost again.
 
+## Use Kaimon
+
+Kaimon exposes the live Julia REPL and code-intelligence tools; prefer it over a shell
+subprocess or ad-hoc `grep`/`find`.
+
+- **Executing code** — `ex` evaluates in the REPL the user is watching; `src/` edits are
+  picked up automatically via Revise, so never call `Revise.revise()` yourself. Run tests
+  by `include`-ing the test file into that REPL, not `Pkg.test()` in a subprocess — a fresh
+  subprocess can't reuse the compiled V3 model or `examples/cache/settled_*.bin`, so a full
+  run there pays the multi-minute first-run cost every time.
+- **Finding code** — semantic search when exploring or when you only know what the code
+  does, not its name; grep when you already have an exact symbol, call site, or string to
+  match.
+
 ### Waiting for a run to finish
 
 A reel-out run takes ~4-6 min of wall time (150 s of sim at ~1.4x realtime, plus the
