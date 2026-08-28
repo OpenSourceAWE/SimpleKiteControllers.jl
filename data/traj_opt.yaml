@@ -220,7 +220,7 @@ traj_opt:
     # its own mean <= value^2/2), the mirror of azimuth_amplitude_min. Where
     # pattern_elevation_max only caps where the path may SIT, this caps how TALL
     # the figure is — the span is what the curvature margin reads.
-    pattern_elevation_amplitude_max: 14.0
+    pattern_elevation_amplitude_max: 10.0
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     # The path is anchored to ONE radius and the run walks away from it; each
