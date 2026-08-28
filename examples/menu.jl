@@ -69,7 +69,7 @@ function example_menu()
     options = [first(e) for e in EXAMPLES]
     push!(options, "quit")
     while true
-        choice = request("\nChoose example to run or `q` to quit: ",
+        choice = REPL.TerminalMenus.request("\nChoose example to run or `q` to quit: ",
                          RadioMenu(options, pagesize=10))
         if choice == -1 || choice == length(options)
             println("Left menu. Press <ctrl><d> to quit Julia!")

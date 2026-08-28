@@ -29,7 +29,7 @@ function select_plots()
     current = selected_plots()
     checked = Set(findall(in(current), PLOT_KEYS))
     menu = MultiSelectMenu(PLOT_LABELS; selected = checked)
-    chosen = request("\nSelect plots to show: ", menu)
+    chosen = REPL.TerminalMenus.request("\nSelect plots to show: ", menu)
     plots = PLOT_KEYS[sort(collect(chosen))]
     set_selected_plots(plots)
     println("Plots set to: ", isempty(plots) ? "none" : join(plots, ", "))

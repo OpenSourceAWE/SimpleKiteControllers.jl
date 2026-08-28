@@ -41,7 +41,7 @@ function plot_scenario()
     end
 
     options = [scenarios; "quit"]
-    choice = request("\nSelect a scenario to plot: ", RadioMenu(options, pagesize = 8))
+    choice = REPL.TerminalMenus.request("\nSelect a scenario to plot: ", RadioMenu(options, pagesize = 8))
 
     if choice != -1 && choice != length(options)
         selected = options[choice]

@@ -43,7 +43,7 @@ function select_sim_time()
     current = selected_sim_time()
     current_str = isnothing(current) ? "default" : "$(current) s"
     options = ["default", "specific value in seconds...", "quit"]
-    choice = request("\nSelect simulation time (current: $current_str): ",
+    choice = REPL.TerminalMenus.request("\nSelect simulation time (current: $current_str): ",
                      RadioMenu(options, pagesize=8))
 
     if choice == 1

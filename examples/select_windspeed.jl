@@ -50,7 +50,7 @@ function select_windspeed()
     current = selected_windspeed()
     current_str = isnothing(current) ? "default" : "$(current) m/s"
     options = ["default", "specific value in m/s...", "quit"]
-    choice = request("\nSelect wind speed (current: $current_str): ",
+    choice = REPL.TerminalMenus.request("\nSelect wind speed (current: $current_str): ",
                      RadioMenu(options, pagesize=8))
 
     if choice == 1
