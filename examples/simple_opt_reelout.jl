@@ -328,7 +328,7 @@ power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 # - Below the knot the sqrt-law MISpredicts: the force-floor guard duty-cycles
 #   reel-in/reel-out there (even 474 s failed at 3 m/s), so the legacy steepened
 #   ratio scaling is kept instead.
-BELOW_DEFAULT_EXPONENT = 2.1  # exponent for scaling sim_time below the knot, tuned to 3 m/s
+BELOW_DEFAULT_EXPONENT = 1.9  # exponent for scaling sim_time below the knot, tuned to 3 m/s
 V_BUDGET_KNOT = 6.0           # [m/s] sqrt-law valid at/above; legacy scaling below
 F_BUDGET_COEF = 80.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w²;
                               # measured 3085/36=85.7, 5667/64=88.5, 6535/81=80.7,
