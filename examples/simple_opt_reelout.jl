@@ -442,6 +442,35 @@ wc.f_low = winch_f_low(project_set.v_wind; project)
 # would command a standstill there. See `winch_force_limit`'s docstring.
 wc.force_limit = winch_force_limit(project_set.v_wind; project)
 rcs = wc                                 # same object, two controllers read it
+
+# The betas the optimizer sees, captured BEFORE WCS_OVERRIDES below can sharpen
+# rcs's OWN corner for a LOCAL-only law (`soft_lfc`, which needs
+# `softminus_beta * f_low >= 8` — far sharper than 1e-3). AWETrim's own corner
+# was measured 2026-08-25 to fail its 3 m/s solve above 1e-3 (see
+# data/winch_kv_table.yaml), independent of what the local WinchController does
+# with the same force, so `winch_from_wc` below is passed these explicitly
+# rather than reading `rcs.softplus_beta`/`rcs.softminus_beta` directly.
+const AWETRIM_SOFTPLUS_BETA = rcs.softplus_beta
+const AWETRIM_SOFTMINUS_BETA = rcs.softminus_beta
+
+# Per-run overrides of `rcs` (WCSettings), for a LOCAL-only winch law — e.g.
+# `Dict(:soft_lfc => true, :softminus_beta => 0.03, :v_reel_in => -2.0,
+# :reel_in_beta => 20.0)`. Read and cleared here like FCS_OVERRIDES above, so a
+# leftover value can never silently change the next interactive run. NEVER sent
+# to AWETrim regardless: see AWETRIM_SOFTPLUS_BETA/AWETRIM_SOFTMINUS_BETA above.
+# `soft_lfc` still requires `force_limit == "soft"` (WinchController throws
+# otherwise), which the wind-speed table above may not have set — soft_lfc is
+# therefore only usable at a wind speed the table already flies "soft" at.
+wcs_overrides = @isdefined(WCS_OVERRIDES) ? WCS_OVERRIDES : Dict{Symbol, Any}()
+WCS_OVERRIDES = Dict{Symbol, Any}()
+for (key, value) in wcs_overrides
+    hasfield(WCSettings, key) ||
+        error("WCS_OVERRIDES: \"$key\" is not a field of WCSettings.")
+    setfield!(rcs, key, convert(fieldtype(WCSettings, key), value))
+end
+isempty(wcs_overrides) ||
+    @info "wc overrides in force: " * join(("$k = $v" for (k, v) in wcs_overrides), ", ")
+
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
 # No dt: init takes it from the project's settings (sample_freq). sim_time falls
@@ -512,7 +541,12 @@ fec = FigureEightController(FigureEightSettings(;
 # is the same WCSettings object the reel-out WinchController is built from, so
 # the optimizer is given the winch law that is actually flown.
 inflow = inflow_from_settings(project_set)
-winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v)
+# softplus_beta/softminus_beta pinned to AWETRIM_SOFTPLUS_BETA/
+# AWETRIM_SOFTMINUS_BETA (captured before WCS_OVERRIDES), not read off `rcs`
+# directly: a local-only `soft_lfc` override must never reach the server.
+winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
+                       softplus_beta = AWETRIM_SOFTPLUS_BETA,
+                       softminus_beta = AWETRIM_SOFTMINUS_BETA)
 # The STARTUP path is the one flown during lap 1, where `first_lap_force_frac`
 # holds the runtime ceiling down — so it is solved against that same ceiling
 # rather than against one the winch will not give it. Re-optimization replies are
@@ -520,7 +554,9 @@ winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v)
 # request's speed ceiling `kv*sqrt(f_max)` too; see `winch_from_wc`'s docstring.
 winch_first_lap = fcs.first_lap_force_frac < 1 ?
     winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
-                  f_max = F_HIGH_NOMINAL * fcs.first_lap_force_frac) : winch
+                  f_max = F_HIGH_NOMINAL * fcs.first_lap_force_frac,
+                  softplus_beta = AWETRIM_SOFTPLUS_BETA,
+                  softminus_beta = AWETRIM_SOFTMINUS_BETA) : winch
 # Every reply's optimized gain lands here, so the summary can report what was
 # actually flown rather than only what was sent.
 opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]

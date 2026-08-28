@@ -788,9 +788,17 @@ against the ceiling that will actually be in force while its path is flown —
 `fcs.first_lap_force_frac` holds the runtime limit down for the first figure of
 eight, and the startup path is the one flown there. Lowering it also lowers the
 speed ceiling `kv*sqrt(f_max)` referred to above.
+
+`softplus_beta`/`softminus_beta` default to `wc.softplus_beta`/`wc.softminus_beta`
+but are separately overridable so a run can sharpen `wc`'s OWN corner for a
+LOCAL-only law (`WinchControllers.WCSettings.soft_lfc`, which needs
+`softminus_beta * f_low >= 8` — far sharper than what the server tolerates at
+3 m/s, see `data/winch_kv_table.yaml`) without also sharpening the server's,
+which was measured to fail its 3 m/s solve above 1e-3.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
-              f_max = wc.f_high) =
+              f_max = wc.f_high, softplus_beta = wc.softplus_beta,
+              softminus_beta = wc.softminus_beta) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
@@ -799,8 +807,8 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
                 # Sent unconditionally, not only under `force_limit = "soft"`: the
                 # server's floor is `sp(beta*f_min)/beta`, so beta shapes the path
                 # it plans whatever the runtime winch then does with it.
-                softplus_beta = Float64(wc.softplus_beta),
-                softminus_beta = Float64(wc.softminus_beta))
+                softplus_beta = Float64(softplus_beta),
+                softminus_beta = Float64(softminus_beta))
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
