@@ -15,3 +15,5 @@
 /data/windfield_*.npz
 .markdownlint.json
 trajectories/
+notebooks/images/
+
