@@ -4282,3 +4282,41 @@ check to the criteria string. Fixing the budget made the existing behaviour
 fully reportable; bringing peak force within limit at 10 m/s is the kv-table
 question (see the 2026-08-26 sweep notes at the top of data/winch_kv_table.yaml),
 not a timing question.
+
+## 10 m/s kv — power against the phase-4 force limit (2026-08-27)
+
+The 2026-08-26 kv notes at the top of `data/winch_kv_table.yaml` (0.0558 at
+10 m/s, 0.0738 shipped at 11, 12 m/s out of envelope) were measured against a
+DIFFERENT tether and winch controller; the table itself had since been reset to
+flat 0.0408 while the header kept telling the old story. This entry re-identifies
+the 10 m/s row against the current plant, riding the phase-4 peak force up to
+its 8400 N limit — the "kv-table question" the entry above ends with.
+
+Sweep at 10 m/s (150 -> 380 m, no turbulence, everything else at HEAD:
+`reelout_f_trigger` 6400, `pattern_elevation_amplitude_max` 7.0), phase-4 peak
+against the 8400 N rating:
+
+    kv      mean F   peak F   power    ratio   verdict
+    0.0408   6332 N   7294 N  20051 W   0.85   all 10 passed
+    0.039    6690 N   7901 N  21161 W   0.84   all 10 passed
+    0.0385   6759 N   8411 N  21247 W   0.85   FAILED max force (whole run)
+    0.036    7223 N   9371 N  22543 W   0.85   FAILED max force (whole run)
+
+(Archives `output/archives/2026-08-27_{220213,220708,220908}` and `220353`.)
+
+- Force is far more kv-sensitive here than the retired 11 m/s sweep suggested:
+  over 0.0408 -> 0.036 the mean scales like kv^-1.2 and the PEAK like kv^-2.2,
+  against ~kv^-0.5 for both in the old sweep. The old numbers cannot be reused
+  for anything.
+- The knee is at kv 0.039. Below it the power gain collapses (0.0385 bought
+  86 W over 0.039; 0.036's extra 1382 W needs a 971 N deeper peak) because the
+  soft law starts clamping against `f_high` 8000 N: mean force 6690 N, peaks
+  7901 N — the operating point has walked into the ramp.
+- power_ratio does NOT move with kv (0.84-0.85 throughout): the optimizer's
+  prediction and the measured power scale together. Reducing kv buys real
+  power, not a better plant-model match; closing the ratio gap needs a
+  different lever (path/depower, not the winch law).
+
+0.039 shipped for 10 m/s: +1110 W (+5.5 %) over 0.0408, all 10 criteria
+passing, phase-4 peak 7901 N — 499 N of margin. The stale header narrative is
+replaced by this sweep; the old text remains in git history.
