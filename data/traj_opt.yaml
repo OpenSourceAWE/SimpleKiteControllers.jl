@@ -104,6 +104,76 @@ traj_opt:
     # polyline makes the curvature check read far tighter than the curve is.
     resample_points:   361   # points the path is resampled to                 [-]
     opt_failure_cache: true  # skip requests recorded as failing; see the docstring
+    # use_awe_trim of a throwaway solve sent BEFORE the startup request, purely to
+    # leave its converged profiles in the session for it. 0.0 is off. Only sent when
+    # ABOVE wc_settings.yaml's own use_awe_trim. Costs one extra solve at startup and
+    # nothing during the run -- re-optimizations are already warm from the solve
+    # before them, only the first request after /init is cold. A deterministic
+    # pre-solve, not a retry: it runs every time it is set, so the optimum flown
+    # stays reproducible.
+    #
+    # 1.0 because wc_settings.yaml's use_awe_trim of 0.875 is fragile in tether
+    # LENGTH, which a reel-out run sweeps. Measured 2026-08-29 at 3 m/s: cold, it
+    # converges over 149.95-150.05 m and fails at 150.2 and 151.0 m. Seeding at 1.0
+    # (which converges cold at every length tried: 150.2, 151, 160, 200 m) recovers
+    # 151, 160 and 200 m but NOT 150.2 — it improves the odds, it does not remove the
+    # failure. See PlanFix3m_per_s.md.
+    opt_warm_start_awe_trim: 1.0   # use_awe_trim of the seeding solve; 0.0 = off  [-]
+    # Round the tether length SENT to the optimizer to a multiple of this; 0.0 sends
+    # it unrounded. Only the request is rounded -- l_set, what the winch is commanded
+    # to, is untouched. Whether a solve converges depends on the length to an absurd
+    # precision: measured 2026-08-29 at 3 m/s, 149.9999542236328 m threw 422 where
+    # 150.0 m converges in 12 s, 46 MICROMETRES away. The run's settled length never
+    # lands on a round number, so it draws from that lottery on every request; this
+    # makes it ask a question with a known answer. The cost is that the path is
+    # anchored up to half this value from the length it is flown at, on top of the
+    # drift re-optimization already has. A workaround, not a fix.
+    opt_length_round:  1.0   # round the REQUEST's tether length to this; 0.0 = off [m]
+    # use_awe_trim SENT to AWETrim, independent of wc_settings.yaml's own value;
+    # negative follows it. The two sides want opposite things. LOCALLY it sets the
+    # force at which the winch starts reeling out -- 350 N at 0.0, 883 N at 1.0 --
+    # and at 3 m/s the kite cannot pull 883 N, so a high value never reels out:
+    # measured 2026-08-29, 0.875 stalled the run at 188.7 m of a 380 m target where
+    # 0.0 reached 380 m and passed all 10 criteria. SERVER-SIDE it must be high, since
+    # the 3 m/s solve does not converge below ~0.875. Same split AWETRIM_SOFTMINUS_BETA
+    # makes for the other beta: the run flies the law it can fly, the optimizer is
+    # asked the question it can answer. This does NOT make the two laws agree -- the
+    # prediction is still computed against a winch floored far above the flown forces,
+    # so the power ratio stays wrong. See PlanFix3m_per_s.md.
+    opt_awe_trim:      1.0 # use_awe_trim sent to the server; < 0 follows wc_settings [-]
+                             # 1.0, not 0.875: free_speed's NLP never evaluates the
+                             # tension curve, so this no longer shapes the path or the
+                             # predicted power at all. It still reaches the node-0
+                             # forward march, which DOES use the force law, and 1.0 is
+                             # the value that march converges at cold.
+    # Winch model the server optimizes against. "" leaves it on force_law, which ties
+    # tension to reel speed through the k_v curve; "free_speed" drops that equality for
+    # a force band [f_min, f_max] with the reel speed a direct control. At 3 m/s
+    # force_law only converges with the winch floored near 883 N -- above anything the
+    # kite pulls -- and then predicts a standstill. free_speed converged cold at all
+    # eight lengths of the sweep (150-380 m) in 8-12 s, measured 2026-08-29. The trade:
+    # its path suits ANY winch in the band, not this k_v law, so its predicted power is
+    # an upper bound. That is the point -- a measured/predicted ratio above 1 is then a
+    # real physics disagreement, not a winch-floor artefact. See PlanFix3m_per_s.md.
+    # MEASURED 2026-08-29: "free_speed" is NOT safe as the path source. Its path is
+    # optimal for any winch in the force band, and flown with this k_v winch it does
+    # not sustain the force the winch needs: the run dipped to 11.6 deg elevation and
+    # 109 N (against 16.1 deg / 254 N on the force_law path), the soft law's reel-in
+    # branch took the tether from 150 m DOWN to 83 m, and the kite stalled at t = 51 s
+    # (lift 101 N against drag 228 N). Its curvature margin was also the tightest of
+    # any run, 0.83 against the 0.82 gate. Left OFF for the path; free_speed is still
+    # the right POWER REFERENCE, which is a separate job. See PlanFix3m_per_s.md.
+    opt_winch_mode:  ""      # "" = server default (force_law) | "free_speed"       [-]
+    # Lengths at which a free_speed reference power is solved AFTER the run, purely to
+    # score the measured power against; 0 is off. free_speed drops the winch law for a
+    # plain [f_min, f_max] band, so its power is what ANY winch in that band could
+    # harvest -- an upper bound. Scored against it, a ratio above 1 is a real physics
+    # disagreement, not the artefact of a floor the kite cannot reach (force_law's own
+    # prediction went NEGATIVE at 3 m/s). Solved after the run and weighted by the time
+    # spent at each length, so it costs the run nothing and cannot destabilise it --
+    # which matters, because a free-speed path is not flyable here (it crashed a run).
+    # Measured cost: ~10 s per point.
+    free_speed_reference_points: 6  # free_speed solves for the reference; 0 = off    [-]
     # Curvature margin the returned path must have at the length it is flown at
     # (path radius / the kite's minimum turn radius); 0.0 flies whatever came
     # back. Below 1.0 the path is tighter than the kite can turn at all.

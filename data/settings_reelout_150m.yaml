@@ -31,7 +31,17 @@ kite:
   model: ''            # 3D model of the kite
   foil_file: ''        # filename for the foil shape
   physical_model: 'v3' # name of the kite model to use (KPS3, KPS4 or SymbolicAWEModel)
-  mass: 6.2            # kite mass [kg]
+  mass: 10.9926        # WING mass [kg], and the one that reaches the model: the wing's
+                       # geometry points carry extra_mass 0, so SymbolicAWEModels'
+                       # finalize_particle_wing_mass! distributes THIS over them.
+                       # 10.9926 matches AWETrim's LEI-V3 wing and V3Kite's own
+                       # bridle_geometry_full_fem.yaml (mass_without_bridles: 11).
+                       # It was 6.2, which is 4.8 kg light and was worth a factor ~2 in
+                       # predicted power at 3 m/s. NOTE the controller is still
+                       # identified at 6.2 kg -- turn_rate_coeffs.yaml's c1/c2,
+                       # depower_setpoint, the steering gains -- and at 3 m/s this mass
+                       # does not fly at all (0 laps, elevation -82 deg). See
+                       # PlanFix3m_per_s.md.
   quasi_static: false  # whether to use quasi static kite points or not
   alpha_zero: 8.8      # should be 5 [degrees]
 

@@ -166,6 +166,121 @@ multi-modal, so the guess is a choice about the answer.
     """
     opt_failure_cache::Bool = true
     """
+    `use_awe_trim` of a throwaway solve sent BEFORE the startup request, to seed
+    the session for it. `0.0` is off.
+
+    The optimizer's first solve after `/init` is cold: it marches a quasi-steady
+    state along the seed path before IPOPT sees it, and at 3 m/s that march fails
+    outright once the winch's force at zero reel speed drops below ~830 N
+    (measured 2026-08-29). A converged solve leaves its `speed_radial`, `s_dot`
+    and `input_steering` profiles in the session, and the next request starts from
+    those instead — which clears that failure entirely.
+
+    Set this to a `use_awe_trim` known to converge (`1.0` is the softminus-floored
+    law the server used before the reel-in law replaced it) when
+    `wc_settings.yaml`'s own value does not converge cold. It costs one extra
+    solve at startup and nothing during the run: re-optimizations are already warm
+    from the solve before them, only the first request is cold.
+
+    This is a deterministic pre-solve, NOT a retry — it runs unconditionally when
+    set, so the ladder is the same every run and the optimum flown stays
+    reproducible. That is what keeps it clear of the rule under
+    [`reopt_retry_el_offset`](@ref) that the startup solve never retries.
+
+    Only sent when it is ABOVE `wc_settings.yaml`'s `use_awe_trim`; a value at or
+    below it would seed with a law at least as hard to solve as the real one.
+    """
+    opt_warm_start_awe_trim::Float64 = 0.0
+    """
+    Round the tether length SENT to the optimizer to a multiple of this [m].
+    `0.0` sends it unrounded.
+
+    Whether a request converges depends on the tether length to an absurd
+    precision — measured 2026-08-29 at 3 m/s, a run at 149.9999542236328 m threw
+    422 where 150.0 m converges in 12 s, 46 MICROMETRES away. The run's own length
+    is a settling artefact that never lands on a round number, so it draws from
+    that lottery every time; rounding the request makes it ask a question that has
+    a known answer.
+
+    Only the REQUEST is rounded. `l_set` — what the winch is actually commanded to
+    — is untouched, so this does not move the kite. It does mean the path is
+    anchored to a length up to half this value away from the one it is flown at,
+    on top of the drift the run already has from re-optimizing at intervals; at
+    `1.0` that is 0.5 m against a 150-380 m sweep.
+
+    This is a workaround for the optimizer's sensitivity, not a fix for it.
+    """
+    opt_length_round::Float64 = 0.0
+    """
+    `use_awe_trim` SENT to AWETrim, independent of the local winch's own
+    `wc_settings.yaml` value. Negative follows `wc.use_awe_trim`, as before.
+
+    The two sides want opposite things and cannot share one number. LOCALLY it
+    must be near `0.0`: it sets the force at which the winch starts reeling out,
+    350 N at `0.0` against 883 N at `1.0`, and at 3 m/s the kite cannot pull 883 N,
+    so a high value simply never reels out — measured 2026-08-29, `0.875` stalled
+    the run at 188.7 m of a 380 m target where `0.0` reached 380 m. SERVER-SIDE it
+    must be HIGH: the 3 m/s solve does not converge below ~0.875, on either
+    continuation axis.
+
+    So this is the same split `AWETRIM_SOFTMINUS_BETA` makes for the other beta
+    (`examples/awetrim_client.jl`) — the run flies the law it can fly, and asks the
+    optimizer the question it can answer.
+
+    It does NOT make the two laws agree; it makes each side usable. The predicted
+    power is still computed against a winch floored far above the forces the run
+    flies, so the power ratio stays wrong until AWETrim converges at low winch
+    force. See PlanFix3m_per_s.md.
+    """
+    opt_awe_trim::Float64 = -1.0
+    """
+    Winch model AWETrim optimizes against: `""` (default) leaves the server on
+    its own `force_law`, `"free_speed"` drops the winch law entirely.
+
+    `force_law` ties tension to reel speed through the `k_v` curve as a per-node
+    equality. `free_speed` replaces that with a force band `[f_min, f_max]` and
+    makes the reel speed a direct, acceleration-limited control — the winch law's
+    flat regions (`dT/dv_r` ~ 0) then cannot cost the solve its Jacobian rank.
+
+    At 3 m/s that is the difference between converging and not. Measured
+    2026-08-29, cold at every length of the reel-out sweep (150, 151, 175, 200,
+    250, 300, 324, 380 m): `free_speed` converged at all eight in 8-12 s, where
+    `force_law` needs the winch floored near 883 N to solve at all and then
+    predicts a standstill.
+
+    The trade is what the reply MEANS. Its path is optimal for any winch inside
+    the force band, not for the `k_v` law the run flies, and its predicted power
+    is therefore an UPPER BOUND. That makes it a better reference than
+    `force_law`'s number at low wind — a measured/predicted ratio above 1 is then
+    unambiguously a disagreement about the physics rather than an artefact of a
+    winch floor the kite can never reach — but it is not a prediction of this
+    controller. See PlanFix3m_per_s.md.
+    """
+    opt_winch_mode::String = ""
+    """
+    Lengths at which a `free_speed` reference power is solved AFTER the run, to
+    score the measured power against. `0` is off; below 2 nothing is solved.
+
+    `force_law`'s own prediction is made against the `k_v` law including its soft
+    floor, which at low wind stands the winch still — at 3 m/s it has come back
+    negative, and the ratio is then unreadable. A `free_speed` solve drops the
+    winch law for a plain `[f_min, f_max]` force band, so its power is what ANY
+    winch in that band could harvest on an optimal path: an UPPER BOUND. Scored
+    against it, a ratio above 1 is a disagreement about the physics rather than an
+    artefact of a floor the kite can never reach.
+
+    Solved after the run, at lengths spanning the reeling window and weighted by
+    the time the run spent at each, so it costs the run nothing and cannot
+    destabilise it. That matters: a free-speed path is NOT flyable here. Installing
+    one crashed a run on 2026-08-29 — it does not sustain the force the winch needs,
+    so the winch reeled in from 150 m to 83 m and the kite stalled. This reference
+    is never flown, only compared against.
+
+    A failed solve is skipped rather than fatal, and the keys are omitted entirely
+    if none succeed.
+    """
+    free_speed_reference_points::Int64 = 0
+    """
     Smallest curvature margin ([`check_pattern_feasible`](@ref), path radius over
     the kite's minimum turn radius) the returned path must have at the tether
     length it is flown at. Below 1.0 the path is tighter than the kite can turn,

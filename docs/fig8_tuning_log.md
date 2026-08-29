@@ -4320,3 +4320,51 @@ against the 8400 N rating:
 0.039 shipped for 10 m/s: +1110 W (+5.5 %) over 0.0408, all 10 criteria
 passing, phase-4 peak 7901 N — 499 N of margin. The stale header narrative is
 replaced by this sweep; the old text remains in git history.
+
+## 2026-08-29 — entry dive at the corrected wing mass (`chi_dive` -95 -> -125)
+
+The wing mass was corrected from 6.2 to 10.9926 kg (`settings_reelout_150m.yaml`'s `mass`,
+which is what reaches the model — see PlanFix3m_per_s.md). At 4 m/s that turned a passing
+entry into a failing one:
+
+| | mass | min elevation, settled | min elevation, WHOLE RUN |
+| --- | --- | --- | --- |
+| `v04` | 6.2 kg | 9.2° | **9.2°** |
+| `v04_2` | 10.9926 kg | 8.1° | **-3.4°** |
+
+Same settings, different mass. Phase 4 is unaffected (8.1°); the dip is entirely in the
+ENTRY, and `min elevation > 6.5° (whole run)` is the only criterion `v04_2` fails.
+
+Traced per phase, from the `v04_2` log:
+
+| phase | azimuth | elevation | duration |
+| --- | --- | --- | --- |
+| 0 park | -0.3 -> -1.1° | 73.4° | 2.0 s |
+| 1 dive | **-1.1 -> -108.9°** | 73.9 -> 39.2° | 18.3 s |
+| 2 hold | -108.9 -> -111.0° | 35.9° | 0.8 s |
+| 3 transition | **-111 -> -12.1°** | 35.8 -> 14.7°, dipping to **-3.4°** | 19.7 s |
+
+**The transition is not the fault; the dive is.** At `chi_dive = -95` the dive is 5° past
+flat, so it barely descends and instead traverses 110° of azimuth, dumping the kite at the
+edge of the window. The transition is then a 19.7 s recovery back across it, and that is
+where the altitude goes. At 6.2 kg this was survivable; 4.8 kg more wing is not.
+
+Ruled out on the way: the entry DESCENT LIMITER plays no part. It was active for 0.0% of
+phase 3, because it only engages when `|chi_set| > entry_chi_max` (95°) and the guidance was
+commanding 62.7° at the lowest point — a CLIMB. The kite was being told to climb and sank
+anyway, which is an energy problem, not a guidance one. `entry_d_gate` was never reached
+either (`dmin` 48.6° at the low point, gate 12°).
+
+Set `chi_dive: -125`, which puts the descent and the lateral travel on the same order
+instead of 1:3.5, so the dive should end near the path with the transition a short
+correction. UNMEASURED as of this entry.
+
+Two further levers, deliberately NOT changed at the same time so this one stays
+attributable:
+
+- `entry_depower: 0.34`. The entry pulls 327-329 N against `entry_f_min`'s own 350 N floor,
+  so the guard's setpoint is never reached — the wind-up its comment warns about — and
+  `v_app` falls to 7.9 m/s against 12.5 in the fig8. Powering up would buy speed, but it
+  also gives more lift and so a SLOWER descent and a longer traverse, which is why it is
+  second and not first.
+- `entry_f_min: 350.0`, unreachable as measured; ~300 would stop the guard winding up.

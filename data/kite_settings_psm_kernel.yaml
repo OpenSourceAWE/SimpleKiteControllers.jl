@@ -12,7 +12,13 @@ kite_settings:
   body_sim_damping: [0.0, 0.0, 38.0]   # per-axis wing-frame damping in flight
   world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
 
-  wing_mass: 6.2                 # [kg] mass redistributed over the wing nodes
+  # INERT in this run path, despite the name: the only consumer of `wing_mass` in
+  # V3Kite is examples/flight_replay.jl, guarded by `wing_mass > 0`. The wing mass
+  # that actually reaches the model is `mass` in settings_reelout_150m.yaml, which
+  # SymbolicAWEModels distributes over the wing points because their own extra_mass
+  # is 0. Left at 0.0 so it cannot be mistaken for the live value; `0` also means
+  # "keep what the geometry carries" if this path ever does read it.
+  wing_mass: 0.0                 # [kg] mass redistributed over the wing nodes
   wing_mass_le_frac: 0.75        # leading-edge share of `wing_mass`
   wing_drag_coeff: 0.0           # parasitic drag spread over the wing nodes
 
