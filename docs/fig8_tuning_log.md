@@ -4368,3 +4368,64 @@ attributable:
   also gives more lift and so a SLOWER descent and a longer traverse, which is why it is
   second and not first.
 - `entry_f_min: 350.0`, unreachable as measured; ~300 would stop the guard winding up.
+
+## 2026-08-29 — `chi_dive` -95 -> -125 measured at corrected mass, 4 m/s (screening)
+
+Follow-up to the entry above: `chi_dive: -125` was committed but never flown. Screened at
+4 m/s, mass 10.9926 kg, `sim_time` requested as 60 s (auto-scaled by `simple_opt_reelout.jl`'s
+below-knot budget to 124.2 s effective — the request is pre-scaling, not the flown length) and
+`entry_time` temporarily lowered to 45.0 (turned out unnecessary: 124.2 s clears even the
+default 64.0 s window, but left in place for future screening runs at other wind speeds where
+the scaling differs). Not archived (a screening run, not a scenario).
+
+Phase table (`output/reelout_150m_opt.arrow` from the run):
+
+| phase | azimuth | elevation | duration |
+| --- | --- | --- | --- |
+| 0 park | -0.3 -> -1.1° | 73.4 -> 73.9° | 2.0 s |
+| 1 dive | -1.1 -> **-82.5°** | 73.9 -> 39.1° | **14.4 s** |
+| 2 hold | -82.5 -> -84.0° | 39.1 -> 35.5° | 0.8 s |
+| 3 transition | -84.0 -> -16.1° | 35.5 -> 15.1°, dipping to **5.9°** | **14.6 s** |
+
+Against the -95 baseline (`v04_2`, same mass): dive azimuth travel 110° -> **81°**, dive
+duration 18.3 -> **14.4 s**, transition duration 19.7 -> **14.6 s**, whole-run min elevation
+-3.4° -> **+5.9°**. `min_settled` 13.1° (fine); `success_criteria` still
+`FAILED: min elevation > 6.5° (whole run)` — **0.6° short**, entirely attributable to the
+transition dip at t = 25.0 s, az -57.7°.
+
+Confirms the hypothesis: the fault was geometry (dive traverse : descent ratio), not an energy
+deficit — a steeper dive alone recovered 9.3° of the 10.9° gap. `dive_el_margin` (13.0,
+unchanged) is the next lever: the dive->hold threshold is `el_c_path + margin` = 26.23 + 13 =
+39.2° here (confirmed against the log's `var_04`), and raising it gives phase 3 more altitude
+to spend before the pattern is expected — per the plan, tried next rather than pushing
+`chi_dive` past -125, since the transition itself (not just the dive) is still 14.6 s long.
+
+## 2026-08-29 — `dive_el_margin` 13 -> 17 closes the gap; full-length confirmation at 4 m/s
+
+Continuation of the entry above. Screened `dive_el_margin: 17.0` (chi_dive still -125) at the
+same 60 s-requested/124.2 s-effective screening budget:
+
+| phase | azimuth | elevation | duration |
+| --- | --- | --- | --- |
+| 1 dive | -1.1 -> -80.7° | 73.9 -> 43.1° | 13.5 s |
+| 2 hold | -80.7 -> -82.4° | 43.1 -> 39.6° | 0.8 s |
+| 3 transition | -82.4 -> -17.8° | 39.6 -> 15.4°, dipping to **10.1°** | 13.6 s |
+
+Whole-run min elevation 5.9° -> **10.1°**, comfortably past the 6.5° gate; `success_criteria`
+dropped to `FAILED: phase 5 (final) reached` alone (a screening-length artifact, not a real
+failure — the truncated run never reaches `reelout_l_max`). Transition duration also fell
+slightly (14.6 -> 13.6 s) and phase 4 was unaffected (laps 3.0, `min_settled` 13.1 -> 13.3°).
+
+**Full-length confirmation** (`sim_time`/`entry_time` restored to the project defaults, 150 s /
+62.0 s, `chi_dive: -125`, `dive_el_margin: 17.0`, everything else unchanged):
+
+`success_criteria: "all 10 passed"`. `elevation_deg.min_whole_run: 7.9°` (== `min_settled`, so
+the dip is gone entirely, not just under the gate). 8.0 laps, RMS cross-track 2.63°,
+`av_power_ro` **1667 W** — above the old 6.2 kg baseline's 1551 W (`v04`), and against `v04_2`'s
+failing 1561 W at 60 s truncation. `max_force_ro` 1801 N. Archived as
+`output/scenarios/v04_3`.
+
+`chi_dive: -125.0` and `dive_el_margin: 17.0` are the fix for the corrected mass at 4 m/s.
+Neither `entry_depower` nor `entry_f_min` needed changing. Remaining per the plan: re-check
+3 m/s (`v03_2` fails differently — `phase 5 (final) reached`, not elevation) and 5-6 m/s with
+this same entry tuning before the overview table is regenerated.

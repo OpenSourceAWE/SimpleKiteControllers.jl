@@ -16,6 +16,7 @@ The `simple_reelout*.jl` scripts read the same key through
 between; a `system_reelout_*.yaml` chosen here does reach them.
 """
 
+using REPL
 using REPL.TerminalMenus
 using SimpleKiteControllers: skc_data_path
 

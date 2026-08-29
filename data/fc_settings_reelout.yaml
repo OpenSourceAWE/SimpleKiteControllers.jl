@@ -86,12 +86,16 @@ fc_settings:
                                # still gets its full settling delay. Inf disables it.
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
-  # -125 since 2026-08-29: at -95 the "dive" is 5 deg past flat, so it descends
-  # barely at all and instead traverses 110 deg of azimuth over 18.3 s. See the
-  # tuning log; back off towards -110 if the steeper dive undershoots.
+  # -125 since 2026-08-29, confirmed at the corrected (10.9926 kg) wing mass: at -95
+  # the "dive" is 5 deg past flat, so it descends barely at all and instead traverses
+  # 110 deg of azimuth. See the tuning log; back off towards -110 if a steeper dive
+  # is ever tried and undershoots.
   chi_dive:          -125.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
-  dive_el_margin:     13.0     # Margin above el_center where the dive ends       [deg]
+  # 17.0 since 2026-08-29: at 13.0 the corrected mass still dipped to 5.9 deg whole-run
+  # elevation, 0.6 deg short of the 6.5 deg gate. Raising the margin gives phase 3 more
+  # altitude to spend; closes the gap to 7.9 deg with no phase-4 regression.
+  dive_el_margin:     17.0     # Margin above el_center where the dive ends       [deg]
   hold_time:          0.8      # Duration of the hold                               [s]
   fig8_d_gate:        4.0      # Cross-track error, transition -> fig8            [deg]
 

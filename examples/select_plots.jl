@@ -12,6 +12,7 @@ Writes the choice to `data/gui.yaml` via [`set_selected_plots`](@ref)
 reads the current selection straight off disk on every `include`.
 """
 
+using REPL
 using REPL.TerminalMenus
 
 include(joinpath(@__DIR__, "gui_state.jl"))
