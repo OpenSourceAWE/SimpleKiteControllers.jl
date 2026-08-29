@@ -451,7 +451,8 @@ function free_speed_reference(lengths)
 end
 
 fs_ref = nothing
-if !isnothing(rp) && tos.free_speed_reference_points >= 2
+# Only meaningful where k_v's soft floor bites (low force); skip the extra solves otherwise.
+if !isnothing(rp) && tos.free_speed_reference_points >= 2 && have_phase4 && p4_force.min < 1000
     lengths_ro = Float64.(sl.var_10[rp.idx])
     global fs_ref = free_speed_reference(lengths_ro)
     if isnothing(fs_ref)
