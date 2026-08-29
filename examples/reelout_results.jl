@@ -870,6 +870,9 @@ if run_archive
         joinpath(skc_data_path(), wc_settings(project)),      # winch gains
         joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
         joinpath(skc_data_path(), winch_kv_table_file(project)), # kv(v_wind) table
+        # The identified c1/c2/delay: they set the steering response and the
+        # curvature gate, and a re-identification replaces the rows in place.
+        joinpath(skc_data_path(), turn_rate_coeffs_file(project)), # turn-rate law
         joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
         # Without this the archive cannot reproduce its own run: the guess decides
         # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin

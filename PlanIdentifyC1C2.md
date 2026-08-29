@@ -298,3 +298,44 @@ re-run demote a passing row, and the skip-if-already-passing resume.
 
 Run it as `include("examples/build_turn_rate_table.jl")` (definitions only), then
 `build_turn_rate_table()`.
+
+## Deleting the old rows: after the sweeps, not before
+
+Keep the FILE at every stage — `__init__` reads it at package load and
+`build_turn_rate_table` refuses to start without it; only rows are ever in
+question. And do not clear the rows up front: every example that calls
+`turn_rate_coeffs` would throw at startup, the suite would go red for reasons
+unrelated to what it tests, and `V3_TURN_RATE_C1`/`C2` would sit at `NaN` behind
+`reload_turn_rate_table!`'s caught `@error`. Since some cells are expected to
+fail, an empty table plus a failed cell leaves nothing to fly and nothing to
+compare against.
+
+Most of the deletion happens by itself: `_write_turn_rate_entry!` matches on
+`(body_damping, depower)`, so the 0.25 and 0.40 sweeps REPLACE their 6.2 kg
+predecessors, and 0.30/0.35 are new inserts.
+
+Delete by hand afterwards, once the grid is green, the rows no sweep covers:
+
+- `[0,0,40]` at **0.23, 0.45 and 0.55**. These are the dangerous ones — they
+  bracket the new grid on both sides, so an interpolation would pair an 11 kg row
+  with a 6.2 kg one and return a coefficient describing neither kite. 0.23 also
+  silently extends the usable range below 0.25.
+- Every `[10,10,40]` and `[20,20,40]` row. Nothing looks them up once the tests
+  stop borrowing them, but they are 6.2 kg data under a key `turn_rate_coeffs`
+  would serve without complaint.
+
+One commit, together with the `conditions:` update and the
+`docs/fig8_tuning_log.md` entry, so `git show` of its parent is the 6.2 kg table.
+
+### The archives now carry the table
+
+`examples/reelout_results.jl` copies `turn_rate_coeffs_file(project)` into each
+run's archive from now on, beside the winch and flight-controller settings: the
+identified `c1`/`c2`/`delay` set the whole steering response and the curvature
+gate, and a re-identification replaces the rows in place, so without the copy an
+archived run's most important input is only recoverable through its git hash.
+
+The twelve existing `output/scenarios/*/` folders were given a copy of the
+current table as well. That is accurate rather than approximate: every scenario's
+recorded `git_hash` resolves to a `data/turn_rate_coeffs.yaml` blob identical to
+today's, so all of them were flown against exactly these rows.

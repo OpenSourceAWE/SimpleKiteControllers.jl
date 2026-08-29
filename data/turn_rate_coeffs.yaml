@@ -154,6 +154,6 @@ entries:
 conditions:
   v_wind: 9.51
   dt: 0.0166666667
-  l_tether: 200.0
-  system: "system_reelout.yaml"
+  l_tether: 150.0
+  system: "system_reelout_150m.yaml"
   elevation: 73.0
