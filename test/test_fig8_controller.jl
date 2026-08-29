@@ -701,36 +701,38 @@ end
         @test winch_f_low(7.0; project = p) == 700.0
 
         # force_limit: a STEP, not an interpolation — a setting is one thing or
-        # the other at a given wind speed. "hard" below 6 m/s because the soft
-        # law's floor (>= ln2/beta = 693 N at beta 1e-3, for ANY f_low) sits above
-        # the whole 3 m/s force range of 587 +- 165 N, where it would command a
-        # standstill; raising beta to move it makes the 3 m/s solve fail outright.
-        @test winch_force_limit(3.0; project = p) == "hard"
-        @test winch_force_limit(4.0; project = p) == "hard"
-        @test winch_force_limit(5.0; project = p) == "hard"   # untested, takes 4's row
-        @test winch_force_limit(5.9; project = p) == "hard"
+        # the other at a given wind speed. "soft" throughout this table
+        # (2026-08-28): sharpening softminus_beta locally to 0.03 (never sent to
+        # AWETrim, see data/wc_settings.yaml) drops the soft law's floor to
+        # ln2/beta ~ 23 N, well below the force range at every measured wind
+        # speed, including 3 m/s (587 +- 165 N).
+        @test winch_force_limit(3.0; project = p) == "soft"
+        @test winch_force_limit(4.0; project = p) == "soft"
+        @test winch_force_limit(5.0; project = p) == "soft"   # untested, takes 4's row
+        @test winch_force_limit(5.9; project = p) == "soft"
         @test winch_force_limit(6.0; project = p) == "soft"   # lowest measured safe
         @test winch_force_limit(9.0; project = p) == "soft"
         @test winch_force_limit(10.0; project = p) == "soft"
         # Clamped below the range like the interpolated columns, and never
         # interpolated INTO a value that is neither.
-        @test winch_force_limit(0.5; project = p) == "hard"
+        @test winch_force_limit(0.5; project = p) == "soft"
         @test winch_force_limit(50.0; project = p) == "soft"
         @test all(v -> winch_force_limit(v; project = p) in ("hard", "soft"),
                   0.5:0.25:12.0)
         # Once it goes soft it stays soft: a run must not drop back to the hard
-        # law as the wind rises.
+        # law as the wind rises. Trivially true while every row is "soft", but
+        # still guards against a future row regressing to "hard".
         let fl = [winch_force_limit(v; project = p) for v in 0.5:0.25:12.0]
             @test issorted(fl .== "soft")
         end
 
-        # The flat value in wc_settings.yaml is the SAFE one, so a script that
-        # never reads this table cannot silently fly the soft law at a wind speed
-        # where it is undefined. (Read from the YAML, not from a WCSettings:
-        # WinchControllers is a dep of examples/, not of this package.)
+        # The flat value in wc_settings.yaml now matches this table's own
+        # default, "soft", since every measured wind speed in the table is
+        # "soft" too. (Read from the YAML, not from a WCSettings: WinchControllers
+        # is a dep of examples/, not of this package.)
         let wcs_file = joinpath(skc_data_path(),
                                 YAML.load_file(p)["system"]["wc_settings"])
-            @test YAML.load_file(wcs_file)["wc_settings"]["force_limit"] == "hard"
+            @test YAML.load_file(wcs_file)["wc_settings"]["force_limit"] == "soft"
         end
 
         # Integer input is converted, like turn_rate_coeffs'.
