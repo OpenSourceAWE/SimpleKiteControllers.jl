@@ -397,6 +397,86 @@ if !isnothing(opt_power_meas)
     power_block["ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
         "measured / predicted, against the weighted prediction")
 end
+
+"""
+    free_speed_reference(lengths) -> (points, weighted) | nothing
+
+Mean reel-out power an OPTIMAL path could harvest with any winch inside
+`[f_min, f_max]`, solved at `tos.free_speed_reference_points` lengths spanning
+`lengths` and weighted by how much of the reeling window was spent at each.
+
+An upper bound, not a prediction of this `k_v` law: `winch_mode = "free_speed"`
+drops the winch law entirely. Solved AFTER the run so it cannot disturb it, and
+never flown — a free-speed path does not sustain the force this winch needs. A
+solve that fails is skipped; `nothing` when none succeed.
+"""
+function free_speed_reference(lengths)
+    n = tos.free_speed_reference_points
+    (n < 2 || isempty(lengths)) && return nothing
+    lo, hi = extrema(lengths)
+    hi - lo < 1.0 && (hi = lo + 1.0)
+    probes = collect(range(lo, hi; length = n))
+    # use_awe_trim 1.0: the free_speed NLP never reads the tension curve, but the
+    # node-0 forward march does, and 1.0 is the value it converges at cold.
+    ref_winch = winch_from_wc(rcs; optimize_k_v = false, use_awe_trim = 1.0,
+                              winch_mode = "free_speed")
+    solved = NamedTuple[]
+    for l in probes
+        try
+            params = InitParams(; name = tos.name * "-fsref", length = l,
+                                winch_params = ref_winch, inflow_conditions = inflow,
+                                trajectory = Trajectory(collect(guess_az), collect(guess_el)),
+                                input_depower = depower_seed(tos, inflow.wind_speed),
+                                reg_weight = tos.reg_weight,
+                                detect_simple_bounds = tos.detect_simple_bounds,
+                                min_turn_radius = opt_r_min, pattern_limits = opt_box)
+            reply = opt_init(params; url = tos.base_url)
+            result = opt_step(StepParams(l, ref_winch, reply.trajectory); url = tos.base_url)
+            isnothing(result.metrics) ||
+                push!(solved, (; l, power = result.metrics.avg_power_W))
+        catch exc
+            @debug "free_speed reference failed at L = $l m" exception = exc
+        end
+    end
+    isempty(solved) && return nothing
+    # Time-weighted: every reeling sample scored at its own length, linearly
+    # interpolated between the probes and held flat outside them.
+    ls = [p.l for p in solved]
+    ps = [p.power for p in solved]
+    at(l) = l <= ls[1] ? ps[1] : l >= ls[end] ? ps[end] : begin
+        k = findlast(<=(l), ls)
+        ps[k] + (ps[k + 1] - ps[k]) * (l - ls[k]) / (ls[k + 1] - ls[k])
+    end
+    return (; points = solved, weighted = sum(at(l) for l in lengths) / length(lengths))
+end
+
+fs_ref = nothing
+if !isnothing(rp) && tos.free_speed_reference_points >= 2
+    lengths_ro = Float64.(sl.var_10[rp.idx])
+    global fs_ref = free_speed_reference(lengths_ro)
+    if isnothing(fs_ref)
+        @warn "free_speed reference: no solve succeeded, omitting it from the summary."
+    else
+        @printf("  free_speed reference: %.0f W over %.0f-%.0f m (%d of %d solved)%s\n",
+                fs_ref.weighted, minimum(lengths_ro), maximum(lengths_ro),
+                length(fs_ref.points), tos.free_speed_reference_points,
+                isnothing(opt_power_meas) ? "" :
+                    @sprintf("; measured %.0f W is %.2f x it",
+                             opt_power_meas, opt_power_meas / fs_ref.weighted))
+        power_block["free_speed_reference_W"] = (round(Int, fs_ref.weighted),
+            "mean reel-out power an OPTIMAL path could harvest with ANY winch in \
+             [f_min, f_max], solved after the run at $(length(fs_ref.points)) \
+             lengths and weighted by time spent at each. An UPPER BOUND, not a \
+             prediction of this k_v law, and never flown [W]")
+        power_block["free_speed_points"] = OrderedDict(
+            @sprintf("L_%05.1f_m", p.l) => (round(Int, p.power), "free_speed solve [W]")
+            for p in fs_ref.points)
+        isnothing(opt_power_meas) || (power_block["free_speed_ratio"] =
+            (round(opt_power_meas / fs_ref.weighted; digits = 2),
+             "measured / free_speed_reference_W; above 1 means the run harvests more \
+              than the optimizer's own upper bound, which no winch law can explain"))
+    end
+end
 feasibility_block = OrderedDict{String, Any}(
     "min_required" => (tos.min_feasibility_margin,
         "min_feasibility_margin of data/traj_opt.yaml [-]"),
@@ -728,6 +808,15 @@ summary_block = OrderedDict{String, Any}(
 if !isnothing(opt_power_meas)
     summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
         "measured / predicted reel-out power [-]")
+    # The one to read at low wind: force_law's prediction is against the k_v law
+    # including its soft floor, which at 3 m/s stands the winch still and has come
+    # back NEGATIVE. This is against an upper bound over any winch in
+    # [f_min, f_max], so above 1 is a real disagreement about the physics.
+    isnothing(fs_ref) || (summary_block["power_ratio_free_speed"] =
+        (round(opt_power_meas / fs_ref.weighted; digits = 2),
+         "measured / free_speed reference reel-out power ($(round(Int, fs_ref.weighted)) W, \
+          an UPPER BOUND over any winch in [f_min, f_max]); above 1 cannot be \
+          explained by any winch law [-]"))
 end
 summary_block["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
     isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :

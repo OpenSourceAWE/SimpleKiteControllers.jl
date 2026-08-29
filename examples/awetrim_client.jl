@@ -121,6 +121,14 @@ Base.@kwdef struct WinchParams
     # WinchParams.reel_in_beta's docstring in AWETrim's schemas.py.
     v_reel_in::Union{Float64, Nothing} = nothing
     reel_in_beta::Union{Float64, Nothing} = nothing
+    # "force_law" (the server default) ties the tension to the reel speed through
+    # the curve above, as a per-node equality; "free_speed" drops that equality and
+    # bounds the tension to [f_min, f_max] instead, the reel speed becoming a direct
+    # acceleration-limited control. `nothing` leaves the server on its own default.
+    # The reply is then the best path for ANY winch in that force band, so its
+    # predicted power is an UPPER BOUND, not a prediction of this k_v law -- see
+    # TrajOptSettings.opt_winch_mode.
+    winch_mode::Union{String, Nothing} = nothing
 end
 
 "The four-field winch of the original contract; `v_max`/`p_max` stay unset."
@@ -827,29 +835,33 @@ f_low >= 8`, far sharper than the server tolerates) — with `soft_lfc = true`,
 `soft_lfc` back off is still covered. See `AWETRIM_SOFTMINUS_BETA`'s
 docstring.
 
-`use_awe_trim`/`v_reel_in`/`reel_in_beta` are read straight off `wc` (unlike
-the `beta`s above, they need no pinning: the server-side sharpness
-requirement on `reel_in_beta` is far more forgiving than the local one, since
-`Winch.tension_curve` blends in the forward direction — see its docstring),
+`use_awe_trim` defaults to `wc`'s and is overridable so a seeding solve can be
+sent at a value known to converge before the real request — see
+`TrajOptSettings.opt_warm_start_awe_trim`. `v_reel_in`/`reel_in_beta` are read
+straight off `wc` (unlike the `beta`s above, they need no pinning: the
+server-side sharpness requirement on `reel_in_beta` is far more forgiving than
+the local one, since `Winch.tension_curve` blends in the forward direction),
 so a run that reels in locally optimizes against a server winch model that
 can do the same. `wc.use_awe_trim` defaults to `0.0`, leaving the server's
 plain law unchanged unless `data/wc_settings.yaml` opts in.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
-              f_max = wc.f_high) =
+              f_max = wc.f_high, use_awe_trim = wc.use_awe_trim,
+              winch_mode = nothing) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),
                 optimize_k_v = Bool(optimize_k_v),
-                use_awe_trim = Float64(wc.use_awe_trim),
+                use_awe_trim = Float64(use_awe_trim),
                 v_reel_in = Float64(wc.v_reel_in),
                 reel_in_beta = Float64(wc.reel_in_beta),
                 # Sent unconditionally, not only under `force_limit = "soft"`: the
                 # server's floor is `sp(beta*f_min)/beta`, so beta shapes the path
                 # it plans whatever the runtime winch then does with it.
                 softplus_beta = Float64(wc.softplus_beta),
-                softminus_beta = Float64(AWETRIM_SOFTMINUS_BETA))
+                softminus_beta = Float64(AWETRIM_SOFTMINUS_BETA),
+                winch_mode = winch_mode)
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
