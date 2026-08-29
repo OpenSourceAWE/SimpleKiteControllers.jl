@@ -87,15 +87,16 @@ wc_settings:
   # law rather than two. It replaces the UpperForceController, which is then held
   # in reset for the whole run — it oscillated, and this is the structure that
   # removes the switching it oscillated on. "hard" restores the two-limiter
-  # behaviour and is the struct default, so other projects are unaffected.
+  # behaviour; "soft" is now the struct default (2026-08-28), since sharpening
+  # softminus_beta locally (below) made every row of winch_kv_table.yaml "soft".
   force_limit:      "soft" # "soft" | "hard"
                            # simple_opt_reelout.jl overrides this per wind speed
                            # from winch_kv_table.yaml's force_limit column, like kv
-                           # and f_low, and the soft law is only DEFINED above
-                           # ~5 m/s (its floor is above the whole force range at
-                           # 3 m/s). A script that never consults that table — or a
-                           # wind speed nobody has measured — therefore gets the
-                           # hard law rather than one that may stall the winch.
+                           # and f_low. That table is "soft" for every measured
+                           # wind speed (3-12 m/s); a script that never consults
+                           # it, or a wind speed nobody has measured, still gets
+                           # this same default rather than a value tied to one
+                           # specific project's table.
   softplus_beta:    0.001  # corner sharpness of the UPPER limit; larger = sharper [1/N]
                            # Left at 1e-3: f_high 8000 >> 1/beta 1000 makes the
                            # smoothing harmless there, and this is the knee the

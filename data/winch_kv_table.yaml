@@ -51,27 +51,29 @@
 #
 # force_limit — `WCSettings.force_limit`, read by `winch_force_limit(v_wind)`.
 #          NOT interpolated: it is a step, the value of the last row at or below
-#          the wind speed. `data/wc_settings.yaml` says "hard" so a script that
-#          never consults this table gets the safe law.
+#          the wind speed. `data/wc_settings.yaml` now defaults to "soft" too
+#          (2026-08-28), since every row in this table is "soft".
 #
 #          "soft" makes the reel-out law itself the upper force limiter, by
-#          inverting the optimizer's own saturating tension curve. It is a
-#          HIGH-WIND tool and is only defined over part of the range:
+#          inverting the optimizer's own saturating tension curve. Its
+#          effective floor is sp(beta*f_low)/beta, which used to sit above the
+#          whole 3 m/s force range (587 +- 165 N) at the AWETrim-shared
+#          beta 1e-3 (floor 693 N there), ruling out "soft" below ~6 m/s.
+#          `WCSettings.softminus_beta` is now sharpened locally to 0.03 (see
+#          `data/wc_settings.yaml`) and never sent to AWETrim — the server
+#          still gets a fixed 1e-3 (`AWETRIM_SOFTMINUS_BETA`,
+#          `examples/awetrim_client.jl`), since 2e-3/5e-3 make its 3 m/s solve
+#          fail (422). At beta 0.03 the local floor drops to ln2/beta ~ 23 N,
+#          well below the force range at both 3 and 4 m/s, so both rows are
+#          "soft" now too — untested by measurement at 4 m/s, extrapolated from
+#          the same floor math that is measured safe at 3.
 #
-#            - Its effective floor is sp(beta*f_low)/beta, 884 N at f_low 350, and
-#              at beta 1e-3 no f_low puts that below ln2/beta = 693 N. The 3 m/s
-#              force range is 587 +- 165 N — entirely BELOW the floor, where the
-#              law commands a standstill. Raising beta is closed: 2e-3 and 5e-3
-#              both make the 3 m/s solve fail (422). So 3 m/s must be "hard".
-#            - At 4 m/s the mean force (1350 N) sits just above the 1104 N floor,
-#              where the inverse is steep; the loop-gain estimate there is 1.16,
-#              the worst of any wind speed. "hard" until measured otherwise.
 #            - Measured at 6 m/s: a NO-OP (3451 +- 436 N vs 3423 +- 414 hard,
 #              power within 0.3 %), so it is safe from there up.
 #            - Measured at 9 m/s: the win it exists for — 0 % of the steady window
 #              over the plant's 8400 N rating against 73.7 %, at 1.7 % power.
 #
-#          5 m/s is untested and takes the 4 m/s row's "hard" by the step rule.
+#          5 m/s is untested and takes the 4 m/s row's "soft" by the step rule.
 entries:
   - v_wind: 3.0
     kv: 0.0408
@@ -80,9 +82,9 @@ entries:
   - v_wind: 4.0
     kv: 0.0408
     f_low: 700.0
-    force_limit: "hard"
-  # Neutral for kv and f_low (both already flat from 4 to 9); the row exists to
-  # put the hard -> soft step at the lowest wind speed where soft was measured.
+    force_limit: "soft"
+  # Neutral for kv and f_low (both already flat from 4 to 9); force_limit is
+  # "soft" throughout the table now, so this row no longer marks a step.
   - v_wind: 6.0
     kv: 0.0408
     f_low: 700.0
