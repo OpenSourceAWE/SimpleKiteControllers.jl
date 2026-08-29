@@ -93,11 +93,15 @@ function plot_scenario()
         @info "Plotting scenario: $selected"
         global SCENARIO_PATH = joinpath(SCENARIOS_DIR, selected)
         include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
-        if haskey(run_summary, "summary")
-            printstyled("\nSummary:\n"; bold = true)
-            write_yaml_commented(stdout, 1, run_summary["summary"]; color = true)
-        else
-            @warn "No summary: block in $selected's run summary."
+        # run_summary is a fresh global from the include above; look it up at the
+        # latest world age or a first-time call throws a world age error.
+        Base.invokelatest() do
+            if haskey(run_summary, "summary")
+                printstyled("\nSummary:\n"; bold = true)
+                write_yaml_commented(stdout, 1, run_summary["summary"]; color = true)
+            else
+                @warn "No summary: block in $selected's run summary."
+            end
         end
     else
         println("Selection cancelled.")
