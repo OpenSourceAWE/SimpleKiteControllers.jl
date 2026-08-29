@@ -169,9 +169,17 @@ struct DepowerReply
 end
 
 """
-Total offset [rel_depower units] between the two models at equal power,
-recalibrated 2026-08-26 by sweeping the offset in steps while rerunning
-`simple_opt_reelout.jl` at 6 m/s (8 mm tether, predictor at AWETrim `a745914`):
+Total offset [rel_depower units] between the two models at equal power.
+
+Recalibrated 2026-08-29 after `kite.mass` in `data/settings_reelout_150m.yaml`
+rose from 6.2 kg to 10.9926 kg (commit `6443fbe`) to match AWETrim's own LEI-V3
+wing — AWETrim never receives a mass, so it was already assuming 11 kg, and the
+prior 0.099 had silently absorbed the 4.8 kg mismatch. At 6 m/s (8 mm tether,
+no turbulence), 0.099 measured 7506 W against 7301 W predicted (ratio 1.028).
+Confirmed at **0.1010**, twice: 7286 W measured against 7262 W predicted,
+ratio 1.00, both runs inside the 0.995..1.004 acceptance band.
+
+Earlier 2026-08-26 sweep, at the 6.2 kg mass (predictor AWETrim `a745914`):
 
 | offset | measured − predicted [W] | power_ratio |
 |--------|--------------------------|-------------|
@@ -180,16 +188,16 @@ recalibrated 2026-08-26 by sweeping the offset in steps while rerunning
 | 0.0985 | +67                      | 1.01        |
 | 0.095  | +451                     | 1.06        |
 
-Linear to first order (~0.14 ratio per 0.005); zero crossing at offset
-≈ 0.0992. Calibrated value: **0.099**, one run each, single wind. The earlier
-history: 0.12 measured 2026-08-18 (`docs/steering_depower.md`, VSM needing
-0.12 more rel_depower than the ROM for equal power, of which 0.08 was the two
-tape-length zeros and 0.04 genuine aero disagreement), lowered to 0.107 by
-commit `ee1ecbd` without re-measurement, then (post-8 mm tether) to this
-value. RE-MEASURE after any change to either model's depower axis or aero:
-the response is steep, ~150 W measured per 0.001 here.
+~100 W measured per 0.001, ~0.14 of ratio per 0.010 — steep enough that the
+0.995..1.004 band (±0.00036 in this variable) needs the constant written to
+four decimals. Earlier history: 0.12 measured 2026-08-18
+(`docs/steering_depower.md`, VSM needing 0.12 more rel_depower than the ROM for
+equal power, of which 0.08 was the two tape-length zeros and 0.04 genuine aero
+disagreement), lowered to 0.107 by commit `ee1ecbd` without re-measurement, then
+(post-8 mm tether) to 0.099, then (post-mass) to this value. RE-MEASURE after
+any change to either model's depower axis, aero, or mass.
 """
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.099
+const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.1010
 
 """
     awetrim_depower_to_v3kite(l_dp) -> Float64

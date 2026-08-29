@@ -288,4 +288,11 @@ changed to 4 mm / 724 kg/m³ on 2026-08-18 (`1e27e66`, "Change tether diameter t
 4mm"), so both models now solve against the same tether and the mismatch no longer
 applies. See [fig8_tuning_log.md](fig8_tuning_log.md).
 
+**The constant above is stale.** `0.107` was superseded on 2026-08-26 (8 mm
+tether) and again on 2026-08-29 (`kite.mass` raised from 6.2 kg to 10.9926 kg to
+match AWETrim's own wing), each time by re-measuring `power_ratio` at 6 m/s
+rather than by re-deriving the worked numbers above. Current value: **0.1010**.
+Treat the `AWETRIM_V3KITE_DEPOWER_OFFSET` docstring in `examples/awetrim_client.jl`
+as the source of truth, not the number in this file.
+
 

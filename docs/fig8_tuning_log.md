@@ -4429,3 +4429,29 @@ failing 1561 W at 60 s truncation. `max_force_ro` 1801 N. Archived as
 Neither `entry_depower` nor `entry_f_min` needed changing. Remaining per the plan: re-check
 3 m/s (`v03_2` fails differently — `phase 5 (final) reached`, not elevation) and 5-6 m/s with
 this same entry tuning before the overview table is regenerated.
+
+## 2026-08-29 — `AWETRIM_V3KITE_DEPOWER_OFFSET` re-measured at the corrected mass
+
+The mass fix above (6.2 -> 10.9926 kg, matching AWETrim's own LEI-V3 wing) invalidated
+`AWETRIM_V3KITE_DEPOWER_OFFSET`. AWETrim never receives a mass, so it had already been
+assuming 11 kg; the constant's 0.099 (calibrated 2026-08-26 at 6.2 kg) had silently
+absorbed the 4.8 kg mismatch. At 6 m/s (8 mm tether, no turbulence), 0.099 measured
+7506 W against 7301 W predicted, `power_ratio` **1.03** — outside the 0.995..1.004
+acceptance band (`PlanTunePowerRatio.md`).
+
+Using the 2026-08-26 sweep's slope (~100 W measured per 0.001 of offset, ~0.14 of ratio
+per 0.010), closing the +205 W residual needed Δoffset ≈ +0.0020. Set to **0.1010** and
+confirmed on two runs: 7286 W measured against 7262 W predicted both times,
+`power_ratio` 1.00. Archives: `output/archives/2026-08-29_223118`,
+`output/archives/2026-08-29_223752`.
+
+The band (±37 W, ±0.00036 in the offset) is narrower than one step of the constant's
+previous 3-decimal precision (0.001 of offset moves the ratio ~1.4 %, nearly three
+times the whole band), so `AWETRIM_V3KITE_DEPOWER_OFFSET` is now written to four
+decimals. Updated the calibration docstring in `examples/awetrim_client.jl` (it also
+corrected two slope figures that were ~1.5x too steep) and flagged the stale `0.107`
+worked example in `docs/steering_depower.md` as superseded rather than rederiving it.
+
+This offset is shared by every wind speed, so 4, 5, 7 and 8 m/s move with it —
+unmeasured here, and `notebooks/overview.md` is already known stale post-mass per the
+entry above; re-run the sweep before regenerating it.

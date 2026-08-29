@@ -81,6 +81,4 @@ reason to move the offset again.
   `AWETRIM_V3KITE_DEPOWER_OFFSET` docstring, noting the 11 kg wing.
 - Fix `docs/steering_depower.md:253`, which still quotes the retired `0.107`.
 - Add a dated entry to `docs/fig8_tuning_log.md`.
-- The offset is one scalar shared by every wind speed, so 4, 5, 7 and 8 m/s move with
-  it. Re-run the sweep and refresh `notebooks/overview.md`, which is stale for every
-  wind speed since the mass change.
+
