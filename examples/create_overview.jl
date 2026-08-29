@@ -9,16 +9,19 @@ Write `SimulationResults/scenarios/overview.md`, a table with one row per
 Columns: `date`, `time`, `v_wind`, `power_ratio`, `total_time`,
 `rt_factor`, `opt_requests`, `opts_installed`, `av_power`, `min_power`,
 `max_power`, `min_force`, `av_force`, `max_force`, `v_ro_min`, `v_ro_av`,
-`v_ro_max`, `av_depower` — read from the YAML `summary:` section's
+`v_ro_max`, `av_depower`, `success_criteria` — read from the YAML `summary:`
+section's
 `date`, `time`, `wind_speed_gnd`, `power_ratio`,
 `total_wall_time_s`, `realtime_factor`, `optimization_requests`,
 `optimizations_installed`, `av_power_ro`, `min_power_ro`, `max_power_ro`,
 `min_force_ro`, `av_force_ro`, `max_force_ro`, `v_ro_min`, `v_ro_av`,
-`v_ro_max` and `av_depower_ro` respectively (see
+`v_ro_max`, `av_depower_ro` and `success_criteria` respectively (see
 `examples/reelout_results.jl`). All `power`/`force`/`v_ro`/`depower` fields
 are averaged over phase four (the figure-eight flying phase). Rows are
 sorted by wind speed ascending. A folder missing the YAML file or its
-`summary:` block is skipped with a warning, not an error.
+`summary:` block is skipped with a warning, not an error; a column missing
+from an otherwise present `summary:` block (older runs predate
+`success_criteria`) renders as an empty cell instead of erroring.
 
 Also opens the same table as a nicely formatted HTML pop-up in the default
 browser, via PrettyTables' `:html` backend (`xdg-open`), with the power
@@ -57,7 +60,8 @@ const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind
                  "max_power_ro" => "max_power", "min_force_ro" => "min_force",
                  "av_force_ro" => "av_force", "max_force_ro" => "max_force",
                  "v_ro_min" => "v_ro_min", "v_ro_av" => "v_ro_av",
-                 "v_ro_max" => "v_ro_max", "av_depower_ro" => "av_depower")
+                 "v_ro_max" => "v_ro_max", "av_depower_ro" => "av_depower",
+                 "success_criteria" => "success_criteria")
 
 """
     scenario_summary(dir) -> Union{Dict, Nothing}
@@ -91,7 +95,7 @@ function write_overview_md(rows, md_file)
         println(io, "| " * join(headers, " | ") * " |")
         println(io, "| " * join(fill(":---:", length(headers)), " | ") * " |")
         for row in rows
-            println(io, "| " * join((row[key] for (key, _) in COLUMNS), " | ") * " |")
+            println(io, "| " * join((get(row, key, "") for (key, _) in COLUMNS), " | ") * " |")
         end
     end
 end
@@ -147,7 +151,7 @@ the same data as the markdown table.
 """
 function show_overview_html(rows, png_file)
     headers = collect(last.(COLUMNS))
-    data = [row[key] for row in rows, (key, _) in COLUMNS]
+    data = [get(row, key, "") for row in rows, (key, _) in COLUMNS]
     table_html = pretty_table(String, data; column_labels = headers, backend = :html, alignment = :c)
     img_b64 = base64encode(read(png_file))
     # a snap-confined browser (e.g. Firefox) cannot see dotfiles/dotdirs under $HOME
