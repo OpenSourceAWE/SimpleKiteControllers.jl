@@ -3,31 +3,42 @@ try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — runni
 #%% web id=intro
 @web(html"""
 <div class="md">
-<h1 class="intro-title">
-  Simulation Results Reel-Out testing at Maasvlakte, NL
-  <button id="video-toggle" class="video-icon" type="button" title="Watch reel-out video" aria-label="Watch reel-out video" aria-expanded="false">🎬</button>
-</h1>
+<h1 class="intro-title">Simulation Results Reel-Out testing at Maasvlakte, NL</h1>
 </div>
-<video id="reelout-video" src="/n/results/asset/notebooks/reelout_150m.mp4" controls preload="none" hidden></video>
+<div class="video-frame">
+  <img id="video-poster" class="video-poster" src="/n/results/asset/notebooks/images/reelout_thumb.jpg"
+       alt="Reel-out video — click to play" title="Click to play video">
+  <span id="play-overlay" class="play-overlay" aria-hidden="true">&#9658;</span>
+  <video id="reelout-video" src="/n/results/asset/notebooks/reelout_150m.mp4" controls preload="none" hidden></video>
+</div>
 """,
 css"""
 /* the export's auto-generated doc header duplicates this cell's own title — this IS the title */
 .exp-titleblock { display: none; }
-.intro-title { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
-.video-icon { flex: none; background: none; border: none; cursor: pointer; font-size: 1.4rem; line-height: 1; padding: .1rem .3rem; border-radius: 6px; }
-.video-icon:hover { opacity: .65; }
-#reelout-video { display: block; width: 100%; max-width: 800px; margin: 1rem auto 0; border-radius: 6px; }
+.video-frame { position: relative; width: 100%; max-width: 800px; margin: 1rem auto 0; }
+.video-poster { display: block; width: 100%; height: auto; border-radius: 6px; cursor: pointer; }
+.video-poster[hidden] { display: none; }
+.play-overlay {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 4rem; height: 4rem; border-radius: 50%; background: rgba(0, 0, 0, .55);
+  color: #fff; font-size: 1.6rem; line-height: 4rem; text-align: center; cursor: pointer;
+}
+.play-overlay[hidden] { display: none; }
+#reelout-video { display: block; width: 100%; border-radius: 6px; }
 #reelout-video[hidden] { display: none; }
 """,
 js"""
-const btn = document.getElementById("video-toggle");
+const poster = document.getElementById("video-poster");
+const overlay = document.getElementById("play-overlay");
 const vid = document.getElementById("reelout-video");
-btn.addEventListener("click", () => {
-  const show = vid.hidden;
-  vid.hidden = !show;
-  btn.setAttribute("aria-expanded", String(show));
-  show ? vid.play().catch(() => {}) : vid.pause();
-});
+const reveal = () => {
+  poster.hidden = true;
+  overlay.hidden = true;
+  vid.hidden = false;
+  vid.play().catch(() => {});
+};
+poster.addEventListener("click", reveal);
+overlay.addEventListener("click", reveal);
 """)
 
 #%% code id=columns_bind
