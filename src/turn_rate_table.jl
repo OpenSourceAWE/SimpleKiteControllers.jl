@@ -10,8 +10,8 @@ know about.
 
 The table is read once, at package load (`__init__`);
 [`reload_turn_rate_table!`](@ref) re-reads it after a table-building script
-appends rows in the same session (V3Kite.jl's
-`examples/build_turn_rate_table.jl` identifies the V3's rows).
+appends rows in the same session (`examples/build_turn_rate_table.jl`
+identifies the V3's rows).
 
 The rows are identified from simulated steering sweeps of a specific kite at
 specific conditions, so this is data ABOUT a plant, not about this controller —
@@ -90,7 +90,7 @@ Re-read the system project's `turn_rate_coeffs` file ([`turn_rate_coeffs_file`](
 and refresh [`turn_rate_coeffs`](@ref), [`V3_TURN_RATE_COEFFS`](@ref),
 [`V3_TURN_RATE_C1`](@ref) and [`V3_TURN_RATE_C2`](@ref) from it. The table is
 otherwise read only at package load, against the default `project` — call this
-after V3Kite.jl's `examples/build_turn_rate_table.jl` appends rows in the same
+after `examples/build_turn_rate_table.jl` appends rows in the same
 session, instead of restarting.
 
 If the `[0,0,40]`/0.25 lookup behind `V3_TURN_RATE_C1`/`C2` throws, this function
@@ -112,7 +112,7 @@ function reload_turn_rate_table!(project = project_file())
         @error "reload_turn_rate_table!: could not refresh V3_TURN_RATE_C1/C2 -- " *
                "the [0,0,40]/0.25 row in data/$(turn_rate_coeffs_file(project)) is unusable. " *
                "Leaving them at their previous value. Re-identify that cell with " *
-               "V3Kite.jl/examples/build_turn_rate_table.jl." exception=(e, catch_backtrace())
+               "examples/build_turn_rate_table.jl." exception=(e, catch_backtrace())
     end
     return nothing
 end
@@ -138,9 +138,9 @@ Look up the V3 turn-rate-law coefficients for a given `body_damping` and
   instead.
 - Outside the identified depower range for that damping, or for a
   `body_damping` with no rows at all, this **throws** rather than
-  extrapolating or guessing — re-identify with V3Kite.jl's `steering_test_v3.jl` +
-  V3Kite.jl's `identify_turn_rate_law`, or run `V3Kite.jl/examples/build_turn_rate_table.jl`,
-  and add the row.
+  extrapolating or guessing — re-identify by running
+  `examples/build_turn_rate_table.jl`, which sweeps the missing cells and appends
+  the rows itself.
 
 **Both arguments matter.** Depowering 0.25 → 0.55 costs a factor 2.95 of
 steering authority *and* raises the steering dead time from 0.03 s to 0.55 s.
@@ -158,8 +158,7 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
         known = sort(unique(e.body_damping for e in table.entries); by = string)
         throw(ArgumentError(
             "No identified turn-rate coefficients for body_damping = $bd. " *
-            "Known: $known. Re-identify with V3Kite.jl's steering_test_v3.jl + " *
-            "V3Kite.jl's identify_turn_rate_law, or run V3Kite.jl/examples/build_turn_rate_table.jl."))
+            "Known: $known. Re-identify by running examples/build_turn_rate_table.jl."))
     end
 
     exact = findfirst(e -> e.depower == dp, group)
@@ -170,7 +169,7 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
                 "The turn-rate entry for body_damping = $bd, depower = $dp did not " *
                 "produce usable coefficients (outcome = $(e.outcome), " *
                 "c1_rel_std = $(e.c1_rel_std), g_rel_std = $(e.g_rel_std)). " *
-                "Re-identify with V3Kite.jl/examples/build_turn_rate_table.jl."))
+                "Re-identify with examples/build_turn_rate_table.jl."))
         end
         return (c1 = e.c1, c2 = e.c2, delay = e.delay, interpolated = false)
     end
@@ -184,7 +183,7 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
         throw(ArgumentError(
             "Not enough usable turn-rate entries to interpolate for " *
             "body_damping = $bd (need >= 2, have $(length(usable))). " *
-            "Run V3Kite.jl/examples/build_turn_rate_table.jl for more depower values."))
+            "Run examples/build_turn_rate_table.jl for more depower values."))
     end
 
     depowers = [e.depower for e in usable]
