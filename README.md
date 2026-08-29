@@ -133,6 +133,7 @@ re-plots that log without re-simulating.
 
 ## Documentation
 
+- [simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
 - [docs/control_algorithm.md](docs/control_algorithm.md) — how the controller works, from the
   optimal trajectory through path following and the steering set point to the reel-out speed,
   plus what is and is not verified by the test suite
@@ -146,9 +147,10 @@ re-plots that log without re-simulating.
 - [docs/TrajectoryOptimization.md](docs/TrajectoryOptimization.md) — notes on the trajectory
   optimization test cases
 
-## TODO
-- drive the NDI-based `ParkingController`/`ParkingControllerSettings` end-to-end in an
-  example, as an alternative to the heading-PID parking in `simple_auto_parking.jl`
+
+## Acknowledgements
+
+This work has been supported by the MERIDIONAL project, which receives funding from the European Union’s Horizon Europe Program under the grant agreement no. [101084216](https://doi.org/10.3030/101084216). The opinions expressed in this document reflect only the author’s view and reflects in no way the European Commission’s opinions. The European Commission is not responsible for any use that may be made of the information it contains.
 
 ## Related
 A fully working set of flight path controllers and planners can be found here: [KiteControllers.jl](https://github.com/aenarete/KiteControllers.jl)
