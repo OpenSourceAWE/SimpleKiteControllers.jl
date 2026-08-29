@@ -1,156 +1,92 @@
 entries:
-  # First row identified with a damping floor passed explicitly: the sweep flew
-  # [0, 0, 40] throughout (floor equal to body_damping, so no decay), where the
-  # rows below predate the floor and the rows above it use init's 0.8x default.
-  # c1 stays monotone in depower against the 0.25 row; c2 does not, and c2 is the
-  # term that moves most with damping — treat it as belonging to this run, not as
-  # continuous with the older ones. See docs/fig8_tuning_log.md.
-  - c2: -1.1124
-    c1: 0.3225
-    depower: 0.23
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    outcome: "sweep_done"
-    delay: 0.25
-    c1_rel_std: 0.0021
-    u_s_max: 0.175
-    g_rel_std: 0.1449
-    min_elevation: 73.05
-    l_tether: 150.0
-    dt: 0.05
-    date: 2026-08-10
-  - c2: 0.07576191167222507
-    c1: 0.31038589289512725
+  # Re-identified 2026-08-30 against the heavier wing (kite.mass 6.2 -> 10.9926
+  # kg, commit 6443fbe, matching AWETrim's LEI-V3 and V3Kite's own
+  # bridle_geometry_full_fem.yaml), at this package's own 150 m reel-out project
+  # (system_reelout_150m.yaml, 8 mm tether) rather than V3Kite's 200 m / 6.2 kg
+  # / 4 mm one the table used to describe. Every prior row (6.2 kg, [10,10,40]
+  # and [20,20,40] damping groups included) was identified against a plant
+  # nobody flies any more and has been removed rather than kept as
+  # cross-damping reference data; see docs/fig8_tuning_log.md for the full
+  # rationale, the deleted rows, and the depower-grid choice. Flown at
+  # body_start_damping [0,0,40] decaying to body_sim_damping [0,0,32] --
+  # PASSING throughout, all body_sim_damping [0.0, 0.0, 32.0].
+  - c2: -0.19902201055727797
+    c1: 0.26975787521515693
     depower: 0.25
     body_damping:
       - 0.0
       - 0.0
       - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
     outcome: "sweep_done"
-    delay: 0.26666666666666666
-    c1_rel_std: 0.0008425854772171317
+    delay: 0.3833333333333333
+    c1_rel_std: 0.001056099420410297
     u_s_max: 0.175
-    g_rel_std: 0.08979832549856072
-    min_elevation: 73.01414489746094
-  - c2: -0.17785525922121595
-    c1: 0.12028768896596123
-    depower: 0.25
-    body_damping:
-      - 10.0
-      - 10.0
-      - 40.0
-    outcome: "time_limit"
-    delay: 0.016666666666666666
-    c1_rel_std: 0.0013117906397058113
-    u_s_max: 0.4000000000000001
-    g_rel_std: 0.17725272306642847
-    min_elevation: 59.70680618286133
-  - c2: -2.0841
-    c1: 0.0567
-    depower: 0.25
-    body_damping:
-      - 20.0
-      - 20.0
-      - 40.0
-    delay: 0.03
-    outcome: "sweep_done"
-    c1_rel_std: 0.0006
-    date: 2026-07-26
-    l_tether: 150.0
-  # Re-run at 200 m with the elevation floor relaxed; see docs/fig8_tuning_log.md.
-  - c2: 0.5925
-    c1: 0.1073
-    depower: 0.55
+    g_rel_std: 0.12066390762931248
+    min_elevation: 72.96259307861328
+    date: "2026-08-30"
+  - c2: 0.26050815100354163
+    c1: 0.21732113088904853
+    depower: 0.3
     body_damping:
       - 0.0
       - 0.0
       - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
     outcome: "sweep_done"
-    delay: 0.55
-    c1_rel_std: 0.0012
+    delay: 0.45
+    c1_rel_std: 0.0011438410731743841
     u_s_max: 0.175
-    g_rel_std: 0.1477
-    min_elevation: 46.83
-  - c2: 0.1951
-    c1: 0.1513
+    g_rel_std: 0.1354722046761689
+    min_elevation: 70.54696655273438
+    date: "2026-08-30"
+  - c2: 0.8015423899780542
+    c1: 0.16554616507205075
+    depower: 0.35
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    outcome: "sweep_done"
+    delay: 0.5166666666666666
+    c1_rel_std: 0.0011872205772073903
+    u_s_max: 0.175
+    g_rel_std: 0.13696743269396944
+    min_elevation: 61.40755081176758
+    date: "2026-08-30"
+  # FAILED: dove below MIN_ELEVATION (50 deg) at the very first amplitude step
+  # (u_s_max only 0.05 of the 0.175 cap) -- the heavier wing cannot hold the
+  # pattern at this much depower. Kept as a recorded failure, never usable as
+  # an interpolation neighbour (_is_usable_turn_rate_entry also fails it on
+  # c1_rel_std). See docs/fig8_tuning_log.md.
+  - c2: 0.9003855319707074
+    c1: 0.14366880214795413
     depower: 0.4
     body_damping:
       - 0.0
       - 0.0
       - 40.0
-    delay: 0.42
-    g_rel_std: 0.098
-    c1_rel_std: 0.0006
-    outcome: "sweep_done"
-    date: 2026-07-26
-  # Re-run at the legacy 0.175 cap; see docs/fig8_tuning_log.md.
-  - c2: 0.4103
-    c1: 0.1919
-    depower: 0.35
-    body_damping:
+    body_sim_damping:
       - 0.0
       - 0.0
-      - 40.0
-    outcome: "sweep_done"
-    delay: 0.37
-    c1_rel_std: 0.0008
-    u_s_max: 0.175
-    g_rel_std: 0.0796
-  - c2: 0.20818150237059205
-    c1: 0.12388379127383817
-    depower: 0.45
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    outcome: "time_limit"
-    delay: 0.5
-    c1_rel_std: 0.0005343566117988374
-    u_s_max: 0.37500000000000006
-    g_rel_std: 0.10704502050406076
-    min_elevation: 50.04434585571289
-  - c2: -0.04709761594234557
-    c1: 0.06382708909627564
-    depower: 0.35
-    body_damping:
-      - 10.0
-      - 10.0
-      - 40.0
-    outcome: "time_limit"
-    delay: 0.1
-    c1_rel_std: 0.0005704878467699284
-    u_s_max: 0.325
-    g_rel_std: 0.17021757212367994
-    min_elevation: 68.70744323730469
-  - c2: -0.07390269191533691
-    c1: 0.04587937329352884
-    depower: 0.45
-    body_damping:
-      - 10.0
-      - 10.0
-      - 40.0
-    outcome: "time_limit"
-    delay: 0.26666666666666666
-    c1_rel_std: 0.0005537949732843564
-    u_s_max: 0.27499999999999997
-    g_rel_std: 0.12257900086353399
-    min_elevation: 53.47966003417969
-  # Re-run with the elevation floor relaxed; see docs/fig8_tuning_log.md.
-  - c2: -0.0742
-    c1: 0.0417
-    depower: 0.55
-    body_damping:
-      - 10.0
-      - 10.0
-      - 40.0
-    outcome: "time_limit"
-    delay: 0.37
-    c1_rel_std: 0.0010
-    u_s_max: 0.175
-    g_rel_std: 0.1543
-    min_elevation: 44.01
+      - 32.0
+    outcome: "low_elevation"
+    delay: 0.6333333333333333
+    c1_rel_std: 0.010074340184189139
+    u_s_max: 0.05
+    g_rel_std: 0.21464255234581398
+    min_elevation: 49.993595123291016
+    date: "2026-08-30"
 conditions:
   v_wind: 9.51
   dt: 0.0166666667

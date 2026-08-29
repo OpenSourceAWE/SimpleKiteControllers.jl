@@ -3430,6 +3430,64 @@ Moved out of `data/turn_rate_coeffs.yaml` on 2026-08-03 when the comment rules
 were applied; each row there now carries a one-line pointer here. All three are
 2026-07-27 re-runs at 200 m tether. The grid's usual elevation floor is 50°.
 
+**Whole table replaced at the heavier mass — 2026-08-30.** `kite.mass` moved
+6.2 -> 10.9926 kg in `data/settings_reelout_150m.yaml` (commit `6443fbe`,
+2026-08-29, matching AWETrim's LEI-V3 wing and V3Kite's own
+`bridle_geometry_full_fem.yaml`) and, same day, in every `data/settings_fig8_*`
+and `settings_reelout_180m.yaml`. Turn rate is mass-dependent and every row in
+this table had been identified at 6.2 kg — `PlanFix3m_per_s.md`'s failed 3 m/s
+run at the new mass already flagged this as unfinished business. Re-identified
+with `examples/build_turn_rate_table.jl` (a port of V3Kite.jl's script of the
+same name, which lived unmerged on that repo's `fig8` branch — see
+`PlanIdentifyC1C2.md` for the port), against this package's own 150 m reel-out
+project (`system_reelout_150m.yaml`, 8 mm tether) rather than V3Kite's 200 m /
+4 mm one the table used to point at.
+
+Every prior row was deleted rather than kept for cross-reference: the
+`[10,10,40]` and `[20,20,40]` damping groups (never looked up by anything in
+this repo — every call site passes `fcs.body_damping = [0,0,40]`) and the
+`[0,0,40]` rows at 0.23, 0.45 and 0.55, which bracketed the new grid on both
+sides and would otherwise have let an interpolation pair an 11 kg row with a
+6.2 kg one. Flown at `body_start_damping [0,0,40]` decaying to
+`body_sim_damping [0,0,32]`, matching every example's own
+`0.8 .* fcs.body_damping` — the row is still keyed by the START value, per
+`FC_Settings.body_damping`'s docstring.
+
+Grid: 0.25/0.30/0.35/0.40, chosen to bracket the flown range measured across
+`output/scenarios/` (0.260-0.35, itself all flown at 6.2 kg) with margin for
+the mass shift, while keeping 0.25 a real row for `reload_turn_rate_table!`'s
+`V3_TURN_RATE_C1`/`C2` anchor.
+
+| depower | outcome | c1 | c2 | delay | c1_rel_std | g_rel_std | min_el | usable |
+|---|---|---|---|---|---|---|---|---|
+| 0.25 | sweep_done | 0.2698 | -0.1990 | 0.383 | 0.11 % | 12.1 % | 72.96° | yes |
+| 0.30 | sweep_done | 0.2173 | 0.2605 | 0.450 | 0.11 % | 13.5 % | 70.55° | yes |
+| 0.35 | sweep_done | 0.1655 | 0.8015 | 0.517 | 0.12 % | 13.7 % | 61.41° | yes |
+| 0.40 | **low_elevation** | 0.1437 | 0.9004 | 0.633 | 1.01 % | 21.5 % | 49.99° | **NO** |
+
+0.40 dove below `MIN_ELEVATION` (50°) at the very first amplitude step
+(`u_s_max` only 0.05 of the 0.175 cap) — the heavier wing cannot hold the
+pattern at this much depower, and its `c1_rel_std` fails the 1 % usability bar
+regardless. Kept in the table as a recorded failure (never used as an
+interpolation neighbour), not deleted: a failed sweep is data too. Consequence
+worth watching — `fc_settings_reelout.yaml`'s `depower_final` (0.35) is now the
+last USABLE point in the identified range, not comfortably inside it, and
+`entry_depower` (0.34) sits close beside it. Neither is retuned here.
+
+`c1` fell across the board relative to the 6.2 kg table (0.3104 -> 0.2698 at
+0.25, roughly -13 %), as expected: more mass needs more lift, which this
+identification does not by itself supply — see `PlanFix3m_per_s.md` for why
+`depower_setpoint`/`entry_depower`/the steering gains are still due their own
+retune at this mass. `c2` (the gravity term) moved further still and even
+changed sign at 0.25 (+0.0758 -> -0.1990); read as a mass effect on the trim
+point, not compared against the deleted 6.2 kg rows.
+
+Also carried over from the same commit: `examples/reelout_results.jl` now
+copies `turn_rate_coeffs_file(project)` into each run's archive, and the
+twelve existing `output/scenarios/*/` folders were backfilled with a copy of
+the OLD (6.2 kg) table, since every one of their recorded `git_hash`es
+resolves to that exact blob.
+
 **`[0,0,40]` / depower 0.55.** Re-run at 200 m with `MIN_ELEVATION` relaxed to
 40° for THIS run only (same fix as `[10,10,40]`/0.55 — the previous 200 m
 attempt dove at `u_s_max` = 0.05, the first amplitude step, so a lower

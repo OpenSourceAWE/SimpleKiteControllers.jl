@@ -480,42 +480,67 @@ end
     end
 
     @testset "turn_rate_coeffs" begin
-        # Body damping changes the steering response by 5.6x: keyed on it, never guessed.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31038589289512725
-        # Confounded by amplitude range (u_s_max 0.175 -> 0.40), not re-run.
-        @test turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 ≈ 0.12028768896596123
-        @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 ≈ 0.0567
-        # more damping -> less agile
-        @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).c1 <
-              turn_rate_coeffs([10.0, 10.0, 40.0], 0.25).c1 <
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        # 0.23, the first row identified with an explicit damping floor (flown [0,0,40]).
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 ≈ 0.3225
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.23).c1 >
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        # DEPOWER costs authority too: 0.25 -> 0.55 is ~2.95x of c1 and 16x the dead time.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 ≈ 0.1073
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 <
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).delay >
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).delay
-        # Integer input is converted; unidentified combinations throw.
-        @test turn_rate_coeffs([0, 0, 40], 0.25).c1 ≈ V3_TURN_RATE_C1
-        @test_throws ArgumentError turn_rate_coeffs([5.0, 5.0, 40.0], 0.25)
-        @test_throws ArgumentError turn_rate_coeffs([0.0, 0.0, 40.0], 0.70)
-        # depower 0.40 sits between the 0.25 and 0.55 rows, as monotonicity requires.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).c1 ≈ 0.1513
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.55).c1 <
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).c1 <
-              turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
-        # the exported defaults track init's default damping at depower 0.25
+        # This testset checks the SHIPPED FILE\'s contract, not its numbers -- a
+        # re-identification (new grid, new c1/c2) must not require editing these
+        # assertions. See docs/fig8_tuning_log.md for what the coefficients are
+        # and why. Only one number below is pinned, as a canary against an
+        # accidental edit of the YAML.
+        entries = SimpleKiteControllers._TURN_RATE_TABLE[].entries
+
+        # A row that claims to have passed never leaves its numbers unusable:
+        # no row is silently half-valid.
+        for e in entries
+            if e.outcome in (:sweep_done, :time_limit)
+                @test isfinite(e.c1) && isfinite(e.c2) && isfinite(e.delay)
+                @test isfinite(e.c1_rel_std) && isfinite(e.g_rel_std)
+            end
+        end
+
+        # Every depower the shipped settings actually look up resolves -- this
+        # is what a retune past the identified range actually breaks.
+        fcs = FC_Settings("fc_settings.yaml")
+        @test turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1 isa Real
+        fcs_ro = FC_Settings("fc_settings_reelout.yaml")
+        @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_setpoint).c1 isa Real
+        @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_final).c1 isa Real
+
+        # c1 decreases monotonically in depower, computed FROM the table -- a
+        # physical invariant of any valid identification, not a pinned number.
+        bd = [0.0, 0.0, 40.0]
+        usable = sort(filter(e -> e.body_damping == bd &&
+                                   SimpleKiteControllers._is_usable_turn_rate_entry(e),
+                              entries); by = e -> e.depower)
+        @test length(usable) >= 2
+        @test issorted(usable; by = e -> -e.c1)
+
+        # An exact hit on either end of the usable range is never interpolated;
+        # a depower strictly between two usable rows always is.
+        lo, hi = usable[1], usable[end]
+        @test turn_rate_coeffs(bd, lo.depower).interpolated == false
+        @test turn_rate_coeffs(bd, hi.depower).interpolated == false
+        mid = (lo.depower + hi.depower) / 2
+        any(e -> e.depower == mid, usable) ||
+            @test turn_rate_coeffs(bd, mid).interpolated == true
+
+        # Integer input is converted; an unidentified body_damping throws, and
+        # so does a depower past either end of the identified range.
+        @test turn_rate_coeffs([0, 0, 40], lo.depower).c1 ==
+              turn_rate_coeffs(bd, lo.depower).c1
+        @test_throws ArgumentError turn_rate_coeffs([5.0, 5.0, 40.0], lo.depower)
+        @test_throws ArgumentError turn_rate_coeffs(bd, hi.depower + 1.0)
+
+        # The exported defaults track init's default damping at depower 0.25 --
+        # 0.25 is kept a real grid row so this is an exact hit, never an
+        # interpolation (see reload_turn_rate_table!).
+        @test isfinite(V3_TURN_RATE_C1) && isfinite(V3_TURN_RATE_C2)
         @test V3_TURN_RATE_C1 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         @test V3_TURN_RATE_C2 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c2
-        # Exact grid hits are never interpolated.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.40).interpolated == false
-        @test turn_rate_coeffs([20.0, 20.0, 40.0], 0.25).interpolated == false
-        # A row carrying its own l_tether/dt is data like any other: no warning.
-        @test_logs turn_rate_coeffs([20.0, 20.0, 40.0], 0.25)
+
+        # Canary: catches an accidental edit of the YAML. EXPECTED to change on
+        # a deliberate re-identification -- update it then, nothing else here.
+        # 0.26975787521515693: 11 kg wing, 150 m / 8 mm tether, re-identified
+        # 2026-08-30 (see docs/fig8_tuning_log.md).
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.26975787521515693
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin
@@ -529,6 +554,12 @@ end
             # A failed sweep: kept in the table, but never used, not even on an exact hit.
             (body_damping = bd, depower = 0.60, c1 = 999.0, c2 = 0.0, delay = 0.0,
              c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :low_elevation),
+            # A second damping group, deliberately extreme and overlapping bd's
+            # own depower range: proves body_damping groups are never pooled,
+            # not merely that an unknown one throws.
+            (body_damping = [99.0, 99.0, 40.0], depower = 0.40, c1 = 999.0,
+             c2 = 0.0, delay = 0.0, c1_rel_std = 0.001, g_rel_std = 0.05,
+             outcome = :sweep_done),
         ]
         synthetic = SimpleKiteControllers.TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
@@ -544,6 +575,9 @@ end
             @test r50.c1 == 0.05 && r50.interpolated == false
 
             # c1 is log-linear, c2/delay linear, delay rounded UP to a dt multiple.
+            # bd's own depower 0.40 is a legitimate interpolation point (0.30..0.50),
+            # and the OTHER damping group's row at the same depower (c1 = 999.0,
+            # added above) must play no part in it.
             r = turn_rate_coeffs(bd, 0.40)
             @test r.interpolated == true
             @test r.c1 ≈ sqrt(0.20 * 0.05)
@@ -605,9 +639,10 @@ end
         # rho = 1/(L*c1*u_s), independent of apparent wind speed
         @test min_turn_radius(150.0, 0.175) ≈
               rad2deg(1 / (150.0 * V3_TURN_RATE_C1 * 0.175))
-        # a more damped kite cannot turn as tightly
-        @test min_turn_radius(150.0, 0.175; c1 = turn_rate_coeffs([10.0,10.0,40.0], 0.25).c1) >
-              min_turn_radius(150.0, 0.175; c1 = turn_rate_coeffs([0.0,0.0,40.0], 0.25).c1)
+        # a more damped kite cannot turn as tightly (illustrative c1 values, not a
+        # table lookup -- min_turn_radius takes c1 directly)
+        @test min_turn_radius(150.0, 0.175; c1 = 0.10) >
+              min_turn_radius(150.0, 0.175; c1 = 0.30)
         # a longer tether allows a TIGHTER angular turn (rho = 1/(L*c1*u_s))
         @test min_turn_radius(300.0, 0.30) < min_turn_radius(150.0, 0.30)
         # more authority or a longer tether -> tighter achievable turn
@@ -1112,11 +1147,12 @@ end
     @testset "reelout_feasibility" begin
         using SimpleKiteControllers: ReeloutFeasibility, Phase5MarginState, c1_at,
                                      phase5_margin
-        coeffs = turn_rate_coeffs([10.0, 10.0, 40.0], 0.25)
 
         # c1_at falls back to the pattern's c1 before phase 5 and when the final
         # lookup failed (NaN), and switches to depower_final's from phase 5 on.
-        feas = ReeloutFeasibility(; c1 = 0.25, c2 = coeffs.c2, delay = coeffs.delay,
+        # c2/delay are arbitrary here -- this testset is about phase selection,
+        # not a table lookup.
+        feas = ReeloutFeasibility(; c1 = 0.25, c2 = -0.1, delay = 0.05,
                                   c1_final = 0.20)
         @test c1_at(feas, 4) == 0.25
         @test c1_at(feas, 5) == 0.20
