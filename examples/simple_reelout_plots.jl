@@ -78,6 +78,7 @@ using GLMakie
 using MakieControlPlots
 using LaTeXStrings
 using V3Kite                  # the log, its data path, wrap_to_pi
+using OrderedCollections: OrderedDict
 using SimpleKiteControllers   # FC_Settings, figure_eight_path
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
@@ -152,7 +153,8 @@ created_at = log_created_at(log_name; path = output_path)
 # all sixteen `var_` slots are taken, so `k_v` and the optimizer's depower are not
 # columns and a replot has to read them from here.
 summary_file = joinpath(output_path, log_name * ".yaml")
-run_summary = isfile(summary_file) ? V3Kite.YAML.load_file(summary_file) : nothing
+run_summary = isfile(summary_file) ?
+    V3Kite.YAML.load_file(summary_file; dicttype = OrderedDict{String, Any}) : nothing
 # `project_set.v_wind` is the PROJECT's base value, not necessarily what was
 # actually flown if a WIND_SPEED override was in effect — a scenario's own run
 # summary is the only place the true value survives.
