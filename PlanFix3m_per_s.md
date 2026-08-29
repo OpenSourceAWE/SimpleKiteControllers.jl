@@ -39,41 +39,32 @@ different laws.
 
 ## Fix: decouple the local law from what AWETrim is sent
 
-- **`examples/awetrim_client.jl`**: `winch_from_wc` now takes `softplus_beta`/
-  `softminus_beta` as separate, explicit keyword arguments (still defaulting to
-  `wc.softplus_beta`/`wc.softminus_beta`, so any caller that doesn't pass them keeps
-  today's behaviour exactly).
-- **`examples/simple_opt_reelout.jl`**: right after `rcs = wc`, `AWETRIM_SOFTPLUS_BETA`/
-  `AWETRIM_SOFTMINUS_BETA` capture the betas BEFORE any local override can touch them.
-  Both `winch_from_wc(rcs; ...)` call sites (the nominal request and the first-lap one)
-  now pass these captured constants explicitly, never `rcs.softplus_beta`/
-  `rcs.softminus_beta` directly — so whatever the local law does, AWETrim always still
-  sees `1e-3`/`1e-3`, the values already known to converge.
-- A new `WCS_OVERRIDES` dict (mirroring the existing `FCS_OVERRIDES` pattern: read and
-  cleared on every run, so nothing lingers into the next interactive `include`) lets a
-  run set arbitrary `WCSettings` fields on `rcs` for the LOCAL simulation only:
+The decoupling is now in the code permanently, with no per-run override mechanism.
 
-  ```julia
-  WCS_OVERRIDES = Dict(:force_limit => "soft", :soft_lfc => true,
-                        :softminus_beta => 0.03, :v_reel_in => -2.0,
-                        :reel_in_beta => 20.0)
-  include("examples/simple_opt_reelout.jl")
-  ```
+- **`examples/awetrim_client.jl`** defines `const AWETRIM_SOFTMINUS_BETA = 1e-3` — the
+  `softminus_beta` `winch_from_wc` ALWAYS sends to the server, hardcoded there instead of
+  read off `wc`. It is used unconditionally by the single `WinchParams` construction, so
+  every request (nominal and first-lap alike) is solved against `1e-3`, the value measured
+  to converge at 3 m/s, no matter how sharp the local `wc.softminus_beta` is. `softplus_beta`
+  is still forwarded from `wc`; only the lower-limit beta needed pinning.
+- **`data/wc_settings.yaml`** carries the local `soft_lfc` law directly, so it is what
+  every run flies with no REPL setup: `force_limit: "soft"`, `soft_lfc: true`,
+  `softminus_beta: 0.03` (sharp enough for the `* f_low >= 8` requirement),
+  `v_reel_in: -2.0`, `reel_in_beta: 20.0`. Note `f_low` in this file is now `700.0`.
+  Because `force_limit` is set here to `"soft"`, it no longer picks up the `"hard"` entry
+  `winch_kv_table.yaml` used to force at 3 m/s, which `soft_lfc` would have thrown on.
 
-  `:force_limit => "soft"` is required in the override at 3 m/s specifically, since
-  `winch_kv_table.yaml` sets `"hard"` there and `soft_lfc` needs `force_limit == "soft"`
-  (`WinchController` throws otherwise — a loud failure, not a silent no-op, if the
-  override is incomplete).
+## Open issue: power_ratio is 5.1
 
-## Verified so far / still open
+With the above in place, a 3 m/s run currently reports a `power_ratio` (local/AWETrim
+predicted power) of **5.1** — worse than the ~4x mismatch this plan set out to fix, not
+better. This needs further investigation before the approach is judged; things to check:
 
-Checked without running the full (multi-minute, AWETrim-calling) script: both edited
-files parse cleanly, and the decoupling logic was verified directly against
-WinchControllers.jl — the local `rcs` ends up with the sharpened `soft_lfc` settings
-(`WinchController` constructs fine), while the captured AWETrim-facing betas stay at the
-original `1e-3`/`1e-3` regardless.
-
-**Not yet done**: an actual 3 m/s run with `WCS_OVERRIDES` set, to check whether the
-local/AWETrim power mismatch is actually closed (or by how much) — that is the real test
-of this fix and hasn't been run yet.
+- whether the local `soft_lfc` reel-in law is actually behaving as intended at 3 m/s, or
+  whether the reel-in line is now dominating and inflating measured power;
+- whether pinning only `softminus_beta` is enough — the server still sees
+  `wc.softplus_beta`, and `f_low` differing between the two sides (700 N locally vs. what
+  the server's floor `sp(beta*f_min)/beta` effectively makes of it at `1e-3`) may be the
+  larger remaining discrepancy;
+- whether the mismatch is in the winch law at all, versus the flown path or the aero side.
 
