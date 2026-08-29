@@ -1,9 +1,34 @@
 try; import KaimonSlate; catch; error("This is a Kaimon Slate notebook — running it as plain Julia needs the KaimonSlate runtime in this environment. Add it with `import Pkg; Pkg.add(\"KaimonSlate\")`, or open it in Kaimon Slate."); end; KaimonSlate.standalone!(@__MODULE__; dir=@__DIR__)
 
-#%% md id=intro
-@md"""
-# Simulation Results Reel-Out testing at Maasvlakte, NL
-"""
+#%% web id=intro
+@web(html"""
+<div class="md">
+<h1 class="intro-title">
+  Simulation Results Reel-Out testing at Maasvlakte, NL
+  <button id="video-toggle" class="video-icon" type="button" title="Watch reel-out video" aria-label="Watch reel-out video" aria-expanded="false">🎬</button>
+</h1>
+</div>
+<video id="reelout-video" src="/n/results/asset/notebooks/reelout_150m.mp4" controls preload="none" hidden></video>
+""",
+css"""
+/* the export's auto-generated doc header duplicates this cell's own title — this IS the title */
+.exp-titleblock { display: none; }
+.intro-title { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.video-icon { flex: none; background: none; border: none; cursor: pointer; font-size: 1.4rem; line-height: 1; padding: .1rem .3rem; border-radius: 6px; }
+.video-icon:hover { opacity: .65; }
+#reelout-video { display: block; width: 100%; max-width: 800px; margin: 1rem auto 0; border-radius: 6px; }
+#reelout-video[hidden] { display: none; }
+""",
+js"""
+const btn = document.getElementById("video-toggle");
+const vid = document.getElementById("reelout-video");
+btn.addEventListener("click", () => {
+  const show = vid.hidden;
+  vid.hidden = !show;
+  btn.setAttribute("aria-expanded", String(show));
+  show ? vid.play().catch(() => {}) : vid.pause();
+});
+""")
 
 #%% code id=columns_bind
 @bind columns MultiCheckBox(["optimization", "force", "reel-out speeds", "performance"], String[];
@@ -178,10 +203,18 @@ pick({{ wind_speed }});
 function wire() {
   if (!(window.Slate && !Slate.isLive())) return;
   // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
-  // sync; this cell only needs to swap its own image on any of them changing.
+  // sync; this cell only needs to swap its own image on any of them changing. It still has to
+  // relabel here too: `Slate.replay.listen` resets a host's readout to the bare number on every
+  // fire, so without this, whichever cell's listener fires last on the dragged host would strip
+  // the " m/s" pattern_plot's sync just restored.
+  const relabel = (h, v) => {
+    const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
+    ro && (ro.textContent = v + " m/s");
+  };
   Slate.replay.hosts("wind_speed").forEach(h => {
     Slate.replay.enable(h, true);
-    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+    relabel(h, Slate.replay.read(h));
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
   });
 }
 document.readyState === "loading" ?
@@ -219,10 +252,18 @@ pick({{ wind_speed }});
 function wire() {
   if (!(window.Slate && !Slate.isLive())) return;
   // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
-  // sync; this cell only needs to swap its own image on any of them changing.
+  // sync; this cell only needs to swap its own image on any of them changing. It still has to
+  // relabel here too: `Slate.replay.listen` resets a host's readout to the bare number on every
+  // fire, so without this, whichever cell's listener fires last on the dragged host would strip
+  // the " m/s" pattern_plot's sync just restored.
+  const relabel = (h, v) => {
+    const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
+    ro && (ro.textContent = v + " m/s");
+  };
   Slate.replay.hosts("wind_speed").forEach(h => {
     Slate.replay.enable(h, true);
-    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+    relabel(h, Slate.replay.read(h));
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
   });
 }
 document.readyState === "loading" ?
@@ -261,10 +302,18 @@ pick({{ wind_speed }});
 function wire() {
   if (!(window.Slate && !Slate.isLive())) return;
   // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
-  // sync; this cell only needs to swap its own image on any of them changing.
+  // sync; this cell only needs to swap its own image on any of them changing. It still has to
+  // relabel here too: `Slate.replay.listen` resets a host's readout to the bare number on every
+  // fire, so without this, whichever cell's listener fires last on the dragged host would strip
+  // the " m/s" pattern_plot's sync just restored.
+  const relabel = (h, v) => {
+    const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
+    ro && (ro.textContent = v + " m/s");
+  };
   Slate.replay.hosts("wind_speed").forEach(h => {
     Slate.replay.enable(h, true);
-    Slate.replay.listen(h, () => pick(Slate.replay.read(h)));
+    relabel(h, Slate.replay.read(h));
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
   });
 }
 document.readyState === "loading" ?
