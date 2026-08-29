@@ -108,7 +108,7 @@ if (window.Slate && !Slate.isLive()) {
 
 #%% md id=powercurve_hint
 @md"""
-The average mechanical power during reel-out, the force, and the speed are shown in the following plot. At about <span style="white-space: nowrap">9 m/s</span> the maximal force of 8400 N is reached. From this wind speed onwards the force is limited by reeling out faster.
+The average mechanical power during reel-out, the force, and the speed are shown in the following plot. At about <span style="white-space: nowrap">9 m/s</span> the maximal force of 8400 N is reached. From this wind speed onwards the force is limited by increasing the depower settings.
 """
 
 #%% md id=powercurve_plot
@@ -322,7 +322,11 @@ document.readyState === "loading" ?
 
 #%% md id=acknowledgements
 @md"""
-These results were achieved using the following research software:
+## Acknowledgements
+
+This work has been supported by the MERIDIONAL project, which receives funding from the European Union’s Horizon Europe Program under the grant agreement no. [101084216](https://doi.org/10.3030/101084216). The opinions expressed in this document reflect only the author’s view and reflects in no way the European Commission’s opinions. The European Commission is not responsible for any use that may be made of the information it contains.
+
+## These results were achieved using the following research software:
 
 - [SimpleKiteControllers.jl](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl), path-following kite control software by Uwe Fechner, Delft, 2026
 - [AWETrim](https://github.com/awegroup/AWETrim/tree/develop) was used to provide optimal flight paths, depending on the inflow conditions, written by Oriol Canyon, Delft, 2026
