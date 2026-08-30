@@ -3,7 +3,8 @@
 
 """
 Move the last finished `simple_opt_reelout.jl` run into `output/scenarios/`,
-named after the wind speed it was flown at — 6.0 m/s becomes `v06`.
+named after the wind speed it was flown at — 6.0 m/s becomes `v06`, a
+fractional wind speed like 3.5 m/s becomes `v03.5` (see `scenario_name`).
 
 The archive to move is read from `output/last_run_done.txt`'s `archive:`
 line, written by `reelout_results.jl` as the very last thing a run does. The
@@ -63,15 +64,25 @@ end
 
 `"vNN"` for the wind speed the run in `archive_dir` was flown at, read from
 that run's own summary YAML (the log named by the archive's one `.arrow`
-file), rounded to the nearest integer m/s.
+file). An integer wind speed (6.0 m/s) keeps the plain `"v06"` every existing
+scenario folder uses; a fractional one (3.5 m/s) becomes `"v03.5"` rather than
+being rounded into an integer bucket — `round(Int, 3.5) == round(Int, 4.5) ==
+4` (round-half-to-even), which silently collided a 3.5 m/s run into the same
+`v04` folder an actual 4.0 m/s run already used. The zero-padded whole part
+keeps every name the same length as its neighbours, so `sort`ing folder names
+(`plot_scenario.jl`'s menu) still orders by wind speed.
 """
 function scenario_name(archive_dir::AbstractString)
     arrow_files = filter(f -> endswith(f, ".arrow"), readdir(archive_dir))
     isempty(arrow_files) && error("No .arrow log found in $archive_dir")
     log_name = replace(only(arrow_files), ".arrow" => "")
     summary = YAML.load_file(joinpath(archive_dir, log_name * ".yaml"))
-    wind_speed = summary["simulation"]["wind_speed"]
-    return "v" * lpad(round(Int, wind_speed), 2, '0')
+    w = round(Float64(summary["simulation"]["wind_speed"]); digits = 2)
+    whole = Int(floor(w))
+    frac = round(w - whole; digits = 2)
+    name = "v" * lpad(whole, 2, '0')
+    isapprox(frac, 0.0; atol = 1e-9) || (name *= lstrip(string(frac), '0'))
+    return name
 end
 
 """
