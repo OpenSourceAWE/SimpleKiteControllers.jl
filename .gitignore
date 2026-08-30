@@ -17,3 +17,5 @@
 trajectories/
 notebooks/images/
 
+# Per-machine Claude Code permissions; .claude/skills/ is checked in.
+/.claude/settings.local.json
