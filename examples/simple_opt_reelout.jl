@@ -517,17 +517,29 @@ inflow = inflow_from_settings(project_set)
 # force the kite can pull, the solve must converge, and those want opposite values.
 opt_awe_trim = tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim
 opt_winch_mode = isempty(tos.opt_winch_mode) ? nothing : tos.opt_winch_mode
+# STARTUP solve: always the plain runtime ceiling, never `rcs.f_high_awe_trim` —
+# the curvature margin is tightest at the untested starting length, before the
+# run has flown a single lap, and de-rating it there has measurably tightened
+# the margin below min_feasibility_margin (PlanImprove_power_ratio.md). The
+# de-rating, when set, is confined to `winch_reopt` below instead.
 winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                      winch_mode = opt_winch_mode)
+                      winch_mode = opt_winch_mode, f_max = F_HIGH_NOMINAL)
 # The STARTUP path is the one flown during lap 1, where `first_lap_force_frac`
 # holds the runtime ceiling down — so it is solved against that same ceiling
 # rather than against one the winch will not give it. Re-optimization replies are
-# installed from lap 2 on and keep `winch`, the nominal one. Note this lowers the
+# installed from lap 2 on and use `winch_reopt`, not `winch`. Note this lowers the
 # request's speed ceiling `kv*sqrt(f_max)` too; see `winch_from_wc`'s docstring.
 winch_first_lap = fcs.first_lap_force_frac < 1 ?
     winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
                   winch_mode = opt_winch_mode,
                   f_max = F_HIGH_NOMINAL * fcs.first_lap_force_frac) : winch
+# RE-OPTIMIZATION solves only (from lap 2 on): the one caller that may fly
+# `rcs.f_high_awe_trim`, via `winch_from_wc`'s own default. By then the run has
+# an installed, flying pattern already clearing the startup gates, so a tighter
+# curvature margin on a later reply is a re-optimization outcome to watch, not
+# an unflown path the run aborts on before it starts.
+winch_reopt = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
+                            winch_mode = opt_winch_mode)
 # Every reply's optimized gain lands here, so the summary can report what was
 # actually flown rather than only what was sent.
 opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]
@@ -1605,7 +1617,7 @@ try
                             # the anchor correction is `L/r`, and the lap's reel-out
                             # is a bigger fraction of a short tether than of a long
                             # one. `nothing` (the request is off) still means "keep".
-                            opt_step(StepParams(; length = opt_length(l_now), winch_params = winch,
+                            opt_step(StepParams(; length = opt_length(l_now), winch_params = winch_reopt,
                                                 min_turn_radius = opt_r_min,
                                                 pattern_limits = opt_box_now);
                                      url = tos.base_url, wait = false)
@@ -1615,7 +1627,7 @@ try
                                                   tos.guess_d, 0.0, el_seed,
                                                   0.0, tos.guess_points)
                             reopt_params = InitParams(; name = tos.name, length = opt_length(l_now),
-                                                      winch_params = winch,
+                                                      winch_params = winch_reopt,
                                                       inflow_conditions = inflow,
                                                       trajectory = Trajectory(collect(guess_az_r),
                                                                               collect(guess_el_r)),
@@ -1645,7 +1657,7 @@ try
                                 continue
                             end
                             reopt_reply = opt_init(reopt_params; url = tos.base_url)
-                            opt_step(StepParams(opt_length(l_now), winch, reopt_reply.trajectory);
+                            opt_step(StepParams(opt_length(l_now), winch_reopt, reopt_reply.trajectory);
                                      url = tos.base_url, wait = false)
                         end
                         global reopt_pending = true
@@ -1792,7 +1804,7 @@ try
                                 tos.guess_b, tos.guess_c, tos.guess_d, 0.0,
                                 retry_el_seed, 0.0, tos.guess_points)
                             retry_params = InitParams(; name = tos.name, length = opt_length(l_now),
-                                winch_params = winch, inflow_conditions = inflow,
+                                winch_params = winch_reopt, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(retry_az),
                                                         collect(retry_el)),
                                 input_depower = depower_seed(tos, inflow.wind_speed),
@@ -1802,7 +1814,7 @@ try
                                 pattern_limits = pattern_limits_from(tos;
                                     elevation_min = retry_el_min))
                             retry_reply = opt_init(retry_params; url = tos.base_url)
-                            opt_step(StepParams(opt_length(l_now), winch, retry_reply.trajectory);
+                            opt_step(StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
                                      url = tos.base_url, wait = false)
                             t_retry = time()
                             retry_state = "solving"

@@ -66,9 +66,9 @@ The gap switches on precisely where `F_needed * cf_force_ro` crosses 8400 N: at
 8 m/s it does not (7070 N) and the ratio is 0.99; from 9 m/s up it does, on all
 three runs.
 
-If this holds, the fix is to send a de-rated `f_max` (approximately
-`8400 / cf_force_ro`) so the predicted optimum is one the plant can fly. The
-ratio then closes and measured power barely moves.
+If this holds, the fix is to send a de-rated `f_max` so the predicted optimum
+is one the plant can fly. The ratio then closes and measured power barely
+moves.
 
 ## Step 1 — decisive, no simulation
 
@@ -84,32 +84,23 @@ and at 10 m/s.
 
 ## Step 2a — de-rate `f_max`
 
-Send `f_max = 8400/cf` instead of `wc.f_high`, with `cf` taken from the run's
-own `force.cf_force_ro`. `winch_from_wc` already takes `f_max` as a keyword
-for exactly this kind of override (`fcs.first_lap_force_frac` uses it), so this
-is a settings change, not new machinery.
+Send a de-rated `f_max` instead of `wc.f_high`. `winch_from_wc` already takes
+`f_max` as a keyword for exactly this kind of override
+(`fcs.first_lap_force_frac` uses it), so this is a settings change, not new
+machinery.
 
 Re-run 9, 10 and 11 m/s. Expect the ratio to close towards 1.0 with measured
 power within a few percent of today's, and peak force to stay under 8400 N.
 
-**Tried 2026-08-30 — REFUTES the working hypothesis at 10 m/s.** Implemented as
-a new `f_max_opt` column in `data/winch_kv_table.yaml` (interpolated, like
-`kv`/`f_low`), read by the new `winch_f_max_opt(v_wind)` in
-`src/winch_kv_table.jl` and sent only into the nominal `winch_from_wc(...)`
-call in `examples/simple_opt_reelout.jl` — never into
-`rcs.f_high`/`F_HIGH_NOMINAL`, which stay the runtime winch's own 8000 N
-ceiling. Targeted test check (`test/test_fig8_controller.jl`) confirmed no new
-failures (3 pre-existing errors, unrelated — see `turn_rate_coeffs` memory).
-
-At 10 m/s, `f_max_opt = 8400/1.17 = 7179 N` (the archived crest factor)
+**Tried 2026-08-30, wind-speed-dependent de-rating — REFUTES the working
+hypothesis at 10 m/s.** First attempt scaled the de-rating per wind speed by
+the run's own measured crest factor (`8400/cf_force_ro`). At 10 m/s this
 FAILED the pre-existing turn-radius feasibility gate at the starting length
-(margin 0.80 < required 0.82) — de-rating `f_max` also lowers the speed
-ceiling `kv*sqrt(f_max)` the optimizer plans against, which reshapes the
-pattern enough to tighten its curvature margin at 150 m. A coupling the
-hypothesis did not anticipate.
-
-Backed off to `f_max_opt = 7400 N` (margin 0.83, barely clears). Full run
-result:
+before it could even be backed off enough to clear it, because de-rating
+`f_max` also lowers the speed ceiling `kv*sqrt(f_max)` the optimizer plans
+against, which reshapes the pattern enough to tighten its curvature margin at
+150 m — a coupling the hypothesis did not anticipate. Backed off to the
+largest value that cleared the gate, full run result:
 
 | | f_max sent | predicted W | measured W | ratio | cf_force_ro | max_force_ro |
 |---|---|---|---|---|---|---|
@@ -120,17 +111,60 @@ Both predicted and measured power dropped by nearly the same amount, so the
 ratio **did not move** (0.82 -> 0.83, still far outside 0.98..1.02) — and the
 crest factor moved the WRONG way (1.17 -> 1.23), pushing peak force back up
 to 8009 N despite the lower request. The plant is still under-delivering by
-the same ~17-18 % whether the optimizer is asked for 8000 N or 7400 N.
+the same ~17-18 % whether the optimizer is asked for 8000 N or 7400 N. That
+attempt's per-wind-speed machinery (`f_max_opt` column, `winch_f_max_opt`) has
+been reverted from the codebase.
 
-**Conclusion:** de-rating `f_max` is not the fix. The "optimizer overshoots
-the flyable peak, run gets detuned by depower" story does not hold up under
-direct test — closing headroom on the SENT ceiling did not close the ratio.
-The gap must live elsewhere, most likely the wind-dependent depower-offset
-error already flagged in "Confound to control" below (calibrated at 6 m/s
-only, and the ratio degrades monotonically away from there). Reverted the
-`f_max_opt` code path is left in place (harmless at 8000 N default) but the
-10/9/11 m/s rows should NOT be treated as tuned — this needs a fresh plan
-step aimed at the depower offset, not further `f_max` iteration.
+**Conclusion so far:** de-rating `f_max` per wind speed via the crest factor
+is not the fix. The "optimizer overshoots the flyable peak, run gets detuned
+by depower" story does not hold up under direct test — closing headroom on
+the SENT ceiling did not close the ratio at that one setting. The gap may
+live elsewhere, most likely the wind-dependent depower-offset error already
+flagged in "Confound to control" below (calibrated at 6 m/s only, and the
+ratio degrades monotonically away from there).
+
+**2026-08-30 follow-up — fixed, non-wind-dependent `f_high_awe_trim`.** Added
+`WCSettings.f_high_awe_trim` (`WinchControllers.jl`'s `src/wc_settings.jl`,
+sourced locally — see the project's "Sourcing V3Kite" note, same mechanism),
+set through this package's own `data/wc_settings.yaml`: a single force
+ceiling [N] sent to AWETrim in place of `wc.f_high`, never into `wc.f_high`
+itself (the runtime plant ceiling is untouched). `0.0` (the default) disables
+it and leaves the request at the plain `f_high`, so existing runs are
+unaffected until it is set. `winch_from_wc` (`examples/awetrim_client.jl`)
+resolves it into `f_max`'s default.
+
+**Tried 2026-08-30 at 7600 N — REFUSED at the STARTUP gate before the run
+could even begin.** Applying the de-rating to the startup solve reproduced
+the same coupling as the crest-factor attempt above, worse: the reply's
+curvature margin at the 150 m starting length came out 0.73 (path radius
+3.6° against the kite's 4.9°), below `min_feasibility_margin = 0.82`, and
+`examples/reelout_feasibility.jl`'s hard gate aborted the run — `feas_start`
+scores the pattern flown for the whole reel-out (phases 3/4), not phase 5,
+which passed fine (margin 1.15) and was never the issue. The startup retry
+loop (`startup_retries_max = 4`, corrected re-solves at the same length)
+could not be relied on to fix this either — it only widens the turn-radius
+ASK, which cannot compensate for a lowered SPEED ceiling reshaping the reply,
+and the code's own history already has a case where four retries topped out
+short of the gate (2026-08-27, best 0.794 against 0.82).
+
+**Fix — scope the de-rating to re-optimization only.** `winch`/`winch_first_lap`
+(the STARTUP solve, `examples/simple_opt_reelout.jl`) now explicitly pin
+`f_max = F_HIGH_NOMINAL`, never `wc.f_high_awe_trim`: the curvature margin is
+tightest at the untested starting length, before the run has flown a single
+lap to prove the pattern out, so this is not a value to fly blind. A new
+`winch_reopt`, built off `winch_from_wc`'s plain default (so it DOES pick up
+`f_high_awe_trim` when set), feeds every re-optimization request from lap 2
+on — by then the run has an installed, flying pattern that already cleared
+the startup gates, so a re-optimization reply landing tighter is a measured
+outcome to react to, not an unflown path the run aborts on before it starts.
+Still untested at any nonzero value — the 9/10/11 m/s rows remain unswept.
+
+Unlike the reverted per-wind-speed attempt, this value does not scale with
+crest factor or wind speed at all — the same number is sent at every wind
+speed, sidestepping the "moved the wrong way" coupling above. It has NOT yet
+been swept: the 10/9/11 m/s rows above should NOT be treated as tuned, and
+this needs its own sweep before drawing a conclusion — do not tune it and the
+depower offset in the same run (see "Confound to control" below).
 
 ## Step 2b — match the upper saturation
 

@@ -828,11 +828,13 @@ optimizer's own 10 m/s bound instead, which with `kv = 0.0408` and
 `f_high = 8000 N` the square-root law never reaches anyway (3.65 m/s), so this
 only starts to matter on a softer winch.
 
-`f_max` defaults to `wc.f_high` and is overridable so a request can be solved
-against the ceiling that will actually be in force while its path is flown —
-`fcs.first_lap_force_frac` holds the runtime limit down for the first figure of
-eight, and the startup path is the one flown there. Lowering it also lowers the
-speed ceiling `kv*sqrt(f_max)` referred to above.
+`f_max` defaults to `wc.f_high_awe_trim` when that is set (a fixed de-rating,
+independent of wind speed) and to `wc.f_high` otherwise, and is overridable so
+a request can be solved against the ceiling that will actually be in force
+while its path is flown — `fcs.first_lap_force_frac` holds the runtime limit
+down for the first figure of eight, and the startup path is the one flown
+there. Lowering it also lowers the speed ceiling `kv*sqrt(f_max)` referred to
+above.
 
 `softminus_beta` sent to the server is pinned to `AWETRIM_SOFTMINUS_BETA`, NOT
 read off `wc`: `wc.softminus_beta` may be sharpened locally for the plain
@@ -854,8 +856,8 @@ can do the same. `wc.use_awe_trim` defaults to `0.0`, leaving the server's
 plain law unchanged unless `data/wc_settings.yaml` opts in.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
-              f_max = wc.f_high, use_awe_trim = wc.use_awe_trim,
-              winch_mode = nothing) =
+              f_max = wc.f_high_awe_trim > 0 ? wc.f_high_awe_trim : wc.f_high,
+              use_awe_trim = wc.use_awe_trim, winch_mode = nothing) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
