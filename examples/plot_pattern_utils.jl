@@ -53,8 +53,11 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     syslog = load_log(log_name; path = scenario_dir)
     sl = syslog.syslog
 
-    # Compute wind speed from the run summary YAML
-    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    # Falls back to the project's own base wind speed for a summary written
+    # before this field existed (or one from a script that never logged the
+    # override actually flown).
+    summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
+    flown_wind = get(summary_sim, "wind_speed", project_set.v_wind)
     fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
     project_name = replace(basename(scenario_project), ".yaml" => "")
 
@@ -118,8 +121,11 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
     syslog = load_log(log_name; path = scenario_dir)
     sl = syslog.syslog
 
-    # Compute wind speed from the run summary YAML
-    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    # Falls back to the project's own base wind speed for a summary written
+    # before this field existed (or one from a script that never logged the
+    # override actually flown).
+    summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
+    flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
     fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
     project_name = replace(basename(scenario_project), ".yaml" => "")
 
@@ -234,7 +240,11 @@ function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
     syslog = load_log(log_name; path = scenario_dir)
     sl = syslog.syslog
 
-    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    # Falls back to the project's own base wind speed for a summary written
+    # before this field existed (or one from a script that never logged the
+    # override actually flown).
+    summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
+    flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
     fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
     project_name = replace(basename(scenario_project), ".yaml" => "")
 
@@ -321,7 +331,11 @@ function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = t
     syslog = load_log(log_name; path = scenario_dir)
     sl = syslog.syslog
 
-    flown_wind = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]["wind_speed"]
+    # Falls back to the project's own base wind speed for a summary written
+    # before this field existed (or one from a script that never logged the
+    # override actually flown).
+    summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
+    flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
     fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
     project_name = replace(basename(scenario_project), ".yaml" => "")
 
