@@ -823,6 +823,8 @@ summary_block["success_criteria"] = (fig8m === nothing ? "not scored — no sett
     isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
     "FAILED: " * join(fig8m.criteria_failed, ", "),
     "pass/fail verdict vs V3Kite's success criteria")
+fig8m === nothing || (summary_block["cross_track_rms_deg"] = (round(fig8m.rms_d; digits = 2),
+    "RMS cross-track error, settled window [deg]"))
 if t_sim > 0
     summary_block["total_wall_time_s"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
     summary_block["realtime_factor"] = (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
