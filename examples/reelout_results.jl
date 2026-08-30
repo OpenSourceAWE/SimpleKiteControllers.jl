@@ -693,8 +693,8 @@ summary["traj_opt"] = OrderedDict{String, Any}(
              "wing_deg" => (fcs.el_offset_wing,
                  "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
              "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
-                 "lowest elevation over the whole run — set in phase 4, so a phase-5 \
-                  lift does not move it [deg]"),
+                 "lowest elevation over the whole run — usually set in PHASE 5 at 4 m/s \
+                  and up, so el_offset_final does move it; the entry sets it below that [deg]"),
              "el_min_final_deg" => (isnan(el_min_final) ? "n/a" :
                                     round(el_min_final; digits = 2),
                  "lowest elevation in phase 5, which is what el_offset_final buys [deg]")],

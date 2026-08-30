@@ -4556,3 +4556,37 @@ Kept `chi_dive: -135.0` (user's call, 2026-08-30): 3.5 m/s fixed, 4 m/s improved
 5 m/s failure is a phase-5 sink that 6 m/s is one tenth of a degree from hitting anyway.
 The post-reel-out sink is opened as its own task (`PlanPhase5Sink.md`); `overview.md` is NOT
 regenerated until it is closed, since 5 m/s is red.
+
+## 2026-08-30 — `el_offset_final` 1.5 -> 3.0 closes the phase-5 sink
+
+Diagnosis in `PlanPhase5Sink.md`: at 4 m/s and up the whole-run minimum elevation is the
+PHASE-5 minimum (`el_min_run_deg == el_min_final_deg` in every scenario measured), and 5 m/s
+failed there at 6.4°. At the phase 4 -> 5 step the winch stops and `depower_final` takes
+depower 0.27 -> 0.35; tracking error against the optimizer's curve goes from under a degree
+in every azimuth band to 1.5-3.4°, cross-track at the low point doubles (3.9 -> 6.5° at
+5 m/s), and `el_bias_max: 4.0` clamps in three of the four runs measured — the learner asks
+for more than it is allowed. `el_offset_final: 1.5` covered under half of what is lost, while
+each run's own `lift_budget` reported ~+2° of room before the elevation-span criterion binds.
+
+Raised to **3.0**, one full-length run per wind speed, nothing else touched:
+
+| wind | `min_whole_run` | before | `av_power_ro` | before | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 4 m/s | **9.4°** | 7.5° | 1590 W | 1562 W | all 10 passed |
+| 5 m/s | **7.8°** | 6.4° | 3836 W | 3840 W | all 10 passed (was FAILED) |
+| 6 m/s | **8.3°** | 7.2° | 7326 W | 7327 W | all 10 passed |
+
++1.5° of lift bought +1.4° at 5 m/s, +1.1° at 6 m/s and +1.9° at 4 m/s — delivered roughly
+1:1, as the lift budget predicted, and the power is unmoved (the lift is spent after reel-out
+has finished). `margin_final_flown` stayed at 0.69 at 5 m/s, so the tighter path did not cost
+tracking: RMS d 2.49 -> 2.52. Each run still reports ~+2° of budget left
+(`tightest: elevation span`, +32 % at 5 m/s), so this is not near the size criteria.
+
+3.5 m/s is NOT yet re-flown at this value — its minimum is in the entry (phase 3), which the
+lift does not touch, so no change is expected there, but it is unconfirmed.
+
+`el_bias_max` and `depower_final` were left alone; the clamp and the depower step remain the
+mechanism behind the sag and are still open in `PlanPhase5Sink.md` if more margin is ever
+wanted. Also corrected the annotation on `el_min_run_deg` in `examples/reelout_results.jl`,
+which claimed the whole-run minimum is set in phase 4 "so a phase-5 lift does not move it" —
+untrue in every run measured here, and the reason this lever was overlooked.

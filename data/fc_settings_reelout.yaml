@@ -129,7 +129,11 @@ fc_settings:
   el_bias_max:         4.0     # Clamp on the learnt elevation correction, per band [deg]
   el_bias_bins:          5     # Azimuth bands the correction is learnt over; 1 = rigid [-]
   el_bias_smooth:     0.25     # How far each band is pulled to its neighbours per lap [-]
-  el_offset_final:     1.5     # Extra lift of the path once reel-out ends       [deg]
+  # 3.0 since 2026-08-30: at 1.5 the phase-5 sag measured 1.5-3.4 deg in every azimuth
+  # band, deeper than the lift meant to cover it, and 5 m/s failed the elevation gate
+  # there. The lift budget had +1.98 deg at 5 m/s before the elevation-span criterion
+  # binds; see the tuning log and PlanPhase5Sink.md.
+  el_offset_final:     3.0     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
   el_offset_wing:      1.5     # Extra lift at the LOBES, none in the centre       [deg]
   el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
