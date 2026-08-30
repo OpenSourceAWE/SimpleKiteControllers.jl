@@ -228,6 +228,17 @@ Add new findings there, not here.
     "Arc distance Q -> attractor [deg]"
     attractor_dist = 10.0
     """
+    How much closer the best point on the WHOLE path must be than the best inside
+    the local search window before Q jumps to it [deg].
+
+    The exit that keeps a stale search window from trapping Q, and the one that can
+    hand it to the reverse branch: near the self-intersection the globally nearest
+    point is often the opposing branch, and taking it flips the commanded course by
+    ~180°. Must therefore stay comfortably above the steady-state cross-track error
+    the run actually flies, or a sagging kite trips it just by being off-path.
+    """
+    reacquire_margin = 3.0
+    """
     Fly UP-loops instead of down-loops. Reverses the traversal direction of the
     reference path; the shape is unchanged, so the curvature margin is
     unaffected. Down-loops convert height into speed where up-loops shed energy
