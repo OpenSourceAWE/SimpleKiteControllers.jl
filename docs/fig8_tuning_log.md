@@ -4513,3 +4513,46 @@ worked example in `docs/steering_depower.md` as superseded rather than rederivin
 This offset is shared by every wind speed, so 4, 5, 7 and 8 m/s move with it —
 unmeasured here, and `notebooks/overview.md` is already known stale post-mass per the
 entry above; re-run the sweep before regenerating it.
+
+## 2026-08-30 — `chi_dive` -125 -> -135 fixes the 3.5 m/s entry; phase 5 is the real floor
+
+`v03.5` (full length, `chi_dive: -125`, `dive_el_margin: 17`) failed on
+`RMS d < 3.0°, min elevation > 6.5° (whole run)` with `min_whole_run: 5.1°` against
+`min_settled: 7.4°` — the dip in phase 3, at t = 26.7 s, exactly the entry fault of the
+2026-08-29 entries. The dive was flatter than at 4 m/s: 93° of azimuth traverse in 13.5 s
+for 29.4° of descent, and a 18.9 s phase 3 to recover it.
+
+**Screening** (`sim_time: 60` requested, 157.9 s effective at 3.5 m/s), `chi_dive: -135`
+alone, `dive_el_margin` untouched at 17: dive traverse 93 -> 85°, dive 13.5 -> 12.7 s,
+phase 3 18.9 -> 17.2 s, `min_whole_run` 5.1 -> **7.3°**. `dive_el_margin` was NOT tried,
+and deliberately: the phase-4 floor at 3.5 m/s is 7.4° (`min_settled`), so entry altitude
+bought past ~7.4° cannot raise `min_whole_run` — the smaller global change is the right one.
+
+**Full-length confirmation** (`sim_time` back to default, 394.7 s effective):
+`min_whole_run` **7.3°**, `min_settled` 7.4° unchanged, 8.0 laps, `stop_reason: length`,
+`av_power_ro` 863 -> **887 W**, `max_force_ro` 1478 -> 1492 N. The elevation criterion now
+passes; the run still reports `FAILED: RMS d < 3.0°` (3.03 -> 3.09, unmoved by this lever
+and a separate pattern-tracking fault). Archived as `output/scenarios/v03.5_2`.
+
+**Regression pass** (the file is shared by every wind speed):
+
+| wind | before | after | verdict |
+| --- | --- | --- | --- |
+| 4 m/s | 7.5° (`v04`, -125) | **7.9°** | all 10 passed; RMS d 2.63 -> 2.55, power 1562 -> 1597 W |
+| 5 m/s | 8.9° (`v05`, -125) | **6.4°** | FAILED: min elevation > 6.5° (whole run); `v05_2` |
+
+**The elevation floor is set by phase 5, not by the entry.** Where the whole-run minimum
+falls, per run: 4 m/s phase 5 (7.9°, phase 4 min 10.0°); 5 m/s phase 5 (6.4°); 6 m/s phase 5
+(**6.5°**, `v06` — passing by exactly 0.0°); only 3.5 m/s is an entry dip at all, and only
+until this fix. Phase 5 is the post-reel-out hold, outside the power window and outside
+anything the entry parameters address.
+
+At 5 m/s the entry itself was untouched by the change (phase 3 min 13.9 -> 13.8°). What moved
+is everything downstream: the dive ended 5° earlier in azimuth and 0.7 s sooner, reel-out
+finished sooner, phase 5 ran 50.2 -> 53.1 s and — unlike `v05`, which recovered to 16.4° —
+ended still sinking at 7.2°. A 0.1° miss on a term the entry does not control.
+
+Kept `chi_dive: -135.0` (user's call, 2026-08-30): 3.5 m/s fixed, 4 m/s improved, and the
+5 m/s failure is a phase-5 sink that 6 m/s is one tenth of a degree from hitting anyway.
+The post-reel-out sink is opened as its own task (`PlanPhase5Sink.md`); `overview.md` is NOT
+regenerated until it is closed, since 5 m/s is red.

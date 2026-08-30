@@ -86,11 +86,11 @@ fc_settings:
                                # still gets its full settling delay. Inf disables it.
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
-  # -125 since 2026-08-29, confirmed at the corrected (10.9926 kg) wing mass: at -95
-  # the "dive" is 5 deg past flat, so it descends barely at all and instead traverses
-  # 110 deg of azimuth. See the tuning log; back off towards -110 if a steeper dive
-  # is ever tried and undershoots.
-  chi_dive:          -125.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
+  # -135 since 2026-08-30, set at 3.5 m/s where -125 still dipped to 5.1 deg whole-run
+  # elevation in phase 3. Steeper trades azimuth traverse for descent: at -95 the "dive"
+  # was 5 deg past flat, traversing 110 deg of azimuth and dumping the kite at the edge
+  # of the window. See the tuning log; back off towards -110 if a steeper dive undershoots.
+  chi_dive:          -135.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
   # 17.0 since 2026-08-29: at 13.0 the corrected mass still dipped to 5.9 deg whole-run
   # elevation, 0.6 deg short of the 6.5 deg gate. Raising the margin gives phase 3 more
