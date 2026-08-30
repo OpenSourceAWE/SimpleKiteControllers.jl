@@ -123,6 +123,12 @@ fc_settings:
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
   attractor_dist:      8.0     # Arc distance Q -> attractor                      [deg]
+  # 6.0 since 2026-08-30, up from the 3.0 default: at 3.0 the phase-5 sag (~3.7 deg mean
+  # cross-track at 3.5 m/s) is the same size as the threshold, and at t = 359.6 s of the
+  # 12:22 run the global best beat the in-window best by 3.06 deg right at the centre
+  # crossing, handing Q to the reverse branch — course flipped 130 deg, the kite spun an
+  # extra loop and heading range hit 624 deg against the 400 deg gate. See the tuning log.
+  reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_bias_gain:        0.5     # Per-lap learning gain for the elevation bias; 0 = off [-]
   el_bias_gain_final:  1.0     # Same, from state 5 on, where the sag deepens        [-]
