@@ -16,7 +16,9 @@ section's
 `optimizations_installed`, `av_power_ro`, `min_power_ro`, `max_power_ro`,
 `min_force_ro`, `av_force_ro`, `max_force_ro`, `v_ro_min`, `v_ro_av`,
 `v_ro_max`, `av_depower_ro` and `success_criteria` respectively (see
-`examples/reelout_results.jl`). All `power`/`force`/`v_ro`/`depower` fields
+`examples/reelout_results.jl`). `power_ratio` is read from
+`power_ratio_free_speed` instead when that key is present. All
+`power`/`force`/`v_ro`/`depower` fields
 are averaged over phase four (the figure-eight flying phase). Rows are
 sorted by wind speed ascending. A folder missing the YAML file or its
 `summary:` block is skipped with a warning, not an error; a column missing
@@ -27,7 +29,8 @@ Also opens the same table as a nicely formatted HTML pop-up in the default
 browser, via PrettyTables' `:html` backend (`xdg-open`), with the power
 curve (mean/max/min reel-out power, tether force and reel-out speed over
 phase four vs. wind speed, stacked as in `plot_powercurve.jl`) embedded
-below it.
+below it as a vector PDF (`<embed>`, base64-encoded) so it stays sharp at
+any zoom.
 
 Run from the menu, or by
 
@@ -67,7 +70,9 @@ const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind
     scenario_summary(dir) -> Union{Dict, Nothing}
 
 The `summary:` block of `dir`'s `reelout_150m_opt.yaml`, or `nothing` (with a
-warning) if the file or the block is missing.
+warning) if the file or the block is missing. If the block has a
+`power_ratio_free_speed` entry, it replaces `power_ratio` under that same
+key, so the displayed `power_ratio` column shows it without a column rename.
 """
 function scenario_summary(dir::AbstractString)
     yaml_file = joinpath(dir, SUMMARY_FILE)
@@ -80,7 +85,11 @@ function scenario_summary(dir::AbstractString)
         @warn "Skipping $(basename(dir)): no summary: block in $SUMMARY_FILE"
         return nothing
     end
-    return y["summary"]
+    summary = y["summary"]
+    if haskey(summary, "power_ratio_free_speed")
+        summary["power_ratio"] = summary["power_ratio_free_speed"]
+    end
+    return summary
 end
 
 """
@@ -101,16 +110,17 @@ function write_overview_md(rows, md_file)
 end
 
 """
-    powercurve_png(rows) -> String
+    powercurve_images(rows) -> (png_file, pdf_file)
 
 Plot mean, max and min reel-out power, tether force and reel-out speed over
 phase four against wind speed [m/s] for `rows` (already sorted by wind speed)
 with MakieControlPlots, the same stacked plot as `plot_powercurve.jl` (max
 dashed grey and min dash-dotted grey in every panel, plus the force panel's
-`MAX_TETHER_FORCE_N` dotted black reference line), and
-save it as a temporary PNG file, returning its path.
+`MAX_TETHER_FORCE_N` dotted black reference line), and save it as both a
+temporary PNG file (for the `notebooks/` markdown embed) and a temporary PDF
+file (vector, for the HTML pop-up), returning both paths.
 """
-function powercurve_png(rows)
+function powercurve_images(rows)
     v_wind = [row["wind_speed_gnd"] for row in rows]
     p_kw = [row["av_power_ro"] / 1000 for row in rows]
     p_max_kw = [row["max_power_ro"] / 1000 for row in rows]
@@ -136,31 +146,35 @@ function powercurve_png(rows)
           title = "V3 reel-out power curve", scatter = true, disp = true,
           fig = "powercurve")
     png_file = joinpath(tempdir(), "powercurve.png")
+    pdf_file = joinpath(tempdir(), "powercurve.pdf")
     savefig(png_file)
+    savefig(pdf_file)
     MakieControlPlots.close("powercurve")
-    return png_file
+    return png_file, pdf_file
 end
 
 """
-    show_overview_html(rows, png_file)
+    show_overview_html(rows, pdf_file)
 
 Render `rows` as an HTML table with PrettyTables, with the power curve
-`png_file` (from `powercurve_png`) embedded below it as a base64-encoded PNG,
-and open it in the default browser, giving a nicely formatted pop-up view of
-the same data as the markdown table.
+`pdf_file` (from `powercurve_images`) embedded below it as a base64-encoded
+PDF via `<embed>` (kept vector, unlike a rasterized `<img>`), opened at 75%
+zoom via the `#zoom=75` fragment, and open it in the default browser, giving
+a nicely formatted pop-up view of the same data as the markdown table.
 """
-function show_overview_html(rows, png_file)
+function show_overview_html(rows, pdf_file)
     headers = collect(last.(COLUMNS))
     data = [get(row, key, "") for row in rows, (key, _) in COLUMNS]
     table_html = pretty_table(String, data; column_labels = headers, backend = :html, alignment = :c)
-    img_b64 = base64encode(read(png_file))
+    pdf_b64 = base64encode(read(pdf_file))
     # a snap-confined browser (e.g. Firefox) cannot see dotfiles/dotdirs under $HOME
     html_file = joinpath(homedir(), "overview.html")
     open(html_file, "w") do io
         println(io, "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body>")
         println(io, table_html)
         println(io, "<div style=\"text-align:center;\">")
-        println(io, "<img src=\"data:image/png;base64,$img_b64\" alt=\"power curve\">")
+        println(io, "<embed src=\"data:application/pdf;base64,$pdf_b64#zoom=75\" type=\"application/pdf\" " *
+                     "width=\"100%\" height=\"900px\">")
         println(io, "</div>")
         println(io, "</body></html>")
     end
@@ -194,14 +208,14 @@ function create_overview()
     write_overview_md(rows, notebooks_file)
     @info "Wrote overview" notebooks_file rows=length(rows)
 
-    png_file = powercurve_png(rows)
+    png_file, pdf_file = powercurve_images(rows)
     notebooks_images_dir = joinpath(notebooks_dir, "images")
     mkpath(notebooks_images_dir)
     notebooks_png_file = joinpath(notebooks_images_dir, "powercurve.png")
     cp(png_file, notebooks_png_file; force = true)
     @info "Wrote power curve" notebooks_png_file
 
-    show_overview_html(rows, png_file)
+    show_overview_html(rows, pdf_file)
 end
 
 create_overview()
