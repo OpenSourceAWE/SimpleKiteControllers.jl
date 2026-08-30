@@ -126,7 +126,8 @@ function pattern_margin(fcs::FC_Settings, f8_a, f8_b, l_tether; c1 = V3_TURN_RAT
     fec = FigureEightController(FigureEightSettings(;
         dt = 0.01, A = f8_a, B = f8_b, C = fcs.f8_c, D = fcs.f8_d,
         az_center = 0.0, el_center = fcs.el_center,
-        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
+        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
+    reacquire_margin = fcs.reacquire_margin))
     return check_pattern_feasible(fec, l_tether, fcs.max_steering; c1, prn = false).margin
 end
 
