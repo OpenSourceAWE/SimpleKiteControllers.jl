@@ -328,7 +328,7 @@ power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 # - Below the knot the sqrt-law MISpredicts: the force-floor guard duty-cycles
 #   reel-in/reel-out there (even 474 s failed at 3 m/s), so the legacy steepened
 #   ratio scaling is kept instead.
-BELOW_DEFAULT_EXPONENT = 1.795  # exponent for scaling sim_time below the knot, tuned to 3 m/s
+BELOW_DEFAULT_EXPONENT = 1.6  # exponent for scaling sim_time below the knot, tuned to 3.5 m/s
 V_BUDGET_KNOT = 6.0           # [m/s] sqrt-law valid at/above; legacy scaling below
 F_BUDGET_COEF = 80.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w²;
                               # measured 3085/36=85.7, 5667/64=88.5, 6535/81=80.7,
@@ -504,7 +504,8 @@ l_set = s.sys_state.l_tether[1]
 fec = FigureEightController(FigureEightSettings(;
     dt = s.dt, A = fcs.f8_a, B = fcs.f8_b, C = fcs.f8_c, D = fcs.f8_d,
     az_center = 0.0, el_center = fcs.el_center,
-    attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops))
+    attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
+    reacquire_margin = fcs.reacquire_margin))
 
 # ================= OPTIMIZED REFERENCE PATH ================== #
 
