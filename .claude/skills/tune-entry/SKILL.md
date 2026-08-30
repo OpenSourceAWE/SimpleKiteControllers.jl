@@ -10,6 +10,14 @@ entry drops the kite below the elevation floor. Derived from the 4 m/s fix after
 mass was corrected 6.2 -> 10.9926 kg; the worked example with all measured numbers is in
 [references/case-4ms.md](references/case-4ms.md).
 
+## Invocation
+
+The argument is the **mean wind speed in m/s** under test — `/tune-entry 3.5` means "fix the
+entry at 3.5 m/s". It is the wind speed passed to `set_selected_windspeed` in step 3 and the
+one whose `output/scenarios/vNN` folder is the baseline in step 0. With no argument, take the
+wind speed from the failing run in the conversation, or read
+`output/scenarios/overview.md` and ask which of the failing speeds to work on — never guess.
+
 ## Scope
 
 In scope: `FAILED: min elevation > 6.5° (whole run)`, with phase 4 (the pattern itself)
