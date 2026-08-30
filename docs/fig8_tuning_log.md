@@ -4590,3 +4590,112 @@ mechanism behind the sag and are still open in `PlanPhase5Sink.md` if more margi
 wanted. Also corrected the annotation on `el_min_run_deg` in `examples/reelout_results.jl`,
 which claimed the whole-run minimum is set in phase 4 "so a phase-5 lift does not move it" —
 untrue in every run measured here, and the reason this lever was overlooked.
+
+## 2026-08-30 — `rms_d` is scored over the reel-out window; phase 5 is out
+
+`v03.5` failed on `RMS d < 3.0°` at 3.09° after the entry fix. Splitting the archived
+logs by phase shows the failure is not in the pattern at all:
+
+| scenario | phase 4 RMS | phase 5 RMS | phase 5 share of the settled window |
+| --- | --- | --- | --- |
+| `v03.5` | 2.43° | **4.26°** | 29 % |
+| `v04` | 1.81° | 3.99° | 29 % |
+| `v05` | 1.78° | 3.81° | 30 % |
+| `v06` | 1.69° | 3.18° | 24 % |
+
+Phase 5 is 1.6-2.2x worse than phase 4 at every wind speed and carries 56 % of the
+mean-square at 3.5 m/s from 29 % of the samples. It is the post-reel-out hold: the winch
+is stopped, `depower_final` steps depower 0.284 -> 0.350 and the path is lifted by
+`el_offset_final`, so its tracking measures a different operating point and nothing that
+was flown for power. 3.5 m/s is not uniquely bad there — it is the only speed where both
+terms are poor enough to cross the gate.
+
+`el_offset_final: 1.5 -> 3.0` does NOT fix it: `v05`/`v06` were flown at 3.0 and still read
+3.81°/3.18° in phase 5, matching the 2.49 -> 2.52 non-result in the entry above.
+
+**`fig8_metrics` now splits the cross-track error the way it already split the elevation
+floor** (user's call, 2026-08-30): `rms_d`/`mean_d` cover the settled samples up to phase 4
+and `rms_d` is the criterion, now printed as `RMS d < 3.0° (reel-out)`;
+`rms_d_all`/`mean_d_all` keep the whole settled window and are printed beside it whenever
+`reelout_frac < 1`. `max_d` deliberately stays on the whole settled window — a large
+excursion is a fault wherever it happens, and at 3.5 m/s the run's max (7.77° against the
+8.0° limit) sits in phase 5. `laps`, `heading_range` and the three extent criteria are
+unchanged. A log that never leaves phase 4 (`simple_fig8.jl`) scores exactly as before, and
+so does one with no `sys_state` field at all.
+
+Re-scored over the archives, `rms_d` (old value in brackets): 3.5 m/s **2.44** (3.09),
+4 m/s 1.83 (2.63), 5 m/s 1.76 (2.52), 6 m/s 1.71 (2.12), 7 m/s 1.20 (1.51), 8 m/s 1.30
+(1.73), 9 m/s 1.33 (1.54), 10 m/s 1.60 (1.58), 11 m/s 1.76 (1.75). At 10 and 11 m/s phase 5
+tracks as well as phase 4 and the change is nil, which is the check that this is measuring
+the transition and not just shortening the window.
+
+The phase-5 sag itself is NOT fixed, only descoped from this criterion. `depower_final:
+0.35` is tuned to hold ~3458 N — a ~6 m/s force, against 837 N at 3.5 m/s — and
+`el_bias_max: 4.0` clamps three of five bands by lap 7. Both stay open in
+`PlanPhase5Sink.md`; `min elevation > 6.5° (whole run)` still covers phase 5 sinking.
+
+3.5 m/s is not yet re-flown at `el_offset_final: 3.0`, so `v03.5` and `v04` remain stale
+baselines and `overview.md` is not regenerated until both are re-flown.
+
+## 2026-08-30 — `reacquire_margin` 3.0 -> 6.0 stops a branch flip in phase 5 at 3.5 m/s
+
+The first 3.5 m/s run at `el_offset_final: 3.0` passed `RMS d` (2.51°) and the elevation
+gate (7.3°) but failed **`heading range < 400.0°` at 624°**, against 282-299° in every
+archived scenario. Archive `output/archives/2026-08-30_122204`.
+
+**One timestep, t = 359.56 s, deep in phase 5.** Q jumped to the reverse branch at the
+centre crossing:
+
+| t [s] | cross-track `d` | `chi_set` |
+| --- | --- | --- |
+| 359.33 | 3.20° | +39° |
+| 359.56 | 3.23° | +39° |
+| 359.78 | 0.17° | -91° |
+
+The commanded course flipped 130°, steering saturated at -0.32 for 6 s and the kite spun an
+extra loop instead of turning back; phase-5 unwrapped heading drifted -241° against <= 86°
+in every healthy run, and the lost lap cost the extent metrics too (worst positive lobe
+10.2° against 17.0°).
+
+**The guard that failed is `reacquire_margin`,** the exit that lets Q leave the local search
+window when the best point on the whole path is that much closer than the best inside it.
+Its default is 3.0°, and the arithmetic on the row above is exact: in-window best 3.23°,
+global best 0.17°, margin **3.06° > 3.0°**. It fired the instant the margin crossed the
+threshold, after `d` had walked up 3.05 -> 3.23° over the preceding 1.6 s. `q_rate_gain =
+2.0` rate-limits such a jump but cannot prevent it — over ~2 s of flight Q has ample arc to
+walk across. The mechanism is the one the `FigureEightSettings` docstring already warns
+about; what was new is that **the phase-5 sag is the same size as the threshold** (mean
+cross-track 3.7° at 3.5 m/s), so the run trips it just by being off-path.
+
+Why 3.5 m/s and not the rest: exposure. Samples in phase 5 within 6° of the crossing —
+3.5 m/s **3610**, `v03.5` 1205, `v04` 832, `v05` 648, `v06` 463. Phase 5 is 107 s there
+against 29-80 s elsewhere.
+
+**`reacquire_margin` is now an `FC_Settings` field** (default 3.0, so nothing else moves) and
+is passed at all six `FigureEightSettings` construction sites — it had never been wired
+anywhere, so the struct default was the only value any run had ever flown.
+`fc_settings_reelout.yaml` sets **6.0**; `fc_settings.yaml` is untouched.
+
+| | margin 3.0 | margin 6.0 |
+| --- | --- | --- |
+| `success_criteria` | FAILED: heading range | **all 10 passed** |
+| heading range | 624° | **299°** |
+| phase-5 heading drift | -241° | +207° |
+| laps | 7.0 | 8.0 |
+| worst positive lobe | 10.2° | 17.0° |
+| `rms_d` / `max_d` | 2.51° / 7.92° | 2.51° / 7.92° |
+| `min_whole_run` | 7.3° | 7.3° |
+| `av_power_ro` | 887 W | 887 W |
+
+Archive `output/archives/2026-08-30_125149`. **The two logs are bit-identical up to sample
+32361 and first diverge at t = 359.57 s** — the exact timestep of the flip — so the lever
+did one thing and nothing else. Power is untouched because reel-out ended at ~288 s, long
+before the divergence.
+
+Note the plant is deterministic at `rel_turbulence: 0.0`: an unchanged re-run reproduces a
+log bit for bit (verified), so re-flying without changing a lever proves nothing.
+
+**Not yet regressed at the other wind speeds.** A larger margin makes Q stickier, which is
+the opposite trade where a run genuinely needs to re-acquire after an excursion, and the
+file is shared. Phase-5 heading drift at 3.5 m/s is +207°, still the loosest of the set
+though well inside the 400° gate. `overview.md` stays stale until the sweep is re-flown.
