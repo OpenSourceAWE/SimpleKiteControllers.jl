@@ -31,6 +31,15 @@ The elevation floor is reported both over the settled window and over the
 **whole run** (`min_elevation_all`) — the latter is the success criterion,
 because a floor breach during the entry transient still counts as a breach.
 
+Cross-track error is split the same way. `rms_d`/`mean_d` cover the **reel-out
+window** — the settled samples up to phase 4 — and `rms_d` is the success
+criterion; `rms_d_all`/`mean_d_all` cover the whole settled window, and
+`reelout_frac` is the share the former keeps. Phase 5 holds a stopped winch at
+`depower_final` on a path lifted by `el_offset_final`, a different operating
+point whose tracking says nothing about the pattern flown for power. `max_d`
+stays on the whole settled window: a large excursion is a fault wherever it
+happens. For a log that never leaves phase 4 the two are identical.
+
 `az_amplitude`/`el_height` are the REFERENCE path's own `A` and `B` [deg]
 (azimuth spans `±A`, elevation spans `B` peak to peak), and `az_center` its
 centre [rad]. Pass them and the metrics also report **how much of the commanded
@@ -93,6 +102,12 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
     isempty(settled) && return nothing
 
     d = Float64.(sl.var_01[settled])
+    # Phase 5 holds a stopped winch at `depower_final` on a lifted path, so its
+    # tracking is a different operating point and is scored separately.
+    reelout = hasproperty(sl, :sys_state) ?
+              [i for i in settled if Int(sl.sys_state[i]) <= 4] : settled
+    isempty(reelout) && (reelout = settled)
+    d_ro = Float64.(sl.var_01[reelout])
     dt = length(t_all) > 1 ? mean(diff(t_all)) : 0.01
 
     fp = Float64.(getindex.(sl.winch_force[settled], 1))
@@ -258,9 +273,12 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
         el_fill,
         az_amplitude,
         el_height,
-        rms_d = sqrt(mean(d .^ 2)),
-        mean_d = mean(d),
+        rms_d = sqrt(mean(d_ro .^ 2)),
+        mean_d = mean(d_ro),
+        rms_d_all = sqrt(mean(d .^ 2)),
+        mean_d_all = mean(d),
         max_d = maximum(d),
+        reelout_frac = length(reelout) / length(settled),
         heading_range = heading_range,
         min_elevation_settled = rad2deg(minimum(sl.elevation[settled])),
         min_elevation_all = rad2deg(minimum(sl.elevation)),
@@ -536,6 +554,10 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
     end
     @printf("Fig8 (settled from t=%.1fs, settle_time=%.1fs): laps=%.1f | RMS d=%.2f° mean=%.2f° max=%.2f°\n",
             m.stats_start, m.settle_time_used, m.laps, m.rms_d, m.mean_d, m.max_d)
+    if m.reelout_frac < 1.0
+        @printf("  RMS d is the REEL-OUT window (%.0f%% of settled); whole window incl. phase 5: RMS=%.2f° mean=%.2f°\n",
+                100 * m.reelout_frac, m.rms_d_all, m.mean_d_all)
+    end
     @printf("  elevation: min settled=%.1f° min WHOLE RUN=%.1f° | peak ψ̇=%.0f°/s | heading range=%.0f°\n",
             m.min_elevation_settled, m.min_elevation_all, m.max_turn_rate, m.heading_range)
     # Separate from the tracking line: low RMS d says ON the path, this says how much of it.
@@ -563,7 +585,7 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
 
     checks = [
         ("laps >= $(min_laps)",            m.laps >= min_laps),
-        ("RMS d < $(max_rms_d)°",          m.rms_d < max_rms_d),
+        ("RMS d < $(max_rms_d)° (reel-out)", m.rms_d < max_rms_d),
         ("max d < $(max_d_limit)°",        m.max_d < max_d_limit),
         ("min elevation > $(min_elevation)° (whole run)",
                                            m.min_elevation_all > min_elevation),
