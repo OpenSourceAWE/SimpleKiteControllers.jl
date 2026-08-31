@@ -9,13 +9,13 @@ Write `SimulationResults/scenarios/overview.md`, a table with one row per
 Columns: `date`, `time`, `v_wind`, `power_ratio`, `total_time`,
 `rt_factor`, `opt_requests`, `opts_installed`, `av_power`, `min_power`,
 `max_power`, `min_force`, `av_force`, `max_force`, `v_ro_min`, `v_ro_av`,
-`v_ro_max`, `av_depower`, `success_criteria` — read from the YAML `summary:`
+`v_ro_max`, `av_depower`, `rms_error`, `success_criteria` — read from the YAML `summary:`
 section's
 `date`, `time`, `wind_speed_gnd`, `power_ratio`,
 `total_wall_time_s`, `realtime_factor`, `optimization_requests`,
 `optimizations_installed`, `av_power_ro`, `min_power_ro`, `max_power_ro`,
 `min_force_ro`, `av_force_ro`, `max_force_ro`, `v_ro_min`, `v_ro_av`,
-`v_ro_max`, `av_depower_ro` and `success_criteria` respectively (see
+`v_ro_max`, `av_depower_ro`, `cross_track_rms_deg` and `success_criteria` respectively (see
 `examples/reelout_results.jl`). `power_ratio` is read from
 `power_ratio_free_speed` instead when that key is present. All
 `power`/`force`/`v_ro`/`depower` fields
@@ -64,6 +64,7 @@ const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind
                  "av_force_ro" => "av_force", "max_force_ro" => "max_force",
                  "v_ro_min" => "v_ro_min", "v_ro_av" => "v_ro_av",
                  "v_ro_max" => "v_ro_max", "av_depower_ro" => "av_depower",
+                 "cross_track_rms_deg" => "rms_error",
                  "success_criteria" => "success_criteria")
 
 """
