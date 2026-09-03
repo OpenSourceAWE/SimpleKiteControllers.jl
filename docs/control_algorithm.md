@@ -61,7 +61,7 @@ Two mechanisms pick the shape:
 ## 2. Path following: from position to a commanded course
 
 The guidance is the **attractor-point ("L0") law** of Fernandes et al., Energies 2022
-(doi:10.3390/en15041390), implemented in
+(https://www.mdpi.com/1996-1073/15/4/1390), implemented in
 [`calc_attractor`](../src/figure_eight_controller.jl#L237) and
 [`navigate_fig8`](../src/figure_eight_controller.jl#L305):
 
