@@ -367,3 +367,181 @@ function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = t
     )
     return p
 end
+
+"""
+    wind_tag(v_wind::Real) -> String
+
+Scenario-style tag for a wind speed, matching `output/scenarios/vNN` naming:
+`"v03"` for an integer m/s, `"v03.5"` when it is not. Used to name a live
+run's own exported plots the way an archived scenario's folder already is,
+so the two land under the same naming scheme in `notebooks/images/`.
+"""
+function wind_tag(v_wind::Real)
+    r = round(v_wind; digits = 1)
+    whole = floor(Int, r)
+    isapprox(r, whole) ? "v" * lpad(whole, 2, '0') :
+                         "v" * lpad(whole, 2, '0') * "." * string(round(Int, 10 * (r - whole)))
+end
+
+"""
+    build_path3d_figure(sl, rng; static_export = false) -> (fig, path)
+
+3D flight-path figure: the flown trajectory in the ENU world frame (raw
+Makie, not MakieControlPlots, which has no 3D plot), the ground track
+underneath it and the straight line to the ground station at the origin for
+depth, coloured by the measured mechanical winch power
+`P_mech = F_tether * v_ro` [kW] — signed, so the entry phase's reel-in is the
+dark end of the colorbar and the reeling-out figure-of-eights the bright one.
+The kite position is no logged field of its own: X/Y/Z hold ALL particle
+positions (`ss.X[point.idx] = point.pos_w[1]`), so it is reconstructed here
+exactly as V3Kite's `pos_kite` does — the centre of pressure of the four
+mid-span wing points 10..13 (10/12 leading edge, 11/13 trailing edge), each
+pair weighted 0.7 LE + 0.3 TE for the ~30 % chord position and then averaged
+over both sides. `path` is the coloured line, returned for a caller that
+wants a colorbar on its own figure layout. Renders through whichever Makie
+backend is currently `activate!`d.
+
+The axis block depends on the destination. By default an `Axis3` with
+`aspect = :data`, so the pattern is not stretched by the tether length
+dominating the x range — the right choice for a live window, GLMakie or
+WGLMakie. With `static_export = true` an `LScene` instead: `Axis3` drives its
+camera from Julia, so in an HTML file exported with
+[`save_path3d_html`](@ref) (no Julia behind it) the view cannot be turned at
+all, whereas `LScene`'s `Camera3D` is the one camera WGLMakie's JS bundle
+re-implements browser-side, which keeps rotate/zoom working offline. The
+`LScene` axis has plainer labels and no `:data` aspect setting — its
+perspective camera has data aspect anyway.
+"""
+function build_path3d_figure(sl, rng; static_export::Bool = false)
+    cop(C) = (0.7 .* getindex.(C, 10) .+ 0.3 .* getindex.(C, 11) .+
+              0.7 .* getindex.(C, 12) .+ 0.3 .* getindex.(C, 13)) ./ 2
+    x_kite = Float64.(cop(sl.X[rng]))
+    y_kite = Float64.(cop(sl.Y[rng]))
+    z_kite = Float64.(cop(sl.Z[rng]))
+    p_kite = Float64.(getindex.(sl.winch_force[rng], 1) .*
+                      getindex.(sl.v_reelout[rng], 1)) ./ 1000
+    fig = Figure(size = (1000, 780))
+    ax = if static_export
+        LScene(fig[1, 1]; show_axis = true)
+    else
+        Axis3(fig[1, 1];
+            xlabel = L"x~[\mathrm{m}]",
+            ylabel = L"y~[\mathrm{m}]",
+            zlabel = L"z~[\mathrm{m}]",
+            xlabelsize = 18, ylabelsize = 18, zlabelsize = 18,
+            aspect = :data,
+        )
+    end
+    lines!(ax, x_kite, y_kite, zeros(length(z_kite));
+        color = (:gray, 0.4), linewidth = 1, label = L"\mathrm{ground~track}")
+    # The ground station sits at the origin (that is the frame `calc_elevation`
+    # and `calc_azimuth` measure in); a straight line to it, sag ignored — the
+    # tether particles ARE logged, but at indices that depend on the tether's
+    # `n_segments`, which the log alone does not carry.
+    lines!(ax, [0.0, x_kite[end]], [0.0, y_kite[end]], [0.0, z_kite[end]];
+        color = (:black, 0.5), linewidth = 1, linestyle = :dash,
+        label = L"\mathrm{tether~(straight)}")
+    path = lines!(ax, x_kite, y_kite, z_kite;
+        color = p_kite, colormap = :viridis, linewidth = 2)
+    scatter!(ax, [x_kite[1]], [y_kite[1]], [z_kite[1]];
+        color = :green, markersize = 14, label = L"\mathrm{start}")
+    scatter!(ax, [x_kite[end]], [y_kite[end]], [z_kite[end]];
+        color = :red, markersize = 14, label = L"\mathrm{end}")
+    scatter!(ax, [0.0], [0.0], [0.0];
+        color = :black, marker = :rect, markersize = 12,
+        label = L"\mathrm{ground~station}")
+    Colorbar(fig[1, 2], path; label = L"P_{\mathrm{mech}}~[\mathrm{kW}]",
+        labelsize = 18)
+    axislegend(ax; position = :rt, labelsize = 16)
+    if static_export
+        # The old 3D axis renders its names through UnicodeFun, not MathTeXEngine,
+        # so plain strings here rather than the L"" labels of the Axis3 branch.
+        names = ax.scene[OldAxis].names[]
+        names.axisnames[] = ("x [m]", "y [m]", "z [m]")
+        names.fontsize[] = (9.0, 9.0, 9.0)
+    end
+    return fig, path
+end
+
+"""
+    save_path3d_html(html_file::AbstractString, fig)
+
+Save `fig` (from [`build_path3d_figure`](@ref)) as a single self-contained
+interactive HTML file at `html_file`, via WGLMakie/Bonito's `export_static`.
+Plain `save(path, fig)` writes a page that loads its JS bundle from
+`http://localhost:<port>/...` instead — fine for the live `display(fig)` in
+the same session, but broken the moment that Bonito server (or the Julia
+process) is gone, which is the normal state of a file meant to sit in
+`notebooks/images/`. Requires WGLMakie to be `import`ed (not merely
+installed) in the calling script and its backend `activate!`d before this is
+called — `WGLMakie` is resolved as a global at call time, so the order
+relative to this function's own definition does not matter.
+
+The page scales the canvas down to the viewport width with a CSS transform
+(a few lines of inline JS), so on a phone or in a narrow iframe the whole
+figure is visible instead of its left edge. A transform rather than
+WGLMakie's `resize_to`: that one asks Julia to re-layout the figure on every
+resize, and the exported page has no Julia behind it.
+"""
+function save_path3d_html(html_file::AbstractString, fig)
+    mkpath(dirname(html_file))
+    w, h = size(fig.scene)
+    DOM = WGLMakie.Bonito.DOM
+    # A transform shrinks what is drawn, not the element's layout box, so the
+    # scaled canvas sits in a clipping box that is resized to the scaled size —
+    # otherwise the 1000 px box still gives the page a horizontal scrollbar.
+    app = WGLMakie.Bonito.App() do
+        DOM.div(
+            DOM.style("""
+                html, body { margin: 0; overflow: hidden; }
+                #skc-fit { overflow: hidden; width: $(w)px; height: $(h)px; }
+                #skc-scaler { transform-origin: top left; width: $(w)px; height: $(h)px; }
+            """),
+            DOM.div(DOM.div(fig; id = "skc-scaler"); id = "skc-fit"),
+            DOM.script("""
+                (function () {
+                  const box = document.getElementById("skc-fit");
+                  const el = document.getElementById("skc-scaler");
+                  const fit = () => {
+                    const k = Math.min(1, document.documentElement.clientWidth / $w);
+                    el.style.transform = "scale(" + k + ")";
+                    box.style.width = ($w * k) + "px";
+                    box.style.height = ($h * k) + "px";
+                  };
+                  fit();
+                  window.addEventListener("resize", fit);
+                })();
+            """),
+        )
+    end
+    WGLMakie.Bonito.export_static(html_file, app)
+    return html_file
+end
+
+"""
+    plot_path3d_scenario(scenario_dir::AbstractString;
+                        project::Union{Nothing, AbstractString} = nothing,
+                        log_name::Union{Nothing, AbstractString} = nothing,
+                        static_export::Bool = false) -> Figure
+
+[`build_path3d_figure`](@ref) for a scenario in `scenario_dir`, loading the
+flight log the same way `plot_pattern_scenario` does — see its docstring for
+`project`/`log_name` semantics, and `build_path3d_figure`'s for
+`static_export`. Renders through whichever backend is currently active; the
+caller picks GLMakie or WGLMakie before calling this.
+"""
+function plot_path3d_scenario(scenario_dir::AbstractString;
+                              project::Union{Nothing, AbstractString} = nothing,
+                              log_name::Union{Nothing, AbstractString} = nothing,
+                              static_export::Bool = false)
+    if isnothing(log_name)
+        arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
+        isempty(arrow_files) && error("No .arrow log found in scenario folder $scenario_dir")
+        log_name = replace(only(arrow_files), ".arrow" => "")
+    end
+    syslog = load_log(log_name; path = scenario_dir)
+    sl = syslog.syslog
+    rng = 2:length(sl.time)
+    fig, _ = build_path3d_figure(sl, rng; static_export)
+    return fig
+end

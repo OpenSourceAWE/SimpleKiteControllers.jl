@@ -2,13 +2,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Export the running `results` KaimonSlate notebook to a self-contained HTML file in `output/`.
+Export the running `results` KaimonSlate notebook to an HTML file in `output/`.
 
 Hits the same `GET /api/<id>/export.html` route as the notebook's own **☰ → Export HTML** menu
 entry, so it needs the notebook already open and served — start it first (Kaimon Slate, or
 `KaimonSlate.serve_notebook("notebooks/results.jl")`). The notebook id and hub URL default to
 `results` and `http://127.0.0.1:8765`; override with the `SLATE_NOTEBOOK`/`SLATE_HUB_URL`
 environment variables.
+
+The export inlines every image, but not the interactive 3D-path pages
+(`notebooks/images/path_webgl_*.html`): the notebook's `path3d_plot` cell loads them into an
+iframe by bare file name, so they are copied next to the export here, and `publish.jl` copies
+them next to `index.html` (their list is left in `PATH3D_FILES` for it). That keeps the page
+itself at ~8 MB instead of ~50, and only the selected wind speed's WebGL page ever loads.
 """
 
 using Downloads
@@ -36,3 +42,12 @@ catch e
           "(or set SLATE_NOTEBOOK/SLATE_HUB_URL). Underlying error: $e")
 end
 println("Exported to $EXPORT_OUTPUT_PATH ($(filesize(EXPORT_OUTPUT_PATH)) bytes)")
+
+PATH3D_FILES = filter(readdir(joinpath(@__DIR__, "images"); join = true)) do f
+    startswith(basename(f), "path_webgl_") && endswith(f, ".html")
+end
+isempty(PATH3D_FILES) &&
+    @warn "No notebooks/images/path_webgl_*.html found — run examples/create_plots.jl first, or the 3D-path cell stays empty."
+for f in PATH3D_FILES
+    cp(f, joinpath(dirname(EXPORT_OUTPUT_PATH), basename(f)); force = true)
+end

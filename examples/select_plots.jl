@@ -3,9 +3,10 @@
 
 """
 Interactive checkbox menu to choose which figures `simple_fig8_plots.jl`
-shows: `pattern`, `time series` and `aerodynamics`. `3d path` (the flown
-trajectory in the world frame) and `power` (the winch figure) belong to
-`simple_reelout_plots.jl`; the fig8 script ignores both keys.
+shows: `pattern`, `time series` and `aerodynamics`. `3d path`, `3d path
+(webgl)` (the flown trajectory in the world frame, GLMakie and WGLMakie
+respectively) and `power` (the winch figure) belong to
+`simple_reelout_plots.jl`; the fig8 script ignores those keys.
 
 Writes the choice to `data/gui.yaml` via [`set_selected_plots`](@ref)
 (`examples/gui_state.jl`) rather than a `Main` global, so `simple_fig8_plots.jl`
@@ -17,8 +18,8 @@ using REPL.TerminalMenus
 
 include(joinpath(@__DIR__, "gui_state.jl"))
 
-const PLOT_LABELS = ["pattern", "3d path", "time series", "power", "aerodynamics"]
-const PLOT_KEYS = ["pattern", "path_3d", "time_series", "power", "aerodynamics"]
+const PLOT_LABELS = ["pattern", "3d path", "3d path (webgl)", "time series", "power", "aerodynamics"]
+const PLOT_KEYS = ["pattern", "path_3d", "path_webgl", "time_series", "power", "aerodynamics"]
 
 """
     select_plots()

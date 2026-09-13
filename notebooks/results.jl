@@ -182,6 +182,63 @@ document.readyState === "loading" ?
   document.addEventListener("DOMContentLoaded", wire) : wire();
 """)
 
+#%% md id=path3d_hint
+@md"""
+The same run in 3D: the flown path in the world frame, coloured by the mechanical winch power, with the ground track underneath and the straight line to the ground station. Drag to rotate, scroll to zoom. Note that at 3 m/s no run was performed and the run at 3.5 m/s is shown instead.
+"""
+
+#%% web id=path3d_plot controls=wind_speed
+@web(html"""
+<!-- One iframe, its src swapped per wind speed, rather than nine: each page is a ~4 MB
+     WebGL app, and browsers cap the number of live WebGL contexts (8-16). The files
+     are NOT inlined by the export — publish.jl copies them next to index.html. -->
+<div id="path3d">
+  <iframe id="path3d-frame" loading="lazy" title="3D flight path"></iframe>
+  <p id="path3d-caption"></p>
+</div>
+""",
+css"""
+/* the page inside scales its 1000x780 canvas to the iframe width, so the height follows the same ratio */
+#path3d iframe { display: block; margin: 0 auto; width: 100%; max-width: 1000px; aspect-ratio: 1000 / 780; border: 0; }
+#path3d-caption { text-align: center; font-size: 0.9em; color: #666; margin: 0.3em 0 0; }
+""",
+js"""
+// Live Slate serves the notebook tree under /n/<id>/asset/; the export sits in a folder the
+// files are copied into (SimulationResults/docs/), so there the bare file name resolves.
+const BASE = (window.Slate && Slate.isLive()) ? "/n/results/asset/notebooks/images/" : "";
+// Scenario folder per slider value: no 3 m/s run exists, the lowest is 3.5.
+const RUN = {3: "3.5", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "11"};
+const tag = v => "v" + String(v).padStart(v.includes(".") ? 4 : 2, "0");
+const frame = document.getElementById("path3d-frame");
+const caption = document.getElementById("path3d-caption");
+const pick = v => {
+  const run = RUN[Number(v)];
+  const src = BASE + "path_webgl_" + tag(run) + ".html";
+  if (frame.getAttribute("src") !== src) frame.src = src;
+  caption.textContent = "3D flight path, " + run + " m/s run";
+};
+pick({{ wind_speed }});
+function wire() {
+  if (!(window.Slate && !Slate.isLive())) return;
+  // pattern_plot's listener keeps every "wind_speed" host's handle position and readout in
+  // sync; this cell only needs to swap its own frame on any of them changing. It still has to
+  // relabel here too: `Slate.replay.listen` resets a host's readout to the bare number on every
+  // fire, so without this, whichever cell's listener fires last on the dragged host would strip
+  // the " m/s" pattern_plot's sync just restored.
+  const relabel = (h, v) => {
+    const ro = h.parentElement && h.parentElement.querySelector(".exp-ctl-val");
+    ro && (ro.textContent = v + " m/s");
+  };
+  Slate.replay.hosts("wind_speed").forEach(h => {
+    Slate.replay.enable(h, true);
+    relabel(h, Slate.replay.read(h));
+    Slate.replay.listen(h, () => { const v = Slate.replay.read(h); pick(v); relabel(h, v); });
+  });
+}
+document.readyState === "loading" ?
+  document.addEventListener("DOMContentLoaded", wire) : wire();
+""")
+
 #%% md id=time_series_hint
 @md"""
 The time series below show, for the same wind speed selected above, the cross-track error, elevation,

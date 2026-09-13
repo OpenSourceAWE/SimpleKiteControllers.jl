@@ -36,6 +36,17 @@ there, so the phase-5 pattern carries no mechanical power at all. The kite posit
 logged field: it is reconstructed here from the logged particle positions
 exactly as V3Kite's `pos_kite` does.
 
+`path_webgl` is the same figure (`build_path3d_figure`), rendered through
+WGLMakie instead of GLMakie so it opens in the browser rather than a native
+window — useful over a remote/SSH session with no GLFW display, or for a plot
+worth rotating in a tab of its own. Independent of `path_3d`: pick either,
+both, or neither. Also saved to `notebooks/images/path_webgl_<tag>.html` via
+`save_path3d_html` (Bonito's `export_static`, not plain `save`, which would
+point at a `localhost` URL that dies with the Julia session) — `<tag>` is the
+scenario folder's name for an archived replot, or `wind_tag(flown_wind)` for
+a live run, matching `create_plots.jl`'s own `<plottype>_<scenario>` naming
+for its batch-exported PNGs.
+
 `power` shows the winch triple
 `F_tether`, `v_reelout` and their product `P_mech = F * v_ro` [kW], all
 measured, over a running integral `E_mech` [kJ]. The legends carry the scores
@@ -315,60 +326,42 @@ end
 
 if "path_3d" in plots
     @info "Plotting the 3D flight path..."
-    # The kite position is no logged field of its own: X/Y/Z hold ALL particle
-    # positions (`ss.X[point.idx] = point.pos_w[1]`), so reconstruct it the way
-    # V3Kite's `pos_kite` does — the centre of pressure of the four mid-span
-    # wing points 10..13 (10/12 leading edge, 11/13 trailing edge), each pair
-    # weighted 0.7 LE + 0.3 TE for the ~30 % chord position and then averaged
-    # over both sides.
-    cop(C) = (0.7 .* getindex.(C, 10) .+ 0.3 .* getindex.(C, 11) .+
-              0.7 .* getindex.(C, 12) .+ 0.3 .* getindex.(C, 13)) ./ 2
-    x_kite = Float64.(cop(sl.X[rng]))
-    y_kite = Float64.(cop(sl.Y[rng]))
-    z_kite = Float64.(cop(sl.Z[rng]))
-    # Mechanical winch power, the same product the `power` figure below plots and
-    # recomputed here so the two blocks stay independent of each other's
-    # selection. Sign included: the entry phase's reel-IN (the force-floor guard)
-    # is negative, and the colorbar's 0 tick separates the two.
-    p_kite = Float64.(getindex.(sl.winch_force[rng], 1) .*
-                      getindex.(sl.v_reelout[rng], 1)) ./ 1000
-    fig3 = Figure(size = (1000, 780))
-    # `aspect = :data` keeps the three axes on one scale, so the pattern is not
-    # stretched by the tether length dominating the x range.
-    ax3 = Axis3(fig3[1, 1];
-        xlabel = L"x~[\mathrm{m}]",
-        ylabel = L"y~[\mathrm{m}]",
-        zlabel = L"z~[\mathrm{m}]",
-        xlabelsize = 18, ylabelsize = 18, zlabelsize = 18,
-        aspect = :data,
-    )
-    # Ground track: the same path at z = 0, which is what makes the height
-    # readable in a projection that has no depth cues of its own.
-    lines!(ax3, x_kite, y_kite, zeros(length(z_kite));
-        color = (:gray, 0.4), linewidth = 1, label = L"\mathrm{ground~track}")
-    # The ground station sits at the origin (that is the frame `calc_elevation`
-    # and `calc_azimuth` measure in); a straight line to it, sag ignored — the
-    # tether particles ARE logged, but at indices that depend on the tether's
-    # `n_segments`, which the log alone does not carry.
-    lines!(ax3, [0.0, x_kite[end]], [0.0, y_kite[end]], [0.0, z_kite[end]];
-        color = (:black, 0.5), linewidth = 1, linestyle = :dash,
-        label = L"\mathrm{tether~(straight)}")
-    path = lines!(ax3, x_kite, y_kite, z_kite;
-        color = p_kite, colormap = :viridis, linewidth = 2)
-    scatter!(ax3, [x_kite[1]], [y_kite[1]], [z_kite[1]];
-        color = :green, markersize = 14, label = L"\mathrm{start}")
-    scatter!(ax3, [x_kite[end]], [y_kite[end]], [z_kite[end]];
-        color = :red, markersize = 14, label = L"\mathrm{end}")
-    scatter!(ax3, [0.0], [0.0], [0.0];
-        color = :black, marker = :rect, markersize = 12,
-        label = L"\mathrm{ground~station}")
-    Colorbar(fig3[1, 2], path; label = L"P_{\mathrm{mech}}~[\mathrm{kW}]",
-        labelsize = 18)
-    axislegend(ax3; position = :rt, labelsize = 16)
+    fig3, _ = build_path3d_figure(sl, rng)
     # Same window handling as MakieControlPlots' figures: a named GLMakie
     # screen, so this plot does not steal or reuse one of theirs.
     screen3 = GLMakie.Screen(title = fig_name * " – 3D path")
     display(screen3, fig3)
+    sleep(0.1)
+end
+
+if "path_webgl" in plots
+    @info "Plotting the 3D flight path (WGLMakie, opens in the browser)..."
+    # WGLMakie is imported (not `using`d) because it exports names that clash
+    # with GLMakie's; `Figure`/`Axis3`/`lines!`/... stay the GLMakie ones from
+    # the top of this file, and only WHICH BACKEND RENDERS THEM is switched by
+    # `activate!`, Makie's normal multi-backend mechanism. Switched back to
+    # GLMakie right after so the plots below (time_series, power,
+    # aerodynamics) keep rendering in their own windows rather than the
+    # browser.
+    import WGLMakie
+    WGLMakie.activate!()
+    fig4, _ = build_path3d_figure(sl, rng)
+    display(fig4)
+    # Also saved as a self-contained interactive HTML file into
+    # notebooks/images/, alongside the PNGs create_plots.jl generates for the
+    # other figures — named after the scenario folder when replotting an
+    # archive (matching create_plots.jl's own `<plottype>_<scenario>` naming),
+    # or after the flown wind speed for a live run in output/, which has no
+    # scenario folder of its own.
+    html_tag = isnothing(scenario_path) ? wind_tag(flown_wind) : basename(scenario_path)
+    html_file = normpath(joinpath(@__DIR__, "..", "notebooks", "images",
+                                  "path_webgl_$(html_tag).html"))
+    # Built a second time with `static_export`: the Axis3 shown above cannot be
+    # turned once no Julia session is behind the page.
+    fig5, _ = build_path3d_figure(sl, rng; static_export = true)
+    save_path3d_html(html_file, fig5)
+    @info "Saved interactive 3D plot" html_file
+    GLMakie.activate!()
     sleep(0.1)
 end
 

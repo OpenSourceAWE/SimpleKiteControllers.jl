@@ -109,11 +109,16 @@ include(joinpath(@__DIR__, "export_html.jl"))   # produces EXPORT_OUTPUT_PATH
 git(args) = Cmd(`git $args`; dir = SIMRESULTS_REPO)
 
 cp(EXPORT_OUTPUT_PATH, INDEX_HTML; force = true)
+# The 3D-path pages are not inlined into the export (results.jl's `path3d_plot` cell loads
+# them into an iframe by bare file name), so they have to sit next to index.html.
+for f in PATH3D_FILES
+    cp(f, joinpath(dirname(INDEX_HTML), basename(f)); force = true)
+end
 
-if isempty(read(git(`status --porcelain -- docs/index.html`), String))
-    println("Nothing to publish — docs/index.html already matches the export.")
+if isempty(read(git(`status --porcelain -- docs/`), String))
+    println("Nothing to publish — docs/ already matches the export.")
 else
-    run(git(`add docs/index.html`))
+    run(git(`add docs/index.html $(["docs/" * basename(f) for f in PATH3D_FILES])`))
     src_hash = strip(read(`git -C $(@__DIR__) rev-parse --short HEAD`, String))
     src_dirty = !isempty(read(`git -C $(@__DIR__) status --porcelain`, String))
     message = "Update exported results notebook\n\n" *

@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Batch-generate pattern, time-series, power and aerodynamics PNG plots for
-every archived scenario in `output/scenarios/`, saving one
-`pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`
-and `aerodynamics_<scenario>.png` per scenario folder into `notebooks/images/`.
+Batch-generate pattern, time-series, power, aerodynamics and 3D-path plots
+for every archived scenario in `output/scenarios/`, saving one
+`pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`,
+`aerodynamics_<scenario>.png` and `path_webgl_<scenario>.html` per scenario
+folder into `notebooks/images/`. The first four are static GLMakie PNGs; the
+last is a self-contained interactive WGLMakie page (rotate/zoom in a
+browser), since a 3D pattern is the one figure a flat image flattens the most.
 
 Each subfolder of `output/scenarios/` (`v08`, `v09`, ...) is a self-contained
 record of one `simple_opt_reelout.jl` run. This script loads each scenario's
@@ -25,6 +28,10 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using GLMakie
+# Imported, not `using`d: WGLMakie exports names that clash with GLMakie's.
+# `create_path_webgl_plots` switches which backend renders `Figure`/`Axis3`/...
+# via `activate!`, Makie's normal multi-backend mechanism.
+import WGLMakie
 using MakieControlPlots
 using LaTeXStrings
 using V3Kite
@@ -197,7 +204,49 @@ function create_aerodynamics_plots()
     @info "Aerodynamics plot generation complete"
 end
 
+"""
+    create_path_webgl_plots()
+
+Scan `output/scenarios/` for non-empty scenario folders, generate the 3D
+flight-path figure for each one (`plot_path3d_scenario`), and save as a
+self-contained interactive `notebooks/images/path_webgl_<name>.html` via
+WGLMakie. Folders with no files are skipped. Switches the active Makie
+backend to WGLMakie for the duration and restores GLMakie afterwards, since
+the other `create_*_plots` functions render (and `savefig`) through it.
+"""
+function create_path_webgl_plots()
+    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+
+    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+        isdir(dir) && !isempty(readdir(dir))
+    end
+    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+
+    mkpath(NOTEBOOKS_DIR)
+
+    @info "Generating 3D path (webgl) plots for $(length(dirs)) scenario(s)..."
+
+    WGLMakie.activate!()
+    for scenario_dir in sort(dirs)
+        scenario_name = basename(scenario_dir)
+        try
+            fig = plot_path3d_scenario(scenario_dir; static_export = true)
+
+            html_file = joinpath(NOTEBOOKS_DIR, "path_webgl_$(scenario_name).html")
+            save_path3d_html(html_file, fig)
+
+            @info "Saved 3D path (webgl) plot" html_file
+        catch e
+            @warn "Failed to process scenario $scenario_name: $e"
+        end
+    end
+    GLMakie.activate!()
+
+    @info "3D path (webgl) plot generation complete"
+end
+
 create_pattern_plots()
 create_time_series_plots()
 create_power_plots()
 create_aerodynamics_plots()
+create_path_webgl_plots()
