@@ -4699,3 +4699,70 @@ log bit for bit (verified), so re-flying without changing a lever proves nothing
 the opposite trade where a run genuinely needs to re-acquire after an excursion, and the
 file is shared. Phase-5 heading drift at 3.5 m/s is +207°, still the loosest of the set
 though well inside the 400° gate. `overview.md` stays stale until the sweep is re-flown.
+
+## 2026-09-13 — The 10 m/s startup solve sits on a fold; retries get seeds and an elevation ceiling
+
+The first `simple_opt_reelout.jl` run since 2026-08-30 threw **IPOPT 422 on the startup
+solve at 10 m/s, 150 m** — and not because anything moved. Every settings file was
+identical to the copies in `output/scenarios/v10` (only `f_high_awe_trim: 8000.0` had
+been added, numerically the same as `f_high`); AWETrim had no commits since 08-29, the
+same `venv` since 08-07; and the server log shows the same `SystemModel`, the same seed
+(1.85 m), the same NLP size (520 vars / 499 eq / 597 ineq) as the last passing session.
+**IPOPT iterations 0-13 are identical to all printed digits and diverge at iteration 14
+in the 7th significant digit** (`-1.9945880` vs `-1.9945877`), after which one path ends
+"Solved To Acceptable Level" and the other "Converged to a point of local infeasibility".
+The 08-30 21:23 session had thrown the same 422 once too, before a re-run passed. Two
+attempts today, across two server restarts, were bit-identical to each other — the noise
+is between sessions, not within one.
+
+The constraint report says what the solve is fighting: `angle_of_attack` 27.1° against
+the 14° cap, `elevation_amplitude` 12.5° against 10°, `trim_residual` infeasible. The
+passing solve had AoA **binding** at 14°, height binding at 50 m and amplitude at 9.5°
+of 10 — three active constraints plus the 3.5 m/s reel-out ceiling. That is the fold.
+
+**Seeds alone do not fix it.** Measured, all at 150 m, 10 m/s, `min_feasibility_margin`
+0.82:
+
+| `guess_el_center` | solver | startup margin | corrected retries (radius ask only) |
+| --- | --- | --- | --- |
+| 29° | converges, 14 s | 0.760 | 0.79, 0.72, 0.71, 0.65 |
+| 30° | 422 (today), 1.03 once on 08-30 | — | — |
+| 31° | converges, 33 s | 0.664 | 0.62, 0.70, 0.78 |
+
+The 31° reply sat at 35-39° elevation, the 29° one at 17-37°; the v10 path topped out at
+35°. **The radius ladder is not monotone:** 16.2 -> 18.7 -> 21.1 m asked gave 0.76 -> 0.79
+-> 0.72 measured, because every reply spent the extra room by climbing, and the
+lemniscate's upper shoulder is where `cos(elevation)` makes the same angular curvature
+tightest.
+
+Two levers, both in `data/traj_opt.yaml`:
+
+- **`startup_retry_el_offsets: [-1.0, 2.0]`** — a startup 422 is retried from these seeds
+  in order; a seed the failure cache knows is skipped with a warning instead of ending the
+  run. The rule "the startup solve never retries, a converging guess is a different optimum
+  flown silently" is kept in spirit: the run `@warn`s which seed it flew and the summary
+  carries `traj_opt.guess.el_center_retry_offset_deg`. (The summary's `el_center_deg` had
+  been writing the raw `guess_el_center`, 29.0, while the request used
+  `guess_el_center_high`, 30.0 — fixed; it reports the seed actually sent now.)
+- **`startup_retry_el_cap_step: 2.0`** — each corrected startup retry also sends an
+  `elevation_max` 2° below the incumbent's own highest point, so the solve has to widen
+  instead of climb. Skipped when it would leave less than `guess_b` of height above the
+  box's floor.
+
+| | 29° seed, radius only | 29° seed, radius + ceiling |
+| --- | --- | --- |
+| startup margin | 0.79 best of 4, **refused** | **0.91**, flown |
+| `success_criteria` | — | **all 10 passed** |
+| measured power | — | 20 333 W (v10: 20 163 W) |
+| `power_ratio` | — | 0.84 (v10: 0.82) |
+| `min_whole_run` | — | 10.7° (v10: 10.0°) |
+| `margin_final_flown` | — | 0.58 (v10: 0.86) |
+
+Archive `output/archives/2026-09-13_191443`. The last re-optimization (376 m) installed at
+0.84 and phase 5 inherited 0.58 — tighter than the reference, though every criterion
+passed; worth watching if phase 5 regresses at 10 m/s.
+
+Not yet regressed at the other wind speeds: the ceiling only fires when the first reply is
+short of the gate, which none of the archived `v03.5`-`v11` runs were, so it should be
+inert there — but their paths top out at 31-38°, so a run that does hit the retries will
+be capped below where they flew.

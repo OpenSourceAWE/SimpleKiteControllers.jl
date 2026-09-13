@@ -592,7 +592,13 @@ end
 
 # The seed, from data/traj_opt.yaml: it decides whether the solve converges and
 # which optimum it converges to. `figure_eight_path` closes the curve itself.
-el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
+# `el_center_seed` is the centre elevation the STARTUP solve was finally seeded
+# at — `guess_el_center_seed` plus the `startup_retry_el_offsets` entry that
+# converged, if the first attempt threw 422 — and the re-optimizations' retries
+# offset from it in turn.
+el_center_seed_base = guess_el_center_seed(tos, inflow.wind_speed)
+el_center_seed = el_center_seed_base
+startup_seed_offset = 0.0
 guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
                                        tos.guess_d, 0.0, el_center_seed,
                                        0.0, tos.guess_points)
@@ -655,63 +661,114 @@ docstring for why the request is.
 opt_length(l) = tos.opt_length_round > 0 ?
     round(l / tos.opt_length_round) * tos.opt_length_round : l
 
-start_params = InitParams(; name = tos.name, length = opt_length(l_set),
-                          winch_params = winch_first_lap, inflow_conditions = inflow,
-                          trajectory = Trajectory(collect(guess_az), collect(guess_el)),
-                          input_depower = depower_seed(tos, inflow.wind_speed),
-                          reg_weight = tos.reg_weight,
-                          detect_simple_bounds = tos.detect_simple_bounds,
-                          min_turn_radius = opt_r_min,
-                          pattern_limits = opt_box)
-# Known bad? Then say so in a second rather than in the 80 s the solver needs to
-# reach its iteration cap and fail again. See the cache in awetrim_client.jl for
-# why a recorded failure can be trusted.
-let cached = tos.opt_failure_cache ? opt_failed_before(start_params) : nothing
-    isnothing(cached) ||
-        error(@sprintf("This exact request failed before (%s, recorded %s) and is \
-                        cached as bad, so it was not sent: %s at %.5f m.\n\nRetry it \
-                        with `clear_opt_failures()`, drop its entry from %s, or set \
-                        opt_failure_cache: false in data/traj_opt.yaml.",
-                       get(cached, "reason", "no reason recorded"),
-                       get(cached, "when", "at an unknown time"), tos.name, l_set,
-                       OPT_FAILURE_CACHE))
+"""
+    startup_params(el_center) -> InitParams
+
+The startup `/init` request seeded with the guess lemniscate centred at
+`el_center` [deg]; everything else comes from `tos`, the inflow and the
+first-lap winch.
+"""
+function startup_params(el_center)
+    az, el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c, tos.guess_d,
+                               0.0, el_center, 0.0, tos.guess_points)
+    InitParams(; name = tos.name, length = opt_length(l_set),
+               winch_params = winch_first_lap, inflow_conditions = inflow,
+               trajectory = Trajectory(collect(az), collect(el)),
+               input_depower = depower_seed(tos, inflow.wind_speed),
+               reg_weight = tos.reg_weight,
+               detect_simple_bounds = tos.detect_simple_bounds,
+               min_turn_radius = opt_r_min, pattern_limits = opt_box)
 end
+
+"""
+    startup_solve(params) -> (result, seed_trajectory)
+
+`/init` with `params`, the optional seeding solve at `opt_warm_start_awe_trim`,
+then the `/step` under the run's own winch. Throws the `HTTP.StatusError` of a
+422 unchanged; the caller decides whether that ends the run.
+"""
+function startup_solve(params)
+    reply = opt_init(params; url = tos.base_url)
+    # Seeding solve: the first request after /init is the only cold one, and its
+    # quasi-steady march along the seed path fails below ~830 N of winch force at
+    # zero reel speed. A converged solve leaves its profiles in the session for
+    # the next request. Unconditional when set, so the ladder is identical every run.
+    seed_trajectory = reply.trajectory
+    if tos.opt_warm_start_awe_trim > winch.use_awe_trim
+        @info @sprintf("Seeding solve at use_awe_trim %.3f before the startup \
+                        request at %.3f; see opt_warm_start_awe_trim.",
+                       tos.opt_warm_start_awe_trim, winch.use_awe_trim)
+        warm_winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
+                                   use_awe_trim = tos.opt_warm_start_awe_trim)
+        seed_trajectory = opt_step(StepParams(opt_length(l_set), warm_winch,
+                                              reply.trajectory);
+                                   url = tos.base_url).trajectory
+    end
+    result = opt_step(StepParams(opt_length(l_set), winch, seed_trajectory);
+                      url = tos.base_url)
+    return result, seed_trajectory
+end
+
+start_params = startup_params(el_center_seed)
 t_solve_start = time()
-opt_reply = opt_init(start_params; url = tos.base_url)
-# Seeding solve: the first request after /init is the only cold one, and its
-# quasi-steady march along the seed path fails below ~830 N of winch force at zero
-# reel speed. A converged solve leaves its profiles in the session for the next
-# request. Unconditional when set, so the ladder is identical every run.
-opt_seed_trajectory = opt_reply.trajectory
-if tos.opt_warm_start_awe_trim > winch.use_awe_trim
-    @info @sprintf("Seeding solve at use_awe_trim %.3f before the startup request \
-                    at %.3f; see opt_warm_start_awe_trim.",
-                   tos.opt_warm_start_awe_trim, winch.use_awe_trim)
-    warm_winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
-                               use_awe_trim = tos.opt_warm_start_awe_trim)
-    opt_seed_trajectory =
-        opt_step(StepParams(opt_length(l_set), warm_winch, opt_reply.trajectory);
-                 url = tos.base_url).trajectory
-end
-# No automatic retry with a different guess, deliberately: a guess that merely
-# converges is not the same answer, and picking one silently would hide which
-# optimum was flown.
-opt_result = try
-    opt_step(StepParams(opt_length(l_set), winch, opt_seed_trajectory); url = tos.base_url)
-catch exc
-    exc isa HTTP.StatusError && exc.status == 422 || rethrow()
-    tos.opt_failure_cache && record_opt_failure!(start_params, "422 from /step")
-    error("""
-          The optimizer returned no path: $(String(copy(exc.response.body)))
+# A 422 is retried from the seeds `startup_retry_el_offsets` lists, in order, and
+# the one that converged is reported loudly and in the summary: it is a different
+# optimum, never a silent one. Empty means the first 422 ends the run. A seed the
+# failure cache knows is skipped in a second rather than in the 80 s the solver
+# needs to reach its iteration cap again (see the cache in awetrim_client.jl).
+opt_result = nothing
+opt_seed_trajectory = nothing
+let last_422 = nothing, cached_msg = nothing
+    for (attempt, offset) in enumerate([0.0; tos.startup_retry_el_offsets])
+        el_center = el_center_seed_base + offset
+        params = attempt == 1 ? start_params : startup_params(el_center)
+        cached = tos.opt_failure_cache ? opt_failed_before(params) : nothing
+        if !isnothing(cached)
+            cached_msg = @sprintf("This exact request failed before (%s, recorded \
+                                   %s) and is cached as bad, so it was not sent: %s \
+                                   at %.5f m, guess centred at %.0f°.",
+                                  get(cached, "reason", "no reason recorded"),
+                                  get(cached, "when", "at an unknown time"),
+                                  tos.name, l_set, el_center)
+            @warn cached_msg
+            continue
+        end
+        attempt == 1 ||
+            @warn @sprintf("Startup solve at %.0f° failed: retry %d/%d from a \
+                            guess centred at %.0f° (startup_retry_el_offsets).",
+                           el_center_seed_base, attempt - 1,
+                           length(tos.startup_retry_el_offsets), el_center)
+        try
+            global opt_result, opt_seed_trajectory = startup_solve(params)
+            global start_params = params
+            global el_center_seed = el_center
+            global startup_seed_offset = offset
+            global guess_az, guess_el = params.trajectory.azimuth,
+                                        params.trajectory.elevation
+            break
+        catch exc
+            exc isa HTTP.StatusError && exc.status == 422 || rethrow()
+            tos.opt_failure_cache && record_opt_failure!(params, "422 from /step")
+            last_422 = exc
+        end
+    end
+    isnothing(opt_result) && isnothing(last_422) &&
+        error(cached_msg * "\n\nRetry it with `clear_opt_failures()`, drop its \
+              entry from $OPT_FAILURE_CACHE, or set opt_failure_cache: false in \
+              data/traj_opt.yaml.")
+    isnothing(opt_result) && error("""
+          The optimizer returned no path: $(String(copy(last_422.response.body)))
 
           Three candidates, most likely first:
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
               it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
-              $(tos.guess_b)°, guess_el_center = $(el_center_seed)° of \
-              data/traj_opt.yaml, which seeds the request and nothing else — \
-              widening or raising it changes the guess, not the flown path. \
-              Measured at 150 m and 6 m/s: 20°/11° at 18° does not converge, \
-              30°/12° and 20°/11°-at-26° do.
+              $(tos.guess_b)°, guess_el_center = $(el_center_seed_base)° of \
+              data/traj_opt.yaml$(isempty(tos.startup_retry_el_offsets) ? "" :
+              ", and every offset in startup_retry_el_offsets = " *
+              "$(tos.startup_retry_el_offsets) failed too"), which seeds the \
+              request and nothing else — widening or raising it changes the \
+              guess, not the flown path. Measured at 150 m and 6 m/s: 20°/11° \
+              at 18° does not converge, 30°/12° and 20°/11°-at-26° do.
             * the winch is too stiff to reel out at the optimum: \
               kv*sqrt(f_high) = $(round(winch.k_v * sqrt(winch.f_max); digits = 1)) \
               m/s against $(inflow.wind_speed) m/s of wind at 6 m.
@@ -719,6 +776,10 @@ catch exc
 
           `bin/run_server log` carries the solver's own output.""")
 end
+startup_seed_offset == 0 ||
+    @warn @sprintf("Startup path solved from a RETRY seed centred at %.0f° \
+                    (%+.1f° off guess_el_center): a different optimum than the \
+                    shipped guess would have given.", el_center_seed, startup_seed_offset)
 # The startup solve, which holds the script rather than the loop; the blocking
 # re-optimizations hold the loop and land in `reopt_blocked_s`.
 opt_startup_solve_s = time() - t_solve_start
@@ -875,6 +936,19 @@ isnothing(opt_r_min) ||
 #     installed unchanged.
 const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
 
+"""
+    with_elevation_max(box, el_max) -> PatternLimits
+
+`box` (a `PatternLimits` or `nothing`) with its `elevation_max` replaced by
+`el_max` [deg]; every other side is kept.
+"""
+with_elevation_max(box, el_max) = isnothing(box) ?
+    PatternLimits(; elevation_max = el_max) :
+    PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
+                  elevation_max = el_max,
+                  azimuth_amplitude_min = box.azimuth_amplitude_min,
+                  elevation_amplitude_max = box.elevation_amplitude_max)
+
 # The startup path's curvature margin, read at TOP level: the retry block below
 # defines `incumbent_score` only when it runs (first reply short of the gate),
 # and the failed-trajectory save further down must also work when it doesn't.
@@ -952,19 +1026,41 @@ if opt_r_on && !isnan(c1_startup)
                     min_turn_radius_request(fcs, tos; scale = opt_r_scale,
                                             margin = target) :
                     r_asked * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
+            # A raised radius alone is not enough when the reply spends it by
+            # CLIMBING: the lemniscate's tightest curve is its upper shoulder and
+            # cos(elevation) compresses the azimuth axis there, so the measured
+            # margin can FALL as the ask rises (2026-09-13 at 10 m/s: 16.2 -> 18.7
+            # -> 21.1 m asked, 0.76 -> 0.79 -> 0.72 measured, top at 37-39 deg).
+            # So each attempt also caps the path's elevation below the incumbent's
+            # own top, by startup_retry_el_cap_step; 0 sends the box unchanged.
+            el_cap = nothing
+            if tos.startup_retry_el_cap_step > 0
+                cap = maximum(inc_raw[2]) - tos.startup_retry_el_cap_step
+                el_min_box = something(isnothing(opt_box) ? nothing :
+                                       opt_box.elevation_min, el_floor_start)
+                # Leave room for the pattern's own height, or the box is empty.
+                cap > el_min_box + tos.guess_b && (el_cap = cap)
+            end
+            box_ask = isnothing(el_cap) ? nothing : with_elevation_max(opt_box, el_cap)
             @info @sprintf("The startup path is at margin %.3f, below \
                             min_feasibility_margin = %.2f: retry %d/%d at L = %.1f m \
-                            under a corrected turn radius (%.2f m, was %.2f m), \
+                            under a corrected turn radius (%.2f m, was %.2f m)%s, \
                             targeting margin %.3f.",
                            incumbent_score.margin, tos.min_feasibility_margin,
                            attempt, Int(tos.startup_retries_max), l_set, r_ask,
-                           prev_ask, target)
+                           prev_ask,
+                           isnothing(el_cap) ? "" :
+                               @sprintf(" and an elevation ceiling of %.1f° (the \
+                                        incumbent tops out at %.1f°)",
+                                        el_cap, maximum(inc_raw[2])),
+                           target)
             t_attempt = time()
             local att_result, att_table, att_raw, att_score
             try
                 att_result = opt_step(StepParams(; length = opt_length(l_set),
                                                  winch_params = winch_first_lap,
-                                                 min_turn_radius = r_ask);
+                                                 min_turn_radius = r_ask,
+                                                 pattern_limits = box_ask);
                                       url = tos.base_url)
                 att_table = opt_trajectory(; url = tos.base_url)
                 att_raw = install_optimized_path!(att_result)

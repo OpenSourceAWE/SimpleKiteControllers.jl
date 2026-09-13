@@ -185,7 +185,8 @@ multi-modal, so the guess is a choice about the answer.
     This is a deterministic pre-solve, NOT a retry — it runs unconditionally when
     set, so the ladder is the same every run and the optimum flown stays
     reproducible. That is what keeps it clear of the rule under
-    [`reopt_retry_el_offset`](@ref) that the startup solve never retries.
+    [`reopt_retry_el_offset`](@ref) that the startup solve retries only through
+    [`startup_retry_el_offsets`](@ref).
 
     Only sent when it is ABOVE `wc_settings.yaml`'s `use_awe_trim`; a value at or
     below it would seed with a law at least as hard to solve as the real one.
@@ -387,6 +388,18 @@ multi-modal, so the guess is a choice about the answer.
     than once or twice.
     """
     startup_retry_slack = 1.03
+    """
+    Elevation [deg] each corrected startup retry caps the path BELOW the
+    incumbent's own highest point, sent as the box's `elevation_max` next to the
+    raised turn radius; `0.0` sends the box unchanged.
+
+    A raised radius alone can be spent by climbing: the lemniscate's tightest
+    curve is its upper shoulder, where `cos(elevation)` compresses the azimuth
+    axis, so the measured margin can FALL as the ask rises. The cap makes the
+    solve widen instead. Skipped when it would leave less than `guess_b` of
+    height above the box's elevation floor.
+    """
+    startup_retry_el_cap_step = 2.0
     """
     Ground clearance [m] the returned path must have at the tether length it is
     flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
@@ -653,16 +666,30 @@ multi-modal, so the guess is a choice about the answer.
     collapses to zero amplitude, or it runs away to the `C_beta` bound. A retry
     from a different seed usually lands elsewhere.
 
-    This is NOT the startup solve, which never retries on purpose: there a guess
-    that merely converges is a different optimum flown silently. A re-optimization
-    is a candidate that still has to pass the curvature, clearance and elevation
-    gates before it is installed, and a failure just means flying on with the
-    current path — so a second attempt costs one solve and risks nothing.
+    This is NOT the startup solve, which retries only through
+    [`startup_retry_el_offsets`](@ref) and reports it. A re-optimization is a
+    candidate that still has to pass the curvature, clearance and elevation gates
+    before it is installed, and a failure just means flying on with the current
+    path — so a second attempt costs one solve and risks nothing.
 
     Only applies when `reopt_blocking` is true; without the hold there is nothing
     to retry within.
     """
     reopt_retry_el_offset = 2.0
+    """
+    Elevation offsets [deg] added to the startup guess's centre, tried in order
+    when the STARTUP solve throws 422; empty never retries and the first 422 ends
+    the run.
+
+    A retry seed that converges is a different optimum, so it is not silent: the
+    run warns which seed was flown and the summary carries it as
+    `traj_opt.guess.el_center_retry_offset_deg`. The path still has to pass the
+    startup curvature and clearance gates. Why it exists: the 10 m/s startup at
+    150 m sits on a fold — an identical request threw 422 on 2026-08-30 and
+    2026-09-13 and converged in between, decided by floating-point noise from
+    IPOPT iteration 14 on.
+    """
+    startup_retry_el_offsets::Vector{Float64} = Float64[]
     """
     Extra elevation [deg] a path must clear above `FC_Settings.min_elevation`
     before it is flown.

@@ -522,7 +522,13 @@ summary["traj_opt"] = OrderedDict{String, Any}(
     "guess" => OrderedDict(
         "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
         "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
-        "el_center_deg" => (tos.guess_el_center, "centre elevation of the guess [deg]"),
+        "el_center_deg" => (el_center_seed,
+            "centre elevation of the guess the startup path was solved from; \
+             guess_el_center_high at and above guess_el_center_wind_ref, plus \
+             the retry offset below [deg]"),
+        "el_center_retry_offset_deg" => (startup_seed_offset,
+            "startup_retry_el_offsets entry the startup solve converged from \
+             after a 422; 0 means the shipped guess converged [deg]"),
         "points" => (tos.guess_points, "points the guess was sent with"),
         "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
             "power-tape length the solve started from, input_depower ramped with \
