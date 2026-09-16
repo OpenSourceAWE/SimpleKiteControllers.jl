@@ -19,3 +19,5 @@ notebooks/images/
 
 # Per-machine Claude Code permissions; .claude/skills/ is checked in.
 /.claude/settings.local.json
+docs/.$flight_path_controller.drawio.bkp
+docs/.$flight_path_controller2.drawio.bkp
