@@ -583,6 +583,14 @@ end
         @test_throws ArgumentError turn_rate_coeffs([5.0, 5.0, 40.0], lo.depower)
         @test_throws ArgumentError turn_rate_coeffs(bd, hi.depower + 1.0)
 
+        # The usable range is exactly what resolves: both ends hit, a hair past
+        # either end throws, and a damping with no rows throws the same way.
+        rng = turn_rate_depower_range(bd)
+        @test rng == (lo.depower, hi.depower)
+        @test turn_rate_coeffs(bd, rng[2]).c1 isa Real
+        @test_throws ArgumentError turn_rate_coeffs(bd, rng[2] + 1e-6)
+        @test_throws ArgumentError turn_rate_depower_range([5.0, 5.0, 40.0])
+
         # The exported defaults track init's default damping at depower 0.25 --
         # 0.25 is kept a real grid row so this is an exact hit, never an
         # interpolation (see reload_turn_rate_table!).

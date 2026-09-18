@@ -69,7 +69,14 @@ wc_settings:
                            # winch_kv_table.yaml, like kv; 700 is its value at 4+ m/s
   f_reelin:      700.0     # set force during a plain reel-in phase (unused here) [N]
   f_high:        8000.0    # upper limit; keep below the plant's max_force (8400) [N]
-  f_high_awe_trim: 8000.0  # fixed f_high sent to AWETrim instead, 0.0 = disabled,
+  # 7700 since 2026-09-18: the optimizer's force model is quasi-steady, and the
+  # plant swings 1.13x above the lap mean at the CROSSING of a down-loop pattern
+  # (lowest, fastest point). With v_sat = 3.5 the kv*sqrt(F) law is pinned from
+  # 7360 N up, so the drum cannot relieve that swing and the optimizer's own
+  # depower is the only actuator: at 8000 N asked, Cabauw 10 m/s flew a 7472 N
+  # mean and 8370-8450 N crossing peaks every lap against the 8400 N criterion
+  # (archive 2026-09-18_224220). Derated by the swing, like depower_final_f_target.
+  f_high_awe_trim: 7700.0  # fixed f_high sent to AWETrim instead, 0.0 = disabled,
                            # use plain f_high (winch_from_wc's default); NOT
                            # wind-speed dependent, see PlanImprove_power_ratio.md [N]
   pf_high:       0.00023040 # P constant of the upper force controller          [-]

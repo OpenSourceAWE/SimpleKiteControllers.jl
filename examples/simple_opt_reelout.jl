@@ -867,6 +867,22 @@ end
 # The turn authority the loop was TUNED at (heading_p, and every archived run's
 # margins): the pattern's fixed depower_setpoint.
 c1_setpoint = c1_at_depower(fcs.depower_setpoint)
+# Phase 5's own reference: it has always flown heading_p at depower_final's c1,
+# unscaled, and every archived phase 5 was tuned there. What moves it off that
+# is the force limiter integrating up to depower_final_max — measured at Cabauw
+# 10 m/s (archive 2026-09-18_225423): phase 5 at 0.39-0.41 for its whole
+# length, c1 0.13 against 0.166 at the 0.35 the gain was tuned at, max d 8.06°
+# in phase 5 with steering at 0.13 of the 0.32 clamp — under-gained, not
+# clamped, the phases 3-4 signature of the 8 m/s fix. The lookup saturates at
+# the table's usable edge (0.40 since 2026-09-18) because the limiter's ceiling
+# (0.42) sits above it: a saturated scale is short of the truth, a NaN one is 1.
+c1_final = c1_at_depower(fcs.depower_final)
+c1_depower_max = try
+    last(turn_rate_depower_range(fcs.body_damping))
+catch exc
+    exc isa ArgumentError || rethrow()
+    NaN
+end
 # The depower a reply will be FLOWN at: its own, when fly_opt_depower hands the
 # optimizer's u_d to phases 3-4, else the setpoint. What every gate and request
 # must read c1 at — a path judged at the setpoint's c1 while the kite flies at
@@ -1557,6 +1573,17 @@ try
         if tos.fly_opt_depower && cc.phase in (3, 4) && isfinite(c1_setpoint)
             local c1_now = c1_at_depower(depower_flown)
             isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_setpoint / c1_now)
+        elseif cc.phase == 5 && fcs.depower_final_max > fcs.depower_final &&
+               isfinite(c1_final) && isfinite(c1_depower_max)
+            # The same correction for phase 5, against ITS tuning point
+            # (c1_final, see there): the force limiter below runs AFTER this
+            # call, so `dp_final_extra` is what the previous step commanded on
+            # top of depower_final. Rounded so the memo is not fed a fresh key
+            # every step of a 25 s integrator; 0.001 of depower is < 0.5 % of c1.
+            local dp5 = round(min(fcs.depower_final + dp_final_extra,
+                                  fcs.depower_final_max, c1_depower_max); digits = 3)
+            local c1_now = c1_at_depower(dp5)
+            isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_final / c1_now)
         end
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);

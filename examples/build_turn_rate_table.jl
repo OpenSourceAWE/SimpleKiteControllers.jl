@@ -60,14 +60,20 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 # ============== FIXED CONDITIONS (data/turn_rate_coeffs.yaml) ============== #
 # Only body_damping and depower vary across the grid. These must agree with the
 # file's `conditions:` block, which `_check_conditions` enforces.
+#
+# `SWEEP_`-prefixed where every run script assigns the bare name as a plain
+# global (`PROJECT`, `SIM_TIME`, `AERO_MODE`): this file is meant to be included
+# into the SAME session those scripts run in (its docstring: the table is reloaded
+# there afterwards), and a `const` of the same name makes their next `include`
+# die on "invalid assignment to constant" (2026-09-18, simple_opt_reelout.jl).
 
-const PROJECT          = project_file("system_reelout_150m.yaml")
+const SWEEP_PROJECT    = project_file("system_reelout_150m.yaml")
 const V_WIND           = 9.51
 const TETHER_LENGTH    = 150.0
 const ELEVATION        = 73.0
 const DT               = 0.05 / 3
-const SIM_TIME         = 200.0
-const AERO_MODE        = ContinuousAero()
+const SWEEP_SIM_TIME   = 200.0
+const SWEEP_AERO_MODE  = ContinuousAero()
 const VSM_INTERVAL     = 5
 
 # Settling starts at the first and decays to the second, which is what the sweep
@@ -97,7 +103,7 @@ script's constants. A row written under conditions the block does not describe
 is unusable data that looks like data.
 """
 function _check_conditions(dict)
-    want = Dict("system" => basename(PROJECT), "v_wind" => V_WIND,
+    want = Dict("system" => basename(SWEEP_PROJECT), "v_wind" => V_WIND,
                 "l_tether" => TETHER_LENGTH, "elevation" => ELEVATION, "dt" => DT)
     for (k, v) in want
         have = get(dict["conditions"], k, missing)
@@ -109,9 +115,16 @@ function _check_conditions(dict)
 end
 
 """
-    _run_turn_rate_sweep(depower; max_steering_cap=MAX_STEERING_CAP) -> NamedTuple
+    _run_turn_rate_sweep(depower; max_steering_cap=MAX_STEERING_CAP,
+                         elevation_floor=MIN_ELEVATION) -> NamedTuple
 
 One steering-amplitude sweep at the fixed conditions above, for `depower`.
+
+`elevation_floor` is the elevation below which the sweep is abandoned as
+`:low_elevation`. Relax it for a cell the wing cannot hold at 50° — `c1`/`c2`
+are normalised by apparent wind, so the sag costs no coefficient quality, and
+the pattern flies such a depower at ~30° anyway (Cabauw 10 m/s, 2026-09-18,
+rel_depower 0.355-0.370 for the whole reel-out, off the table's 0.35 end).
 
 The kite is settled and parked at constant tether length (the winch length loop
 is the caller's), then a relay controller flips the steering between `-u_s` and
@@ -123,13 +136,14 @@ Returns `(; outcome, u_s_max, min_elevation, fit)`. `outcome` is `:sweep_done`
 solver diverged — the fit still runs on whatever was logged). `fit` is the
 `identify_turn_rate_law` result, or `nothing` when even that failed.
 """
-function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP)
-    @info @sprintf("build_turn_rate_table: depower = %.3f, max_steering_cap = %.3f",
-                   depower, max_steering_cap)
+function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP,
+                              elevation_floor::Real = MIN_ELEVATION)
+    @info @sprintf("build_turn_rate_table: depower = %.3f, max_steering_cap = %.3f, \
+                    elevation floor %.1f°", depower, max_steering_cap, elevation_floor)
     s = init(V_WIND, TETHER_LENGTH; body_start_damping = BODY_START_DAMPING,
         body_sim_damping = BODY_SIM_DAMPING, elevation = ELEVATION,
-        depower_setpoint = depower, sim_time = SIM_TIME, dt = DT,
-        system_yaml = PROJECT, aero_mode = AERO_MODE, remake_model = false)
+        depower_setpoint = depower, sim_time = SWEEP_SIM_TIME, dt = DT,
+        system_yaml = SWEEP_PROJECT, aero_mode = SWEEP_AERO_MODE, remake_model = false)
 
     l0 = s.sys_state.l_tether[1]
     wpc = WinchPosController(WCSettings(true; dt = s.dt); dt = s.dt)
@@ -176,9 +190,9 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
 
             el = rad2deg(s.sys_state.elevation)
             min_elevation = min(min_elevation, el)
-            if el < MIN_ELEVATION
+            if el < elevation_floor
                 @warn @sprintf("  elevation %.2f° below floor %.1f° at t = %.2f s, stopping",
-                               el, MIN_ELEVATION, t)
+                               el, elevation_floor, t)
                 outcome = :low_elevation
                 break
             end
@@ -263,7 +277,8 @@ end
 
 """
     build_turn_rate_table(; depowers, out="turn_rate_coeffs.yaml", remake=false,
-                          max_steering_cap=MAX_STEERING_CAP) -> Vector{NamedTuple}
+                          max_steering_cap=MAX_STEERING_CAP,
+                          elevation_floor=MIN_ELEVATION) -> Vector{NamedTuple}
 
 Sweep every depower in `depowers` that is not already a passing row in
 `data/out`, writing each result as it completes and reloading the table at the
@@ -275,13 +290,15 @@ because `reload_turn_rate_table!` anchors `V3_TURN_RATE_C1`/`C2` there.
 
 `max_steering_cap` is the amplitude ceiling for every cell in this call — pass a
 narrower `depowers` to retry one cell at a different cap instead of recomputing
-the grid.
+the grid. `elevation_floor` likewise applies to every cell here; a row swept
+under a floor other than `MIN_ELEVATION` records it as `elevation_floor`.
 """
 function build_turn_rate_table(;
         depowers = [0.25, 0.30, 0.35, 0.40],
         out::String = OUT_FILE,
         remake::Bool = false,
-        max_steering_cap::Real = MAX_STEERING_CAP)
+        max_steering_cap::Real = MAX_STEERING_CAP,
+        elevation_floor::Real = MIN_ELEVATION)
     path = joinpath(skc_data_path(), out)
     isfile(path) || error("build_turn_rate_table: $path not found")
     _check_conditions(YAML.load_file(path))
@@ -298,7 +315,7 @@ function build_turn_rate_table(;
             continue
         end
 
-        r = _run_turn_rate_sweep(dp; max_steering_cap)
+        r = _run_turn_rate_sweep(dp; max_steering_cap, elevation_floor)
         entry = Dict{String, Any}(
             "body_damping" => Float64.(BODY_START_DAMPING),
             "body_sim_damping" => Float64.(BODY_SIM_DAMPING),
@@ -306,6 +323,8 @@ function build_turn_rate_table(;
             "u_s_max" => r.u_s_max, "min_elevation" => r.min_elevation,
             "date" => string(Dates.today()),
         )
+        elevation_floor == MIN_ELEVATION ||
+            (entry["elevation_floor"] = Float64(elevation_floor))
         if !isnothing(r.fit)
             entry["c1"] = r.fit.c1
             entry["c2"] = r.fit.c2

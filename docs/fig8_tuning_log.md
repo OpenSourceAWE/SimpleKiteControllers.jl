@@ -4891,3 +4891,107 @@ lobe lift 75 %, margin 0.83, gain factor 1.09, RMS d 2.13°, max d 6.74°, `min_
 Maasvlakte set, where every change above is inert by construction (optimizer depower
 within 0.03 of the setpoint, full lift passing the gate, phase 5 under 7500 N) — a claim,
 not a measurement, until `create_overview.jl` is re-run against fresh scenarios.
+
+## 2026-09-18 — Cabauw 10 m/s: the flown depower left the turn-rate table, and everything the c1 fix added switched itself off
+
+**Symptom.** Archive `2026-09-18_222342`, 10 m/s, at `0c3508a` ("Works for 9 m/s"): `RMS d < 3.0°`
+(**5.18°**), `max d < 8.0°` (**11.51°**) and `max force <= 8400 N` (8443 N), 23 719 W. Peak
+steering 0.244 of the 0.32 clamp, tape delivering 0.193 — sluggish, not clamped: the 8 m/s
+signature from the previous entry, after that fix had gone in.
+
+**Cause.** To hold its 8000 N the optimizer depowered to l_dp 1.87-1.94 m, `rel_depower`
+**0.355-0.370** for the whole reel-out (`av_depower_ro` 0.358). The usable turn-rate table
+ended at **0.35**: the 0.40 row of 2026-08-30 was `low_elevation` and is never a neighbour,
+`turn_rate_coeffs` refuses to extrapolate, so `c1_at_depower` returned NaN from the first
+reply on. That NaN is a designed fallback, and every consumer took it at once:
+
+| consumer | with c1 NaN | evidence in the summary |
+| --- | --- | --- |
+| curvature gate (`shift_margin`, installs) | `return Inf` — nothing gated | `margin Inf` on all three installs, `lobe_lift_pct` 100, no retry |
+| `gain_scale`, phases 3-4 | stays 1.0 — loop ~1.5x under-gained | `c1_pattern`/`gain_scale_flown` absent (written only when finite) |
+| `feasibility.c1_pattern` | key dropped | the only trace was one `@warn` in the REPL |
+
+The 9 m/s run of `_220633` flew 0.341-0.348 and only crossed 0.35 on its last install at
+t = 85 s, which is why it never showed this.
+
+**Fix 1: rows 0.375 and 0.40, swept with the elevation floor at 40°.** `build_turn_rate_table.jl`
+takes `elevation_floor` (default `MIN_ELEVATION` = 50°, so no existing call changes; a row swept
+under another floor records it as `elevation_floor`). The 0.40 cell had died at the first
+amplitude step because it bottomed at 49.99° against a 50° floor, not because the wing could
+not hold it — the reel-out flies that depower at ~30°. Same precedent as the `[0,0,40]`/0.55
+row (40° "for THIS run only"; now an argument instead of an edit).
+
+| depower | outcome | c1 | c2 | delay | c1_rel_std | g_rel_std | min el | usable |
+|---|---|---|---|---|---|---|---|---|
+| 0.375 | sweep_done | 0.1443 | 0.7172 | 0.567 | 0.12 % | 13.8 % | 54.5° | yes |
+| 0.40 | sweep_done | 0.1283 | 0.9543 | 0.600 | 0.12 % | 15.7 % | 48.1° | yes |
+
+Both reached the full 0.175 cap; 0.375 never went below 54.5° and would have passed at 50°
+too. The c1 values sit on the table's log-linear trend (0.1444 predicted at 0.375 from the
+0.30/0.35 pair) — the failed row's 0.1437 at 0.40 was the bad fit, not the trend. Usable
+range now 0.25-0.40, which covers the phase-5 limiter up to its 0.42 ceiling but for the
+last 0.02. Also fixed while there: `build_turn_rate_table.jl`'s `PROJECT`/`SIM_TIME`/
+`AERO_MODE` are now `SWEEP_`-prefixed — as `const`s of the bare names they made the next
+`include("examples/simple_opt_reelout.jl")` in the same session die on "invalid assignment
+to constant", and the same session is exactly where the script says it is meant to be used.
+
+| 10 m/s | `_222342`, c1 NaN | `_224220`, table to 0.40 |
+| --- | --- | --- |
+| `c1_pattern` / `gain_scale_flown` | — | 0.161 / **1.511** |
+| installs | margin Inf x3, lift 100 % | 0.89 / 0.83 / 0.99, lift 50/0/0 % |
+| RMS d / max d | 5.18° / 11.51° | **2.71° / 7.57°** |
+| max force | 8443 N | 8449 N |
+| `av_power_ro` | 23 719 W | 24 946 W |
+
+**Fix 2: `f_high_awe_trim` 8000 -> 7700.** The remaining 49 N sat at the CROSSING of the
+down-loop pattern (az ~0°, el 20-25°, its lowest and fastest point), one peak per lap: 8371 /
+8382 / 8373 / 8365 / **8449** / 8366 N at t = 19-55 s, falling with tether length (7996 N at
+293 m). Only lap 4 crossed the line, for 0.7 s, but every lap was within 30 N of it. The winch
+could not take it: with `v_sat` 3.5 the `kv*sqrt(F)` law is pinned from (3.5/0.0408)² =
+7360 N up, the phase-4 mean was 7472 N, so the drum sat at its cap through every peak
+(`speed_pct` 100, `v_ro` 3.48-3.53 at each one). The optimizer knows the cap (`v_max = v_sat`)
+and depowers to hold its `f_max` — but its quasi-steady force model does not see the plant's
+1.13 crest factor at the crossing, so 8000 N asked is ~8400 N flown. Derated by the swing, the
+way `depower_final_f_target` already is. Only the RE-OPTIMIZATION requests see it; the startup
+solve keeps `F_HIGH_NOMINAL` on purpose (its curvature margin was 0.83 against 0.82 required
+here, and derating it is what tightened that below the gate before). So lap 1 still flies the
+8000 N path and its crossing peaked at 8382 N — under, by 18 N. If lap 1 is the next to trip,
+the levers are `first_lap_force_frac` (reaches the startup request, through the retry ladder)
+or `v_sat` 3.5 -> 3.8, which was reduced on 2026-08-26 (`79539dd`, C3) for measured power
+and which would give the law its authority back instead of costing power.
+
+| 10 m/s | `_224220` | `_225423`, `f_high_awe_trim` 7700 |
+| --- | --- | --- |
+| max force, phase 4 | 8449 N (lap 4) | **8382 N** (lap 1, startup path) |
+| `av_force_ro` | 7472 N | 7376 N |
+| `av_power_ro` | 24 946 W | 24 534 W (-1.7 %) |
+| RMS d / max d | 2.71° / 7.57° | 2.77° / **8.06°** |
+| `success_criteria` | max force | **max d** |
+
+**Fix 3: `gain_scale` for phase 5.** The 8.06° was not in the reel-out: phase 4 peaked at 7.01°
+in both runs (lap 1, t = 25 s, identical). It was in PHASE 5 at t ~100 s, az 6°, el 11° —
+7.57° at the same spot the run before — with the steering at 0.13 of the clamp. Phase 5 flew
+at depower 0.39-0.41 for its whole length (the force limiter holding 7500 N: mean 7507 N, peak
+8088 N), where c1 is 0.13 against the 0.166 of the 0.35 its gain was tuned at: ~25 %
+under-gained. The 8 m/s entry left phase 5 alone ("keeps its tuned gain") because the table
+ended at 0.35 and there was nothing to read; now there is. The sim loop scales phase 5 by
+`c1(depower_final) / c1(depower_final + dp_final_extra)` — the limiter's own integrator, i.e.
+what the previous step commanded, since the limiter runs after `calc_steering` — saturated at
+the table's usable top via the new `turn_rate_depower_range` (a saturated factor is short of
+the truth, a NaN one is 1.0). Inert wherever the limiter is off, i.e. every run below 8 m/s.
+`summary.gain_scale_final_peak` records it.
+
+| 10 m/s | `_225423` | `_230255`, phase-5 gain scaled |
+| --- | --- | --- |
+| `gain_scale_final_peak` | 1.0 | **1.284** (limiter peak 0.412, read at 0.40) |
+| max d, phase 5 | 8.06° (steering 0.13) | **6.36°** (steering 0.175) |
+| max d, whole run | 8.06° | **7.01°** (phase 4, lap 1) |
+| RMS d / max force / power | 2.77° / 8382 N / 24 534 W | 2.77° / 8382 N / 24 534 W |
+| `success_criteria` | max d | **all 10 passed** |
+
+Phase 4 is bit-identical between the last two runs, as it should be: nothing in fix 3 is read
+before phase 5. Not re-flown: 8 and 9 m/s, where fix 2 costs ~2 % of power (the optimizer
+sits at `f_max` there too) and fix 3 scales phase 5 by ~1.09 / ~1.25 (limiter peaks 0.364 /
+~0.40); below 8 m/s all three fixes are inert by construction (optimizer depower inside the
+old table, limiter never engaging). Same caveat as the previous entry: claims until
+`create_overview.jl` is re-run.

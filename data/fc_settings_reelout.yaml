@@ -79,7 +79,9 @@ fc_settings:
   # about to see. Inert wherever phase 5 stays under the target: the strongest
   # archived phase 5 before this was 7239 N (Cabauw 7 m/s), Maasvlakte 11 m/s 7022 N.
   # 0.42 is inside the optimizer's own depower range (2.3 m = 0.44 equivalent);
-  # the turn-rate table ends at 0.35, so the phase-5 gate is read there.
+  # the phase-5 gate is read at depower_final's c1, the heading gain at the
+  # flown depower as far as the turn-rate table reaches (0.40 since 2026-09-18;
+  # rows 0.375/0.40 identified with the sweep's elevation floor at 40°).
   depower_final_max:  0.42     # Ceiling of the phase-5 force limiter; = depower_final is OFF [-]
   depower_final_f_target: 7500.0 # Force it holds against, below the 8400 N criterion by the lobe swing [N]
   depower_final_f_gain: 2.0e-5 # Integrator gain, depower per N per s                  [1/(N s)]

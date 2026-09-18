@@ -933,6 +933,17 @@ if have_phase4
                                                     max(fcs.depower_final_max, dp_final_floor)); digits = 3),
         "highest depower the force limiter asked for, from the stop latch through phase 5; \
          the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
+    # The phase-5 counterpart of feasibility.gain_scale_flown, at the limiter's
+    # peak: what simple_opt_reelout.jl's phase-5 branch scaled heading_p by
+    # there, saturated at the table's usable edge exactly as the run was.
+    if isfinite(c1_final) && isfinite(c1_depower_max)
+        dp5_peak = round(min(fcs.depower_final + dp_final_extra_peak,
+                             fcs.depower_final_max, c1_depower_max); digits = 3)
+        c1_5 = c1_at_depower(dp5_peak)
+        summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_final / c1_5 : 1.0; digits = 3),
+            "heading_p factor phase 5 flew with at the limiter's peak, \
+             c1(depower_final)/c1(flown), read at $(dp5_peak); 1.0 when the limiter never engaged [-]")
+    end
 end
 summary["summary"] = summary_block
 

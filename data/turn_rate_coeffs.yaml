@@ -1,95 +1,99 @@
-entries:
-  # Re-identified 2026-08-30 against the heavier wing (kite.mass 6.2 -> 10.9926
-  # kg, commit 6443fbe, matching AWETrim's LEI-V3 and V3Kite's own
-  # bridle_geometry_full_fem.yaml), at this package's own 150 m reel-out project
-  # (system_reelout_150m.yaml, 8 mm tether) rather than V3Kite's 200 m / 6.2 kg
-  # / 4 mm one the table used to describe. Every prior row (6.2 kg, [10,10,40]
-  # and [20,20,40] damping groups included) was identified against a plant
-  # nobody flies any more and has been removed rather than kept as
-  # cross-damping reference data; see docs/fig8_tuning_log.md for the full
-  # rationale, the deleted rows, and the depower-grid choice. Flown at
-  # body_start_damping [0,0,40] decaying to body_sim_damping [0,0,32] --
-  # PASSING throughout, all body_sim_damping [0.0, 0.0, 32.0].
-  - c2: -0.19902201055727797
-    c1: 0.26975787521515693
-    depower: 0.25
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
-    outcome: "sweep_done"
-    delay: 0.3833333333333333
-    c1_rel_std: 0.001056099420410297
-    u_s_max: 0.175
-    g_rel_std: 0.12066390762931248
-    min_elevation: 72.96259307861328
-    date: "2026-08-30"
-  - c2: 0.26050815100354163
-    c1: 0.21732113088904853
-    depower: 0.3
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
-    outcome: "sweep_done"
-    delay: 0.45
-    c1_rel_std: 0.0011438410731743841
-    u_s_max: 0.175
-    g_rel_std: 0.1354722046761689
-    min_elevation: 70.54696655273438
-    date: "2026-08-30"
-  - c2: 0.8015423899780542
-    c1: 0.16554616507205075
-    depower: 0.35
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
-    outcome: "sweep_done"
-    delay: 0.5166666666666666
-    c1_rel_std: 0.0011872205772073903
-    u_s_max: 0.175
-    g_rel_std: 0.13696743269396944
-    min_elevation: 61.40755081176758
-    date: "2026-08-30"
-  # FAILED: dove below MIN_ELEVATION (50 deg) at the very first amplitude step
-  # (u_s_max only 0.05 of the 0.175 cap) -- the heavier wing cannot hold the
-  # pattern at this much depower. Kept as a recorded failure, never usable as
-  # an interpolation neighbour (_is_usable_turn_rate_entry also fails it on
-  # c1_rel_std). See docs/fig8_tuning_log.md.
-  - c2: 0.9003855319707074
-    c1: 0.14366880214795413
-    depower: 0.4
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
-    outcome: "low_elevation"
-    delay: 0.6333333333333333
-    c1_rel_std: 0.010074340184189139
-    u_s_max: 0.05
-    g_rel_std: 0.21464255234581398
-    min_elevation: 49.993595123291016
-    date: "2026-08-30"
 conditions:
-  v_wind: 9.51
-  dt: 0.0166666667
-  l_tether: 150.0
   system: "system_reelout_150m.yaml"
+  l_tether: 150.0
+  v_wind: 9.51
   elevation: 73.0
+  dt: 0.0166666667
+entries:
+  - c1: 0.26975787521515693
+    delay: 0.3833333333333333
+    date: "2026-08-30"
+    outcome: "sweep_done"
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    depower: 0.25
+    g_rel_std: 0.12066390762931248
+    u_s_max: 0.175
+    c2: -0.19902201055727797
+    c1_rel_std: 0.001056099420410297
+    min_elevation: 72.96259307861328
+  - c1: 0.21732113088904853
+    delay: 0.45
+    date: "2026-08-30"
+    outcome: "sweep_done"
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    depower: 0.3
+    g_rel_std: 0.1354722046761689
+    u_s_max: 0.175
+    c2: 0.26050815100354163
+    c1_rel_std: 0.0011438410731743841
+    min_elevation: 70.54696655273438
+  - c1: 0.16554616507205075
+    delay: 0.5166666666666666
+    date: "2026-08-30"
+    outcome: "sweep_done"
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    depower: 0.35
+    g_rel_std: 0.13696743269396944
+    u_s_max: 0.175
+    c2: 0.8015423899780542
+    c1_rel_std: 0.0011872205772073903
+    min_elevation: 61.40755081176758
+  - body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    c1: 0.12834019039594055
+    delay: 0.6
+    depower: 0.4
+    date: "2026-09-18"
+    outcome: "sweep_done"
+    elevation_floor: 40.0
+    g_rel_std: 0.1572099737280977
+    u_s_max: 0.175
+    c2: 0.9542895226958756
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    min_elevation: 48.145050048828125
+    c1_rel_std: 0.0012321797942422105
+  - c1: 0.14428661564410072
+    delay: 0.5666666666666667
+    date: "2026-09-18"
+    outcome: "sweep_done"
+    elevation_floor: 40.0
+    body_damping:
+      - 0.0
+      - 0.0
+      - 40.0
+    body_sim_damping:
+      - 0.0
+      - 0.0
+      - 32.0
+    depower: 0.375
+    g_rel_std: 0.13765807508172465
+    u_s_max: 0.175
+    c2: 0.7172213134264473
+    min_elevation: 54.48885726928711
+    c1_rel_std: 0.0011937851271945406

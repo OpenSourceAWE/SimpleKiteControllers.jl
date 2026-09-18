@@ -206,6 +206,29 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
 end
 
 """
+    turn_rate_depower_range(body_damping) -> (lo, hi)
+
+The depower interval [`turn_rate_coeffs`](@ref) can serve for `body_damping`
+without throwing: the lowest and highest USABLE row (non-passing rows do not
+count, exactly as they are never interpolation neighbours). For a caller whose
+depower can leave the table — the phase-5 force limiter integrates up to
+`depower_final_max`, above the identified grid — so it can saturate its lookup
+at the edge instead of losing the coefficient altogether. Throws the same
+`ArgumentError` as `turn_rate_coeffs` for a damping with fewer than two usable
+rows, since nothing can be interpolated there either.
+"""
+function turn_rate_depower_range(body_damping)
+    bd = collect(Float64.(body_damping))
+    usable = filter(e -> e.body_damping == bd && _is_usable_turn_rate_entry(e),
+                    _TURN_RATE_TABLE[].entries)
+    length(usable) >= 2 || throw(ArgumentError(
+        "Not enough usable turn-rate entries for body_damping = $bd " *
+        "(need >= 2, have $(length(usable))). " *
+        "Run examples/build_turn_rate_table.jl for more depower values."))
+    return extrema(e.depower for e in usable)
+end
+
+"""
     V3_TURN_RATE_COEFFS
 
 Snapshot of every row of `data/turn_rate_coeffs.yaml`, as parsed at package

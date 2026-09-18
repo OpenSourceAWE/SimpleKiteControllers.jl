@@ -129,9 +129,11 @@ Add new findings there, not here.
     `depower_final` is one number, tuned to hold ~3.5 kN at 6 m/s; the frozen
     length force follows `v_app^2` (measured 2026-09-18, phase-5 means: 4.2 kN at
     30 m/s, 6.4 at 36.7, 8.1 at 41.5 — Cabauw 8 m/s, above the 8400 N criterion
-    for a third of phase 5 at 8.6 kN peaks). The turn-rate table ends at 0.35, so
-    a ceiling above it flies phase 5 with its curvature gate read at 0.35's c1 —
-    phase-5 margins are 1.3-1.8, which is the room this spends.
+    for a third of phase 5 at 8.6 kN peaks). The curvature gate reads phase 5 at
+    `depower_final`'s c1 whatever the limiter adds — phase-5 margins are 1.3-1.8,
+    which is the room this spends. The heading gain does follow the flown
+    depower there (`gain_scale`, simple_opt_reelout.jl), as far as the turn-rate
+    table reaches (0.40 since 2026-09-18); above that it saturates.
     """
     depower_final_max = 0.328
     """
