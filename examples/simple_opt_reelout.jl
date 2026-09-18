@@ -1446,7 +1446,12 @@ try
                 global fig8_idx_progress += delta
                 global fig8_idx_prev = fec.last_idx
                 lap_before = fig8_n
-                global fig8_n = 1 + floor(Int, fig8_idx_progress / n_path)
+                # Never counted DOWN: Q can slip a fraction of a point backwards —
+                # measured 2026-09-18 right after an install re-indexed the kite
+                # onto the aligned path, on the very step lap 4 began — and a plain
+                # floor() then reads 4 -> 3 -> 4, firing every lap-boundary action
+                # below twice, the second time on a 2-sample "lap".
+                global fig8_n = max(fig8_n, 1 + floor(Int, fig8_idx_progress / n_path))
                 # Lap 1 only: hold the upper force limit down while the pattern is
                 # still converging onto the reference and the winch has just
                 # engaged. `calc_vro_soft` reads `f_high` live, so writing it here

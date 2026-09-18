@@ -64,15 +64,19 @@ sl = syslog.syslog
     lap_durations(sl) -> (; t_start::Vector{Float64}, dt::Vector{Float64})
 
 Sim time each FULL figure of eight took, from the logged `fig_8` lap counter:
-lap `k` runs from the first sample at which `fig_8 == k` to the first at which
-`fig_8 == k + 1`, so the lap still in progress when the run ends is left out.
-`fig_8` counts full traversals of the reference path in the air (phases 4 and
-5 alike), so a lap here is one whole pattern regardless of the path's shape.
+lap `k` runs from the first sample at which `fig_8` REACHES `k` to the first at
+which it reaches `k + 1`, so the lap still in progress when the run ends is left
+out. First arrival, not every upward step: in logs flown before the counter was
+made monotone it can dip back for a step or two at a lap boundary (a path install
+re-indexing the kite), and counting the second crossing as a lap start gave a
+0.0 s "fastest lap". `fig_8` counts full traversals of the reference path in
+the air (phases 4 and 5 alike), so a lap here is one whole pattern regardless
+of the path's shape.
 """
 function lap_durations(sl)
     f8 = Int.(sl.fig_8)
     t = Float64.(sl.time)
-    starts = [t[i] for i in eachindex(f8) if f8[i] >= 1 && (i == 1 || f8[i] > f8[i - 1])]
+    starts = [t[findfirst(>=(k), f8)] for k in 1:maximum(f8; init = 0)]
     (; t_start = starts[1:max(0, end - 1)], dt = diff(starts))
 end
 laps_flown = lap_durations(sl)
