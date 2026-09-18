@@ -926,6 +926,9 @@ if have_phase4
     summary_block["v_ro_av"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
     summary_block["v_ro_max"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
     summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
+    summary_block["max_depower_final"] = (round(fcs.depower_final + dp_final_extra_peak; digits = 3),
+        "highest depower the phase-5 force limiter asked for; depower_final itself when it \
+         never engaged or is off (depower_final_max == depower_final) [-]")
 end
 summary["summary"] = summary_block
 

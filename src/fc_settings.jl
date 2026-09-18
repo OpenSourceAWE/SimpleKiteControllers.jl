@@ -113,6 +113,37 @@ Add new findings there, not here.
     """
     depower_final = 0.328
     """
+    Ceiling [-] of the phase-5 FORCE LIMITER: with the length frozen, the depower
+    is the only actuator left against the tether force, so from phase 5 on
+    `rel_depower` is raised above `depower_final` while the winch force exceeds
+    `depower_final_f_target`, integrating at `depower_final_f_gain`, and lowered
+    again the same way once it is below — never under `depower_final`, never over
+    this. Equal to `depower_final` (the default) the limiter is OFF and phase 5
+    flies `depower_final` alone, as every run before 2026-09-18 did.
+
+    `depower_final` is one number, tuned to hold ~3.5 kN at 6 m/s; the frozen
+    length force follows `v_app^2` (measured 2026-09-18, phase-5 means: 4.2 kN at
+    30 m/s, 6.4 at 36.7, 8.1 at 41.5 — Cabauw 8 m/s, above the 8400 N criterion
+    for a third of phase 5 at 8.6 kN peaks). The turn-rate table ends at 0.35, so
+    a ceiling above it flies phase 5 with its curvature gate read at 0.35's c1 —
+    phase-5 margins are 1.3-1.8, which is the room this spends.
+    """
+    depower_final_max = 0.328
+    """
+    Winch force [N] the phase-5 force limiter holds the depower against; only
+    read when `depower_final_max > depower_final`. Set it BELOW the force
+    criterion by the lobe-to-lobe swing (~±800 N at 41 m/s), not at it.
+    """
+    depower_final_f_target = 7500.0
+    """
+    Integrator gain [1/(N s)] of the phase-5 force limiter: the depower moves by
+    this times the force error per second. The KCU tape can only move
+    `v_depower` (0.075/s) anyway, so a gain that asks for more merely saturates
+    it; `2e-5` moves 0.012/s at 600 N of error and reaches a 0.05 ceiling in
+    ~4 s, a fraction of a lap.
+    """
+    depower_final_f_gain = 2e-5
+    """
     Soft-start time [s]: the commanded reel-out speed (both `v_ff` and the
     `l_set` integration, i.e. the actual reel-out rate) is ramped linearly from
     `0` to WinchControllers.jl's `v_set = kv * sqrt(force)` over this many

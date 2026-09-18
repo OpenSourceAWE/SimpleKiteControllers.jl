@@ -1386,6 +1386,8 @@ stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN =
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
+dp_final_extra = 0.0        # [-] phase-5 force limiter's depower above depower_final
+dp_final_extra_peak = 0.0   # [-] the most it asked for, for the summary
 reelout_started = false     # true once the gate below has opened; LATCHED, never re-closes
 reelout_start_t = NaN       # [s] time it opened; the soft-start ramp counts from here
 reelout_trigger_fired = false # true if the FORCE trigger opened it, not the timer
@@ -1597,6 +1599,18 @@ try
                 (fcs.depower_final - stop_dp_entry) * clamp((t - stop_start) / stop_T, 0.0, 1.0)
         elseif phase == 5
             rel_depower = fcs.depower_final
+        end
+        # Phase-5 force limiter: the length is frozen, so the depower is the only
+        # actuator left against the force, and depower_final is one number tuned
+        # at 6 m/s (see FC_Settings.depower_final_max). An integrator above the
+        # floor, both ways, clamped — off when the ceiling equals the floor.
+        if phase == 5 && fcs.depower_final_max > fcs.depower_final &&
+           (isnan(stop_start) || t - stop_start >= stop_T)   # not during the stop ramp
+            global dp_final_extra = clamp(dp_final_extra + fcs.depower_final_f_gain *
+                                          (winch_force(s) - fcs.depower_final_f_target) * s.dt,
+                                          0.0, fcs.depower_final_max - fcs.depower_final)
+            rel_depower = fcs.depower_final + dp_final_extra
+            dp_final_extra > dp_final_extra_peak && (global dp_final_extra_peak = dp_final_extra)
         end
         chi_cmd = cc.chi_cmd
         w_lim = cc.w_lim
