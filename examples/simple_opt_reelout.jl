@@ -862,11 +862,41 @@ end
 #
 # A function because the startup path can be installed twice: once from the first
 # solve, once from the corrected re-solve below.
+#
+# The lobe lift is RATIONED here on the same rungs the mid-run installs use
+# (100/75/50/25/0 %), not applied whole. On a figure whose highest point sits
+# near the crossing rather than out on the lobe, the lift's ramp bends the path
+# exactly where cos(elevation) already makes it tightest: measured 2026-09-18 at
+# Cabauw 7 m/s, 150 m, the optimizer's reply was at margin 1.09 bare and 0.74
+# with the full lift, refused by the gate — and four retry ladders (radius,
+# ceiling, width) could not buy that back, because every reply they got was
+# feasible before the lift and infeasible after it. The lift compensates the
+# lobe sag measured at 380 m; at the anchor the startup path is flown for one
+# or two laps before the first re-optimization replaces it, so holding it back
+# there costs nothing the run scores. `startup_wing_frac` records what went in.
+startup_wing_frac = 1.0
 install_optimized_path!(reply) = begin
+    global startup_wing_frac
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
-    set_path!(fec, az, el .+ wing_lift(az, el);
-              resample = min(tos.resample_points, length(az) - 1))
+    lift = wing_lift(az, el)
+    resample = min(tos.resample_points, length(az) - 1)
+    startup_wing_frac = 1.0
+    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
+        for frac in (1.0, 0.75, 0.5, 0.25, 0.0)
+            startup_wing_frac = frac
+            set_path!(fec, az, el .+ frac .* lift; resample)
+            check_pattern_feasible(fec, l_tether, fcs.max_steering;
+                                   c1 = c1_startup, prn = false).margin >=
+                tos.min_feasibility_margin && break
+        end
+        startup_wing_frac < 1 &&
+            @info @sprintf("Lobe lift held back on the startup path to fit the \
+                            curvature gate: %.0f %% of %.2f°.",
+                           100 * startup_wing_frac, fcs.el_offset_wing)
+    else
+        set_path!(fec, az, el .+ lift; resample)
+    end
     return (az, el)
 end
 # Every optimizer answer this run flies, as it arrived — before `el_bias`,
@@ -934,7 +964,25 @@ isnothing(opt_r_min) ||
 #   * the first fully-clearing candidate is flown; absent one, the best strict
 #     improvement that still clears the floors; failures leave the incumbent
 #     installed unchanged.
+#
+# Since 2026-09-18 the ladder moves ONE lever per attempt after the first, the
+# ceiling before the radius. The radius ladder is not monotone — replies spend a
+# wider ask by climbing or growing taller (10 m/s on 2026-09-13: 0.76 -> 0.79 ->
+# 0.72; Cabauw 7 m/s on 2026-09-18: 0.785 -> 0.736) — while the ceiling is what
+# fixed both. Its ratchet (startup_retry_el_cap_step below the incumbent's top)
+# is clamped so the incumbent still FITS between the box floor and the ceiling,
+# with RETRY_CAP_SLACK to spare: at Cabauw 7 m/s a 15.2° figure over a 15.5°
+# floor left a 30.9° ceiling with 15.4° of box, and three asks 422'd under it.
+# A ceiling step that has less than RETRY_CAP_MIN_STEP of travel left, or that
+# 422'd, hands over to a WIDTH step (the box's azimuth_amplitude_min at the
+# incumbent's own amplitude + startup_retry_az_widen_step — width is what the
+# passing figures have and the Cabauw 7 m/s one lacked, ±24° against ±18° at
+# the same height), and only then to the radius, which steps under the last
+# converged ceiling and width floor; a radius ask that 422s is bisected toward
+# the last converged one.
 const RETRY_GAIN_MAX = 1.15   # largest per-attempt scaling of the turn-radius ask
+const RETRY_CAP_SLACK = 0.5     # box height kept above the incumbent's own    [deg]
+const RETRY_CAP_MIN_STEP = 0.5  # smallest ceiling step still worth a solve    [deg]
 
 """
     with_elevation_max(box, el_max) -> PatternLimits
@@ -948,6 +996,23 @@ with_elevation_max(box, el_max) = isnothing(box) ?
                   elevation_max = el_max,
                   azimuth_amplitude_min = box.azimuth_amplitude_min,
                   elevation_amplitude_max = box.elevation_amplitude_max)
+
+"""
+    with_azimuth_amplitude_min(box, a_min) -> PatternLimits
+
+`box` (a `PatternLimits` or `nothing`) with its `azimuth_amplitude_min` replaced
+by `a_min` [deg]; every other side is kept.
+"""
+with_azimuth_amplitude_min(box, a_min) = isnothing(box) ?
+    PatternLimits(; azimuth_amplitude_min = a_min) :
+    PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
+                  elevation_max = box.elevation_max,
+                  azimuth_amplitude_min = a_min,
+                  elevation_amplitude_max = box.elevation_amplitude_max)
+
+"The server's amplitude measure of a path's azimuth [deg]: the RMS-based
+half-width its `azimuth_amplitude_min` row bounds, `sqrt(2 * mean((az - mean(az))^2))`."
+azimuth_amplitude(az) = sqrt(2 * mean((az .- mean(az)) .^ 2))
 
 # The startup path's curvature margin, read at TOP level: the retry block below
 # defines `incumbent_score` only when it runs (first reply short of the gate),
@@ -1004,6 +1069,13 @@ if opt_r_on && !isnan(c1_startup)
         inc_result, inc_table, inc_raw = opt_result, opt_table, opt_paths_raw[1]
         r_asked = NaN                        # turn radius whose reply was asked last
         m_reply = incumbent_score.margin     # measured margin of that reply
+        bisect_hi = NaN                      # narrowest ask KNOWN to 422; NaN = none yet
+        cap_ok = nothing                     # elevation ceiling of the last CONVERGED ask
+        cap_bad = NaN                        # highest ceiling KNOWN to 422; NaN = none yet
+        relax_cap = false                    # retry under cap_ok instead of the ratchet
+        width_ok = nothing                   # azimuth half-width floor of the last CONVERGED ask
+        width_bad = NaN                      # lowest width floor KNOWN to 422; NaN = none yet
+        relax_width = false                  # no width step until the next converged solve
         t_retries = time()
         for attempt in 1:max(Int(tos.startup_retries_max), 0)
             # Top-level soft scope: these are script globals written inside the
@@ -1013,47 +1085,106 @@ if opt_r_on && !isnan(c1_startup)
             global opt_result, opt_table, opt_downloops, opt_power_pred
             global opt_paths_raw, opt_r_scale, opt_r_min
             global incumbent_score, inc_result, inc_table, inc_raw
-            global r_asked, m_reply
+            global r_asked, m_reply, bisect_hi, cap_ok, cap_bad, relax_cap
+            global width_ok, width_bad, relax_width
             target = max(tos.startup_retry_step * m_reply,
                          tos.startup_retry_slack * tos.min_feasibility_margin)
-            # Attempt 1 corrects the ASSUMED lap reel-out of the original request;
-            # later ones scale the previous REQUEST by target/measured, clamped so
-            # one converged solve can move the ask by at most RETRY_GAIN_MAX.
-            prev_ask = attempt == 1 ?
+            # The last CONVERGED ask, the lower bound every step builds on. Before
+            # any retry has converged (r_asked still NaN — attempt 1, or a later
+            # attempt after attempt 1 itself 422'd) that is the original request
+            # reconstructed; keyed on `isnan(r_asked)` rather than `attempt == 1`
+            # because a 422 on attempt 1 leaves r_asked unset.
+            prev_ask = isnan(r_asked) ?
                        opt_r_min / opt_r_scale * (1 + turn_radius_reel / l_set) *
                        tos.turn_radius_headroom : r_asked
-            r_ask = attempt == 1 ?
-                    min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                            margin = target) :
-                    r_asked * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
-            # A raised radius alone is not enough when the reply spends it by
-            # CLIMBING: the lemniscate's tightest curve is its upper shoulder and
-            # cos(elevation) compresses the azimuth axis there, so the measured
-            # margin can FALL as the ask rises (2026-09-13 at 10 m/s: 16.2 -> 18.7
-            # -> 21.1 m asked, 0.76 -> 0.79 -> 0.72 measured, top at 37-39 deg).
-            # So each attempt also caps the path's elevation below the incumbent's
-            # own top, by startup_retry_el_cap_step; 0 sends the box unchanged.
-            el_cap = nothing
-            if tos.startup_retry_el_cap_step > 0
-                cap = maximum(inc_raw[2]) - tos.startup_retry_el_cap_step
-                el_min_box = something(isnothing(opt_box) ? nothing :
-                                       opt_box.elevation_min, el_floor_start)
-                # Leave room for the pattern's own height, or the box is empty.
-                cap > el_min_box + tos.guess_b && (el_cap = cap)
+            # The ceiling the ratchet would send next: startup_retry_el_cap_step
+            # below the incumbent's top or the last converged ceiling, whichever
+            # is lower, but never so low that the incumbent's own height plus
+            # RETRY_CAP_SLACK no longer fits above the box floor. It is a lever
+            # only while that leaves RETRY_CAP_MIN_STEP of travel, and never at or
+            # below a ceiling that 422'd (the ratchet re-proposes that one as long
+            # as the incumbent is unchanged).
+            inc_top = maximum(inc_raw[2])
+            inc_height = inc_top - minimum(inc_raw[2])
+            el_min_box = something(isnothing(opt_box) ? nothing :
+                                   opt_box.elevation_min, el_floor_start)
+            cap_from = isnothing(cap_ok) ? inc_top : min(inc_top, cap_ok)
+            cap_next = max(cap_from - tos.startup_retry_el_cap_step,
+                           el_min_box + inc_height + RETRY_CAP_SLACK)
+            cap_room = tos.startup_retry_el_cap_step > 0 &&
+                       cap_next <= cap_from - RETRY_CAP_MIN_STEP &&
+                       (isnan(cap_bad) || cap_next > cap_bad)
+            # The width floor a width step would send: startup_retry_az_widen_step
+            # above the incumbent's own amplitude or the last converged floor,
+            # whichever is wider, in the server's RMS measure — and never at or
+            # above a floor that 422'd.
+            inc_amp = azimuth_amplitude(inc_raw[1])
+            width_next = max(inc_amp, something(width_ok, 0.0)) +
+                         tos.startup_retry_az_widen_step
+            width_room = tos.startup_retry_az_widen_step > 0 &&
+                         (isnan(width_bad) || width_next < width_bad)
+            # One lever per attempt, see the block comment above RETRY_GAIN_MAX.
+            # Every rung carries the ceiling and width floor the last solve
+            # converged with unless it is the one moving them.
+            az_min = width_ok
+            if !isnan(bisect_hi)
+                # A radius ask 422'd: the gain-scaled ask would repeat the same
+                # infeasible number (a failed attempt leaves r_asked/m_reply
+                # untouched), so bisect toward the last converged one instead.
+                lever = "radius bisection"
+                r_ask = (prev_ask + bisect_hi) / 2
+                el_cap = cap_ok
+            elseif isnan(r_asked)
+                # Attempt 1 corrects the ASSUMED lap reel-out of the original
+                # request to the measured ratio, and caps the elevation with it
+                # when there is room: the 2026-09-13 combination that took 10 m/s
+                # from 0.79 refused to 0.91 flown.
+                lever = "radius correction"
+                r_ask = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                                margin = target)
+                el_cap = cap_room ? cap_next : cap_ok
+            elseif !relax_cap && cap_room
+                lever = "ceiling step"
+                r_ask = r_asked
+                el_cap = cap_next
+            elseif !relax_width && width_room
+                lever = "width step"
+                r_ask = r_asked
+                el_cap = cap_ok
+                az_min = width_next
+            else
+                # Scale the previous REQUEST by target/measured, clamped so one
+                # converged solve moves the ask by at most RETRY_GAIN_MAX, under
+                # the last ceiling and width floor a solve converged with.
+                lever = "radius step"
+                r_ask = r_asked * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
+                el_cap = cap_ok
             end
-            box_ask = isnothing(el_cap) ? nothing : with_elevation_max(opt_box, el_cap)
+            # `nothing` keeps the session's limits; only a changed side builds a box.
+            box_ask = nothing
+            isnothing(el_cap) || (box_ask = with_elevation_max(opt_box, el_cap))
+            isnothing(az_min) ||
+                (box_ask = with_azimuth_amplitude_min(isnothing(box_ask) ? opt_box : box_ask,
+                                                      az_min))
             @info @sprintf("The startup path is at margin %.3f, below \
-                            min_feasibility_margin = %.2f: retry %d/%d at L = %.1f m \
-                            under a corrected turn radius (%.2f m, was %.2f m)%s, \
-                            targeting margin %.3f.",
+                            min_feasibility_margin = %.2f: retry %d/%d (%s) at \
+                            L = %.1f m, turn radius %.2f m (was %.2f m)%s, targeting \
+                            margin %.3f%s.",
                            incumbent_score.margin, tos.min_feasibility_margin,
-                           attempt, Int(tos.startup_retries_max), l_set, r_ask,
-                           prev_ask,
-                           isnothing(el_cap) ? "" :
-                               @sprintf(" and an elevation ceiling of %.1f° (the \
-                                        incumbent tops out at %.1f°)",
-                                        el_cap, maximum(inc_raw[2])),
-                           target)
+                           attempt, Int(tos.startup_retries_max), lever, l_set,
+                           r_ask, prev_ask,
+                           (isnothing(el_cap) ? ", no elevation ceiling" :
+                               @sprintf(", elevation ceiling %.1f° (the incumbent \
+                                        spans %.1f-%.1f° over a %.1f° floor)",
+                                        el_cap, inc_top - inc_height, inc_top,
+                                        el_min_box)) *
+                           (isnothing(az_min) ? "" :
+                               @sprintf(", azimuth half-width >= %.1f° (the \
+                                        incumbent's is %.1f°)", az_min, inc_amp)),
+                           target,
+                           isnan(bisect_hi) ? "" :
+                               @sprintf(" (bisecting below the %.2f m that 422'd)",
+                                        bisect_hi))
             t_attempt = time()
             local att_result, att_table, att_raw, att_score
             try
@@ -1067,8 +1198,43 @@ if opt_r_on && !isnan(c1_startup)
                 att_score = score_installed()
             catch exc
                 exc isa HTTP.StatusError && exc.status == 422 || rethrow()
-                @warn "Startup retry $attempt was refused; flying the incumbent." exception = exc
-                break
+                if !isequal(el_cap, cap_ok)
+                    # The ceiling is what moved since the last converged ask, so
+                    # it is what failed: never send it (or lower) again. A
+                    # ceiling STEP left the radius alone, so the next attempt
+                    # goes to the radius; a radius correction is re-sent under
+                    # the last converged ceiling first.
+                    relax_cap = true
+                    isnothing(el_cap) ||
+                        (cap_bad = isnan(cap_bad) ? el_cap : max(cap_bad, el_cap))
+                    @info @sprintf("Startup retry %d (%s) could not converge (HTTP \
+                                    422) at %.2f m under a ceiling of %s; the \
+                                    ceiling lever is spent, %s under the last \
+                                    converged ceiling (%s).",
+                                   attempt, lever, r_ask,
+                                   isnothing(el_cap) ? "none" : @sprintf("%.1f°", el_cap),
+                                   isnan(r_asked) ? "re-asking the same radius" :
+                                                    "the radius steps next",
+                                   isnothing(cap_ok) ? "none" : @sprintf("%.1f°", cap_ok))
+                elseif !isequal(az_min, width_ok)
+                    # Only the width floor moved, so it is what failed: never ask
+                    # for it (or wider) again; the radius steps next.
+                    relax_width = true
+                    width_bad = isnan(width_bad) ? az_min : min(width_bad, az_min)
+                    @info @sprintf("Startup retry %d (%s) could not converge (HTTP \
+                                    422) at %.2f m with an azimuth half-width >= \
+                                    %.1f°; the width lever is spent, the radius \
+                                    steps next at the last converged floor (%s).",
+                                   attempt, lever, r_ask, az_min,
+                                   isnothing(width_ok) ? "none" :
+                                       @sprintf("%.1f°", width_ok))
+                else
+                    bisect_hi = r_ask
+                    @info @sprintf("Startup retry %d could not converge (HTTP 422) at \
+                                    %.2f m; bisecting toward the last converged ask \
+                                    of %.2f m.", attempt, r_ask, prev_ask)
+                end
+                continue
             end
             @info @sprintf("Startup retry %d measured: margin %.3f%s, lowest point \
                             %.1f m (floor %.0f m), elevation %s, predicted power \
@@ -1123,6 +1289,9 @@ if opt_r_on && !isnan(c1_startup)
                                attempt, att_score.margin, incumbent_score.margin)
             end
             r_asked, m_reply = r_ask, att_score.margin
+            bisect_hi = NaN   # this ask converged, so it is no longer an upper bound
+            cap_ok, relax_cap = el_cap, false
+            width_ok, relax_width = az_min, false
         end
     end
 end

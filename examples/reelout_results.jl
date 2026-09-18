@@ -606,6 +606,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "el_center_deg" => (round(el_c_path; digits = 1), "centre elevation of the path [deg]"),
         "el_height_deg" => (round(el_height_path; digits = 1),
             "elevation span of the path, peak to peak [deg]"),
+        "lobe_lift_pct" => (round(Int, 100 * startup_wing_frac),
+            "share of el_offset_wing the STARTUP install carried; held back on the \
+             same rungs as a mid-run install when the full lift fails the curvature gate"),
         "downloops" => (opt_downloops, "traversal direction the optimizer solved for")),
     "feasibility" => feasibility_block,
     "reopt" => OrderedDict(

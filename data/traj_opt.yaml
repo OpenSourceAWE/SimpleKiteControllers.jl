@@ -351,6 +351,13 @@ traj_opt:
     # spent the room by climbing to a 37-39 deg top, where cos(elevation) makes the
     # upper shoulder tighter. The passing v10 path (2026-08-30) topped out at 35 deg.
     startup_retry_el_cap_step: 2.0                                            # [deg]
+    # Once the ceiling cannot go lower, a retry asks for the figure this much WIDER
+    # than the incumbent instead (the box's azimuth_amplitude_min), before the
+    # radius is raised; 0.0 never widens. Measured 2026-09-18 at 7 m/s, Cabauw,
+    # 150 m: every ceiling step 422'd (the figure's height would not shrink) and a
+    # raised radius came back taller, not wider — 0.73-0.79 whatever was asked.
+    # The passing figures are wider: v10 was +-24 deg at margin 1.03, this +-18.
+    startup_retry_az_widen_step: 2.0                                          # [deg]
     # A pattern collapsed to near-zero amplitude clears curvature, clearance and
     # blend_folds trivially — there is almost no pattern left to be tight, low or
     # foldable — and was installed anyway at 2094 W against ~22000 W everywhere else

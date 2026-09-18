@@ -401,6 +401,21 @@ multi-modal, so the guess is a choice about the answer.
     """
     startup_retry_el_cap_step = 2.0
     """
+    Azimuth half-width [deg] a startup WIDTH retry asks for on top of the
+    incumbent's own, sent as the box's `azimuth_amplitude_min` (the RMS-based
+    amplitude the server measures, `sqrt(2 * mean((az - mean(az))^2))`); `0.0`
+    never widens.
+
+    The rung between the ceiling and the radius: at Cabauw 7 m/s (2026-09-18)
+    the figure's height was rigid — every ceiling step 422'd, even 0.7° below
+    the top — and a wider radius ask came back TALLER (16.5°), tighter at the
+    anchor (3.6° against 3.9°), so neither moved the margin off 0.73-0.79.
+    Width is what the passing figures have that this one lacks: Maasvlakte
+    10 m/s at the same depower and height was ±24° at margin 1.03, this one
+    ±18°. Compounds on every adopted reply; a floor that 422'd is never re-asked.
+    """
+    startup_retry_az_widen_step = 2.0
+    """
     Ground clearance [m] the returned path must have at the tether length it is
     flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
 
