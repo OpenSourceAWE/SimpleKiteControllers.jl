@@ -1,0 +1,37 @@
+# System project of the reel-out run, resolved by `project_file` to THIS
+# package's data/ instead of the kite model's, so the run's conditions (wind,
+# tether, winch, KCU, solver) can be varied here without editing V3Kite.
+# A copy of system_reelout_150m.yaml that only swaps the wind: the inland,
+# onshore Cabauw yearly-average profile of Sect. 2.2 of the paper (a pure
+# power law, following Sect. 5.2.3 of Fechner's PhD thesis) instead of the
+# near-shore Maasvlakte log/power blend the 150m project flies.
+# `sim_settings` resolves relative to this file; `wc_settings` is a bare name
+# resolved under the active data path, which the example points here too — it
+# names the POSITION-mode file, unused by simple_reelout.jl (see wc_settings.yaml).
+# `fc_settings` is read the same way, by this package's own `fc_settings`
+# function (analogous to `KiteUtils.wc_settings`); it names its OWN file
+# (fc_settings_reelout.yaml, not fig8's fc_settings.yaml) because REEL_OUT needs
+# `compliance: 0`, unlike the figure-eight runs' default of 0.5.
+# `traj_opt_settings` is read the same way, by `traj_opt_settings_file`, and
+# feeds `simple_opt_reelout.jl`'s `TrajOptSettings`. `winch_kv_table` feeds
+# `winch_kv` (via `winch_kv_table_file`) and `turn_rate_coeffs` feeds
+# `reload_turn_rate_table!` (via `turn_rate_coeffs_file`); both are only
+# resolved through THIS project when a caller passes it explicitly —
+# `__init__`'s own turn-rate load reads `system_fig8_200m.yaml` instead.
+# `kite_settings`/`structural_geometry`/`aero_geometry`/`vsm_settings`/
+# `settle_settings`/`heading_settings` are V3Kite's own project keys, resolved
+# against ITS data path (not this file's), so they name V3Kite's particle-model
+# defaults (`system_psm.yaml`'s own values) unchanged.
+system:
+    sim_settings: "settings_reelout_cabauw.yaml"
+    wc_settings: "wc_settings.yaml"
+    fc_settings: "fc_settings_reelout.yaml"
+    traj_opt_settings: "traj_opt.yaml"
+    winch_kv_table: "winch_kv_table.yaml"
+    turn_rate_coeffs: "turn_rate_coeffs.yaml"
+    kite_settings: "kite_settings_psm_kernel.yaml"
+    structural_geometry: "struc_geometry.yaml"
+    aero_geometry: "cfd_aero_geometry.yaml"
+    vsm_settings: "vsm_settings.yaml"
+    settle_settings: "settle_settings_default.yaml"
+    heading_settings: "heading_settings_psm.yaml"
