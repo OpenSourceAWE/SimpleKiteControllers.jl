@@ -4816,7 +4816,7 @@ records `traj_opt.path.lobe_lift_pct` in the summary. Inert wherever the full li
 i.e. every archived run. At the anchor the startup path is flown for one lap before the
 first re-optimization replaces it, and those installs ration on their own.
 
-| | 7 m/s, `v07` (archive `2026-09-18_195354`) |
+| | 7 m/s, archive `2026-09-18_195354` (before the c1 fix below; `v07` is the re-run) |
 | --- | --- |
 | lobe lift installed | **75 %**, margin 0.90, no retry |
 | `success_criteria` | **all 10 passed** |
@@ -4835,17 +4835,59 @@ or width floor that 422'd is never re-sent, a radius ask that 422s is bisected t
 last converged one. It should not fire on a raw-feasible reply any more; it is there for the
 next fold.
 
-**Open, and the next thing: 8 m/s (`v08`, archive `2026-09-18_195720`) flies but fails**
-`RMS d < 3.0°` (3.5°), `max d < 8.0°` (8.68°) and `max force <= 8400 N` (8677 N), at
-21 697 W. The drum sits on `v_ro_max` (3.56 m/s), so the force cannot be relieved by reeling
-faster, and the optimizer depowers to hold its 8000 N: l_dp 1.70-1.75 m, i.e. `rel_depower`
-0.32-0.33, which `fly_opt_depower` flies (mean 0.327; 7 m/s: 0.305; every Maasvlakte run
-0.27-0.30). At 0.33 the turn-rate gain `c1` is ~30 % below its 0.274 value, and two things
-still assume 0.274: the curvature gate and the turn-radius requests (`c1_startup` is
-`turn_rate_coeffs(body_damping, depower_setpoint)`), so installs reported at 1.03-1.08 were
-~0.75 for the kite that flew them; and the heading PID's schedule, which corrects for
-`v_app` but not for `c1(depower)`. Peak steering was only 0.184 against 0.256 at 6 m/s while
-the error grew — under-gained, not saturated. The candidate fix is to read `c1` at the
-depower actually flown wherever `fly_opt_depower` is on; the 8677 N against the optimizer's
-own 8000 N plan is a model mismatch that will not cure, and 5 % between
-`f_high_awe_trim` and the criterion may be too thin for this profile.
+**8 m/s flew but failed three criteria, and the cause was a second inconsistency of the
+same kind.** Archive `2026-09-18_195720`: `RMS d < 3.0°` (3.5°), `max d < 8.0°` (8.68°) and
+`max force <= 8400 N` (8677 N), at 21 697 W. The drum sat on `v_ro_max` (3.56 m/s), so the
+force could not be relieved by reeling faster, and the optimizer depowered to hold its
+8000 N: l_dp 1.70-1.75 m, i.e. `rel_depower` 0.32-0.33, which `fly_opt_depower` flies
+(mean 0.327; 7 m/s: 0.305; every Maasvlakte run 0.27-0.30). At 0.33 the turn-rate gain
+`c1` is 0.19 against 0.243 at `depower_setpoint` 0.274, and two things still read 0.274:
+
+- the curvature gate and the turn-radius requests — `c1_startup` was
+  `turn_rate_coeffs(body_damping, depower_setpoint)`, so installs reported at 1.03-1.08
+  were ~0.8 for the kite that flew them, and the optimizer was asked for figures sized for
+  a more powered kite;
+- the heading PID, whose schedule corrects for `v_app` but not for `c1(depower)` — the loop
+  was under-gained by ~22 %. Peak steering 0.184 against 0.256 at 6 m/s while the error
+  grew: sluggish, not clamped.
+
+Fixed the way phase 5 was fixed on 2026-08-20 (`min_turn_radius_request`: "PASS THE ONE
+THE GATE WILL USE"): `check_reelout_feasibility` takes `depower`, the startup install and
+retry ladder read `c1` at the reply's own depower (`pattern_depower`, `c1_at_depower`),
+every mid-run candidate is scored at ITS depower off `tab`, and `calc_steering` takes
+`gain_scale`, `c1(depower_setpoint)/c1(flown)` over phases 3-4 (1.25 at 8 m/s, 1.09 at
+7 m/s, ~1.0 on every Maasvlakte run; phase 5 keeps its tuned gain). The summary carries
+`feasibility.c1_pattern` and `gain_scale_flown`.
+
+| 8 m/s | `_195720`, c1 at 0.274 | `_201540`, c1 at flown | `v08`, + phase-5 limiter |
+| --- | --- | --- | --- |
+| startup ask / lobe lift | 15.81 m, lift 50 % | 15.81 m, lift **0 %**, no retry | same |
+| re-optimization ask | 16.5 m | **20.2 m** | same |
+| RMS d / max d | 3.5° / 8.68° | **2.33° / 6.70°** | 2.33° / 6.70° |
+| phase-4 max force | 8677 N | 7577 N | 7577 N |
+| phase-5 force, mean / max | — | 8099 / **8623 N** | **7460 / 8053 N** |
+| `success_criteria` | 3 failed | `max force` only | **all 10 passed** |
+| `av_power_ro` | 21 697 W | 21 996 W | 21 996 W |
+
+**The last failure was phase 5 alone: a frozen length at a wind nothing had flown.** With
+the winch stopped at 380 m the pattern is at ~160 m, where Cabauw's profile puts the wind
+at ~17 m/s and `v_app` at 41.5 m/s, and the frozen-length force follows `v_app^2`
+(phase-5 means from the archives: 4.2 kN at 30 m/s, 5.2 at 33, 6.4 at 36.7, 8.1 at 41.5).
+`depower_final` is one number, tuned at 6 m/s to hold ~3.5 kN. Fixed with a phase-5 FORCE
+LIMITER by depower — the only actuator left once the length is frozen: `rel_depower`
+integrates above `depower_final` while the winch force exceeds `depower_final_f_target`
+(7500 N, the criterion less the lobe swing) at `depower_final_f_gain` (2e-5 per N per s),
+back down below it, never past `depower_final_max` (0.42, inside the optimizer's own
+depower range). Off wherever phase 5 stays under the target — the strongest archived phase
+5 before this was 7239 N (Cabauw 7 m/s), Maasvlakte 11 m/s 7022 N — and off by default in
+`FC_Settings` (`depower_final_max == depower_final`). At 8 m/s it needed 0.35 -> 0.364
+(`summary.max_depower_final`) for 8.1 -> 7.5 kN mean, 8.6 -> 8.05 kN peak; at 7 m/s it never
+engaged. The turn-rate table ends at 0.35, so phase 5 above it flies with its gate read
+there; `margin_final_flown` 0.97 at both wind speeds.
+
+**Re-confirmed after all of it, 7 m/s** (`v07`, archive `2026-09-18_203510`): all 10 passed,
+lobe lift 75 %, margin 0.83, gain factor 1.09, RMS d 2.13°, max d 6.74°, `min_whole_run`
+12.9°, 20 852 W (was 20 812 W), max force 7606 N. Not re-flown: Cabauw 5-6 m/s and the
+Maasvlakte set, where every change above is inert by construction (optimizer depower
+within 0.03 of the setpoint, full lift passing the gate, phase 5 under 7500 N) — a claim,
+not a measurement, until `create_overview.jl` is re-run against fresh scenarios.
