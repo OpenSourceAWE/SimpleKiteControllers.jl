@@ -529,6 +529,13 @@ feasibility_block = OrderedDict{String, Any}(
         "reel-out per lap ASSUMED for the startup request, the only one with no \
          reply to measure it off [m]"))
 if !isnan(feas.c1)
+    feasibility_block["c1_pattern"] = (round(feas.c1; digits = 4),
+        "turn-rate gain the startup gate and requests read the path at: at the \
+         depower the pattern is FLOWN at (the optimizer's own under \
+         fly_opt_depower), not depower_setpoint's [1/m]")
+    feasibility_block["gain_scale_flown"] = (round(c1_setpoint / feas.c1; digits = 3),
+        "heading_p factor phases 3-4 flew with, c1(depower_setpoint)/c1(flown) \
+         for the startup reply; 1.0 when the optimizer's depower is the setpoint [-]")
     feasibility_block["margin_start"] = (round(feas.feas_start.margin; digits = 2),
         "curvature margin at the starting length; the worst case only when one \
          path is flown throughout — see the docstring [-]")

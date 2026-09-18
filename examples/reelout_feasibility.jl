@@ -46,7 +46,10 @@ if tos.min_height > 0
                        clr.height, l_tether, clr.elevation, tos.min_height))
 end
 
-feas = check_reelout_feasibility(fec, fcs, tos; l_tether)
+# At the depower the pattern is FLOWN at (`pattern_depower`), not the setpoint:
+# with fly_opt_depower the kite flies the optimizer's u_d from phase 3 on.
+feas = check_reelout_feasibility(fec, fcs, tos; l_tether,
+                                 depower = pattern_depower(opt_result))
 
 # A refusal, not a warning: the optimizer knows nothing of the V3's turn-rate law,
 # so a path the kite cannot turn along is a plausible thing for it to return, and
@@ -61,8 +64,15 @@ isnothing(feas.feas_start) ||
                    feas.feas_start.path_radius, feas.feas_start.kite_radius,
                    l_tether, feas.feas_start.margin, tos.min_feasibility_margin))
 
-# The c1 to check a path against at time t — from phase 5 that is depower_final's.
-c1_at(phase) = c1_at(feas, phase)
+# The c1 to check a path against at time t — from phase 5 that is depower_final's;
+# before that the one at `depower`, which with fly_opt_depower is the depower a
+# reply carries (a candidate's own, when scoring it) or the one currently flown
+# (`depower_flown_opt`, when sizing a request). A cell the table cannot serve
+# falls back to the startup law, as `c1_at(feas, phase)` itself does.
+c1_at(phase::Integer, depower::Real) = phase >= 5 ? c1_at(feas, phase) :
+    (c1 = c1_at_depower(depower); isnan(c1) ? feas.c1 : c1)
+c1_at(phase::Integer) =
+    c1_at(phase, tos.fly_opt_depower ? depower_flown_opt : fcs.depower_setpoint)
 
 # What phase 5 will fly a candidate path with; NaN when the table could not serve
 # depower_final. See phase5_margin's docstring for why this is NOT comparable to

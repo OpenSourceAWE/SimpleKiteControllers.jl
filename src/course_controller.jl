@@ -175,7 +175,7 @@ end
 
 """
     calc_steering(cc::CourseController, chi_set, heading, course;
-                  t, elevation, v_kite, v_app, dmin, tangent)
+                  t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0)
 
 Inner loop of the figure-of-eight flight controller: raw guidance course
 `chi_set` [rad] in, `(rel_steering, rel_depower, phase)` out. `heading`/
@@ -204,7 +204,10 @@ The feedback angle ψ' blends `heading` and `course` by `v_kite` [m/s] between
 `ccs.v_kite_heading` (pure heading) and `ccs.v_kite_course` (pure course);
 `ccs.fig8_pure_course` forces pure course from `phase >= 3`. The gain is
 scheduled by `v_app` [m/s] as `K = heading_p * v_app_ref / max(v_app, v_app_min)`,
-and by phase (`entry_gain` below 3, full gain from 3); the PID output is
+by phase (`entry_gain` below 3, full gain from 3), and by `gain_scale` (default
+`1.0`), a caller-supplied factor for what the schedule cannot see from here —
+the turn-rate gain `c1` moving with the depower actually flown, when that is
+not `ccs.depower_setpoint` the loop was tuned at; the PID output is
 bypassed to `0.0` at `phase == 0` (park), though it is still stepped so
 engagement stays bumpless. `rel_depower`'s TARGET is `ccs.entry_depower`
 during the dive and hold, `ccs.depower_final` at phase 5, `ccs.depower_setpoint`
@@ -216,7 +219,7 @@ are left on `cc` as [`chi_cmd`](@ref CourseController)/`w_lim`/`psi_prime`/
 `w_course`/`err` for a caller that logs them.
 """
 function calc_steering(cc::CourseController, chi_set, heading, course;
-                       t, elevation, v_kite, v_app, dmin, tangent)
+                       t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0)
     ccs = cc.ccs
     el_deg = rad2deg(elevation)
     if cc.phase == 0 && t >= ccs.park_time
@@ -266,7 +269,7 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     cc.err = err
     v_app_eff = max(v_app, ccs.v_app_min)
     K_phase = phase >= 3 ? ccs.heading_p : ccs.entry_gain * ccs.heading_p
-    set_K!(cc.pid, K_phase * ccs.v_app_ref / v_app_eff, 0.0, err)
+    set_K!(cc.pid, gain_scale * K_phase * ccs.v_app_ref / v_app_eff, 0.0, err)
     rel_steering = if phase == 0
         cc.pid(0.0, 0.0, 0.0)
         0.0

@@ -847,15 +847,39 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
+# The turn-rate gain at a depower, NaN for a cell the table cannot serve — a
+# lookup that costs the diagnosis, not the run. Memoized on the depower value:
+# the sim loop below asks for it every step while a blend ramps.
+const c1_memo = Dict{Float64, Float64}()
+c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
+    try
+        turn_rate_coeffs(fcs.body_damping, depower).c1
+    catch exc
+        exc isa ArgumentError || rethrow()
+        # Once per run: a blend ramping off the grid would repeat it every step.
+        any(isnan, values(c1_memo)) ||
+            @warn @sprintf("No turn-rate coefficients at depower %.3f (body_damping \
+                            %s): gates and gain fall back to the startup law there.",
+                           depower, fcs.body_damping)
+        NaN
+    end
+end
+# The turn authority the loop was TUNED at (heading_p, and every archived run's
+# margins): the pattern's fixed depower_setpoint.
+c1_setpoint = c1_at_depower(fcs.depower_setpoint)
+# The depower a reply will be FLOWN at: its own, when fly_opt_depower hands the
+# optimizer's u_d to phases 3-4, else the setpoint. What every gate and request
+# must read c1 at — a path judged at the setpoint's c1 while the kite flies at
+# 0.33 is judged ~22 % too kindly (c1 0.243 -> 0.19), which is how the Cabauw
+# 8 m/s installs of 2026-09-18 passed at 1.03-1.08 and were flown at ~0.8:
+# RMS d 3.5°, max d 8.7°, steering nowhere near its clamp.
+pattern_depower(reply) =
+    tos.fly_opt_depower && !isnothing(reply.depower) ?
+        awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
 # The turn-rate law the retry below reads a path against, looked up HERE because
 # the retry runs BEFORE `reelout_feasibility.jl` (which looks it up again and
-# reports it); a cell the table cannot serve costs the retry, not the run.
-c1_startup = try
-    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
-catch exc
-    exc isa ArgumentError || rethrow()
-    NaN
-end
+# reports it). Re-read for every reply installed, at that reply's own depower.
+c1_startup = c1_setpoint
 # Resample, but NEVER upsample: the reply is a polyline, and interpolating extra
 # points onto it concentrates each vertex's turn into one short segment, which
 # makes path_radius_profile report a far tighter pattern than the curve is.
@@ -876,11 +900,12 @@ end
 # there costs nothing the run scores. `startup_wing_frac` records what went in.
 startup_wing_frac = 1.0
 install_optimized_path!(reply) = begin
-    global startup_wing_frac
+    global startup_wing_frac, c1_startup
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
     lift = wing_lift(az, el)
     resample = min(tos.resample_points, length(az) - 1)
+    c1_startup = c1_at_depower(pattern_depower(reply))
     startup_wing_frac = 1.0
     if !isnan(c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
         for frac in (1.0, 0.75, 0.5, 0.25, 0.0)
@@ -926,7 +951,8 @@ opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
 # `min_turn_radius_request` again would only repeat its warning once per lap.
 if opt_r_on
     opt_r_scale = reelout_anchor_ratio(opt_table) * tos.turn_radius_headroom
-    opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+    opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                        c1 = c1_startup)
 end
 isnothing(opt_r_min) ||
     @info @sprintf("Turn-radius request for the re-optimizations: %.2f m — the \
@@ -1141,7 +1167,7 @@ if opt_r_on && !isnan(c1_startup)
                 # from 0.79 refused to 0.91 flown.
                 lever = "radius correction"
                 r_ask = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                                margin = target)
+                                                margin = target, c1 = c1_startup)
                 el_cap = cap_room ? cap_next : cap_ok
             elseif !relax_cap && cap_room
                 lever = "ceiling step"
@@ -1271,7 +1297,8 @@ if opt_r_on && !isnan(c1_startup)
                 opt_paths_raw = [inc_raw]
                 opt_r_scale = reelout_anchor_ratio(inc_table) *
                               tos.turn_radius_headroom
-                opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+                opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
+                                                    c1 = c1_startup)
                 if att_score.ok
                     @info @sprintf("Startup path clears the gates at margin %.3f \
                                     after %d solves (%.1f s of wall time).",
@@ -1516,11 +1543,24 @@ try
         heading = Float64(s.sys_state.heading)
         local v_kite = norm(s.sys_state.vel_kite)
         phase_before = cc.phase
+        # heading_p was tuned at depower_setpoint's c1; the schedule inside
+        # calc_steering corrects for v_app but cannot see c1 move with the
+        # depower fly_opt_depower hands the kite. Loop gain is heading_p * c1,
+        # so scale by c1(setpoint)/c1(flown) over the phases that fly it —
+        # 1.28 at the 0.327 of Cabauw 8 m/s (2026-09-18), where the steering
+        # peaked at 0.184 of 0.32 while RMS d reached 3.5°: under-gained, not
+        # clamped. Phase 5 keeps its tuned gain at depower_final, as it always
+        # has; the one-step lag on `depower_flown` is a blend's ramp, not a step.
+        local gain_scale = 1.0
+        if tos.fly_opt_depower && cc.phase in (3, 4) && isfinite(c1_setpoint)
+            local c1_now = c1_at_depower(depower_flown)
+            isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_setpoint / c1_now)
+        end
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
-            dmin, tangent = path_tangent(fec))
+            dmin, tangent = path_tangent(fec), gain_scale)
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Overrides calc_steering's fixed fcs.depower_setpoint with the optimizer's
         # own converted depower from the transition (phase 3) on — reel-out begins
@@ -2175,6 +2215,13 @@ try
                         el_mean = mean(el_target)
                         el_dev = el_target .- el_mean
                         n_native = min(tos.resample_points, length(new_az) - 1)
+                        # The turn authority THIS reply will be flown with: its own
+                        # depower under fly_opt_depower, applied further down only
+                        # if it is installed — so the gates read it here, off `tab`.
+                        cand_c1 = c1_at(phase, tos.fly_opt_depower ?
+                            awetrim_depower_to_v3kite(
+                                Float64(tab["optimized_parameters"]["input_depower"])) :
+                            fcs.depower_setpoint)
                         lifted(fs, fw) = new_el .+
                                          bias_lift(new_az, el_mean .+ fs .* el_dev) .+
                                          fw .* wing_delta
@@ -2183,7 +2230,7 @@ try
                             a, b = prepare_path(new_az, e; resample = n_native,
                                                 up_loops = fcs.up_loops)
                             check_pattern_feasible(a, b, l_now, fcs.max_steering;
-                                                   c1 = c1_at(phase), prn = false).margin
+                                                   c1 = cand_c1, prn = false).margin
                         end
                         # Ration order: the LOBE LIFT first, then the droop spread.
                         # Both are the RUN's additions to the optimizer's curve; the
@@ -2298,7 +2345,7 @@ try
                         # At the CURRENT length, which is what it will be flown at.
                         margin = isnan(feas.c1) ? Inf :
                             check_pattern_feasible(chk_az, chk_el, l_now,
-                                fcs.max_steering; c1 = c1_at(phase), prn = false).margin
+                                fcs.max_steering; c1 = cand_c1, prn = false).margin
                         clearance = path_min_height(chk_az, chk_el, l_now)
                         # Gated against BOTH the startup prediction and the previous
                         # install's: a collapsed pattern and a worse local optimum

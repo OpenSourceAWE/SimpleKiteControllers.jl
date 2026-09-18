@@ -88,9 +88,12 @@ Checks performed (all reported via `@info`/`@warn` here):
   `fcs.min_elevation + tos.candidate_elevation_margin`;
 * ground clearance — [`check_pattern_height`](@ref) at `l_tether`, when
   `tos.min_height > 0`;
-* turn-rate coefficients for `(fcs.body_damping, fcs.depower_setpoint)` — a cell
-  the table cannot serve costs the diagnosis, not the run (warned, coefficients
-  become `NaN`);
+* turn-rate coefficients for `(fcs.body_damping, depower)` — `depower` is the
+  one the pattern is FLOWN at, `fcs.depower_setpoint` unless the caller flies the
+  optimizer's own (`fly_opt_depower`), where a reply judged at the setpoint's c1
+  is off by `c1(flown)/c1(setpoint)`, ~22 % at 0.33 against 0.274 (Cabauw 8 m/s,
+  2026-09-18); a cell the table cannot serve costs the diagnosis, not the run
+  (warned, coefficients become `NaN`);
 * curvature at the STARTING length (the worst case for one fixed path) and at
   `fcs.reelout_l_max`, plus the dead-time context for `fcs.attractor_dist`;
 * phase 5 — the same path lifted by `fcs.el_offset_final`, scored at
@@ -98,7 +101,7 @@ Checks performed (all reported via `@info`/`@warn` here):
 """
 function check_reelout_feasibility(fec::FigureEightController,
                                    fcs::FC_Settings, tos::TrajOptSettings;
-                                   l_tether::Real)
+                                   l_tether::Real, depower::Real = fcs.depower_setpoint)
     # The ELEVATION floor, which is not the clearance floor and does not follow
     # from it: `min_height` is satisfied at ever lower elevations as the tether
     # grows. Checked with `candidate_elevation_margin` on top, because this
@@ -123,11 +126,11 @@ function check_reelout_feasibility(fec::FigureEightController,
     # identifies both. The coefficients are DIAGNOSTIC here — a damping/depower
     # the table cannot serve costs the diagnosis, not the run.
     coeffs = try
-        turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+        turn_rate_coeffs(fcs.body_damping, depower)
     catch e
         e isa ArgumentError || rethrow()
         @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
-               depower = $(fcs.depower_setpoint) — flying WITHOUT the feasibility \
+               depower = $(depower) — flying WITHOUT the feasibility \
                check.\n$(e.msg)"
         nothing
     end
@@ -138,7 +141,7 @@ function check_reelout_feasibility(fec::FigureEightController,
     c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
     @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
                     c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                   fcs.body_damping, fcs.depower_setpoint,
+                   fcs.body_damping, depower,
                    coeffs.interpolated ? " (INTERPOLATED)" : "", c1, c2, delay)
 
     # At l_tether (the START) this is the WORST case for one fixed path: a longer
@@ -163,7 +166,7 @@ function check_reelout_feasibility(fec::FigureEightController,
     # final laps have a margin the gates above never looked at. Evaluated at
     # `reelout_l_max`, on the path lifted by the fixed `el_offset_final`. The
     # LEARNT `el_bias` is not in it: it is not known until the run has flown.
-    coeffs_final = if isapprox(fcs.depower_final, fcs.depower_setpoint; atol = 1e-6)
+    coeffs_final = if isapprox(fcs.depower_final, depower; atol = 1e-6)
         coeffs
     else
         try
