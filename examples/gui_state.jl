@@ -94,6 +94,31 @@ function selected_reelout_project()
 end
 
 """
+    scenario_site(project = selected_reelout_project()) -> String
+
+The site subfolder of `output/scenarios/` a reel-out project's runs are
+archived under: `"cabauw"` for `system_reelout_cabauw.yaml`, `"maasvlakte"`
+for every other reel-out project. `move_scenario.jl` files a run by the
+project its summary YAML records; the readers (`plot_scenario.jl`,
+`plot_powercurve.jl`, `create_plots.jl`) pass nothing and follow the active
+project, see [`selected_scenarios_dir`](@ref).
+"""
+function scenario_site(project::AbstractString = selected_reelout_project())
+    return project == "system_reelout_cabauw.yaml" ? "cabauw" : "maasvlakte"
+end
+
+"""
+    selected_scenarios_dir() -> String
+
+`output/scenarios/<site>` for the active reel-out project's site (see
+[`scenario_site`](@ref)): the folder `move_scenario.jl` files that project's
+runs into, and the one the scenario readers list.
+"""
+function selected_scenarios_dir()
+    return normpath(joinpath(@__DIR__, "..", "output", "scenarios", scenario_site()))
+end
+
+"""
     selected_sim_time() -> Union{Float64, Nothing}
 
 Persisted simulation-time override in seconds, or `nothing` for the

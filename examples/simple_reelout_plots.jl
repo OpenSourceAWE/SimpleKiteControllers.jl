@@ -114,8 +114,12 @@ SCENARIO_PATH = nothing
 if !isnothing(scenario_path)
     # Every setting comes from ITS OWN copies inside the folder, not the live
     # data/ directory or whatever a prior run left in `Main` — a scenario exists
-    # to freeze exactly the conditions it was flown under.
-    scenario_project = joinpath(scenario_path, "system_reelout_150m.yaml")
+    # to freeze exactly the conditions it was flown under. The file's own name
+    # varies by project family (`system_reelout_150m.yaml` at maasvlakte,
+    # `system_reelout_cabauw.yaml` at cabauw), so find it rather than assuming one.
+    project_files = filter(f -> startswith(f, "system_reelout_") && endswith(f, ".yaml"),
+                           readdir(scenario_path))
+    scenario_project = joinpath(scenario_path, only(project_files))
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
     pattern_project = scenario_project
@@ -144,7 +148,11 @@ output_path = isnothing(scenario_path) ?
 # `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
 # project keep separate logs and can be plotted against each other. A scenario
 # archive is identified by its one `.arrow` file instead, since it was moved out
-# of `output/archives/` by hand and may hold any project's log.
+# of `output/archives/` by hand and may hold any project's log. A standalone
+# re-include with no `LOG_NAME` around (a fresh session, or the plots having
+# failed at the end of the run that set it) takes whichever of the project's two
+# logs was written last — a project only ever flown by simple_opt_reelout.jl
+# (system_reelout_cabauw.yaml) has no plain `<log_file>.arrow` at all.
 log_name = if !isnothing(scenario_path)
     arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_path))
     isempty(arrow_files) &&
@@ -153,7 +161,14 @@ log_name = if !isnothing(scenario_path)
 elseif @isdefined(LOG_NAME) && LOG_NAME isa AbstractString
     LOG_NAME
 else
-    basename(project_set.log_file)
+    base = basename(project_set.log_file)
+    candidates = filter([base, base * "_opt"]) do name
+        isfile(joinpath(output_path, name * ".arrow"))
+    end
+    isempty(candidates) &&
+        error("No $base.arrow or $(base)_opt.arrow in $output_path; run \
+               simple_reelout.jl or simple_opt_reelout.jl first.")
+    argmax(name -> mtime(joinpath(output_path, name * ".arrow")), candidates)
 end
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog

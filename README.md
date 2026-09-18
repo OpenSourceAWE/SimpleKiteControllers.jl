@@ -84,8 +84,8 @@ Choose example to run or `q` to quit:
    select_project.jl       - choose which system project (150m/200m/300m) to fly
    select_sim_time.jl      - choose the simulation time (default or a specific value)
    select_plots.jl         - choose figures: pattern/3d path/time series/power/aerodynamics
-   plot_scenario.jl        - replot an archived run from output/scenarios/
-   move_scenario.jl        - move the last reel-out run into output/scenarios/vNN
+   plot_scenario.jl        - replot an archived run from output/scenarios/<site>/
+   move_scenario.jl        - move the last reel-out run into output/scenarios/<site>/vNN
    copy_scenario.jl        - same, but keeps vNN_2/vNN_3/... instead of overwriting
    simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)
    simple_reelout_plots.jl - plot the last logged reel-out run
@@ -100,8 +100,8 @@ Choose example to run or `q` to quit:
    optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)
    optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer
    export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv
-   create_overview.jl      - write SimulationResults/scenarios/overview.md across wind speeds
-   create_plots.jl         - batch-generate pattern/time-series/power/aerodynamics PNGs for notebooks/images
+   create_overview.jl      - write SimulationResults/scenarios/<site>/overview.md across wind speeds
+   create_plots.jl         - batch-generate pattern/time-series/power/aerodynamics PNGs for notebooks/images/<site>
    publish.jl              - export the results notebook and push it to the SimulationResults site
    plot_powercurve.jl      - plot mean reel-out power vs wind speed across archived scenarios
    quit

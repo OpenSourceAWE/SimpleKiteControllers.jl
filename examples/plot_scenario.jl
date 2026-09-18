@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Interactive menu to replot an archived scenario from `output/scenarios/`.
+Interactive menu to replot an archived scenario from the active project's
+site folder under `output/scenarios/` (`cabauw/` or `maasvlakte/`, see
+`selected_scenarios_dir` in `gui_state.jl`).
 
 Each subfolder there (`v08`, `v09`, ...) is a self-contained copy of one
 `simple_opt_reelout.jl` run — its log plus every settings file that produced
@@ -16,8 +18,8 @@ live `data/` directory or whatever a prior run left in `Main`.
 """
 
 using REPL.TerminalMenus
-
-const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "output", "scenarios"))
+# `selected_scenarios_dir`: the site folder of the active project.
+include(joinpath(@__DIR__, "gui_state.jl"))
 
 """
     write_yaml_commented(io, indent, node; comment_col = 36, color = false)
@@ -64,7 +66,8 @@ end
 """
     plot_scenario()
 
-Ask which archived scenario under `output/scenarios/` to replot, then
+Ask which archived scenario under the active project's site folder (see
+`selected_scenarios_dir`) to replot, then
 `include` `simple_reelout_plots.jl` against it, and print that scenario's
 `summary:` block (from its `reelout_150m_opt.yaml`) to the console with the
 same syntax highlighting as the one printed at the end of a live
@@ -72,26 +75,28 @@ same syntax highlighting as the one printed at the end of a live
 menu.
 """
 function plot_scenario()
-    if !isdir(SCENARIOS_DIR)
-        println("No scenarios found — $SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    if !isdir(scenarios_dir)
+        println("No scenarios found — $scenarios_dir does not exist.")
         return nothing
     end
-    scenarios = sort(filter(readdir(SCENARIOS_DIR)) do name
-        dir = joinpath(SCENARIOS_DIR, name)
+    scenarios = sort(filter(readdir(scenarios_dir)) do name
+        dir = joinpath(scenarios_dir, name)
         isdir(dir) && !isempty(readdir(dir))
     end)
     if isempty(scenarios)
-        println("No non-empty scenario folders found in $SCENARIOS_DIR")
+        println("No non-empty scenario folders found in $scenarios_dir")
         return nothing
     end
 
     options = [scenarios; "quit"]
-    choice = TerminalMenus.request("\nSelect a scenario to plot: ", RadioMenu(options, pagesize = 8))
+    choice = TerminalMenus.request("\nSelect a scenario to plot ($(basename(scenarios_dir))): ",
+                                   RadioMenu(options, pagesize = 8))
 
     if choice != -1 && choice != length(options)
         selected = options[choice]
         @info "Plotting scenario: $selected"
-        global SCENARIO_PATH = joinpath(SCENARIOS_DIR, selected)
+        global SCENARIO_PATH = joinpath(scenarios_dir, selected)
         include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
         # run_summary is a fresh global from the include above; look it up at the
         # latest world age or a first-time call throws a world age error.

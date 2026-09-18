@@ -3,14 +3,17 @@
 
 """
 Batch-generate pattern, time-series, power, aerodynamics and 3D-path plots
-for every archived scenario in `output/scenarios/`, saving one
+for every archived scenario in the active project's site folder under
+`output/scenarios/` (`cabauw/` or `maasvlakte/`, see `selected_scenarios_dir`
+in `gui_state.jl`), saving one
 `pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`,
 `aerodynamics_<scenario>.png` and `path_webgl_<scenario>.html` per scenario
-folder into `notebooks/images/`. The first four are static GLMakie PNGs; the
+folder into `notebooks/images/<site>/`, the same site the scenarios were read
+from, so a Cabauw `v06` never overwrites a Maasvlakte one. The first four are static GLMakie PNGs; the
 last is a self-contained interactive WGLMakie page (rotate/zoom in a
 browser), since a 3D pattern is the one figure a flat image flattens the most.
 
-Each subfolder of `output/scenarios/` (`v08`, `v09`, ...) is a self-contained
+Each subfolder of that site folder (`v08`, `v09`, ...) is a self-contained
 record of one `simple_opt_reelout.jl` run. This script loads each scenario's
 flight log and settings from its own folder and generates a pattern plot showing
 the flown azimuth/elevation path and the attractor reference (or optimizer's
@@ -40,30 +43,43 @@ using SimpleKiteControllers: project_file
 
 # Include utility function for pattern plotting
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
+# `selected_scenarios_dir`: the site folder of the active project.
+include(joinpath(@__DIR__, "gui_state.jl"))
 
-const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "output", "scenarios"))
-const NOTEBOOKS_DIR = normpath(joinpath(@__DIR__, "..", "notebooks", "images"))
+
+"""
+    notebook_images_dir() -> String
+
+`notebooks/images/<site>` for the active project's site (see `scenario_site`),
+mirroring `selected_scenarios_dir`, so each site's PNGs and WebGL pages keep
+their plain `vNN` names without colliding with the other site's.
+"""
+function notebook_images_dir()
+    return normpath(joinpath(@__DIR__, "..", "notebooks", "images", scenario_site()))
+end
 
 """
     create_pattern_plots()
 
-Scan `output/scenarios/` for non-empty scenario folders, generate a pattern plot
-for each one using `plot_pattern_scenario`, and save as `notebooks/images/pattern_<name>.png`.
+Scan the active project's site folder (see `selected_scenarios_dir`) for non-empty scenario folders, generate a pattern plot
+for each one using `plot_pattern_scenario`, and save as `notebooks/images/<site>/pattern_<name>.png`.
 Folders with no files are skipped. Each plot is shown (`disp=true`) so
 `MakieControlPlots.savefig` captures the right figure, then the window is
 closed immediately via `MakieControlPlots.close`.
 """
 function create_pattern_plots()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
 
     # Collect non-empty scenario directories
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
     # Ensure notebooks directory exists
-    mkpath(NOTEBOOKS_DIR)
+    images_dir = notebook_images_dir()
+    mkpath(images_dir)
 
     @info "Generating pattern plots for $(length(dirs)) scenario(s)..."
 
@@ -74,7 +90,7 @@ function create_pattern_plots()
             # capture this scenario's figure rather than a stale one
             p = plot_pattern_scenario(scenario_dir; disp = true)
 
-            png_file = joinpath(NOTEBOOKS_DIR, "pattern_$(scenario_name).png")
+            png_file = joinpath(images_dir, "pattern_$(scenario_name).png")
             savefig(png_file)
             MakieControlPlots.close(p.fig)
 
@@ -90,21 +106,23 @@ end
 """
     create_time_series_plots()
 
-Scan `output/scenarios/` for non-empty scenario folders, generate a
+Scan the active project's site folder (see `selected_scenarios_dir`) for non-empty scenario folders, generate a
 time-series plot for each one using `plot_time_series_scenario`, and save as
-`notebooks/images/time_series_<name>.png`. Folders with no files are skipped. Each
+`notebooks/images/<site>/time_series_<name>.png`. Folders with no files are skipped. Each
 plot is shown (`disp=true`) so `MakieControlPlots.savefig` captures the right
 figure, then the window is closed immediately via `MakieControlPlots.close`.
 """
 function create_time_series_plots()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
 
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
-    mkpath(NOTEBOOKS_DIR)
+    images_dir = notebook_images_dir()
+    mkpath(images_dir)
 
     @info "Generating time-series plots for $(length(dirs)) scenario(s)..."
 
@@ -113,7 +131,7 @@ function create_time_series_plots()
         try
             p = plot_time_series_scenario(scenario_dir; disp = true)
 
-            png_file = joinpath(NOTEBOOKS_DIR, "time_series_$(scenario_name).png")
+            png_file = joinpath(images_dir, "time_series_$(scenario_name).png")
             savefig(png_file)
             MakieControlPlots.close(p.fig)
 
@@ -129,21 +147,23 @@ end
 """
     create_power_plots()
 
-Scan `output/scenarios/` for non-empty scenario folders, generate a power plot
+Scan the active project's site folder (see `selected_scenarios_dir`) for non-empty scenario folders, generate a power plot
 for each one using `plot_power_scenario`, and save as
-`notebooks/images/power_<name>.png`. Folders with no files are skipped. Each plot is
+`notebooks/images/<site>/power_<name>.png`. Folders with no files are skipped. Each plot is
 shown (`disp=true`) so `MakieControlPlots.savefig` captures the right figure,
 then the window is closed immediately via `MakieControlPlots.close`.
 """
 function create_power_plots()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
 
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
-    mkpath(NOTEBOOKS_DIR)
+    images_dir = notebook_images_dir()
+    mkpath(images_dir)
 
     @info "Generating power plots for $(length(dirs)) scenario(s)..."
 
@@ -152,7 +172,7 @@ function create_power_plots()
         try
             p = plot_power_scenario(scenario_dir; disp = true)
 
-            png_file = joinpath(NOTEBOOKS_DIR, "power_$(scenario_name).png")
+            png_file = joinpath(images_dir, "power_$(scenario_name).png")
             savefig(png_file)
             MakieControlPlots.close(p.fig)
 
@@ -168,21 +188,23 @@ end
 """
     create_aerodynamics_plots()
 
-Scan `output/scenarios/` for non-empty scenario folders, generate an
+Scan the active project's site folder (see `selected_scenarios_dir`) for non-empty scenario folders, generate an
 aerodynamics plot for each one using `plot_aerodynamics_scenario`, and save as
-`notebooks/images/aerodynamics_<name>.png`. Folders with no files are skipped. Each
+`notebooks/images/<site>/aerodynamics_<name>.png`. Folders with no files are skipped. Each
 plot is shown (`disp=true`) so `MakieControlPlots.savefig` captures the right
 figure, then the window is closed immediately via `MakieControlPlots.close`.
 """
 function create_aerodynamics_plots()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
 
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
-    mkpath(NOTEBOOKS_DIR)
+    images_dir = notebook_images_dir()
+    mkpath(images_dir)
 
     @info "Generating aerodynamics plots for $(length(dirs)) scenario(s)..."
 
@@ -191,7 +213,7 @@ function create_aerodynamics_plots()
         try
             p = plot_aerodynamics_scenario(scenario_dir; disp = true)
 
-            png_file = joinpath(NOTEBOOKS_DIR, "aerodynamics_$(scenario_name).png")
+            png_file = joinpath(images_dir, "aerodynamics_$(scenario_name).png")
             savefig(png_file)
             MakieControlPlots.close(p.fig)
 
@@ -207,22 +229,24 @@ end
 """
     create_path_webgl_plots()
 
-Scan `output/scenarios/` for non-empty scenario folders, generate the 3D
+Scan the active project's site folder (see `selected_scenarios_dir`) for non-empty scenario folders, generate the 3D
 flight-path figure for each one (`plot_path3d_scenario`), and save as a
-self-contained interactive `notebooks/images/path_webgl_<name>.html` via
+self-contained interactive `notebooks/images/<site>/path_webgl_<name>.html` via
 WGLMakie. Folders with no files are skipped. Switches the active Makie
 backend to WGLMakie for the duration and restores GLMakie afterwards, since
 the other `create_*_plots` functions render (and `savefig`) through it.
 """
 function create_path_webgl_plots()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
 
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
-    mkpath(NOTEBOOKS_DIR)
+    images_dir = notebook_images_dir()
+    mkpath(images_dir)
 
     @info "Generating 3D path (webgl) plots for $(length(dirs)) scenario(s)..."
 
@@ -232,7 +256,7 @@ function create_path_webgl_plots()
         try
             fig = plot_path3d_scenario(scenario_dir; static_export = true)
 
-            html_file = joinpath(NOTEBOOKS_DIR, "path_webgl_$(scenario_name).html")
+            html_file = joinpath(images_dir, "path_webgl_$(scenario_name).html")
             save_path3d_html(html_file, fig)
 
             @info "Saved 3D path (webgl) plot" html_file

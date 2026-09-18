@@ -11,10 +11,12 @@ entry, so it needs the notebook already open and served — start it first (Kaim
 environment variables.
 
 The export inlines every image, but not the interactive 3D-path pages
-(`notebooks/images/path_webgl_*.html`): the notebook's `path3d_plot` cell loads them into an
-iframe by bare file name, so they are copied next to the export here, and `publish.jl` copies
-them next to `index.html` (their list is left in `PATH3D_FILES` for it). That keeps the page
-itself at ~8 MB instead of ~50, and only the selected wind speed's WebGL page ever loads.
+(`notebooks/images/<site>/path_webgl_*.html`): the notebook's `path3d_plot` cell loads them
+into an iframe by bare file name, so they are copied next to the export here, and `publish.jl`
+copies them next to `index.html` (their list is left in `PATH3D_FILES` for it). That keeps the
+page itself at ~8 MB instead of ~50, and only the selected wind speed's WebGL page ever loads.
+`SITE` names the site folder the notebook's images live in (`results.jl` shows the Maasvlakte
+runs, so it defaults to `maasvlakte`; override with `SLATE_SITE`).
 """
 
 using Downloads
@@ -30,6 +32,8 @@ isdefined(Main, :NOTEBOOK) && NOTEBOOK !== nothing ||
     (NOTEBOOK = get(ENV, "SLATE_NOTEBOOK", "results"))
 isdefined(Main, :HUB_URL) && HUB_URL !== nothing ||
     (HUB_URL = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"))
+isdefined(Main, :SITE) && SITE !== nothing ||
+    (SITE = get(ENV, "SLATE_SITE", "maasvlakte"))
 isdefined(Main, :EXPORT_OUTPUT_PATH) && EXPORT_OUTPUT_PATH !== nothing ||
     (EXPORT_OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "$(NOTEBOOK)_export.html"))
 
@@ -43,11 +47,12 @@ catch e
 end
 println("Exported to $EXPORT_OUTPUT_PATH ($(filesize(EXPORT_OUTPUT_PATH)) bytes)")
 
-PATH3D_FILES = filter(readdir(joinpath(@__DIR__, "images"); join = true)) do f
+PATH3D_DIR = joinpath(@__DIR__, "images", SITE)
+PATH3D_FILES = isdir(PATH3D_DIR) ? filter(readdir(PATH3D_DIR; join = true)) do f
     startswith(basename(f), "path_webgl_") && endswith(f, ".html")
-end
+end : String[]
 isempty(PATH3D_FILES) &&
-    @warn "No notebooks/images/path_webgl_*.html found — run examples/create_plots.jl first, or the 3D-path cell stays empty."
+    @warn "No notebooks/images/$SITE/path_webgl_*.html found — run examples/create_plots.jl with the $SITE project selected first, or the 3D-path cell stays empty."
 for f in PATH3D_FILES
     cp(f, joinpath(dirname(EXPORT_OUTPUT_PATH), basename(f)); force = true)
 end

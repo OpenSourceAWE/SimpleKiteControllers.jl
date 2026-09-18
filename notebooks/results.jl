@@ -64,7 +64,7 @@ matched to measurements at a near-shore site in Maasvlakte, NL. A ground-station
 #%% code id=overview_table hidecode
 using DataFrames
 
-overview_lines = split(@asset("notebooks/overview.md"), '\n')
+overview_lines = split(@asset("notebooks/overview_maasvlakte.md"), '\n')
 header = strip.(split(strip(overview_lines[1], '|'), '|'))
 rows = [strip.(split(strip(l, '|'), '|')) for l in overview_lines[3:end] if !isempty(strip(l))]
 overview_df = DataFrame([header[i] => [something(tryparse(Float64, r[i]), r[i]) for r in rows] for i in eachindex(header)])
@@ -124,7 +124,7 @@ The average mechanical power during reel-out, the force, and the speed are shown
 
 #%% md id=powercurve_plot
 @md"""
-![power curve](/n/results/asset/notebooks/images/powercurve.png)
+![power curve](/n/results/asset/notebooks/images/maasvlakte/powercurve.png)
 """
 
 #%% md id=wind_speed_hint
@@ -138,15 +138,15 @@ The optimal trajectory of the kite, the shape of the figure of eight, depends on
 #%% web id=pattern_plot controls=wind_speed
 @web(html"""
 <div id="pattern">
-  <img data-v="3" src="/n/results/asset/notebooks/images/pattern_v03.png" alt="flight pattern, 3 m/s">
-  <img data-v="4" src="/n/results/asset/notebooks/images/pattern_v04.png" alt="flight pattern, 4 m/s">
-  <img data-v="5" src="/n/results/asset/notebooks/images/pattern_v05.png" alt="flight pattern, 5 m/s">
-  <img data-v="6" src="/n/results/asset/notebooks/images/pattern_v06.png" alt="flight pattern, 6 m/s">
-  <img data-v="7" src="/n/results/asset/notebooks/images/pattern_v07.png" alt="flight pattern, 7 m/s">
-  <img data-v="8" src="/n/results/asset/notebooks/images/pattern_v08.png" alt="flight pattern, 8 m/s">
-  <img data-v="9" src="/n/results/asset/notebooks/images/pattern_v09.png" alt="flight pattern, 9 m/s">
-  <img data-v="10" src="/n/results/asset/notebooks/images/pattern_v10.png" alt="flight pattern, 10 m/s">
-  <img data-v="11" src="/n/results/asset/notebooks/images/pattern_v11.png" alt="flight pattern, 11 m/s">
+  <img data-v="3" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v03.png" alt="flight pattern, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v04.png" alt="flight pattern, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v05.png" alt="flight pattern, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v06.png" alt="flight pattern, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v07.png" alt="flight pattern, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v08.png" alt="flight pattern, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v09.png" alt="flight pattern, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v10.png" alt="flight pattern, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/maasvlakte/pattern_v11.png" alt="flight pattern, 11 m/s">
 </div>
 """,
 css"""
@@ -205,7 +205,7 @@ css"""
 js"""
 // Live Slate serves the notebook tree under /n/<id>/asset/; the export sits in a folder the
 // files are copied into (SimulationResults/docs/), so there the bare file name resolves.
-const BASE = (window.Slate && Slate.isLive()) ? "/n/results/asset/notebooks/images/" : "";
+const BASE = (window.Slate && Slate.isLive()) ? "/n/results/asset/notebooks/images/maasvlakte/" : "";
 // Scenario folder per slider value: no 3 m/s run exists, the lowest is 3.5.
 const RUN = {3: "3.5", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "11"};
 const tag = v => "v" + String(v).padStart(v.includes(".") ? 4 : 2, "0");
@@ -249,15 +249,15 @@ state machine over the whole run. The first subplot, `d ', shows the distance be
 #%% web id=time_series_plot controls=wind_speed
 @web(html"""
 <div id="time_series">
-  <img data-v="3" src="/n/results/asset/notebooks/images/time_series_v03.png" alt="time series, 3 m/s">
-  <img data-v="4" src="/n/results/asset/notebooks/images/time_series_v04.png" alt="time series, 4 m/s">
-  <img data-v="5" src="/n/results/asset/notebooks/images/time_series_v05.png" alt="time series, 5 m/s">
-  <img data-v="6" src="/n/results/asset/notebooks/images/time_series_v06.png" alt="time series, 6 m/s">
-  <img data-v="7" src="/n/results/asset/notebooks/images/time_series_v07.png" alt="time series, 7 m/s">
-  <img data-v="8" src="/n/results/asset/notebooks/images/time_series_v08.png" alt="time series, 8 m/s">
-  <img data-v="9" src="/n/results/asset/notebooks/images/time_series_v09.png" alt="time series, 9 m/s">
-  <img data-v="10" src="/n/results/asset/notebooks/images/time_series_v10.png" alt="time series, 10 m/s">
-  <img data-v="11" src="/n/results/asset/notebooks/images/time_series_v11.png" alt="time series, 11 m/s">
+  <img data-v="3" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v03.png" alt="time series, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v04.png" alt="time series, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v05.png" alt="time series, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v06.png" alt="time series, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v07.png" alt="time series, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v08.png" alt="time series, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v09.png" alt="time series, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v10.png" alt="time series, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/maasvlakte/time_series_v11.png" alt="time series, 11 m/s">
 </div>
 """,
 css"""
@@ -298,15 +298,15 @@ mechanical power over the whole run, and the cumulative mechanical energy.
 #%% web id=power_plot controls=wind_speed
 @web(html"""
 <div id="power">
-  <img data-v="3" src="/n/results/asset/notebooks/images/power_v03.png" alt="power, 3 m/s">
-  <img data-v="4" src="/n/results/asset/notebooks/images/power_v04.png" alt="power, 4 m/s">
-  <img data-v="5" src="/n/results/asset/notebooks/images/power_v05.png" alt="power, 5 m/s">
-  <img data-v="6" src="/n/results/asset/notebooks/images/power_v06.png" alt="power, 6 m/s">
-  <img data-v="7" src="/n/results/asset/notebooks/images/power_v07.png" alt="power, 7 m/s">
-  <img data-v="8" src="/n/results/asset/notebooks/images/power_v08.png" alt="power, 8 m/s">
-  <img data-v="9" src="/n/results/asset/notebooks/images/power_v09.png" alt="power, 9 m/s">
-  <img data-v="10" src="/n/results/asset/notebooks/images/power_v10.png" alt="power, 10 m/s">
-  <img data-v="11" src="/n/results/asset/notebooks/images/power_v11.png" alt="power, 11 m/s">
+  <img data-v="3" src="/n/results/asset/notebooks/images/maasvlakte/power_v03.png" alt="power, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/images/maasvlakte/power_v04.png" alt="power, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/images/maasvlakte/power_v05.png" alt="power, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/images/maasvlakte/power_v06.png" alt="power, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/images/maasvlakte/power_v07.png" alt="power, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/images/maasvlakte/power_v08.png" alt="power, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/images/maasvlakte/power_v09.png" alt="power, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/images/maasvlakte/power_v10.png" alt="power, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/maasvlakte/power_v11.png" alt="power, 11 m/s">
 </div>
 """,
 css"""
@@ -348,15 +348,15 @@ kite speed over the whole run.
 #%% web id=aerodynamics_plot controls=wind_speed
 @web(html"""
 <div id="aerodynamics">
-  <img data-v="3" src="/n/results/asset/notebooks/images/aerodynamics_v03.png" alt="aerodynamics, 3 m/s">
-  <img data-v="4" src="/n/results/asset/notebooks/images/aerodynamics_v04.png" alt="aerodynamics, 4 m/s">
-  <img data-v="5" src="/n/results/asset/notebooks/images/aerodynamics_v05.png" alt="aerodynamics, 5 m/s">
-  <img data-v="6" src="/n/results/asset/notebooks/images/aerodynamics_v06.png" alt="aerodynamics, 6 m/s">
-  <img data-v="7" src="/n/results/asset/notebooks/images/aerodynamics_v07.png" alt="aerodynamics, 7 m/s">
-  <img data-v="8" src="/n/results/asset/notebooks/images/aerodynamics_v08.png" alt="aerodynamics, 8 m/s">
-  <img data-v="9" src="/n/results/asset/notebooks/images/aerodynamics_v09.png" alt="aerodynamics, 9 m/s">
-  <img data-v="10" src="/n/results/asset/notebooks/images/aerodynamics_v10.png" alt="aerodynamics, 10 m/s">
-  <img data-v="11" src="/n/results/asset/notebooks/images/aerodynamics_v11.png" alt="aerodynamics, 11 m/s">
+  <img data-v="3" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v03.png" alt="aerodynamics, 3 m/s">
+  <img data-v="4" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v04.png" alt="aerodynamics, 4 m/s">
+  <img data-v="5" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v05.png" alt="aerodynamics, 5 m/s">
+  <img data-v="6" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v06.png" alt="aerodynamics, 6 m/s">
+  <img data-v="7" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v07.png" alt="aerodynamics, 7 m/s">
+  <img data-v="8" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v08.png" alt="aerodynamics, 8 m/s">
+  <img data-v="9" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v09.png" alt="aerodynamics, 9 m/s">
+  <img data-v="10" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v10.png" alt="aerodynamics, 10 m/s">
+  <img data-v="11" src="/n/results/asset/notebooks/images/maasvlakte/aerodynamics_v11.png" alt="aerodynamics, 11 m/s">
 </div>
 """,
 css"""

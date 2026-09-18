@@ -3,8 +3,10 @@
 
 """
 Plot mean, max and min reel-out power, tether force and reel-out speed against
-wind speed across every archived scenario in `output/scenarios/` (see
-`move_scenario.jl`) — one point per `vNN` folder, read from that scenario's
+wind speed across every archived scenario in the active project's site folder
+under `output/scenarios/` (`cabauw/` or `maasvlakte/`, see
+`selected_scenarios_dir` in `gui_state.jl` and `move_scenario.jl`) — one point
+per `vNN` folder, read from that scenario's
 own run-summary YAML (`summary.av_power_ro`/`max_power_ro`/`min_power_ro`,
 `summary.av_force_ro`/`max_force_ro`/`min_force_ro`,
 `summary.v_ro_av`/`v_ro_max`/`v_ro_min`, all over the figure-eight flying
@@ -25,8 +27,9 @@ end
 
 using YAML, MakieControlPlots
 using SimpleKiteControllers: skc_data_path
+# `selected_scenarios_dir`: the site folder of the active project.
+include(joinpath(@__DIR__, "gui_state.jl"))
 
-const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "output", "scenarios"))
 const MAX_TETHER_FORCE_N =
     YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
 
@@ -56,7 +59,8 @@ end
 """
     plot_powercurve()
 
-Scan `output/scenarios/` for non-empty scenario folders, read each one's mean,
+Scan the active project's site folder (see `selected_scenarios_dir`) for
+non-empty scenario folders, read each one's mean,
 max and min reel-out power, tether force and reel-out speed (all over the
 figure-eight flying phase) and wind speed, and plot them stacked against wind
 speed [m/s]: power [kW], force [kN], speed [m/s] — mean, max and min together
@@ -64,11 +68,12 @@ in each row, max dashed grey and min dash-dotted grey throughout, plus a
 dotted black `MAX_TETHER_FORCE_N` reference line in the force row.
 """
 function plot_powercurve()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    scenarios_dir = selected_scenarios_dir()
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && !isempty(readdir(dir))
     end
-    isempty(dirs) && error("No non-empty scenario folders found in $SCENARIOS_DIR")
+    isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 
     rows = sort(scenario_metrics.(dirs))
     v_wind = getindex.(rows, 1)
@@ -96,10 +101,10 @@ function plot_powercurve()
           title = "V3 reel-out power curve", scatter = true, disp = true,
           fig = "powercurve")
     
-    # Save the plot to PNG file in notebooks/images folder
-    notebooks_dir = normpath(joinpath(@__DIR__, "..", "notebooks", "images"))
-    ispath(notebooks_dir) || mkpath(notebooks_dir)
-    png_file = joinpath(notebooks_dir, "powercurve.png")
+    # Save the plot to the active site's folder under notebooks/images
+    images_dir = normpath(joinpath(@__DIR__, "..", "notebooks", "images", scenario_site()))
+    mkpath(images_dir)
+    png_file = joinpath(images_dir, "powercurve.png")
     savefig(png_file)
 end
 

@@ -2,9 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Write `SimulationResults/scenarios/overview.md`, a table with one row per
-`vNN` scenario folder (`v03`…`v10`, excluding `v08_2` — same wind speed as
-`v08`), read from each folder's own `reelout_150m_opt.yaml` `summary:` block.
+Write `SimulationResults/scenarios/<site>/overview.md`, `site` the active
+project's (`cabauw` or `maasvlakte`, see `scenario_site` in `gui_state.jl`,
+mirroring `output/scenarios/<site>/`): a table with one row per `vNN`
+scenario folder (`v03`…`v10`, excluding `v08_2` — same wind speed as `v08`),
+read from each folder's own run-summary YAML `summary:` block (the one named
+by the folder's `.arrow` log, `reelout_150m_opt.yaml` at Maasvlakte,
+`reelout_cabauw_opt.yaml` at Cabauw).
 
 Columns: `date`, `time`, `v_wind`, `power_ratio`, `total_time`,
 `rt_factor`, `opt_requests`, `opts_installed`, `av_power`, `min_power`,
@@ -47,9 +51,10 @@ using PrettyTables
 using MakieControlPlots
 using Base64
 using SimpleKiteControllers: skc_data_path
+# `scenario_site`: the site folder of the active project.
+include(joinpath(@__DIR__, "gui_state.jl"))
 
-const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
-const SUMMARY_FILE = "reelout_150m_opt.yaml"
+const SIMRESULTS_SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
 const SKIPPED_FOLDERS = ("v08_2",)
 const MAX_TETHER_FORCE_N =
     YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
@@ -70,20 +75,27 @@ const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind
 """
     scenario_summary(dir) -> Union{Dict, Nothing}
 
-The `summary:` block of `dir`'s `reelout_150m_opt.yaml`, or `nothing` (with a
-warning) if the file or the block is missing. If the block has a
+The `summary:` block of `dir`'s run-summary YAML (the one named by its `.arrow`
+log, as `scenario_name` in `move_scenario.jl` finds it), or `nothing` (with a
+warning) if the log, the YAML or the block is missing. If the block has a
 `power_ratio_free_speed` entry, it replaces `power_ratio` under that same
 key, so the displayed `power_ratio` column shows it without a column rename.
 """
 function scenario_summary(dir::AbstractString)
-    yaml_file = joinpath(dir, SUMMARY_FILE)
+    arrow_files = filter(f -> endswith(f, ".arrow"), readdir(dir))
+    if length(arrow_files) != 1
+        @warn "Skipping $(basename(dir)): expected one .arrow log, found $(length(arrow_files))"
+        return nothing
+    end
+    summary_file = replace(only(arrow_files), ".arrow" => ".yaml")
+    yaml_file = joinpath(dir, summary_file)
     if !isfile(yaml_file)
-        @warn "Skipping $(basename(dir)): $SUMMARY_FILE not found"
+        @warn "Skipping $(basename(dir)): $summary_file not found"
         return nothing
     end
     y = YAML.load_file(yaml_file)
     if !haskey(y, "summary")
-        @warn "Skipping $(basename(dir)): no summary: block in $SUMMARY_FILE"
+        @warn "Skipping $(basename(dir)): no summary: block in $summary_file"
         return nothing
     end
     summary = y["summary"]
@@ -185,32 +197,36 @@ end
 """
     create_overview()
 
-Scan `SimulationResults/scenarios/` and write `overview.md` there, one row
-per scenario ordered by wind speed, mirror `overview.md` into `notebooks/`
-and the power curve PNG into `notebooks/images/` for `notebooks/results.jl`
-to embed, then display the same table as a pop-up in the default browser.
+Scan `SimulationResults/scenarios/<site>/` for the active project's site and
+write `overview.md` there, one row per scenario ordered by wind speed, mirror
+it to `notebooks/overview_<site>.md` and the power curve PNG into
+`notebooks/images/<site>/` for the site's notebook (`notebooks/results.jl`
+for Maasvlakte) to embed, then display the same table as a pop-up in the
+default browser.
 """
 function create_overview()
-    isdir(SCENARIOS_DIR) || error("$SCENARIOS_DIR does not exist.")
-    dirs = filter(readdir(SCENARIOS_DIR; join = true)) do dir
+    site = scenario_site()
+    scenarios_dir = joinpath(SIMRESULTS_SCENARIOS_DIR, site)
+    isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
+    dirs = filter(readdir(scenarios_dir; join = true)) do dir
         isdir(dir) && basename(dir) ∉ SKIPPED_FOLDERS
     end
     summaries = filter(!isnothing, scenario_summary.(dirs))
-    isempty(summaries) && error("No usable $SUMMARY_FILE summary: blocks found in $SCENARIOS_DIR")
+    isempty(summaries) && error("No usable summary: blocks found in $scenarios_dir")
 
     rows = sort(summaries; by = row -> row["wind_speed_gnd"])
-    md_file = joinpath(SCENARIOS_DIR, "overview.md")
+    md_file = joinpath(scenarios_dir, "overview.md")
     write_overview_md(rows, md_file)
     @info "Wrote overview" md_file rows=length(rows)
 
     notebooks_dir = joinpath(@__DIR__, "..", "notebooks")
     mkpath(notebooks_dir)
-    notebooks_file = joinpath(notebooks_dir, "overview.md")
+    notebooks_file = joinpath(notebooks_dir, "overview_$site.md")
     write_overview_md(rows, notebooks_file)
     @info "Wrote overview" notebooks_file rows=length(rows)
 
     png_file, pdf_file = powercurve_images(rows)
-    notebooks_images_dir = joinpath(notebooks_dir, "images")
+    notebooks_images_dir = joinpath(notebooks_dir, "images", site)
     mkpath(notebooks_images_dir)
     notebooks_png_file = joinpath(notebooks_images_dir, "powercurve.png")
     cp(png_file, notebooks_png_file; force = true)
