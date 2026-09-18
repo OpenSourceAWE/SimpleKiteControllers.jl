@@ -363,8 +363,15 @@ traj_opt:
     # since predicted power rises with length and its startup reference is the run's
     # minimum. Skipped until one re-optimization has installed a path: the first
     # re-anchoring may legitimately predict far less than the startup solve (200 ->
-    # 116 W at 3 m/s), while every later step measured stays above 0.95.
-    min_power_frac_prev: 0.7 # fraction of the previous install's power; 0 is off [-]
+    # 116 W at 3 m/s), while every later step measured stays above 0.93 (worst is
+    # 0.93 at 11 m/s; the recorded 3.5-10 m/s runs never go below 0.98). Measured
+    # 2026-09-18 at 6 m/s: the third re-opt at 270 m returned 5338 W against the
+    # 7391 W it replaced — a ratio of 0.72 that a 0.7 floor let through. The reply
+    # was the tall-pattern basin (elevation amplitude binding at the 10 deg
+    # ceiling, tension 1789 N against 2830 N, 532 IPOPT iterations to "acceptable"
+    # only), flown for 48 % of the reel-out: 6132 W measured against 7281 W for
+    # the recorded v06 run, and max cross-track 8.9 deg failed the 8 deg criterion.
+    min_power_frac_prev: 0.85 # fraction of the previous install's power; 0 is off [-]
     # Below this mean wind BOTH gates above are bypassed for a NEGATIVE prediction.
     # The optimizer's winch model is out of its domain there — its softminus floor
     # puts the representable force at ~883 N against a 585 N mean at 3 m/s — so a
