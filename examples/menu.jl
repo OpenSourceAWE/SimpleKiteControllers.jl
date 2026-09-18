@@ -55,9 +55,9 @@ const EXAMPLES = [
     "optimize_fig8.jl        - sweep the pattern shape in parallel processes (HOURS!)" => "optimize_fig8.jl",
     "optimize_path.jl        - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl   - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
-    "create_overview.jl      - write SimulationResults/scenarios/<site>/overview.md across wind speeds" => "create_overview.jl",
-    "create_plots.jl         - batch-generate pattern/time-series/power/aerodynamics PNGs for notebooks/images/<site>" => "create_plots.jl",
-    "publish.jl              - export the results notebook and push it to the SimulationResults site" => "../notebooks/publish.jl",
+    "create_overview.jl      - write scenario overview.md across wind speeds" => "create_overview.jl",
+    "create_plots.jl         - batch-generate plots for notebooks/images/<site>" => "create_plots.jl",
+    "publish.jl              - export and push the results notebook" => "../notebooks/publish.jl",
     "plot_powercurve.jl      - plot mean reel-out power vs wind speed across archived scenarios" => "plot_powercurve.jl",
 ]
 
