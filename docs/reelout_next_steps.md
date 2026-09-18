@@ -63,7 +63,7 @@ at the end.
 1. **Why does `el_offset_lead > 0` make the kite circle in phase 5?** — ANSWERED,
    and the premise was wrong on both halves. The lead was **inert**: a 2.5 s lead
    latched the lift 2.5 s early (t = 122.2 s, 6.1 m of reel-out left, recorded as
-   `el_bias.lift_t_s`) and produced a run BIT-IDENTICAL to lead 0 in every logged
+   `el_bias.lift_t`) and produced a run BIT-IDENTICAL to lead 0 in every logged
    channel, because the lift could only ever reach the kite at a re-optimization
    install and the same install carried it either way. That is the in-air gate bug
    (item 5). With the gate fixed the lead is no longer inert but buys nothing:

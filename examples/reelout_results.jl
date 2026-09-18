@@ -59,6 +59,23 @@ end
 
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
+
+"""
+    lap_durations(sl) -> (; t_start::Vector{Float64}, dt::Vector{Float64})
+
+Sim time each FULL figure of eight took, from the logged `fig_8` lap counter:
+lap `k` runs from the first sample at which `fig_8 == k` to the first at which
+`fig_8 == k + 1`, so the lap still in progress when the run ends is left out.
+`fig_8` counts full traversals of the reference path in the air (phases 4 and
+5 alike), so a lap here is one whole pattern regardless of the path's shape.
+"""
+function lap_durations(sl)
+    f8 = Int.(sl.fig_8)
+    t = Float64.(sl.time)
+    starts = [t[i] for i in eachindex(f8) if f8[i] >= 1 && (i == 1 || f8[i] > f8[i - 1])]
+    (; t_start = starts[1:max(0, end - 1)], dt = diff(starts))
+end
+laps_flown = lap_durations(sl)
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 # require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
 # (which never goes past 4) — checks reel-out actually finished within the run.
@@ -170,9 +187,21 @@ summary["simulation"] = OrderedDict{String, Any}(
     "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
 if fig8m !== nothing
     summary["fig8_metrics"] = OrderedDict{String, Any}(
-        "settled_from_s" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
-        "settle_time_s" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
+        "settled_from" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
+        "settle_time" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
         "laps" => (fig8m.laps, "figure-eight laps completed"),
+        "lap_time" => isempty(laps_flown.dt) ?
+            ("none", "no full figure of eight was completed") :
+            OrderedDict(
+                "fastest" => (round(minimum(laps_flown.dt); digits = 1),
+                    @sprintf("shortest time for one full figure of eight — lap %d, \
+                              starting at t = %.1f s [s]",
+                             argmin(laps_flown.dt), laps_flown.t_start[argmin(laps_flown.dt)])),
+                "mean" => (round(mean(laps_flown.dt); digits = 1),
+                    "mean time per full figure of eight, over $(length(laps_flown.dt)) laps [s]"),
+                "slowest" => (round(maximum(laps_flown.dt); digits = 1),
+                    @sprintf("longest time for one full figure of eight — lap %d [s]",
+                             argmax(laps_flown.dt)))),
         "cross_track_deg" => OrderedDict(
             "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error [deg]"),
             "mean" => (round(fig8m.mean_d; digits = 2), "mean cross-track error [deg]"),
@@ -235,7 +264,7 @@ else
             duration, mean(va), minimum(va), maximum(va),
             fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
     reelout_summary["v_app_phase4"] = OrderedDict(
-        "duration_s" => (round(duration; digits = 1), "phase-4 window length [s]"),
+        "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
         "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
         "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
         "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
@@ -291,7 +320,7 @@ else
     reelout_summary["power"] = OrderedDict(
         "cf_power_ro" => (round(rp.cf_power_ro; digits = 2),
             "crest factor: peak / mean reel-out power over the reeling window"),
-        "duration_s" => (round(rp.duration; digits = 1), "reeling window length [s]"),
+        "duration" => (round(rp.duration; digits = 1), "reeling window length [s]"),
         "n_samples" => (rp.n, "sample count in the reeling window"),
         "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
         "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
@@ -331,10 +360,10 @@ else
             rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
     reelout_summary["ringing"] = OrderedDict(
         "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
-        "period_s" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
+        "period" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
         "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
         "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
-        "duration_s" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
+        "duration" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
         "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
         "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
 end
@@ -583,10 +612,21 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "requests" => (reopt_n, "solves that completed, accepted or rejected"),
         "blocking" => (tos.reopt_blocking,
             "simulation held while a solve ran"),
-        "blocked_s" => (round(reopt_blocked_s; digits = 1),
+        "blocked" => (round(reopt_blocked_s; digits = 1),
             "wall time the simulation was frozen waiting for replies [s]"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
+        "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()
+            for c in reopt_cycles
+                k = @sprintf("t_%05.1f_s", c.t)
+                n = get(seen, k, 0) + 1
+                seen[k] = n
+                cw[n == 1 ? k : "$(k)_$n"] = (round(c.wall_s; digits = 1),
+                    @sprintf("wall time from the first request to the verdict (%s), \
+                              every retry included, at L = %.0f m [s]", c.status, c.l))
+            end
+            cw
+        end,
         "blend_retries" => (@isdefined(blend_retries_total) ? blend_retries_total : 0,
             "cold-restart attempts spent on a rejected reply — a folded blend, a \
              collapsed prediction, or a clearance/elevation shortfall re-asked at \
@@ -622,7 +662,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "the learnt correction per band, crossing first [deg]"),
         "lift_deg" => (fcs.el_offset_final,
             "el_offset_final, the fixed lift added on top of the learnt bias [deg]"),
-        "lift_lead_s" => (fcs.el_offset_lead,
+        "lift_lead" => (fcs.el_offset_lead,
             "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
         "wing_deg" => (fcs.el_offset_wing,
             "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
@@ -634,7 +674,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "wing_depth" => (fcs.el_offset_wing_depth,
             "elevation mode: depth below the path's elevation centre where the lift \
              starts, in half-spans; full at its lowest point [-]"),
-        "lift_t_s" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
+        "lift_t" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
             "when the lift actually latched [s]"),
         "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :
                                round(lift_remaining; digits = 1),
@@ -763,6 +803,23 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                          rc.wcs.softminus_beta, rc.wcs.softplus_beta, rc.wcs.force_limit_tau) :
                 "bare kv*sqrt(force) with the two force controllers switching in at the limits")))
 
+# The longest a new figure of eight took to compute, retries included: the
+# startup solve (which already contains its own retry seed) against every
+# re-optimization cycle from its first request to the verdict.
+opt_cycle_max_s, opt_cycle_max_where = if isempty(reopt_cycles)
+    opt_startup_solve_s, "the startup solve, the only solve of the run"
+else
+    c = reopt_cycles[argmax(getfield.(reopt_cycles, :wall_s))]
+    c.wall_s > opt_startup_solve_s ?
+        (c.wall_s, @sprintf("the re-optimization at t = %.1f s (%s, L = %.0f m); \
+                             the startup solve took %.1f s",
+                            c.t, c.status, c.l, opt_startup_solve_s)) :
+        (opt_startup_solve_s,
+         @sprintf("the startup solve; the slowest re-optimization took %.1f s", c.wall_s))
+end
+opt_cycle_max_comment = "longest wall time to compute a new figure of eight, retries \
+                         included: $opt_cycle_max_where [s]"
+
 # Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
 if t_sim > 0
     steps = round(Int, t_sim / s.dt)
@@ -785,22 +842,23 @@ if t_sim > 0
              waiting for the optimizer (%.0f s at startup).\n",
             t_total, t_opt, opt_startup_solve_s)
     summary["performance"] = OrderedDict(
-        "sim_time_s" => (round(t_sim; digits = 1), "simulated time [s]"),
-        "wall_time_s" => (round(t_wall; digits = 1), "wall-clock time [s]"),
-        "total_wall_time_s" => (round(t_total; digits = 1),
+        "sim_time" => (round(t_sim; digits = 1), "simulated time [s]"),
+        "wall_time" => (round(t_wall; digits = 1), "wall-clock time [s]"),
+        "total_wall_time" => (round(t_total; digits = 1),
             "the whole script: package loading, init, settling, the startup solve \
              and the run, up to this summary — the archive copy and any plots \
              follow it [s]"),
-        "optimization_time_s" => (round(t_opt; digits = 1),
+        "optimization_time" => (round(t_opt; digits = 1),
             "wall time waiting for the optimizer: the startup solve \
              ($(round(opt_startup_solve_s; digits = 1)) s) plus every blocking \
-             re-optimization (traj_opt.reopt.blocked_s) [s]"),
+             re-optimization (traj_opt.reopt.blocked) [s]"),
+        "max_optimization_time" => (round(opt_cycle_max_s; digits = 1), opt_cycle_max_comment),
         "realtime_factor" => (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
             "sim_time / wall_time, excluding time frozen for re-optimization"),
         "ms_per_step" => (round(1000 * (t_wall - reopt_blocked_s) / steps; digits = 1),
             "wall time per step, excluding time frozen for re-optimization [ms]"),
         "steps" => (steps, "step count"),
-        "dt_s" => (s.dt, "simulation timestep [s]"),
+        "dt" => (s.dt, "simulation timestep [s]"),
         "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))
 else
     @warn "No simulated time elapsed — no performance figure."
@@ -832,13 +890,17 @@ summary_block["success_criteria"] = (fig8m === nothing ? "not scored — no sett
 fig8m === nothing || (summary_block["cross_track_rms_deg"] = (round(fig8m.rms_d; digits = 2),
     "RMS cross-track error, settled window [deg]"))
 if t_sim > 0
-    summary_block["total_wall_time_s"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
+    summary_block["total_wall_time"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
     summary_block["realtime_factor"] = (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
         "sim_time / wall_time, excluding time frozen for re-optimization")
 end
 summary_block["optimization_requests"] = (reopt_n, "solves that completed, accepted or rejected")
 summary_block["optimizations_installed"] = (count(e -> e.status == "installed", reopt_events),
     "new paths actually flown")
+isempty(laps_flown.dt) || (summary_block["fastest_fig8"] = (round(minimum(laps_flown.dt); digits = 1),
+    "shortest time for flying one full figure of eight [s]"))
+summary_block["max_optimization_time"] = (round(opt_cycle_max_s; digits = 1),
+    "longest wall time to compute a new figure of eight, retries included [s]")
 if have_phase4
     summary_block["av_power_ro"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
     summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four [W]")

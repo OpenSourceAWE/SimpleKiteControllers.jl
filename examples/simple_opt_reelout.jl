@@ -57,7 +57,7 @@ optimizer's own iterate in its own variables and never leaves the server.
 `reopt_blocking` decides what the loop does during the 7-13 s solve. `true`
 (default) holds the loop at the request until `/status` leaves `"solving"`, so the
 reply matches the length it was asked for; the frozen wall time is reported as
-`traj_opt.reopt.blocked_s` and excluded from `performance.realtime_factor`.
+`traj_opt.reopt.blocked` and excluded from `performance.realtime_factor`.
 `false` flies on instead, which keeps the run realtime-ish but anchors the reply to
 a radius the run has already left — at 2.4 m/s of reel-out, a 10 s solve is ~24 m
 of lag.
@@ -226,7 +226,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 # Wall clock of the WHOLE script, package loading included, for
-# `performance.total_wall_time_s`; `tic`/`toc` below time the phases inside it.
+# `performance.total_wall_time`; `tic`/`toc` below time the phases inside it.
 t_script_start = time()
 # Named here rather than read off `@__FILE__` where the summary is built: that
 # code lives in `reelout_results.jl` now and would report its own name.
@@ -1277,6 +1277,12 @@ reopt_t_request = NaN       # [s] when the pending request went out
 reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
 reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
 reopt_events = NamedTuple[] # one row per solve, for the run summary
+# Wall clock at which the current cycle's FIRST request went out, and one row per
+# cycle with the wall time from there to the verdict — every seed retry, the
+# blend-fold retries and the gating included, so it is what a new figure of eight
+# costs the run, where `reopt_last_solve_s` is only the last blocking wait.
+reopt_t_wall_request = NaN  # [s] time() when the cycle's first request went out
+reopt_cycles = NamedTuple[] # (; t, l, status, wall_s) per completed cycle
 blend_retries_total = 0     # cold-restart attempts spent on a rejected reply
 # [deg] how far the last reply that was gated out for clearance or elevation fell
 # below the floor it was asked for. Carried across cycles, not reset per request:
@@ -1647,6 +1653,9 @@ try
             if !reopt_pending && isnothing(blend_to) && reopt_n < tos.max_reopt &&
                fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
                 try
+                    # Clocked from here, so a request that fails while being BUILT
+                    # (radius, floor, seeds) still has a start to measure from.
+                    global reopt_t_wall_request = time()
                     # A re-optimization is one of two things, chosen by
                     # `use_step` in data/traj_opt.yaml.
                     #
@@ -1808,6 +1817,8 @@ try
                     global reopt_n += 1
                     push!(reopt_events, (; t, l = l_now, status = "request failed",
                                          detail = first(sprint(showerror, exc), 120)))
+                    push!(reopt_cycles, (; t, l = l_now, status = "request failed",
+                                         wall_s = time() - reopt_t_wall_request))
                     @warn "Re-optimization request failed; flying on with the \
                            current path." exception = exc
                 end
@@ -2300,6 +2311,11 @@ try
                     end
                         end
                     push!(reopt_events, event)
+                    # Non-blocking: the wall clock ran on with the simulation between
+                    # the request and this poll, so the figure is an upper bound on
+                    # the solve, by at most one `reopt_poll_interval` of sim time.
+                    push!(reopt_cycles, (; t, l = l_now, status = event.status,
+                                         wall_s = time() - reopt_t_wall_request))
                     # Blocking collects on the SAME step as the request, so the
                     # simulated gap is 0 by construction; the wall time is the figure
                     # that means something there.

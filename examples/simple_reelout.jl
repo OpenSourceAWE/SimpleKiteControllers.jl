@@ -665,8 +665,8 @@ summary["simulation"] = OrderedDict{String, Any}(
     "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
 if fig8m !== nothing
     summary["fig8_metrics"] = OrderedDict{String, Any}(
-        "settled_from_s" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
-        "settle_time_s" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
+        "settled_from" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
+        "settle_time" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
         "laps" => (fig8m.laps, "figure-eight laps completed"),
         "cross_track_deg" => OrderedDict(
             "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error [deg]"),
@@ -730,7 +730,7 @@ else
             duration, mean(va), minimum(va), maximum(va),
             fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
     reelout_summary["v_app_phase4"] = OrderedDict(
-        "duration_s" => (round(duration; digits = 1), "phase-4 window length [s]"),
+        "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
         "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
         "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
         "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
@@ -770,7 +770,7 @@ else
         "mean_W" => (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"),
         "peak_W" => (round(Int, rp.peak_power), "peak reel-out power over the reeling window [W]"),
         "cf_power_ro" => (round(rp.cf_power_ro; digits = 2), "crest factor: peak_W / mean_W"),
-        "duration_s" => (round(rp.duration; digits = 1), "reeling window length [s]"),
+        "duration" => (round(rp.duration; digits = 1), "reeling window length [s]"),
         "n_samples" => (rp.n, "sample count in the reeling window"),
         "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
         "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
@@ -810,10 +810,10 @@ else
             rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
     reelout_summary["ringing"] = OrderedDict(
         "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
-        "period_s" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
+        "period" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
         "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
         "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
-        "duration_s" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
+        "duration" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
         "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
         "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
 end
@@ -827,12 +827,12 @@ if t_sim > 0
             t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / steps,
             steps, s.dt, fcs.vsm_interval)
     summary["performance"] = OrderedDict(
-        "sim_time_s" => (round(t_sim; digits = 1), "simulated time [s]"),
-        "wall_time_s" => (round(t_wall; digits = 1), "wall-clock time [s]"),
+        "sim_time" => (round(t_sim; digits = 1), "simulated time [s]"),
+        "wall_time" => (round(t_wall; digits = 1), "wall-clock time [s]"),
         "realtime_factor" => (round(t_sim / t_wall; digits = 2), "sim_time / wall_time"),
         "ms_per_step" => (round(1000 * t_wall / steps; digits = 1), "wall time per step [ms]"),
         "steps" => (steps, "step count"),
-        "dt_s" => (s.dt, "simulation timestep [s]"),
+        "dt" => (s.dt, "simulation timestep [s]"),
         "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))
 else
     @warn "No simulated time elapsed — no performance figure."

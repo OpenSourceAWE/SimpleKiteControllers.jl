@@ -408,7 +408,7 @@ traj_opt:
     # 7-13 s, over which the tether grows by that times the reel-out speed, so a
     # non-blocking reply is anchored to a radius the run has already left. Blocking
     # removes that lag and costs the wall time: the frozen seconds are reported as
-    # traj_opt.reopt.blocked_s and are taken out of performance.realtime_factor.
+    # traj_opt.reopt.blocked and are taken out of performance.realtime_factor.
     reopt_blocking: true     # freeze the simulation until the reply lands       [-]
     # Elevation offset added to guess_el_center for ONE retry when a re-optimization
     # comes back "failed"; 0.0 never retries. The optimizer has isolated failure

@@ -652,7 +652,7 @@ multi-modal, so the guess is a choice about the answer.
     the reel-out speed times the solve time. `true` freezes the loop at the
     request, so the reply is anchored to the length it was asked for, at the cost
     of that wall time. Only the accounting differs, not the physics: the frozen
-    time is reported as `traj_opt.reopt.blocked_s` and taken out of
+    time is reported as `traj_opt.reopt.blocked` and taken out of
     `performance.realtime_factor`.
     """
     reopt_blocking::Bool = true

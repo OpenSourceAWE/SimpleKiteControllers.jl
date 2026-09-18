@@ -460,8 +460,8 @@ function run_metrics(summary_path, f8_a, f8_b; status = "ok", worker = 0)
         "min_elevation_deg" =>
             _dig(summary, "fig8_metrics", "elevation_deg", "min_whole_run"),
         "success_criteria" => _dig(summary, "fig8_metrics", "success_criteria"),
-        "sim_time_s" => _dig(summary, "performance", "sim_time_s"),
-        "wall_time_s" => _dig(summary, "performance", "wall_time_s"),
+        "sim_time_s" => _dig(summary, "performance", "sim_time"),
+        "wall_time_s" => _dig(summary, "performance", "wall_time"),
         "worker" => worker,
     ]
     return entry

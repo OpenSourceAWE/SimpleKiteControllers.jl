@@ -56,7 +56,7 @@ const MAX_TETHER_FORCE_N =
 # yaml key => displayed column header
 const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind",
                  "power_ratio" => "power_ratio",
-                 "total_wall_time_s" => "total_time", "realtime_factor" => "rt_factor",
+                 "total_wall_time" => "total_time", "realtime_factor" => "rt_factor",
                  "optimization_requests" => "opt_requests",
                  "optimizations_installed" => "opts_installed",
                  "av_power_ro" => "av_power", "min_power_ro" => "min_power",
