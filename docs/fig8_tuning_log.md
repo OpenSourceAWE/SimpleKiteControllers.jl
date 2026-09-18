@@ -4766,3 +4766,86 @@ Not yet regressed at the other wind speeds: the ceiling only fires when the firs
 short of the gate, which none of the archived `v03.5`-`v11` runs were, so it should be
 inert there — but their paths top out at 31-38°, so a run that does hit the retries will
 be capped below where they flew.
+
+## 2026-09-18 — Cabauw 7 m/s: the startup gate refused the LOBE LIFT, not the optimizer's path
+
+The first `simple_opt_reelout.jl` run of the Cabauw project (`system_reelout_cabauw.yaml`,
+the inland power-law profile with `alpha = 0.234`) at 7 m/s, 150 m, died at the startup
+curvature gate: **0.693 on the first reply, 0.785 best of four retries, against 0.82**.
+Cabauw 6 m/s (`v06`) and Maasvlakte 7 m/s (`v07`) had both started at 0.92 with no retry.
+
+**Every lever on the optimizer side was measured, and none of them moved it** — across five
+runs, each retry ladder logged by name:
+
+| lever | ask | reply |
+| --- | --- | --- |
+| radius correction (measured reel-out ratio) | 15.64 -> 16.95 m, ceiling 33.5° | 0.785 |
+| radius, warm step | 18.25 m, ceiling 33.5° | 0.736 — the reply got TALLER (15.7°), not wider |
+| radius, warm step | 19.50 m, ceiling 33.7° | 0.732 |
+| ceiling step | 16.95 m under 31.1°, 31.3°, 32.5° | 422 every time, even 0.7° below the top |
+| width step (`azimuth_amplitude_min`) | 16.95 m, half-width >= 19.0° | 0.737, widened on one side only |
+| same ask, ceiling 33.5° vs 33.7° | | 0.785 vs 0.729 — fold sensitivity, nothing else moved |
+
+The figure the optimizer returns here is ±17° wide and 15-16° tall with its highest point at
+azimuth **5-6°, near the crossing** — a different shape from the Maasvlakte lemniscates
+(±19-24°, top on the lobe). Its height is rigid: no ceiling the incumbent still fits under
+converges, and a wider radius ask is spent on height and, presumably, on reel-out within
+the lap, since the optimizer measures the radius up the reel-out and the gate at the anchor.
+
+**Where the 3.6° actually was.** `path_radius_profile` on the saved reply
+(`trajectories/startup_incumbent_2026-09-18_1932.yaml`), kite radius 4.91° at 150 m:
+
+| path | tightest radius | at | margin |
+| --- | --- | --- | --- |
+| raw reply | 5.71° | az -17°, el 31° (lobe shoulder) | **1.164** |
+| + `el_offset_wing` 1.5°, ramp 2-10° | 3.99° | az **9.7°**, el 34.2° | 0.814 |
+| installed (resampled to 360) | 3.62° | same | **0.737** |
+
+The optimizer's path was never the problem. The lobe lift's smoothstep bends the path hardest
+at the ramp's ends, and on this figure the end at `el_offset_wing_az = 10°` sits on the top
+of the path at 34°, where `cos(elevation)` already compresses the azimuth axis. On the
+Maasvlakte figures that point is a gentle diagonal, which is why the 2026-08-18 sweep found
+the lift free (0.94 -> 0.94). Swept on the Cabauw reply (bare 1.092 resampled): `az_full`/
+`blend` 10/8 0.737, 8/6 0.585, 6/4 0.303, 12/10 1.020 on one reply but 0.742 on the other,
+16/14 0.831 / 0.927; elevation mode 0.67 / 0.66. No ramp is robust on these figures.
+
+**Fix: the startup install rations the lift the way every mid-run install already does.**
+`install_optimized_path!` (`examples/simple_opt_reelout.jl`) now tries the lift at 100, 75,
+50, 25, 0 % and installs the first that clears `min_feasibility_margin`, says so, and
+records `traj_opt.path.lobe_lift_pct` in the summary. Inert wherever the full lift passes,
+i.e. every archived run. At the anchor the startup path is flown for one lap before the
+first re-optimization replaces it, and those installs ration on their own.
+
+| | 7 m/s, `v07` (archive `2026-09-18_195354`) |
+| --- | --- |
+| lobe lift installed | **75 %**, margin 0.90, no retry |
+| `success_criteria` | **all 10 passed** |
+| `av_power_ro` / `power_ratio` | 20 812 W / 0.85 (v06: 21 625 W / 0.93) |
+| RMS d / max d | 2.46° / 7.23° |
+| `min_whole_run` | 12.4° |
+| max force, phase 4 | 7587 N |
+| installs | 1.23, 0.98, 1.18; `margin_final_flown` 0.92 |
+
+**The retry ladder is kept, rebuilt to move ONE lever per attempt** and to survive a 422
+(it used to abandon the remaining budget on the first one): radius correction, then ceiling
+steps clamped so the incumbent's own height still fits above the box floor (the old
+`guess_b` guard let a 15.4° box through for a 15.2° figure), then width steps
+(`startup_retry_az_widen_step`, new in `data/traj_opt.yaml`), then radius steps; a ceiling
+or width floor that 422'd is never re-sent, a radius ask that 422s is bisected toward the
+last converged one. It should not fire on a raw-feasible reply any more; it is there for the
+next fold.
+
+**Open, and the next thing: 8 m/s (`v08`, archive `2026-09-18_195720`) flies but fails**
+`RMS d < 3.0°` (3.5°), `max d < 8.0°` (8.68°) and `max force <= 8400 N` (8677 N), at
+21 697 W. The drum sits on `v_ro_max` (3.56 m/s), so the force cannot be relieved by reeling
+faster, and the optimizer depowers to hold its 8000 N: l_dp 1.70-1.75 m, i.e. `rel_depower`
+0.32-0.33, which `fly_opt_depower` flies (mean 0.327; 7 m/s: 0.305; every Maasvlakte run
+0.27-0.30). At 0.33 the turn-rate gain `c1` is ~30 % below its 0.274 value, and two things
+still assume 0.274: the curvature gate and the turn-radius requests (`c1_startup` is
+`turn_rate_coeffs(body_damping, depower_setpoint)`), so installs reported at 1.03-1.08 were
+~0.75 for the kite that flew them; and the heading PID's schedule, which corrects for
+`v_app` but not for `c1(depower)`. Peak steering was only 0.184 against 0.256 at 6 m/s while
+the error grew — under-gained, not saturated. The candidate fix is to read `c1` at the
+depower actually flown wherever `fly_opt_depower` is on; the 8677 N against the optimizer's
+own 8000 N plan is a model mismatch that will not cure, and 5 % between
+`f_high_awe_trim` and the criterion may be too thin for this profile.

@@ -401,7 +401,12 @@ Add new findings there, not here.
 
       * `"azimuth"` — over `|azimuth|` in degrees. Raises the whole lobe, top and
         bottom alike, i.e. translates the part of the path that turns hardest,
-        which is why it costs no curvature margin.
+        which is why it costs no curvature margin on a lemniscate whose top is
+        out on the lobe. On a figure whose highest point sits near the crossing
+        (Cabauw 7 m/s, 2026-09-18: top at |azimuth| 5-6°, 34°) the ramp's end
+        bends the path exactly there: 1.09 bare, 0.74 lifted, and no ramp width
+        is robust. The startup install rations the lift for that case, the way
+        the mid-run installs always did; see the tuning log.
       * `"azimuth_frac"` — the same, with both read as FRACTIONS of the path's own
         azimuth amplitude, so the profile keeps its place on a pattern that shrinks
         as the tether grows. Only worth having once a pattern shrinks past the
