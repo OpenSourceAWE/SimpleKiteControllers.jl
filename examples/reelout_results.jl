@@ -926,9 +926,13 @@ if have_phase4
     summary_block["v_ro_av"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
     summary_block["v_ro_max"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
     summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
-    summary_block["max_depower_final"] = (round(fcs.depower_final + dp_final_extra_peak; digits = 3),
-        "highest depower the phase-5 force limiter asked for; depower_final itself when it \
-         never engaged or is off (depower_final_max == depower_final) [-]")
+    # The floor the limiter integrates above: depower_final, or the depower the
+    # stop latched at when that is higher (simple_opt_reelout.jl's stop ramp).
+    dp_final_floor = isnan(stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, stop_dp_entry)
+    summary_block["max_depower_final"] = (round(min(dp_final_floor + dp_final_extra_peak,
+                                                    max(fcs.depower_final_max, dp_final_floor)); digits = 3),
+        "highest depower the force limiter asked for, from the stop latch through phase 5; \
+         the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
 end
 summary["summary"] = summary_block
 

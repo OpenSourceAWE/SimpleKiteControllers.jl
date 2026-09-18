@@ -114,11 +114,16 @@ Add new findings there, not here.
     depower_final = 0.328
     """
     Ceiling [-] of the phase-5 FORCE LIMITER: with the length frozen, the depower
-    is the only actuator left against the tether force, so from phase 5 on
+    is the only actuator left against the tether force, so from the reel-out
+    STOP LATCH on — through the soft-stop ramp and all of phase 5 —
     `rel_depower` is raised above `depower_final` while the winch force exceeds
     `depower_final_f_target`, integrating at `depower_final_f_gain`, and lowered
     again the same way once it is below — never under `depower_final`, never over
-    this. Equal to `depower_final` (the default) the limiter is OFF and phase 5
+    this. During the ramp it integrates on the force the STOPPED drum is about
+    to see, the measured force scaled by `((v_app + v_ro)/v_app)^2`: the stop
+    hands the kite the reel-out speed as apparent wind, 6.1 -> 10.5 kN in 3 s
+    at Cabauw 9 m/s (2026-09-18) with the limiter held off until the ramp's
+    end. Equal to `depower_final` (the default) the limiter is OFF and phase 5
     flies `depower_final` alone, as every run before 2026-09-18 did.
 
     `depower_final` is one number, tuned to hold ~3.5 kN at 6 m/s; the frozen
@@ -143,6 +148,19 @@ Add new findings there, not here.
     ~4 s, a fraction of a lap.
     """
     depower_final_f_gain = 2e-5
+    """
+    The same gain [1/(N s)] while the reel-out soft-stop ramp is running, from
+    the stop latch until `v_set` has reached 0 (`reelout_softstop`, ~3 s). The
+    stop is the run's biggest force step and it is over in a fraction of a lap,
+    so the phase-5 gain, tuned against the lobe-to-lobe swing, is too slow for
+    it: measured 2026-09-18 at Cabauw 9 m/s, integrating from the latch at
+    2e-5 moved the depower 0.348 -> 0.367 by the drum's standstill and left an
+    8.7 kN peak against 10.6 kN with no limiter and 8.4 kN allowed. The KCU tape
+    moves 0.075/s at most, so `1e-4` saturates it above 750 N of error and the
+    extra reached during the ramp then relaxes at `depower_final_f_gain`. Equal
+    to `depower_final_f_gain` (the default) the ramp is treated like phase 5.
+    """
+    depower_final_f_gain_stop = 2e-5
     """
     Soft-start time [s]: the commanded reel-out speed (both `v_ff` and the
     `l_set` integration, i.e. the actual reel-out rate) is ramped linearly from

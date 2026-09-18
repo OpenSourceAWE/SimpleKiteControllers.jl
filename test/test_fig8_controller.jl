@@ -206,6 +206,60 @@ end
         @test_throws ArgumentError resample_path(src.az_path, src.el_path, 3)
     end
 
+    @testset "set_path_keeps_branch_at_crossing" begin
+        # A blend step moves the path a fraction of a degree. With Q ON the
+        # self-intersection, both branches of the moved path pass within that
+        # fraction of the old Q, and their tangents differ by the crossing angle
+        # only — inside the 90° gate. The plain nearest point can then be on the
+        # other branch, and taking it sends the kite round the same lobe twice
+        # (9 m/s, archive `2026-09-18_214437`, t = 66.14 s). The remap must rank
+        # the near-equal candidates by alignment with the old Q's tangent.
+        # Taller than wide, as the optimized patterns are: the flown 9 m/s path
+        # crossed at 25-70°. The default test lemniscate crosses at 114°, which
+        # the 90° gate alone already separates.
+        fec = _make_test_controller(B = 10.0)
+        n = length(fec.az_path)
+        az, el = fec.az_path, fec.el_path
+        # The two crossing points: the local minima of |azimuth| along the path.
+        crossing = [i for i in 1:n if abs(az[i]) <= abs(az[mod1(i - 1, n)]) &&
+                                       abs(az[i]) <= abs(az[mod1(i + 1, n)])]
+        @test length(crossing) == 2
+        i1, i2 = crossing
+        crossing_angle = abs(wrap2pi(fec.tangent[i1] - fec.tangent[i2]))
+        @test deg2rad(20) < crossing_angle < deg2rad(90)   # the gate alone cannot tell them apart
+        # Walk Q a full lap onto a crossing point along its own branch, so the
+        # course estimate and the search window are live when it arrives at a
+        # position both branches share. (`last_idx` starts at 1, which is on the
+        # crossing here, so a shorter walk-on would begin inside its window.)
+        function _walk_to_crossing!(fec, i)
+            for k in (i - n):i
+                calc_attractor(fec, az[mod1(k, n)], el[mod1(k, n)])
+            end
+        end
+        _walk_to_crossing!(fec, i1)
+        @test fec.last_idx == i1
+        # Shift the whole path 0.3° along the OTHER branch's tangent: the old Q now
+        # lies on that branch of the new path (distance ~0) and only
+        # 0.3 * sin(crossing_angle) from its own.
+        tb = fec.tangent[i2]
+        az_new = az .+ 0.3 * sin(tb)
+        el_new = el .+ 0.3 * cos(tb)
+        dists = [_skc_dist(az[i1], el[i1], az_new[i], el_new[i]) for i in 1:n]
+        nearest = argmin(dists)
+        near_gap(i, j) = min(mod(i - j, n), mod(j - i, n))
+        @test near_gap(nearest, i2) < n ÷ 8     # the plain nearest point IS the other branch
+        set_path!(fec, az_new, el_new)
+        @test near_gap(fec.last_idx, i1) < n ÷ 8
+        @test abs(wrap2pi(fec.tangent[fec.last_idx] - fec.tangent[i1])) < deg2rad(15)
+        # And the mirror case, Q on the second crossing, shifted along the first's.
+        fec2 = _make_test_controller(B = 10.0)
+        _walk_to_crossing!(fec2, i2)
+        @test fec2.last_idx == i2
+        ta = fec2.tangent[i1]
+        set_path!(fec2, az .+ 0.3 * sin(ta), el .+ 0.3 * cos(ta))
+        @test near_gap(fec2.last_idx, i2) < n ÷ 8
+    end
+
     @testset "search_window_continuity" begin
         # Q must advance along the path, never jump to the far branch.
         fec = _make_test_controller()

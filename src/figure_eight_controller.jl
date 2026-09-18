@@ -494,14 +494,28 @@ Called every step of a gradual swap (`examples/simple_opt_reelout.jl`'s
 `path_blend_time`), this remap has no `calc_attractor` guard behind it —
 `aligned`, `branch_hysteresis` and `q_rate_gain` all operate on `last_idx`
 *after* it runs, so a bad pick here reaches `fec.last_idx` outright. Near the
-self-intersection the two branches are close in position but ~180° apart in
-tangent, and as the blended curve reshapes step by step the nearer one can swap
-between them; a plain Euclidean nearest-point search takes whichever is closer
-that step, same failure as an unranked `argmin` in [`calc_attractor`](@ref).
-So the search is restricted to points whose tangent is within 90° of the OLD
-`last_idx`'s tangent — the closest read of "the kite's own branch" available
-here, since `set_path!` has no live position or course estimate to test
-against — falling back to the plain nearest point only if nothing qualifies.
+self-intersection the two branches are close in position, and as the blended
+curve reshapes step by step the nearer one can swap between them; a plain
+Euclidean nearest-point search takes whichever is closer that step, same failure
+as an unranked `argmin` in [`calc_attractor`](@ref). The only read of "the
+kite's own branch" available here — `set_path!` has no live position or course
+estimate — is the OLD `last_idx`'s tangent, and it is used twice:
+
+1. points whose tangent is more than 90° from it are not candidates at all
+   (a reversed traversal, or the far arm of a lobe);
+2. among the local minima within `branch_tol` of the nearest remaining point,
+   the one whose tangent needs the smallest turn from it wins.
+
+The second is what separates the branches AT the crossing: they meet there at
+the pattern's crossing angle — 25-70° of heading measured 2026-09-18 at 9 m/s
+(archive `2026-09-18_214437`), both ascending — well inside the 90° gate, and
+both pass within a fraction of a degree of an old Q that sits on the
+intersection. With the gate alone, a blend step at t = 66.14 s of that run
+swapped Q to the other branch: the attractor jumped 9° of azimuth in one step,
+the guidance steered the kite back into the lobe it had just flown, and the
+heading-range criterion caught the extra loop. On a blend step the kite's own
+branch is a near copy of the old one (effort ~0°); the other is the crossing
+angle away. Falls back to the plain nearest point only if nothing is aligned.
 """
 function set_path!(fec::FigureEightController, az, el; resample = 0,
                    up_loops = fec.fes.up_loops)
@@ -523,21 +537,35 @@ function set_path!(fec::FigureEightController, az, el; resample = 0,
     # `last_idx` defaults to 1 and its tangent is meaningless before the
     # controller has ever tracked a real position — the guard only applies once
     # `has_prev` says there is an actual branch to preserve.
+    n = length(new_az)
+    dists = [_dist(q_az, q_el, new_az[i], new_el[i]) for i in 1:n]
     aligned(i) = !fec.has_prev || abs(wrap2pi(tangent[i] - q_tangent)) <= pi / 2
     dmin = Inf; imin = 1
-    d_any = Inf; i_any = 1
-    for i in eachindex(new_az)
-        d = _dist(q_az, q_el, new_az[i], new_el[i])
-        if d < d_any
-            d_any = d
-            i_any = i
-        end
-        if d < dmin && aligned(i)
-            dmin = d
+    for i in 1:n
+        if dists[i] < dmin && aligned(i)
+            dmin = dists[i]
             imin = i
         end
     end
-    fec.last_idx = isinf(dmin) ? i_any : imin
+    if isinf(dmin)
+        imin = argmin(dists)
+    elseif fec.has_prev
+        # Of the aligned local minima within branch_tol of the nearest, the one
+        # best aligned with the old Q — the branches meet at the crossing well
+        # inside the 90° gate, see the docstring. A tie goes to the nearer.
+        best = Inf
+        for i in 1:n
+            d = dists[i]
+            d <= dmin + fec.fes.branch_tol && aligned(i) &&
+                d <= dists[mod1(i - 1, n)] && d <= dists[mod1(i + 1, n)] || continue
+            effort = abs(wrap2pi(tangent[i] - q_tangent))
+            if effort < best || (effort == best && d < dists[imin])
+                best = effort
+                imin = i
+            end
+        end
+    end
+    fec.last_idx = imin
     nothing
 end
 

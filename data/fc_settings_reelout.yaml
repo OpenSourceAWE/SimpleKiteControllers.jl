@@ -73,13 +73,18 @@ fc_settings:
   # frozen-length force follows v_app^2 — 8.1 kN mean, 8.6 kN peaks at Cabauw
   # 8 m/s (v_app 41.5 m/s), against the 8400 N criterion. Above f_target the
   # depower integrates up from depower_final, never past depower_final_max; below
-  # it, back down. Inert wherever phase 5 stays under the target: the strongest
+  # it, back down. From the reel-out STOP LATCH, not phase 5: the stop itself
+  # hands the kite its reel-out speed as apparent wind (6.1 -> 10.5 kN in 3 s at
+  # 9 m/s), so through the ramp it integrates on the force the stopped drum is
+  # about to see. Inert wherever phase 5 stays under the target: the strongest
   # archived phase 5 before this was 7239 N (Cabauw 7 m/s), Maasvlakte 11 m/s 7022 N.
   # 0.42 is inside the optimizer's own depower range (2.3 m = 0.44 equivalent);
   # the turn-rate table ends at 0.35, so the phase-5 gate is read there.
   depower_final_max:  0.42     # Ceiling of the phase-5 force limiter; = depower_final is OFF [-]
   depower_final_f_target: 7500.0 # Force it holds against, below the 8400 N criterion by the lobe swing [N]
   depower_final_f_gain: 2.0e-5 # Integrator gain, depower per N per s                  [1/(N s)]
+  depower_final_f_gain_stop: 1.0e-4 # The same during the soft-stop ramp: 3 s to move 0.35 -> 0.40,
+                               # the KCU tape's 0.075/s from 750 N of error up          [1/(N s)]
   depower_blend_time: 2.5      # Seconds over which `rel_depower` ramps to a new phase-ladder target
                                # instead of stepping to it. `0` restores the hard switch.     [s]
   reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]

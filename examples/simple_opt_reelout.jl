@@ -1594,22 +1594,46 @@ try
         # Ramps depower toward depower_final in step with v_set's own soft-stop
         # decay, so shedding lift offsets the tension the slowing winch would
         # otherwise raise; the clamp holds it at depower_final once reached.
+        # Never BELOW the depower the stop latched at: the optimizer's own
+        # depower passes depower_final (0.35) at 9 m/s (0.348) and a ramp down
+        # would power the kite UP at the one moment the drum stops relieving it.
         if !isnan(stop_start)
+            dp_stop_target = max(fcs.depower_final, stop_dp_entry)
             rel_depower = stop_dp_entry +
-                (fcs.depower_final - stop_dp_entry) * clamp((t - stop_start) / stop_T, 0.0, 1.0)
+                (dp_stop_target - stop_dp_entry) * clamp((t - stop_start) / stop_T, 0.0, 1.0)
         elseif phase == 5
             rel_depower = fcs.depower_final
         end
-        # Phase-5 force limiter: the length is frozen, so the depower is the only
+        # Force limiter: the length is frozen, so the depower is the only
         # actuator left against the force, and depower_final is one number tuned
         # at 6 m/s (see FC_Settings.depower_final_max). An integrator above the
         # floor, both ways, clamped — off when the ceiling equals the floor.
-        if phase == 5 && fcs.depower_final_max > fcs.depower_final &&
-           (isnan(stop_start) || t - stop_start >= stop_T)   # not during the stop ramp
-            global dp_final_extra = clamp(dp_final_extra + fcs.depower_final_f_gain *
-                                          (winch_force(s) - fcs.depower_final_f_target) * s.dt,
+        #
+        # From the STOP LATCH, not from phase 5: the stop itself is the biggest
+        # force step of the run. Stopping the drum hands the kite the reel-out
+        # speed it was shedding as apparent wind — measured 2026-09-18 at Cabauw
+        # 9 m/s (archive `2026-09-18_214437`): 6.1 kN at the latch, 10.5 kN at
+        # the drum's standstill 3 s later in a lobe (v_app 44 -> 48 m/s), and
+        # 7.4 -> 6.9 kN within 1.5 s once the limiter, held off until the ramp
+        # had run out, finally moved the depower 0.35 -> 0.40. The ramp above
+        # sheds nothing there (depower_final ~ the flown depower), so the
+        # limiter integrates through the ramp on the force the STOPPED drum is
+        # about to see: the measured force scaled by ((v_app + v_ro)/v_app)^2,
+        # which IS the measured force once v_ro has reached 0, and at
+        # `depower_final_f_gain_stop` while the ramp runs — the phase-5 gain
+        # is tuned against the lobe swing and too slow for a 3 s stop. The
+        # stop-time extra stays in the integrator and relaxes at the phase-5 gain.
+        if fcs.depower_final_max > fcs.depower_final && (phase == 5 || !isnan(stop_start))
+            f_now = winch_force(s)
+            v_app_now = Float64(s.sys_state.v_app)
+            v_ro_now = max(Float64(s.sys_state.v_reelout[1]), 0.0)
+            f_stopped = v_app_now > 0 ? f_now * ((v_app_now + v_ro_now) / v_app_now)^2 : f_now
+            ramping = !isnan(stop_start) && t - stop_start < stop_T
+            f_gain = ramping ? fcs.depower_final_f_gain_stop : fcs.depower_final_f_gain
+            global dp_final_extra = clamp(dp_final_extra + f_gain *
+                                          (f_stopped - fcs.depower_final_f_target) * s.dt,
                                           0.0, fcs.depower_final_max - fcs.depower_final)
-            rel_depower = fcs.depower_final + dp_final_extra
+            rel_depower = min(rel_depower + dp_final_extra, fcs.depower_final_max)
             dp_final_extra > dp_final_extra_peak && (global dp_final_extra_peak = dp_final_extra)
         end
         chi_cmd = cc.chi_cmd
