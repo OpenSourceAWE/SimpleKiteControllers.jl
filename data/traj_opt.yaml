@@ -283,7 +283,7 @@ traj_opt:
     # on the spot.                                                            [deg]
     elevation_min_retry_margin: 0.5
     pattern_elevation_max: 0.0
-    pattern_azimuth_max: 0.0
+    pattern_azimuth_max: 25.0
     pattern_azimuth_amplitude_min: 0.0
     # Largest elevation HALF-SPAN [deg] of the optimized figure; 0.0 is off. One
     # smooth NLP row on the server (mean squared deviation of the elevation from
