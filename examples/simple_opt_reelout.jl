@@ -241,7 +241,7 @@ using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
     set_tracking, set_force, get_v_set_out, calc_vro
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
-using AtmosphericModels: calc_wind_factor
+using AtmosphericModels: AtmosphericModel, calc_wind_factor
 using LinearAlgebra: norm
 using Statistics: mean
 using Printf
@@ -318,21 +318,30 @@ power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 #
 # - At or above V_BUDGET_KNOT the sqrt-law holds and the budget is PHYSICS-BASED:
 #       T = ENTRY + (l_max - l_start)/(REEL_MARGIN * v_reel) + TAIL,
-#   v_reel = min(kv(w)*sqrt(F_BUDGET_COEF*w^2), v_sat) — the winch law evaluated
-#   at a conservative mean-tension fit and capped at the drum limit. Validated
-#   against every archived scenario (docs/fig8_tuning_log.md, 2026-08-27): the
-#   law reproduces the measured whole-window reel speeds at 6/8/9 m/s within
-#   2-5 %, and correctly caps at v_sat from 10 m/s up — where linear ratio
-#   scaling kept shrinking the budget although the reel speed had stopped
-#   growing (the 90 s budget fell 12.6 m short; v09 passes with under 2 % slack).
+#   v_reel = min(kv(w)*sqrt(F_BUDGET_COEF*w_100^2), v_sat) — the winch law
+#   evaluated at a conservative mean-tension fit and capped at the drum limit.
+#   Validated against every archived scenario (docs/fig8_tuning_log.md,
+#   2026-08-27): the law reproduces the measured whole-window reel speeds at
+#   6/8/9 m/s within 2-5 %, and correctly caps at v_sat from 10 m/s up — where
+#   linear ratio scaling kept shrinking the budget although the reel speed had
+#   stopped growing (the 90 s budget fell 12.6 m short; v09 passes with under
+#   2 % slack).
 # - Below the knot the sqrt-law MISpredicts: the force-floor guard duty-cycles
 #   reel-in/reel-out there (even 474 s failed at 3 m/s), so the legacy steepened
 #   ratio scaling is kept instead.
+#
+# The force fit and the knot are in terms of the wind at BUDGET_HEIGHT_M, not at
+# the project's h_ref: the tether force follows the wind the kite flies in, and
+# the profile between 6 m and 100 m differs by site — 1.29x for Maasvlakte's
+# EXPLOG, 1.93x for Cabauw's power law (2026-09-19). Budgeted at ground level,
+# a Cabauw 5.5 m/s got 145 s for a 75 s reel-out and fell into the legacy branch.
 BELOW_DEFAULT_EXPONENT = 1.6  # exponent for scaling sim_time below the knot, tuned to 3.5 m/s
-V_BUDGET_KNOT = 6.0           # [m/s] sqrt-law valid at/above; legacy scaling below
-F_BUDGET_COEF = 80.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w²;
-                              # measured 3085/36=85.7, 5667/64=88.5, 6535/81=80.7,
-                              # 6425/100=64.3 -> low bias keeps the budget generous
+BUDGET_HEIGHT_M = 100.0       # [m] height the budget's wind is taken at
+V_BUDGET_KNOT = 7.7           # [m/s at 100 m] sqrt-law valid at/above; legacy scaling below
+                              # (6.0 m/s at Maasvlakte's h_ref = 6 m)
+F_BUDGET_COEF = 48.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w_100²;
+                              # measured at Maasvlakte 51.7, 53.4, 48.7, 38.8 (6-10 m/s),
+                              # Cabauw 5.5 m/s 53.7 -> low bias keeps the budget generous
 REEL_MARGIN = 0.9             # achievable fraction of nominal speed (rings, soft-start)
 BUDGET_ENTRY_S = 25.0         # park + dive + hold + reelout_delay [s]
 BUDGET_TAIL_S = 10.0          # soft-stop ramp + phase-5 hold after length stop [s]
@@ -340,12 +349,18 @@ BUDGET_TAIL_S = 10.0          # soft-stop ramp + phase-5 hold after length stop 
 # actually enforces, and the budget has to move when someone retunes it.
 v_budget_cap =
     load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq).v_sat
-"Reel-out speed the budget assumes [m/s] at mean wind `w`: the winch's own law
-at a conservative tension estimate, capped by the drum's speed limit."
-v_reel_nominal(w) = min(winch_kv(w; project) * sqrt(F_BUDGET_COEF * w^2), v_budget_cap)
+# Ratio of the wind at BUDGET_HEIGHT_M to the one at h_ref, from the project's own profile law.
+budget_wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
+                                      BUDGET_HEIGHT_M)
+"Reel-out speed the budget assumes [m/s] at mean ground wind `w`: the winch's
+own law at a conservative tension estimate from the wind at `BUDGET_HEIGHT_M`,
+capped by the drum's speed limit. `winch_kv` stays keyed by the ground wind,
+which is what its table lists."
+v_reel_nominal(w) = min(winch_kv(w; project) * sqrt(F_BUDGET_COEF) * w * budget_wind_factor,
+                        v_budget_cap)
 EFFECTIVE_SIM_TIME = if isnothing(WIND_SPEED)
     SIM_TIME
-elseif WIND_SPEED < V_BUDGET_KNOT
+elseif WIND_SPEED * budget_wind_factor < V_BUDGET_KNOT
     wind_ratio = default_v_wind / WIND_SPEED
     scale = wind_ratio <= 1 ? wind_ratio : wind_ratio^BELOW_DEFAULT_EXPONENT
     something(SIM_TIME, project_set.sim_time) * scale
@@ -356,13 +371,16 @@ else
 end
 isnothing(WIND_SPEED) || @info @sprintf("simple_opt_reelout.jl: wind-speed override active, \
                                         %s",
-    WIND_SPEED < V_BUDGET_KNOT ?
-    @sprintf("sim_time scaled to %.1f s.", EFFECTIVE_SIM_TIME) :
+    WIND_SPEED * budget_wind_factor < V_BUDGET_KNOT ?
+    @sprintf("sim_time scaled to %.1f s (%.1f m/s at %.0f m, below the %.1f m/s knot).",
+             EFFECTIVE_SIM_TIME, WIND_SPEED * budget_wind_factor, BUDGET_HEIGHT_M,
+             V_BUDGET_KNOT) :
     @sprintf("reel-out budget %.1f s (%.0f s entry + %.0f m at %.2f m/s of %.2f nominal \
-              + %.0f s tail)",
+              + %.0f s tail; %.1f m/s at %.0f m)",
              EFFECTIVE_SIM_TIME, BUDGET_ENTRY_S, fcs.reelout_l_max - l_tether,
              v_reel_nominal(project_set.v_wind) * REEL_MARGIN,
-             v_reel_nominal(project_set.v_wind), BUDGET_TAIL_S))
+             v_reel_nominal(project_set.v_wind), BUDGET_TAIL_S,
+             WIND_SPEED * budget_wind_factor, BUDGET_HEIGHT_M))
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 # OUTPUT_PATH redirects them, so that parallel runs of this script (the sweep)
