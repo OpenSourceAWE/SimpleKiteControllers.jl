@@ -484,13 +484,16 @@ function free_speed_reference(lengths)
 end
 
 fs_ref = nothing
-# Only meaningful where k_v's soft floor bites (low force) AND the run fell short of
-# its own prediction; a ratio above FREE_SPEED_RATIO_MAX needs no upper bound.
+# Only meaningful where k_v's soft floor bites (low force) AND the run either fell
+# short of its own prediction or beat it by more than FREE_SPEED_RATIO_MIN_HIGH;
+# a ratio in between needs no upper bound.
 FREE_SPEED_RATIO_MAX = 0.9
-power_ratio_low = !isnothing(opt_power_meas) &&
-                  opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX
+FREE_SPEED_RATIO_MIN_HIGH = 1.1
+power_ratio_notable = !isnothing(opt_power_meas) &&
+                      (opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX ||
+                       opt_power_meas / opt_power_pred_eff >= FREE_SPEED_RATIO_MIN_HIGH)
 if !isnothing(rp) && tos.free_speed_reference_points >= 2 && have_phase4 &&
-   p4_force.min < 1000 && power_ratio_low
+   p4_force.min < 1000 && power_ratio_notable
     lengths_ro = Float64.(sl.var_10[rp.idx])
     global fs_ref = free_speed_reference(lengths_ro)
     if isnothing(fs_ref)
