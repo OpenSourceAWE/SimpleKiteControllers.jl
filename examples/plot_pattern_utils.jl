@@ -50,7 +50,8 @@ end
     plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                          opt_raw::Union{Nothing, Tuple} = nothing,
                          project::Union{Nothing, AbstractString} = nothing,
-                         log_name::Union{Nothing, AbstractString} = nothing) -> Figure
+                         log_name::Union{Nothing, AbstractString} = nothing,
+                         hide_before_final::Union{Nothing, Real} = nothing) -> Figure
 
 Plot the azimuth/elevation flight pattern for a scenario in `scenario_dir`
 (flown path vs. attractor reference, or vs. optimizer-raw if available).
@@ -66,12 +67,17 @@ optimized reel-out run wrote one (see [`load_opt_paths`](@ref)), and the
 attractor reference is the fallback for a run without it. Pass `log_name` explicitly to
 avoid ambiguity when multiple logs exist in the directory (common in `output/`
 after multiple runs); if absent and `project` is provided, searches for the
-one `.arrow` file.
+one `.arrow` file. The flown curve leaves out phase 5 and the
+`hide_before_final` seconds [s] before it, where the pattern is already lifted
+by `el_offset_final` ahead of the end of reel-out; the default is the scenario's
+own `fcs.el_offset_lead`, which is exactly that window, and `0` hides phase 5
+alone.
 """
 function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                opt_raw::Union{Nothing, Tuple} = nothing,
                                project::Union{Nothing, AbstractString} = nothing,
-                               log_name::Union{Nothing, AbstractString} = nothing)
+                               log_name::Union{Nothing, AbstractString} = nothing,
+                               hide_before_final::Union{Nothing, Real} = nothing)
     # Load settings and log; the system project is either the caller's own
     # resolved path, or the scenario folder's own copy
     scenario_project = something(project, joinpath(scenario_dir, "system_reelout_150m.yaml"))
@@ -99,9 +105,17 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     rng = 2:length(sl.time)
 
     # Azimuth and elevation over the flight phase; phase 5 (final descent after
-    # the winch stops) is masked out so it does not distort the pattern plot
-    az_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
-    el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
+    # the winch stops) is masked out so it does not distort the pattern plot,
+    # and so are the `hide_before_final` seconds before it: `el_offset_final`
+    # latches `fcs.el_offset_lead` seconds ahead of the end of reel-out, so the
+    # last part of phase 4 already flies the lifted pattern and ends a lap
+    # ~5° above the others at the crossing (measured 2026-09-20).
+    i5 = findfirst(==(5), sl.sys_state)
+    hide_s = something(hide_before_final, fcs.el_offset_lead)
+    t_hide = isnothing(i5) ? Inf : sl.time[i5] - hide_s
+    hidden(i) = sl.sys_state[i] == 5 || sl.time[i] >= t_hide
+    az_deg = [hidden(i) ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
+    el_deg = [hidden(i) ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
     # The optimizer's uncorrected curves, when the run wrote them and the caller
     # passed none: the reference the correction is meant to land the kite on.
