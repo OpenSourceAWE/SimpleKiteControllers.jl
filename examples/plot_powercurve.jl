@@ -97,15 +97,15 @@ function plot_powercurve()
                        [nothing, :dash, :dashdot]],
           color = [[nothing, :grey, :grey], [nothing, :grey, :grey, :black],
                    [nothing, :grey, :grey]],
-          legend_position = [:auto, :lt, :auto],
-          title = "V3 reel-out power curve", scatter = true, disp = true,
+          legend_position = [:auto, :lt, :rb],
+          title = "", scatter = true, disp = true,
           xticks = 3:11, fig = "powercurve")
-    
-    # Save the plot to the active site's folder under notebooks/images
-    images_dir = normpath(joinpath(@__DIR__, "..", "notebooks", "images", scenario_site()))
-    mkpath(images_dir)
-    png_file = joinpath(images_dir, "powercurve.png")
-    savefig(png_file)
+
+    # Save the plot as PDF (no title) to ../LearningControl/figures
+    figures_dir = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
+    mkpath(figures_dir)
+    pdf_file = joinpath(figures_dir, "powercurve_$(scenario_site()).pdf")
+    savefig(pdf_file)
 end
 
 plot_powercurve()
