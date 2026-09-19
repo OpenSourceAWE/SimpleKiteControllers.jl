@@ -75,7 +75,11 @@ script — it is a single reel-out, not a pumping cycle.
 - **Steering gain (0-2 vs 3-5).** The heading PID's gain is
   `entry_gain * heading_p` (25 %) during the entry and the full `heading_p` from
   phase 3. On top of that, the gain is always scaled by `v_app_ref / v_app`,
-  independent of phase.
+  independent of phase, and (in `simple_opt_reelout.jl`) by
+  `c1(depower_setpoint) / c1(u_d)` from the turn-rate table at the depower
+  commanded last step, so the loop gain `heading_p * c1` stays what it was tuned
+  to whether the kite flies the entry's `entry_depower`, the optimizer's depower
+  or phase 5's `depower_final` plus the force limiter's extra.
 - **Course source (0-2 vs 3-5).** With `fig8_pure_course = true`, phases 3+ use
   pure course feedback; during the entry the feedback angle is blended from
   heading to course by kite speed.

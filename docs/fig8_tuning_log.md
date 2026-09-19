@@ -5054,3 +5054,23 @@ stop, all 10 passed, 18 641 W — bit-identical reeling window to the 145 s run.
 8 m/s budgets sit on the drum cap with ~1–2 s of slack (measured reel speeds 3.23 / 3.30
 of the 3.5 assumed × 0.9), the same slack Maasvlakte 9 m/s runs with by design; re-fly
 before relying on them.
+
+## 2026-09-19 — heading_p is scaled by `c1(depower_setpoint)/c1(u_d)` in every phase
+
+Until now the c1 correction of the steering gain ran in phases 3-4 only under
+`fly_opt_depower`, and in phase 5 against `c1(depower_final)` and only when the force
+limiter could raise the depower (`depower_final_max > depower_final`). Everything else
+flew `heading_p` (or `entry_gain * heading_p`) as tuned at the setpoint's c1, whatever
+the depower actually was: the entry's `entry_depower` 0.34 at c1 0.175 against 0.243
+at the 0.274 setpoint, phase 5's 0.35 at 0.166.
+
+Now `simple_opt_reelout.jl` scales by `c1_setpoint / c1(rel_depower_prev)` on every
+step, `rel_depower_prev` the depower commanded last step (entry ladder, blend,
+`depower_final` plus the limiter's extra alike), rounded to 0.001 for the memo and
+clamped to the table's usable edge (0.40). One reference for the whole run, so the
+loop gain `heading_p * c1` is the same everywhere. Factors at `body_damping` as flown:
+1.07 at 0.29, 1.18 at 0.31, 1.39 at 0.34 (entry), 1.47 at 0.35 (phase 5), 1.73 at
+0.38, 1.90 at 0.40. Phases 1-2 and 5 therefore fly 1.4-1.5x the gain they were tuned
+with; `gain_scale_final_peak` in the summary now reads against the setpoint too.
+Not yet re-flown across the wind speeds — the entry (min elevation) and phase 5
+(`reacquire_margin` branch flips) are the places to look first.

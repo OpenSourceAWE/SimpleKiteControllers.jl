@@ -883,18 +883,13 @@ c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
     end
 end
 # The turn authority the loop was TUNED at (heading_p, and every archived run's
-# margins): the pattern's fixed depower_setpoint.
+# margins): the pattern's fixed depower_setpoint. The sim loop scales heading_p
+# by c1_setpoint/c1(u_d) in EVERY phase (until 2026-09-19 only phases 3-4 under
+# fly_opt_depower, and phase 5 against depower_final's own c1), so the loop gain
+# heading_p * c1 is the same at the entry's 0.34, the optimizer's depower and
+# phase 5's 0.35-0.42 as at the setpoint. The limiter's ceiling (0.42) sits above
+# the table's usable edge (0.40 since 2026-09-18), hence `c1_depower_max`.
 c1_setpoint = c1_at_depower(fcs.depower_setpoint)
-# Phase 5's own reference: it has always flown heading_p at depower_final's c1,
-# unscaled, and every archived phase 5 was tuned there. What moves it off that
-# is the force limiter integrating up to depower_final_max — measured at Cabauw
-# 10 m/s (archive 2026-09-18_225423): phase 5 at 0.39-0.41 for its whole
-# length, c1 0.13 against 0.166 at the 0.35 the gain was tuned at, max d 8.06°
-# in phase 5 with steering at 0.13 of the 0.32 clamp — under-gained, not
-# clamped, the phases 3-4 signature of the 8 m/s fix. The lookup saturates at
-# the table's usable edge (0.40 since 2026-09-18) because the limiter's ceiling
-# (0.42) sits above it: a saturated scale is short of the truth, a NaN one is 1.
-c1_final = c1_at_depower(fcs.depower_final)
 c1_depower_max = try
     last(turn_rate_depower_range(fcs.body_damping))
 catch exc
@@ -1422,7 +1417,8 @@ stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 dp_final_extra = 0.0        # [-] phase-5 force limiter's depower above depower_final
 dp_final_extra_peak = 0.0   # [-] the most it asked for, for the summary
-reelout_started = false     # true once the gate below has opened; LATCHED, never re-closes
+rel_depower_prev = fcs.depower_setpoint  # [-] depower commanded last step; the gain reads c1 there
+reelout_started = false    # true once the gate below has opened; LATCHED, never re-closes
 reelout_start_t = NaN       # [s] time it opened; the soft-start ramp counts from here
 reelout_trigger_fired = false # true if the FORCE trigger opened it, not the timer
 reelout_done = false        # true once either stop criterion has ended reel-out
@@ -1581,27 +1577,20 @@ try
         phase_before = cc.phase
         # heading_p was tuned at depower_setpoint's c1; the schedule inside
         # calc_steering corrects for v_app but cannot see c1 move with the
-        # depower fly_opt_depower hands the kite. Loop gain is heading_p * c1,
-        # so scale by c1(setpoint)/c1(flown) over the phases that fly it —
-        # 1.28 at the 0.327 of Cabauw 8 m/s (2026-09-18), where the steering
-        # peaked at 0.184 of 0.32 while RMS d reached 3.5°: under-gained, not
-        # clamped. Phase 5 keeps its tuned gain at depower_final, as it always
-        # has; the one-step lag on `depower_flown` is a blend's ramp, not a step.
+        # depower. Loop gain is heading_p * c1, so every phase flies
+        # heading_p * c1(setpoint)/c1(u_d), u_d the depower commanded last step
+        # (the entry ladder, the optimizer's, depower_final plus the limiter's
+        # extra alike). Rounded so the memo is not fed a fresh key every step
+        # of a blend or a 25 s integrator; 0.001 of depower is < 0.5 % of c1.
+        # Clamped to the table's usable edge: a saturated scale is short of
+        # the truth, a NaN one is 1.
         local gain_scale = 1.0
-        if tos.fly_opt_depower && cc.phase in (3, 4) && isfinite(c1_setpoint)
-            local c1_now = c1_at_depower(depower_flown)
+        if isfinite(c1_setpoint)
+            local dp_prev = round(isfinite(c1_depower_max) ?
+                                  min(rel_depower_prev, c1_depower_max) : rel_depower_prev;
+                                  digits = 3)
+            local c1_now = c1_at_depower(dp_prev)
             isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_setpoint / c1_now)
-        elseif cc.phase == 5 && fcs.depower_final_max > fcs.depower_final &&
-               isfinite(c1_final) && isfinite(c1_depower_max)
-            # The same correction for phase 5, against ITS tuning point
-            # (c1_final, see there): the force limiter below runs AFTER this
-            # call, so `dp_final_extra` is what the previous step commanded on
-            # top of depower_final. Rounded so the memo is not fed a fresh key
-            # every step of a 25 s integrator; 0.001 of depower is < 0.5 % of c1.
-            local dp5 = round(min(fcs.depower_final + dp_final_extra,
-                                  fcs.depower_final_max, c1_depower_max); digits = 3)
-            local c1_now = c1_at_depower(dp5)
-            isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_final / c1_now)
         end
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);
@@ -2807,6 +2796,7 @@ try
               set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set,
                                          speed_limit = rcs.v_sat,
                                          acceleration_limit = rcs.max_acc))
+        global rel_depower_prev = rel_depower
 
         # Report the overspeed rather than the opaque solver abort it causes later.
         if Float64(s.sys_state.v_app) > fcs.v_app_abort

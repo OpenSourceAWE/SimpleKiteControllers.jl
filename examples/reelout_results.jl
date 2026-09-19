@@ -484,8 +484,13 @@ function free_speed_reference(lengths)
 end
 
 fs_ref = nothing
-# Only meaningful where k_v's soft floor bites (low force); skip the extra solves otherwise.
-if !isnothing(rp) && tos.free_speed_reference_points >= 2 && have_phase4 && p4_force.min < 1000
+# Only meaningful where k_v's soft floor bites (low force) AND the run fell short of
+# its own prediction; a ratio above FREE_SPEED_RATIO_MAX needs no upper bound.
+FREE_SPEED_RATIO_MAX = 0.9
+power_ratio_low = !isnothing(opt_power_meas) &&
+                  opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX
+if !isnothing(rp) && tos.free_speed_reference_points >= 2 && have_phase4 &&
+   p4_force.min < 1000 && power_ratio_low
     lengths_ro = Float64.(sl.var_10[rp.idx])
     global fs_ref = free_speed_reference(lengths_ro)
     if isnothing(fs_ref)
@@ -904,6 +909,8 @@ if !isnothing(opt_power_meas)
     # including its soft floor, which at 3 m/s stands the winch still and has come
     # back NEGATIVE. This is against an upper bound over any winch in
     # [f_min, f_max], so above 1 is a real disagreement about the physics.
+    # Absent when power_ratio is already above FREE_SPEED_RATIO_MAX (or the
+    # force never dropped low): the reference solves are skipped there.
     isnothing(fs_ref) || (summary_block["power_ratio_free_speed"] =
         (round(opt_power_meas / fs_ref.weighted; digits = 2),
          "measured / free_speed reference reel-out power ($(round(Int, fs_ref.weighted)) W, \
@@ -947,15 +954,15 @@ if have_phase4
         "highest depower the force limiter asked for, from the stop latch through phase 5; \
          the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
     # The phase-5 counterpart of feasibility.gain_scale_flown, at the limiter's
-    # peak: what simple_opt_reelout.jl's phase-5 branch scaled heading_p by
-    # there, saturated at the table's usable edge exactly as the run was.
-    if isfinite(c1_final) && isfinite(c1_depower_max)
+    # peak: what simple_opt_reelout.jl scaled heading_p by there, saturated at
+    # the table's usable edge exactly as the run was.
+    if isfinite(c1_setpoint) && isfinite(c1_depower_max)
         dp5_peak = round(min(fcs.depower_final + dp_final_extra_peak,
                              fcs.depower_final_max, c1_depower_max); digits = 3)
         c1_5 = c1_at_depower(dp5_peak)
-        summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_final / c1_5 : 1.0; digits = 3),
+        summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_setpoint / c1_5 : 1.0; digits = 3),
             "heading_p factor phase 5 flew with at the limiter's peak, \
-             c1(depower_final)/c1(flown), read at $(dp5_peak); 1.0 when the limiter never engaged [-]")
+             c1(depower_setpoint)/c1(flown), read at $(dp5_peak) [-]")
     end
 end
 summary["summary"] = summary_block
