@@ -57,17 +57,17 @@ length in opposite directions. Both are selectable plots like the others, so
 `select_plots()` shows them in the menu; `simple_fig8_plots.jl` ignores the keys.
 A fifth panel, flown `rel_depower` (`var_14`) against the optimizer's own
 depower converted to the same units (`awetrim_depower_to_v3kite`, step-held
-between reopt solves), is added when `simple_opt_reelout.jl`'s
-`opt_depower_log` is in scope — silently skipped for a plain `simple_reelout.jl`
-run or a standalone replot of an older archive, neither of which has it. A sixth
-carries `k_v`, the winch gain the run flew, against the seed it was bracketed
-around when `optimize_k_v` made it a design variable; that one is ALWAYS drawn,
-flat when the gain was fixed.
+between reopt solves), is added when the run has one — silently skipped for a
+plain `simple_reelout.jl` run. A sixth carries `k_v`, the winch gain the run
+flew, against the seed it was bracketed around when `optimize_k_v` made it a
+design variable; that one is ALWAYS drawn, flat when the gain was fixed.
 
-Neither rides a `var_` slot — all sixteen are taken. The depower is a Julia-side
-series that only a live run has, but `k_v` is read from the RUN SUMMARY
-(`traj_opt.guess.k_v_optimized`, `traj_opt.winch.k_v_flown`), which every archive
-carries, so an archived replot draws the `k_v` panel and not the depower one.
+Neither rides a `var_` slot — all sixteen are taken. Both are read from the RUN
+SUMMARY on a scenario replot (`traj_opt.guess.depower_optimized_rel`,
+`traj_opt.guess.k_v_optimized`, `traj_opt.winch.k_v_flown`) and from the live
+globals (`opt_depower_log`, `opt_kv_log`) only for the run that just flew —
+see `depower_series`/`kv_series` for why a replot must never touch the globals.
+An archive from before `depower_optimized_rel` was written gets no `u_d` panel.
 
 Run from the REPL after (or instead of, if the log already exists) running
 simple_reelout.jl:
@@ -246,7 +246,40 @@ function kv_series(summary, times; live::Bool)
     idx = searchsortedlast.(Ref(t_kv), times)
     ([i == 0 ? k_kv[1] : k_kv[i] for i in idx], seed, true)
 end
-fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
+
+"""
+    depower_series(summary, times; live) -> Union{Vector{Float64}, Nothing}
+
+The optimizer's depower over `times` as V3Kite `rel_depower`, step-held between
+replies, for the power plot's `u_d` panel; `nothing` when the run has none.
+
+Sourced from `opt_depower_log` for a live run and from the summary's
+`traj_opt.guess.depower_optimized_rel` for a scenario replot (`live = false`),
+the same split as `kv_series` and for the same reason: `opt_depower_log`
+outlives the run that set it, so a replot reading it would draw the LAST live
+run's replies against this archive's flown depower. Archives written before
+that key existed get no panel rather than a wrong one.
+"""
+function depower_series(summary, times; live::Bool)
+    t_dp, u_dp = if live && @isdefined(opt_depower_log) && !isempty(opt_depower_log)
+        (Float64[e.t for e in opt_depower_log], Float64[e.u_p_equiv for e in opt_depower_log])
+    else
+        traj = isnothing(summary) ? nothing : get(summary, "traj_opt", nothing)
+        guess = isnothing(traj) ? nothing : get(traj, "guess", nothing)
+        block = isnothing(guess) ? nothing : get(guess, "depower_optimized_rel", nothing)
+        rows = block isa AbstractDict ?
+            [(parse(Float64, m[1]), String(k), Float64(v))
+             for (k, v) in block
+             for m in (match(r"^t_([\d.]+)_s", String(k)),) if m !== nothing] :
+            Tuple{Float64, String, Float64}[]
+        sort!(rows; by = r -> (r[1], r[2]))
+        (Float64[r[1] for r in rows], Float64[r[3] for r in rows])
+    end
+    isempty(t_dp) && return nothing
+    idx = searchsortedlast.(Ref(t_dp), times)
+    [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
+end
+fig_name ="V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
 end
@@ -483,13 +516,9 @@ if "power" in plots
         p_label,
         e_label,
     ]
-    if @isdefined(opt_depower_log) && !isempty(opt_depower_log)
-        t_dp = Float64[e.t for e in opt_depower_log]
-        u_dp = Float64[e.u_p_equiv for e in opt_depower_log]
-        # Right-continuous step hold: the optimizer's value applies from the
-        # reopt that produced it until the next one.
-        idx = searchsortedlast.(Ref(t_dp), Float64.(sl.time[rng]))
-        u_p_opt = [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
+    u_p_opt = depower_series(run_summary, Float64.(sl.time[rng]);
+                             live = isnothing(scenario_path))
+    if !isnothing(u_p_opt)
         push!(panels, [Float64.(sl.var_14[rng]), u_p_opt])
         push!(ylabels, L"u_d~[-]")
         push!(labels, [L"\mathrm{flown}", L"\mathrm{optimizer~(equiv.)}"])

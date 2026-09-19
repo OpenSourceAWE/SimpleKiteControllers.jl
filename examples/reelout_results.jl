@@ -588,6 +588,19 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             end
             dp
         end,
+        "depower_optimized_rel" => let seen = Dict{String, Int}(), dp = OrderedDict{String, Any}()
+            for e in opt_depower_log
+                k = @sprintf("t_%05.1f_s", e.t)
+                n = get(seen, k, 0) + 1
+                seen[k] = n
+                dp[n == 1 ? k : "$(k)_$n"] =
+                    (round(e.u_p_equiv; digits = 4),
+                     "the same reply as V3Kite rel_depower, converted with the \
+                      AWETRIM_V3KITE_DEPOWER_OFFSET in force at run time; what a \
+                      replot's u_d panel draws [-]")
+            end
+            dp
+        end,
         "k_v_optimized" => let seen = Dict{String, Int}(), kv = OrderedDict{String, Any}()
             for e in opt_kv_log
                 k = @sprintf("t_%05.1f_s", e.t)
