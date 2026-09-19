@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 # Set up the Julia environment of this workspace:
-#   - verify that Julia 1.12 is the active version
-#   - restore the default manifest (Manifest-v1.12.toml)
+#   - verify that the active Julia version is 1.12 or 1.13
+#   - restore the default manifest (Manifest-v<version>.toml.default)
 #   - remove stale per-project Manifest.toml files
 #   - instantiate the workspace and precompile the examples project
 
@@ -14,7 +14,7 @@ if [[ $(basename $(pwd)) == "bin" ]]; then
     cd ..
 fi
 
-# --- check Julia 1.12 ---------------------------------------------------------
+# --- check Julia 1.12 or 1.13 --------------------------------------------------
 if ! command -v julia >/dev/null 2>&1; then
     echo "ERROR: julia not found in PATH." >&2
     echo "Install Julia 1.12, e.g. with juliaup:  juliaup add 1.12 && juliaup default 1.12" >&2
@@ -22,28 +22,34 @@ if ! command -v julia >/dev/null 2>&1; then
 fi
 
 julia_version=$(julia --version | grep -o '[0-9][0-9.]*')
-if [[ $julia_version != 1.12.* ]]; then
-    echo "ERROR: Julia 1.12 is required, but the active version is $julia_version." >&2
+if [[ $julia_version == 1.12.* ]]; then
+    minor="1.12"
+elif [[ $julia_version == 1.13.* ]]; then
+    minor="1.13"
+else
+    echo "ERROR: Julia 1.12 or 1.13 is required, but the active version is $julia_version." >&2
     echo "Switch versions, e.g. with juliaup:  juliaup add 1.12 && juliaup default 1.12" >&2
     exit 1
 fi
 echo "Using Julia $julia_version"
 
 # --- restore the default manifest ---------------------------------------------
-if [[ ! -f Manifest-v1.12.toml.default ]]; then
-    echo "ERROR: Manifest-v1.12.toml.default not found in $(pwd)." >&2
+default_manifest="Manifest-v$minor.toml.default"
+manifest="Manifest-v$minor.toml"
+if [[ ! -f $default_manifest ]]; then
+    echo "ERROR: $default_manifest not found in $(pwd)." >&2
     exit 1
 fi
-cp Manifest-v1.12.toml.default Manifest-v1.12.toml
-echo "Copied Manifest-v1.12.toml.default -> Manifest-v1.12.toml"
+cp "$default_manifest" "$manifest"
+echo "Copied $default_manifest -> $manifest"
 
 # --- drop stale manifests -----------------------------------------------------
 # A Manifest.toml in a workspace sub-project shadows the shared, version-specific
 # manifest of the root project and breaks the workspace resolution.
-for manifest in Manifest.toml examples/Manifest.toml; do
-    if [[ -f $manifest ]]; then
-        rm -f "$manifest"
-        echo "Removed $manifest"
+for stale_manifest in Manifest.toml examples/Manifest.toml; do
+    if [[ -f $stale_manifest ]]; then
+        rm -f "$stale_manifest"
+        echo "Removed $stale_manifest"
     fi
 done
 
