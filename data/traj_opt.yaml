@@ -431,7 +431,10 @@ traj_opt:
     # the path still has to pass the startup gates. Measured 2026-09-13 at 10 m/s,
     # 150 m: the 30 deg seed is on a fold (422 or a margin-1.03 path, decided by
     # floating-point noise), 31 deg converges into a basin at 35-39 deg elevation
-    # whose margin (0.66) fails the gate. So -1 first, +2 after.
+    # whose margin (0.66) fails the gate. So -1 first, +2 after. A seed the failure
+    # cache rejects is skipped for free, not counted as a retry: the budget is the
+    # number of requests SENT, and when the listed seeds are used up the run walks
+    # outward by whole degrees (-1, +1, -2, +2, ... up to 10) to find an untried one.
     startup_retry_el_offsets: [-1.0, 2.0]                                     # [deg]
 
     # Extra elevation a path must clear above fc_settings*.yaml's min_elevation

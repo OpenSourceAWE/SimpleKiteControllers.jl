@@ -4739,7 +4739,9 @@ Two levers, both in `data/traj_opt.yaml`:
 
 - **`startup_retry_el_offsets: [-1.0, 2.0]`** — a startup 422 is retried from these seeds
   in order; a seed the failure cache knows is skipped with a warning instead of ending the
-  run. The rule "the startup solve never retries, a converging guess is a different optimum
+  run, and (since 2026-09-19) without using up a retry: the list's length is a budget of
+  requests actually sent, and once the listed seeds are used up the run walks outward by
+  whole degrees (-1, +1, -2, +2, … to ±10) so a cached seed is replaced by an untried one. The rule "the startup solve never retries, a converging guess is a different optimum
   flown silently" is kept in spirit: the run `@warn`s which seed it flew and the summary
   carries `traj_opt.guess.el_center_retry_offset_deg`. (The summary's `el_center_deg` had
   been writing the raw `guess_el_center`, 29.0, while the request used

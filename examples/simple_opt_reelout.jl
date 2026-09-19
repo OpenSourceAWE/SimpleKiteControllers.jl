@@ -680,6 +680,26 @@ opt_length(l) = tos.opt_length_round > 0 ?
     round(l / tos.opt_length_round) * tos.opt_length_round : l
 
 """
+    startup_seed_offsets(listed; max_abs = 10.0) -> Vector{Float64}
+
+The centre-elevation offsets [deg] the startup solve may be seeded from, in
+order: 0 (the shipped guess), then `listed` (`startup_retry_el_offsets`), then
+every whole degree not yet in the list by growing magnitude, negative first, out
+to `max_abs`. The tail only exists so a seed the failure cache rejects can be
+replaced by one that has not been tried; how many of them are SENT is the
+caller's budget, not this list. An empty `listed` never retries, so it gets no
+tail either.
+"""
+function startup_seed_offsets(listed; max_abs = 10.0)
+    offsets = [0.0; listed]
+    isempty(listed) && return offsets
+    for k in 1.0:max_abs, o in (-k, k)
+        o in offsets || push!(offsets, o)
+    end
+    return offsets
+end
+
+"""
     startup_params(el_center) -> InitParams
 
 The startup `/init` request seeded with the guess lemniscate centred at
@@ -733,13 +753,18 @@ t_solve_start = time()
 # the one that converged is reported loudly and in the summary: it is a different
 # optimum, never a silent one. Empty means the first 422 ends the run. A seed the
 # failure cache knows is skipped in a second rather than in the 80 s the solver
-# needs to reach its iteration cap again (see the cache in awetrim_client.jl).
+# needs to reach its iteration cap again (see the cache in awetrim_client.jl) —
+# and it does NOT use up a retry: the budget is `1 + length(offsets)` requests
+# actually SENT, and once the listed seeds are used up the loop walks outward
+# (`startup_seed_offsets`) so a cached seed is replaced by an untried one.
 opt_result = nothing
 opt_seed_trajectory = nothing
-let last_422 = nothing, cached_msg = nothing
-    for (attempt, offset) in enumerate([0.0; tos.startup_retry_el_offsets])
+let last_422 = nothing, cached_msg = nothing, sent = 0,
+    budget = 1 + length(tos.startup_retry_el_offsets), sent_offsets = Float64[]
+    for offset in startup_seed_offsets(tos.startup_retry_el_offsets)
+        sent < budget || break
         el_center = el_center_seed_base + offset
-        params = attempt == 1 ? start_params : startup_params(el_center)
+        params = offset == 0 ? start_params : startup_params(el_center)
         cached = tos.opt_failure_cache ? opt_failed_before(params) : nothing
         if !isnothing(cached)
             cached_msg = @sprintf("This exact request failed before (%s, recorded \
@@ -751,11 +776,14 @@ let last_422 = nothing, cached_msg = nothing
             @warn cached_msg
             continue
         end
-        attempt == 1 ||
+        sent += 1
+        push!(sent_offsets, offset)
+        sent == 1 ||
             @warn @sprintf("Startup solve at %.0f° failed: retry %d/%d from a \
-                            guess centred at %.0f° (startup_retry_el_offsets).",
-                           el_center_seed_base, attempt - 1,
-                           length(tos.startup_retry_el_offsets), el_center)
+                            guess centred at %.0f° (%+.1f°, startup_retry_el_offsets%s).",
+                           el_center_seed_base, sent - 1, budget - 1, el_center, offset,
+                           offset in tos.startup_retry_el_offsets ? "" :
+                               " walked outward past the listed seeds")
         try
             global opt_result, opt_seed_trajectory = startup_solve(params)
             global start_params = params
@@ -771,8 +799,9 @@ let last_422 = nothing, cached_msg = nothing
         end
     end
     isnothing(opt_result) && isnothing(last_422) &&
-        error(cached_msg * "\n\nRetry it with `clear_opt_failures()`, drop its \
-              entry from $OPT_FAILURE_CACHE, or set opt_failure_cache: false in \
+        error(cached_msg * "\n\nEvery seed within reach of startup_retry_el_offsets \
+              is cached as bad. Retry them with `clear_opt_failures()`, drop an entry \
+              from $OPT_FAILURE_CACHE, or set opt_failure_cache: false in \
               data/traj_opt.yaml.")
     isnothing(opt_result) && error("""
           The optimizer returned no path: $(String(copy(last_422.response.body)))
@@ -781,9 +810,9 @@ let last_422 = nothing, cached_msg = nothing
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
               it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
               $(tos.guess_b)°, guess_el_center = $(el_center_seed_base)° of \
-              data/traj_opt.yaml$(isempty(tos.startup_retry_el_offsets) ? "" :
-              ", and every offset in startup_retry_el_offsets = " *
-              "$(tos.startup_retry_el_offsets) failed too"), which seeds the \
+              data/traj_opt.yaml$(length(sent_offsets) == 1 ? "" :
+              ", and the retry seeds at offsets $(sent_offsets[2:end])° " *
+              "failed too (startup_retry_el_offsets)"), which seeds the \
               request and nothing else — widening or raising it changes the \
               guess, not the flown path. Measured at 150 m and 6 m/s: 20°/11° \
               at 18° does not converge, 30°/12° and 20°/11°-at-26° do.

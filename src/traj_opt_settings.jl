@@ -703,6 +703,12 @@ multi-modal, so the guess is a choice about the answer.
     150 m sits on a fold — an identical request threw 422 on 2026-08-30 and
     2026-09-13 and converged in between, decided by floating-point noise from
     IPOPT iteration 14 on.
+
+    The length of the list is a budget of requests actually SENT, not of seeds
+    looked at: a seed the failure cache already knows is skipped for free, and
+    once the listed seeds are used up the run walks outward by whole degrees
+    (-1, +1, -2, +2, … to ±10) so a cached seed is replaced by an untried one.
+    A converging walked-out seed is reported like any other retry.
     """
     startup_retry_el_offsets::Vector{Float64} = Float64[]
     """
