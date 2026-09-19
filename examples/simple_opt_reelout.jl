@@ -1052,6 +1052,11 @@ end
 # nothing about what was asked for over the run. Every other curve in that plot
 # carries the pre-distortion.
 opt_paths_raw = [install_optimized_path!(opt_result)]
+# Where each of those was installed: (sim time [s], phase). The startup path goes
+# in before the run and is flown from phase 3/4; a re-optimized one is flown from
+# the install on, so one installed in phase 5 is flown by phase 5 alone, and the
+# pattern plot masks it out with the phase-5 samples of the flown curve.
+opt_paths_at = [(0.0, 0)]
 
 # set_path! REVERSES a path that does not match up_loops, so a mismatch here is
 # not caught by anything downstream: the kite would fly the optimizer's curve,
@@ -1228,7 +1233,7 @@ if opt_r_on && !isnan(c1_startup)
             # carried-over state (`m_reply`'s last measurement, the incumbent)
             # would be lost or undefined between attempts.
             global opt_result, opt_table, opt_downloops, opt_power_pred
-            global opt_paths_raw, opt_r_scale, opt_r_min
+            global opt_paths_raw, opt_paths_at, opt_r_scale, opt_r_min
             global incumbent_score, inc_result, inc_table, inc_raw
             global r_asked, m_reply, bisect_hi, cap_ok, cap_bad, relax_cap
             global width_ok, width_bad, relax_width
@@ -1414,6 +1419,7 @@ if opt_r_on && !isnan(c1_startup)
                 opt_downloops = inc_table["spline"]["downloops"]
                 opt_power_pred = Float64(inc_table["metrics"]["avg_power_W"])
                 opt_paths_raw = [inc_raw]
+                opt_paths_at = [(0.0, 0)]
                 opt_r_scale = reelout_anchor_ratio(inc_table) *
                               tos.turn_radius_headroom
                 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
@@ -2601,6 +2607,7 @@ try
                             # a path the kite ever flies, and the pattern plot
                             # draws these as what it flew, undistorted.
                             push!(opt_paths_raw, cand_raw)
+                            push!(opt_paths_at, (t, phase))
                             global blend_t0 = t
                             # k_v and input_depower move only for the `tab` that made
                             # it here: a candidate rejected or spent on a retry above

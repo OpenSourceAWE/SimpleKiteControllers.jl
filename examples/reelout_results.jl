@@ -1001,12 +1001,16 @@ end
 # correction and cannot show what the correction did; these are the curves the
 # kite is meant to land on. Its own file next to the log, archived with it, so
 # `plot_pattern_scenario` can draw them for an archived run as well as a live one.
+# Each carries the sim time and phase it was installed at, so the plot can leave
+# out what only phase 5 flew.
 opt_paths_file = joinpath(output_path, log_name * "_opt_paths.yaml")
 if @isdefined(opt_paths_raw) && !isempty(opt_paths_raw)
     YAML.write_file(opt_paths_file, Dict(
-        "paths" => [Dict("azimuth" => round.(Float64.(paz); digits = 3),
+        "paths" => [Dict("installed_t" => round(t_at; digits = 2),
+                         "installed_phase" => ph_at,
+                         "azimuth" => round.(Float64.(paz); digits = 3),
                          "elevation" => round.(Float64.(pel); digits = 3))
-                    for (paz, pel) in opt_paths_raw]))
+                    for ((paz, pel), (t_at, ph_at)) in zip(opt_paths_raw, opt_paths_at)]))
 elseif isfile(opt_paths_file)
     rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
 end

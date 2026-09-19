@@ -15,20 +15,27 @@ create_plots.jl while keeping the interactive script's structure intact.
 # using SimpleKiteControllers
 
 """
-    load_opt_paths(scenario_dir, log_name) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
+    load_opt_paths(scenario_dir, log_name; phases = (0, 3, 4)) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
 
 The optimizer's uncorrected paths of an optimized reel-out run, from the
 `<log_name>_opt_paths.yaml` that `reelout_results.jl` writes next to the log, as
 one `(az, el)` pair of series [deg] — the curves joined by `NaN` so Makie draws
 the family in one colour under one legend entry, each closed by repeating its
-first point. `nothing` when the file is absent (a lemniscate run, or a log from
-before it was written) or empty.
+first point. Only the paths installed in one of `phases` (the startup path counts
+as phase 0): a path is flown from its install on, so one installed in phase 5 is
+flown by phase 5 alone, which the pattern plot masks out of the flown curve too.
+`nothing` when the file is absent (a lemniscate run, or a log from before it was
+written) or no path is left.
 """
-function load_opt_paths(scenario_dir::AbstractString, log_name::AbstractString)
+function load_opt_paths(scenario_dir::AbstractString, log_name::AbstractString;
+                        phases = (0, 3, 4))
     file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
     isfile(file) || return nothing
     paths = get(V3Kite.YAML.load_file(file), "paths", nothing)
-    (paths isa AbstractVector && !isempty(paths)) || return nothing
+    paths isa AbstractVector || return nothing
+    # A file from before the phase was recorded keeps every path.
+    paths = [p for p in paths if get(p, "installed_phase", 0) in phases]
+    isempty(paths) && return nothing
     oaz = Float64[]; oel = Float64[]
     for (k, p) in enumerate(paths)
         paz, pel = Float64.(p["azimuth"]), Float64.(p["elevation"])
