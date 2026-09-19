@@ -46,6 +46,9 @@ export TrajOptSettings, turn_radius_lap_reelout
 export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
 export check_reelout_feasibility
 
+# Learnt elevation bias, remembered per inflow condition (examples/simple_opt_reelout.jl)
+export EL_BIAS_CACHE, el_bias_key, el_bias_seed, record_el_bias_seed!
+
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
 export with_file_lock, init_results_file, record_result!, load_results
@@ -85,6 +88,8 @@ include("optimization.jl")
 include("traj_opt_settings.jl")
 # After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.
 include("reelout_feasibility.jl")
+# After optimization.jl: with_file_lock guards the cache file.
+include("el_bias_cache.jl")
 
 function __init__()
     reload_turn_rate_table!()

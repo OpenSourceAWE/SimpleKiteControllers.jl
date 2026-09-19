@@ -894,6 +894,36 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
+# The elevation correction REMEMBERED for this project at this wind speed
+# (`fcs.el_bias_seed_laps`): what the learner below settled on after its first
+# laps last time. The kite sags under whatever path it is given, and the learner
+# starts from zero, so without this the first one or two laps fly the
+# optimizer's curve uncorrected — measured 2026-09-19 at Cabauw 5.8 m/s, 4-5° of
+# lobe overshoot on laps 1-2 against 2-3° once the correction had reached the
+# path. Read here, before the startup install bakes it in; written back by
+# reelout_results.jl once the run has learnt its own.
+n_el_bins = max(1, fcs.el_bias_bins)
+flown_wind = something(WIND_SPEED, default_v_wind)
+el_bias_seed0 = zeros(n_el_bins)
+"The elevation correction as one number per azimuth band, crossing first [deg]."
+prof_str(p) = length(p) == 1 ? @sprintf("%+.2f°", p[1]) :
+              string("[", join((@sprintf("%+.2f", v) for v in p), " "),
+                     "]° (crossing … lobe)")
+if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
+    seed = el_bias_seed(PROJECT, flown_wind, n_el_bins)
+    if isnothing(seed)
+        @info @sprintf("No elevation bias remembered for %s: the first laps fly \
+                        the optimizer's curve uncorrected and the correction \
+                        after lap %d is stored in %s.",
+                       el_bias_key(PROJECT, flown_wind), fcs.el_bias_seed_laps,
+                       EL_BIAS_CACHE)
+    else
+        el_bias_seed0 = clamp.(seed, -fcs.el_bias_max, fcs.el_bias_max)
+        @info @sprintf("Elevation bias seeded from %s: %s, baked into the startup \
+                        path.", el_bias_key(PROJECT, flown_wind), prof_str(el_bias_seed0))
+    end
+end
+
 # The turn-rate gain at a depower, NaN for a cell the table cannot serve — a
 # lookup that costs the diagnosis, not the run. Memoized on the depower value:
 # the sim loop below asks for it every step while a blend ramps.
@@ -956,19 +986,43 @@ c1_startup = c1_setpoint
 # lobe sag measured at 380 m; at the anchor the startup path is flown for one
 # or two laps before the first re-optimization replaces it, so holding it back
 # there costs nothing the run scores. `startup_wing_frac` records what went in.
+#
+# The REMEMBERED bias (`el_bias_seed0`) goes in here too: its mean whole — a
+# rigid shift the curvature gate barely notices — and its band-to-band spread
+# rationed BEFORE the lobe lift is, the opposite order to a mid-run install.
+# There the spread is the measured half and the lift a guess at the same shape;
+# here the seed was MEASURED with the lift in the path, so the two are additive
+# and dropping the lift to fit the spread only swaps one for the other. Measured
+# 2026-09-19 at Cabauw 5.8 m/s: the first seeded run took the spread and 0 % of
+# the lift, and its lap-1 reference sat where the unseeded run's had — then
+# learnt a bias that absorbed the missing lift, which the next run would have
+# displaced again. `startup_bias_applied` is what the path carries, and seeds
+# `el_applied` below so the in-air route delivers the remainder.
 startup_wing_frac = 1.0
+startup_bias_frac = 1.0
+startup_bias_applied = zeros(n_el_bins)
 install_optimized_path!(reply) = begin
-    global startup_wing_frac, c1_startup
+    global startup_wing_frac, startup_bias_frac, startup_bias_applied, c1_startup
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
     lift = wing_lift(az, el)
+    bias_mean = mean(el_bias_seed0)
+    bias_dev = el_bias_seed0 .- bias_mean
+    lifted(fs, fw) = el .+ bias_lift(az, bias_mean .+ fs .* bias_dev) .+ fw .* lift
     resample = min(tos.resample_points, length(az) - 1)
     c1_startup = c1_at_depower(pattern_depower(reply))
-    startup_wing_frac = 1.0
-    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
-        for frac in (1.0, 0.75, 0.5, 0.25, 0.0)
-            startup_wing_frac = frac
-            set_path!(fec, az, el .+ frac .* lift; resample)
+    startup_wing_frac, startup_bias_frac = 1.0, 1.0
+    has_spread = any(!=(0), bias_dev)
+    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 &&
+       (any(!=(0), lift) || has_spread)
+        # (spread fraction, lift fraction): spread down to 0 first, lift after.
+        rungs = has_spread ?
+            ((1.0, 1.0), (0.75, 1.0), (0.5, 1.0), (0.25, 1.0), (0.0, 1.0),
+             (0.0, 0.75), (0.0, 0.5), (0.0, 0.25), (0.0, 0.0)) :
+            ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5), (1.0, 0.25), (1.0, 0.0))
+        for (fs, fw) in rungs
+            startup_bias_frac, startup_wing_frac = fs, fw
+            set_path!(fec, az, lifted(fs, fw); resample)
             check_pattern_feasible(fec, l_tether, fcs.max_steering;
                                    c1 = c1_startup, prn = false).margin >=
                 tos.min_feasibility_margin && break
@@ -977,9 +1031,16 @@ install_optimized_path!(reply) = begin
             @info @sprintf("Lobe lift held back on the startup path to fit the \
                             curvature gate: %.0f %% of %.2f°.",
                            100 * startup_wing_frac, fcs.el_offset_wing)
+        startup_bias_frac < 1 &&
+            @info @sprintf("Remembered bias held back on the startup path to fit \
+                            the curvature gate: %.0f %% of its %.2f° spread; the \
+                            %+.2f° mean went in whole.",
+                           100 * startup_bias_frac,
+                           maximum(bias_dev) - minimum(bias_dev), bias_mean)
     else
-        set_path!(fec, az, el .+ lift; resample)
+        set_path!(fec, az, lifted(1.0, 1.0); resample)
     end
+    startup_bias_applied = bias_mean .+ startup_bias_frac .* bias_dev
     return (az, el)
 end
 # Every optimizer answer this run flies, as it arrived — before `el_bias`,
@@ -1475,9 +1536,10 @@ chk_points = n_path
 # solved for rather than a curve 2° under it. The correction is a PROFILE over
 # `fcs.el_bias_bins` azimuth bands (1 = one number, i.e. a rigid shift), since the
 # sag is deeper at the lobes than at the crossing.
-n_el_bins = max(1, fcs.el_bias_bins)
-el_bias = zeros(n_el_bins)      # [deg] learnt correction, per azimuth band
-el_applied = zeros(n_el_bins)   # [deg] profile the path in the air actually carries
+# `n_el_bins` is set above, where the remembered seed is read; the learner starts
+# from that seed and the startup path already carries what its ladder let in.
+el_bias = copy(el_bias_seed0)   # [deg] learnt correction, per azimuth band
+el_applied = copy(startup_bias_applied)   # [deg] profile the path in the air actually carries
 lift_on = false             # `el_offset_final` latched in; never cleared once set
 el_shift_events = NamedTuple[]  # in-air shift attempts, one entry per outcome CHANGE
 lift_t = NaN                # [s] when it latched; NaN = never
@@ -1497,11 +1559,6 @@ geom_t = Float64[]
 geom_az_c = Float64[]
 geom_az_amp = Float64[]
 geom_el_h = Float64[]
-
-"The elevation correction as one number per azimuth band, crossing first [deg]."
-prof_str(p) = length(p) == 1 ? @sprintf("%+.2f°", p[1]) :
-              string("[", join((@sprintf("%+.2f", v) for v in p), " "),
-                     "]° (crossing … lobe)")
 
 # Where in the pattern the kite ends up low — the profile a shaped lift is aimed
 # at, and the one thing a whole-lap mean like `el_bias` cannot see. Binned on

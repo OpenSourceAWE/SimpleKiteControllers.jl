@@ -154,6 +154,7 @@ fc_settings:
   el_bias_max:         4.0     # Clamp on the learnt elevation correction, per band [deg]
   el_bias_bins:          5     # Azimuth bands the correction is learnt over; 1 = rigid [-]
   el_bias_smooth:     0.25     # How far each band is pulled to its neighbours per lap [-]
+  el_bias_seed_laps:     2     # Remember the correction after this many laps, per project and wind speed; 0 = off [-]
   # 3.0 since 2026-08-30: at 1.5 the phase-5 sag measured 1.5-3.4 deg in every azimuth
   # band, deeper than the lift meant to cover it, and 5 m/s failed the elevation gate
   # there. The lift budget had +1.98 deg at 5 m/s before the elevation-span criterion

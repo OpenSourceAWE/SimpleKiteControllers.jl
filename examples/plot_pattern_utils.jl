@@ -15,6 +15,31 @@ create_plots.jl while keeping the interactive script's structure intact.
 # using SimpleKiteControllers
 
 """
+    load_opt_paths(scenario_dir, log_name) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
+
+The optimizer's uncorrected paths of an optimized reel-out run, from the
+`<log_name>_opt_paths.yaml` that `reelout_results.jl` writes next to the log, as
+one `(az, el)` pair of series [deg] — the curves joined by `NaN` so Makie draws
+the family in one colour under one legend entry, each closed by repeating its
+first point. `nothing` when the file is absent (a lemniscate run, or a log from
+before it was written) or empty.
+"""
+function load_opt_paths(scenario_dir::AbstractString, log_name::AbstractString)
+    file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
+    isfile(file) || return nothing
+    paths = get(V3Kite.YAML.load_file(file), "paths", nothing)
+    (paths isa AbstractVector && !isempty(paths)) || return nothing
+    oaz = Float64[]; oel = Float64[]
+    for (k, p) in enumerate(paths)
+        paz, pel = Float64.(p["azimuth"]), Float64.(p["elevation"])
+        k > 1 && (push!(oaz, NaN); push!(oel, NaN))
+        append!(oaz, paz); push!(oaz, first(paz))
+        append!(oel, pel); push!(oel, first(pel))
+    end
+    return (oaz, oel)
+end
+
+"""
     plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                          opt_raw::Union{Nothing, Tuple} = nothing,
                          project::Union{Nothing, AbstractString} = nothing,
@@ -28,8 +53,10 @@ scenario folder (`output/scenarios/<name>` or `output/archives/<run>`); pass
 `project` explicitly for a live run in `output/`, whose project file lives in
 `data/` and is never copied there. When `disp=false`, the figure is created
 but not displayed (suitable for batch processing). `opt_raw` may be passed as
-`(az_array, el_array)` to overlay the optimizer's uncorrected paths; if
-absent, uses the attractor reference instead. Pass `log_name` explicitly to
+`(az_array, el_array)` to overlay the optimizer's uncorrected paths; if absent,
+they are read from `<log_name>_opt_paths.yaml` in `scenario_dir` when an
+optimized reel-out run wrote one (see [`load_opt_paths`](@ref)), and the
+attractor reference is the fallback for a run without it. Pass `log_name` explicitly to
 avoid ambiguity when multiple logs exist in the directory (common in `output/`
 after multiple runs); if absent and `project` is provided, searches for the
 one `.arrow` file.
@@ -69,9 +96,13 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     az_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
     el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
+    # The optimizer's uncorrected curves, when the run wrote them and the caller
+    # passed none: the reference the correction is meant to land the kite on.
+    isnothing(opt_raw) && (opt_raw = load_opt_paths(scenario_dir, log_name))
+
     # Reference path: the logged attractor (live, walking every path under re-opt)
-    # or fallback to the lemniscate
-    live = [i for i in rng if sl.sys_state[i] >= 3 &&
+    # or fallback to the lemniscate. Phase 5 is left out, matching the flown mask.
+    live = [i for i in rng if sl.sys_state[i] in (3, 4) &&
             !(iszero(sl.var_02[i]) && iszero(sl.var_03[i]))]
     ref_az, ref_el = if !isempty(live)
         Float64.(sl.var_02[live]), Float64.(sl.var_03[live])

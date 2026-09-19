@@ -363,6 +363,29 @@ Add new findings there, not here.
     """
     el_bias_smooth = 0.25
     """
+    Laps of learning after which the elevation correction is REMEMBERED for the
+    inflow condition flown, `0` to neither read nor write the memory.
+
+    The learner starts every run from zero, so the first laps fly the optimizer's
+    curve uncorrected and sag under it by whatever the previous run already
+    measured (4-5 deg at the lobe bottoms at Cabauw 5.8 m/s, 2026-09-19, where the
+    later laps held 2-3). With this set, `examples/simple_opt_reelout.jl` seeds
+    `el_bias` from [`el_bias_seed`](@ref) — the correction stored for the same
+    project at the same wind speed ([`el_bias_key`](@ref)) — bakes it into the
+    startup path on the install ladder every other path gets, and at the end of
+    the run stores the correction as it stood after this many completed laps
+    ([`record_el_bias_seed!`](@ref)). Run after run the seed then converges on the
+    correction the FIRST laps need, which is what it is for: the sag deepens as
+    the tether grows, so the end-of-run profile would over-lift the anchor.
+
+    Why not `el_bias_max` or the end of phase 4: the seed is learnt from the laps
+    it will be applied to, not from a length the run has left behind. 2 is a lap
+    of settling onto the seeded path plus one lap of correction; 1 stores what a
+    single lap under the seed still found. A run that ends before that many laps
+    stores what it has, and a run with no completed lap stores nothing.
+    """
+    el_bias_seed_laps::Int = 0
+    """
     Extra elevation [deg] the flown path is lifted by once reel-out ends, on top
     of the learnt correction. A setpoint move, not an error: the kite is asked to
     fly the pattern higher where height is clearance and there is no reel-out power

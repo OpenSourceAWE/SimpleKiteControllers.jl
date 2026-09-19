@@ -646,6 +646,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "lobe_lift_pct" => (round(Int, 100 * startup_wing_frac),
             "share of el_offset_wing the STARTUP install carried; held back on the \
              same rungs as a mid-run install when the full lift fails the curvature gate"),
+        "seed_spread_pct" => (round(Int, 100 * startup_bias_frac),
+            "share of the remembered bias's band-to-band SPREAD the STARTUP install \
+             carried; its mean always goes in whole, and the spread is rationed \
+             before the lobe lift is"),
         "downloops" => (opt_downloops, "traversal direction the optimizer solved for")),
     "feasibility" => feasibility_block,
     "reopt" => OrderedDict(
@@ -704,6 +708,12 @@ summary["traj_opt"] = OrderedDict{String, Any}(
              after every lap [-]"),
         "profile_deg" => (n_el_bins == 1 ? "n/a" : round.(el_bias; digits = 2),
             "the learnt correction per band, crossing first [deg]"),
+        "seed_deg" => (round.(el_bias_seed0; digits = 2),
+            "the correction the run started from, remembered per project and wind \
+             speed after el_bias_seed_laps laps of the previous run; zeros = none"),
+        "seed_laps" => (fcs.el_bias_seed_laps,
+            "el_bias_seed_laps, laps after which this run's correction is remembered; \
+             0 = off"),
         "lift_deg" => (fcs.el_offset_final,
             "el_offset_final, the fixed lift added on top of the learnt bias [deg]"),
         "lift_lead" => (fcs.el_offset_lead,
@@ -985,6 +995,46 @@ open(joinpath(output_path, log_name * ".yaml"), "w") do io
     write_yaml_commented(io, 0, summary)
 end
 
+# Every path the optimizer returned that the run went on to fly, AS IT ARRIVED —
+# before `el_offset_wing`, the seeded/learnt `el_bias` and `el_offset_final`
+# were added. The logged attractor walks the CORRECTED path, so it rises with the
+# correction and cannot show what the correction did; these are the curves the
+# kite is meant to land on. Its own file next to the log, archived with it, so
+# `plot_pattern_scenario` can draw them for an archived run as well as a live one.
+opt_paths_file = joinpath(output_path, log_name * "_opt_paths.yaml")
+if @isdefined(opt_paths_raw) && !isempty(opt_paths_raw)
+    YAML.write_file(opt_paths_file, Dict(
+        "paths" => [Dict("azimuth" => round.(Float64.(paz); digits = 3),
+                         "elevation" => round.(Float64.(pel); digits = 3))
+                    for (paz, pel) in opt_paths_raw]))
+elseif isfile(opt_paths_file)
+    rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
+end
+
+# ==================== REMEMBER THE ELEVATION BIAS ==================== #
+
+# The correction as it stood after `fcs.el_bias_seed_laps` completed laps, stored
+# for this project at this wind speed so the next run's FIRST laps start from it
+# (see the seed block of simple_opt_reelout.jl). The end-of-run profile is not
+# what is wanted: the sag deepens as the tether grows, and this seed is applied
+# at the anchor. A run that ended early stores the latest lap it has; one with no
+# completed lap of learning leaves the memory alone.
+if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
+    seed_events = filter(e -> e.lap <= fcs.el_bias_seed_laps, el_bias_events)
+    if isempty(seed_events)
+        @info "Elevation bias not remembered: no lap of learning completed."
+    else
+        seed_event = argmax(e -> e.lap, seed_events)
+        record_el_bias_seed!(PROJECT, flown_wind, seed_event.bias;
+                             laps = seed_event.lap, log = log_name,
+                             turbulence = string(TURBULENCE),
+                             seeded_from = round.(el_bias_seed0; digits = 3))
+        @info @sprintf("Elevation bias remembered for %s after lap %d: %s (started \
+                        the run at %s).", el_bias_key(PROJECT, flown_wind),
+                       seed_event.lap, prof_str(seed_event.bias), prof_str(el_bias_seed0))
+    end
+end
+
 # ==================== ARCHIVE ==================== #
 
 # One timestamped folder per run under output/archives/, so the exact config
@@ -1016,6 +1066,7 @@ if run_archive
     output_files = [
         joinpath(output_path, log_name * ".arrow"),
         joinpath(output_path, log_name * ".yaml"),
+        opt_paths_file,                                       # optimizer's uncorrected curves
     ]
     for f in unique(vcat(input_yaml_files, output_files))
         isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
@@ -1034,9 +1085,9 @@ end
 plots_failed = nothing
 if show_plots
     # The flown curve and this run's log name, so the plots draw the optimized
-    # path and load the _opt log instead of the lemniscate run's.
+    # path and load the _opt log instead of the lemniscate run's. The optimizer's
+    # raw curves reach the plots through `<log>_opt_paths.yaml`, written above.
     REF_PATH = (fec.az_path, fec.el_path)
-    OPT_PATHS_RAW = opt_paths_raw
     LOG_NAME = log_name
     # The plots are cosmetic and the run is already scored, logged and archived by
     # here; a GLMakie failure (needs the main thread, so an eval off it throws)

@@ -316,25 +316,10 @@ end
 # `el_bias`, `el_offset_final` and `el_offset_wing` were added to it. Every other
 # curve here carries that pre-distortion — the logged attractor included, since it
 # walks the corrected path — so without these there is nothing in the figure to
-# compare the correction against. Set by `simple_opt_reelout.jl`; absent for a
-# lemniscate run or a log replayed on its own.
-#
-# Joined by NaN into ONE series rather than plotted one by one: Makie breaks a
-# line at NaN, so the family draws in a single colour under a single legend entry,
-# the way the flown trajectory's own laps already do. Each loop is closed by
-# repeating its first point, since a reply need not repeat it.
-opt_raw = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
-             !isempty(OPT_PATHS_RAW) && !any(==(5), sl.sys_state[rng])
-    oaz = Float64[]; oel = Float64[]
-    for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
-        k > 1 && (push!(oaz, NaN); push!(oel, NaN))
-        append!(oaz, paz); push!(oaz, first(paz))
-        append!(oel, pel); push!(oel, first(pel))
-    end
-    (oaz, oel)
-else
-    nothing
-end
+# compare the correction against. Read from the `<log>_opt_paths.yaml` that
+# reelout_results.jl writes next to the log, through the same loader an archived
+# run's plot uses; absent for a lemniscate run or a log from before it was written.
+opt_raw = load_opt_paths(output_path, log_name)
 
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
 unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
@@ -352,21 +337,9 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 
 if "pattern" in plots
     @info "Plotting the pattern..."
-    # Construct opt_raw from OPT_PATHS_RAW if available (from simple_opt_reelout.jl);
-    # dropped entirely when the run reached phase 5, matching the masked flown curve.
-    opt_raw_for_plot = if @isdefined(OPT_PATHS_RAW) && OPT_PATHS_RAW isa AbstractVector &&
-                          !isempty(OPT_PATHS_RAW) && !any(==(5), sl.sys_state[rng])
-        oaz = Float64[]; oel = Float64[]
-        for (k, (paz, pel)) in enumerate(OPT_PATHS_RAW)
-            k > 1 && (push!(oaz, NaN); push!(oel, NaN))
-            append!(oaz, paz); push!(oaz, first(paz))
-            append!(oel, pel); push!(oel, first(pel))
-        end
-        (oaz, oel)
-    else
-        nothing
-    end
-    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw = opt_raw_for_plot,
+    # `opt_raw` (above) is the optimizer's uncorrected curves when the run has
+    # them; the attractor is the fallback for a lemniscate run or a replayed log.
+    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw,
                                project = pattern_project, log_name = log_name)
     display(p1)
     sleep(0.1)
