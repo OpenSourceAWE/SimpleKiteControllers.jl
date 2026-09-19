@@ -155,7 +155,7 @@ function powercurve_images(rows)
                        [nothing, :dash, :dashdot]],
           color = [[nothing, :grey, :grey], [nothing, :grey, :grey, :black],
                    [nothing, :grey, :grey]],
-          legend_position = [:auto, :lt, :auto],
+          legend_position = [:auto, :rb, :rb],
           title = "V3 reel-out power curve", scatter = true, disp = true,
           fig = "powercurve")
     png_file = joinpath(tempdir(), "powercurve.png")
