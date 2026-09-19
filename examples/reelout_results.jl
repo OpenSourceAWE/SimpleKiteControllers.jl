@@ -291,7 +291,7 @@ else
     i_min = findall(<=(t4[end] - 2.0), t4)
     isempty(i_min) && (i_min = eachindex(t4))
     p4_power = (av = mean(p4), min = minimum(p4[i_min]), max = maximum(p4))
-    p4_force = (av = mean(f4), min = minimum(f4), max = maximum(f4))
+    p4_force = (av = mean(f4), min = minimum(f4[i_min]), max = maximum(f4))
     p4_v_ro = (av = mean(vro4), min = minimum(vro4[i_min]), max = maximum(vro4))
     p4_depower_av = mean(dp4)
     @printf("  Phase 4: power av %.0f W (min %.0f, max %.0f); force av %.0f N \
@@ -949,7 +949,7 @@ if have_phase4
     summary_block["av_power_ro"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
     summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four, last 2 s excluded [W]")
     summary_block["max_power_ro"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
-    summary_block["min_force_ro"] = (round(Int, p4_force.min), "min tether force over phase four [N]")
+    summary_block["min_force_ro"] = (round(Int, p4_force.min), "min tether force over phase four, last 2 s excluded [N]")
     summary_block["av_force_ro"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
     summary_block["max_force_ro"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
     summary_block["v_ro_min"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four, last 2 s excluded [m/s]")
