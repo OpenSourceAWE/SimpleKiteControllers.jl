@@ -5074,3 +5074,31 @@ loop gain `heading_p * c1` is the same everywhere. Factors at `body_damping` as 
 with; `gain_scale_final_peak` in the summary now reads against the setpoint too.
 Not yet re-flown across the wind speeds — the entry (min elevation) and phase 5
 (`reacquire_margin` branch flips) are the places to look first.
+
+## 2026-09-19 — `attractor_dist` 8 -> 6 on the reel-out settings: RMS d 1.80 -> 1.41°
+
+Asked to bring `rms_d` under 1.5° at 6 m/s (150 -> 380 m, no turbulence, the
+14:18 run at 1.80° as baseline). The lead was the obvious lever: the 2026-08-02
+sweep found RMS d monotone in it with the minimum below the swept range, and
+10 -> 8 bought 30 % on 2026-08-18. Three re-flies, all with the c1-scaled
+`heading_p` of the entry above, plant deterministic so each pair differs by the
+lever alone:
+
+| `attractor_dist` | RMS / mean / max d | min el (phase 5) | laps | saturated / chatter | power |
+|--:|---|---|--:|---|--:|
+| 8.0 (baseline) | 1.80 / 1.46 / 5.23° | 8.3° (9.97°) | 7.5 | 11 % / 0.0071 | 7299 W (1.00x) |
+| 6.5 | 1.50 / 1.19 / 5.02° | 8.7° (9.1°) | 7.5 | 9 % / 0.0063 | 7323 W (1.01x) |
+| **6.0 (kept)** | **1.41 / 1.13 / 4.97°** | **8.9° (9.95°)** | 7.0 | 8 % / 0.0055 | 7294 W (1.01x) |
+| 5.5 | 1.33 / 1.03 / 4.98° | **7.4° (7.37°)** | 7.0 | 7 % / 0.0049 | 7295 W (1.01x) |
+
+Archives `2026-09-19_141800`, `_142338`, `_142718`, `_142533`. RMS d keeps
+falling with the lead all the way to 5.5, and so do saturation and chatter —
+but at 5.5 the **phase-5 floor drops 2.6°** (9.95 -> 7.37°, against the 6.5°
+criterion). That is the overrun the 2026-08-18 entry predicted: at 380 m the
+pattern is ~4.8° tall, so a 5.5° lead lands the attractor on top of the kite in
+the small, lifted phase-5 pattern. 6.0 is the shortest lead that keeps the
+phase-5 floor where 8.0 had it. Power is flat (-0.1 %), all 10 criteria pass at
+every setting. `fc_settings.yaml` (200 m fig8) is untouched.
+
+Not yet regressed at the other wind speeds; `v03` and `v10` are where the
+pattern's angular size differs most from 6 m/s.

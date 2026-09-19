@@ -141,7 +141,7 @@ fc_settings:
   f8_c:               0.0      # Size of the right part                           [deg]
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
-  attractor_dist:      8.0     # Arc distance Q -> attractor                      [deg]
+  attractor_dist:      6.0     # Arc distance Q -> attractor                      [deg]
   # 6.0 since 2026-08-30, up from the 3.0 default: at 3.0 the phase-5 sag (~3.7 deg mean
   # cross-track at 3.5 m/s) is the same size as the threshold, and at t = 359.6 s of the
   # 12:22 run the global best beat the in-window best by 3.06 deg right at the centre
