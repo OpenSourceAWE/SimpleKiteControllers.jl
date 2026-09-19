@@ -90,8 +90,8 @@ function plot_powercurve()
 
     plotx(v_wind, [p_kw, p_max_kw, p_min_kw], [f_kn, f_max_kn, f_min_kn, f_limit_kn],
           [v_ro, v_ro_max, v_ro_min];
-          xlabel = "wind speed [m/s]",
-          ylabels = ["power [kW]", "force [kN]", "speed [m/s]"],
+          xlabel = "wind speed at 6 m height [m/s]",
+          ylabels = ["power [kW]", "force [kN]", "reelout speed [m/s]"],
           labels = [["mean", "max", "min"], ["mean", "max", "min", "limit"], ["mean", "max", "min"]],
           linestyle = [[nothing, :dash, :dashdot], [nothing, :dash, :dashdot, :dot],
                        [nothing, :dash, :dashdot]],
