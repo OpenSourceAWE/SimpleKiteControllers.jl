@@ -99,7 +99,7 @@ function plot_powercurve()
                    [nothing, :grey, :grey]],
           legend_position = [:auto, :lt, :auto],
           title = "V3 reel-out power curve", scatter = true, disp = true,
-          fig = "powercurve")
+          xticks = 3:11, fig = "powercurve")
     
     # Save the plot to the active site's folder under notebooks/images
     images_dir = normpath(joinpath(@__DIR__, "..", "notebooks", "images", scenario_site()))

@@ -157,7 +157,7 @@ function powercurve_images(rows)
                    [nothing, :grey, :grey]],
           legend_position = [:auto, :rb, :rb],
           title = "V3 reel-out power curve", scatter = true, disp = true,
-          fig = "powercurve")
+          xticks = 3:11, fig = "powercurve")
     png_file = joinpath(tempdir(), "powercurve.png")
     pdf_file = joinpath(tempdir(), "powercurve.pdf")
     savefig(png_file)
