@@ -283,9 +283,16 @@ else
     vro4 = Float64.(getindex.(sl.v_reelout, 1))[fig8]
     p4 = f4 .* vro4
     dp4 = Float64.(sl.depower[fig8])
-    p4_power = (av = mean(p4), min = minimum(p4), max = maximum(p4))
+    # The power and speed minima skip the last 2 s of phase 4: the soft-stop
+    # ramp winds the speed (and with it the power) down before the length stop
+    # flips to phase 5, and that ramp is a setpoint move, not a dip. Falls back
+    # to the whole window if phase 4 is shorter.
+    t4 = Float64.(sl.time[fig8])
+    i_min = findall(<=(t4[end] - 2.0), t4)
+    isempty(i_min) && (i_min = eachindex(t4))
+    p4_power = (av = mean(p4), min = minimum(p4[i_min]), max = maximum(p4))
     p4_force = (av = mean(f4), min = minimum(f4), max = maximum(f4))
-    p4_v_ro = (av = mean(vro4), min = minimum(vro4), max = maximum(vro4))
+    p4_v_ro = (av = mean(vro4), min = minimum(vro4[i_min]), max = maximum(vro4))
     p4_depower_av = mean(dp4)
     @printf("  Phase 4: power av %.0f W (min %.0f, max %.0f); force av %.0f N \
              (min %.0f, max %.0f); v_reelout av %.2f m/s (min %.2f, max %.2f); \
@@ -940,12 +947,12 @@ summary_block["max_optimization_time"] = (round(opt_cycle_max_s; digits = 1),
     "longest wall time to compute a new figure of eight, retries included [s]")
 if have_phase4
     summary_block["av_power_ro"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
-    summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four [W]")
+    summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four, last 2 s excluded [W]")
     summary_block["max_power_ro"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
     summary_block["min_force_ro"] = (round(Int, p4_force.min), "min tether force over phase four [N]")
     summary_block["av_force_ro"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
     summary_block["max_force_ro"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
-    summary_block["v_ro_min"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four [m/s]")
+    summary_block["v_ro_min"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four, last 2 s excluded [m/s]")
     summary_block["v_ro_av"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
     summary_block["v_ro_max"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
     summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
