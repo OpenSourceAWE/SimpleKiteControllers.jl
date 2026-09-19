@@ -4995,3 +4995,62 @@ sits at `f_max` there too) and fix 3 scales phase 5 by ~1.09 / ~1.25 (limiter pe
 ~0.40); below 8 m/s all three fixes are inert by construction (optimizer depower inside the
 old table, limiter never engaging). Same caveat as the previous entry: claims until
 `create_overview.jl` is re-run.
+
+## 2026-09-19 — Cabauw 5.5 m/s: `pattern_azimuth_max` 25° closes the wide basin; the budget moves to the 100 m wind
+
+Two findings from the Cabauw sweep, both at 5.5 m/s (`gui.yaml` `wind_speed: 5.5`,
+`system_reelout_cabauw.yaml`).
+
+**1. The re-optimizer wandered into the wide basin.** The startup path was the usual one
+(half-width 20.8°, 14 873 W predicted — same width as 5 and 6 m/s), but the first
+re-optimization at t = 31 s / L = 188 m came back at ±33–37° azimuth with a 19° elevation
+span (5 m/s flies ±18° / 10°). It was installed because its 13 238 W was 0.89 of the
+previous install, above the `min_power_frac_prev = 0.85` gate, and then covered 83 % of the
+reeling window; the next reply at L = 281 m was worse still (7.6 kW) and rejected. Net:
+14.5 kW at 5.5 m/s against 14.1 at 5 and 21.6 at 6.
+
+Fix: `pattern_azimuth_max: 25.0` in `data/traj_opt.yaml` (was 0.0, i.e. the server's
+45.8°). Every good run across 5–10 m/s flies ±18–25° reach, so the cap does not bind on
+the solutions we want; it only removes the basin. Tightening `min_power_frac_prev` to
+~0.95 would have rejected the reply too, but only refuses bad paths rather than steering
+the solve — the run would have stayed on its startup path.
+
+| 5.5 m/s | `_120220` (cap off) | `_121042` (cap 25°) |
+| --- | --- | --- |
+| mean reel-out power | 14 511 W | **18 641 W** (+28 %) |
+| flown azimuth reach | ±33–37° | ±20° |
+| elevation span per lobe | 19.1° | 11.5° |
+| re-opts installed | 1 of 2 | 4 of 4 |
+| predicted, weighted / ratio | 13 521 W / 1.07 | 19 040 W / 0.98 |
+| `success_criteria` | all 10 passed | all 10 passed |
+
+Caveat: the last two installs report curvature margins of 0.92 (L = 277 m) and phase-5
+margins of 0.83 / 0.80 at 380 m — below 1, though the run passed. Not re-flown at the other
+wind speeds; the cap is sent with every solve, so a startup retry somewhere is possible.
+
+**2. The sim-time budget was fit to the wrong wind.** The 2026-08-27 budget (entry
+above) gates on `V_BUDGET_KNOT` and fits `F_BUDGET_COEF` against `v_wind` at the
+project's `h_ref = 6 m`. That was calibrated on Maasvlakte, whose EXPLOG profile
+(`alpha = 0.082`) gives 1.29x at 100 m; Cabauw's power law (`alpha = 0.234`) gives
+1.93x. A Cabauw 5.5 m/s is therefore a 10.6 m/s wind at the kite: it reels out in
+75 s but was budgeted 145 s, and it fell into the below-knot legacy branch (5.5 < 6.0)
+although the sqrt-law regime plainly applies. Same across the site: 3 m/s got 376 s
+for a 169 s reel-out, 4 m/s 237 s for 108 s, 5 m/s 166 s for 83 s — every run spent
+half its length in phase 5.
+
+Fix: the budget reads the wind at `BUDGET_HEIGHT_M = 100` through the project's own
+profile law (`calc_wind_factor(AtmosphericModel(project_set; nowindfield = true), 100)`),
+for both the knot test and the force estimate. `V_BUDGET_KNOT = 7.7` m/s at 100 m (the
+old 6.0 at Maasvlakte's 6 m), `F_BUDGET_COEF = 48` N/(m/s)² (= 80 / 1.29²; the measured
+force-over-`w_100²` fits are 51.7 / 53.4 / 48.7 / 38.8 at Maasvlakte 6–10 m/s and 53.7
+at Cabauw 5.5, so 48 keeps the low bias). `winch_kv` stays keyed by the ground wind,
+which is what its table lists. The Maasvlakte budgets come out unchanged to the second
+(152 / 123 / 113 / 109 s at 6/8/9/10 m/s).
+
+Cabauw budgets, new (old): 4 m/s 152 (237), 5 m/s 129 (166), 5.5 m/s 120 (145),
+6 m/s 113 (152), 7 m/s 108 (135), 8 m/s 108 (123). 3 m/s is 5.8 m/s at 100 m and stays
+in the legacy branch. Flown at 5.5 m/s (`_122456`): 120.1 s, 380 m reached by length
+stop, all 10 passed, 18 641 W — bit-identical reeling window to the 145 s run. The 7 and
+8 m/s budgets sit on the drum cap with ~1–2 s of slack (measured reel speeds 3.23 / 3.30
+of the 3.5 assumed × 0.9), the same slack Maasvlakte 9 m/s runs with by design; re-fly
+before relying on them.
