@@ -166,6 +166,17 @@ multi-modal, so the guess is a choice about the answer.
     """
     opt_failure_cache::Bool = true
     """
+    The elevation-bias learner of `examples/simple_opt_reelout.jl`; `false` flies
+    the optimizer's curve uncorrected, for a run to compare against.
+
+    Off, both `FC_Settings.el_bias_gain` and `el_bias_gain_final` are forced to
+    zero after the settings and any sweep overrides are loaded, which every part
+    of the learner is gated on: no remembered seed is read from `EL_BIAS_CACHE`,
+    no per-lap update runs and the cache file is NOT written back, so the run
+    leaves no trace for the next one to start from.
+    """
+    learning::Bool = true
+    """
     `use_awe_trim` of a throwaway solve sent BEFORE the startup request, to seed
     the session for it. `0.0` is off.
 

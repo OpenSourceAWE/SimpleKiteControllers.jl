@@ -58,6 +58,16 @@ it was reached, every excursion's elevation span against the mean `B` commanded
 across it, and the lap-detection band against the `A` in force at each sample. A
 constant geometry passed per sample is the scalar case exactly.
 
+`cross_track`, one value per log sample [deg], replaces `var_01` as the
+cross-track error everything above is computed from — the settle detection and
+`rms_d`/`mean_d`/`max_d` alike. A run whose reference is corrected in the air
+(`simple_opt_reelout.jl` lifts the optimizer's curve by the learnt droop profile
+and the lobe lift) logs the guidance's own error to `var_01`, the distance to the
+path it is steering for; scoring against the optimizer's curve as it arrived,
+blended the same way but never lifted, says how far the kite flew from what was
+ASKED for, which is what this argument carries. `nothing` (the default) reads
+`var_01`.
+
 `el_fill` is measured on the span of each excursion (`el_span_lap`), not on
 `el_span`, which is the span over the whole settled window: the window takes its
 top from one lap and its bottom from another, so a pattern that descends as the
@@ -89,25 +99,29 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
                       hf_window = 0.5,
                       lap_frac = 0.5, min_excursion = deg2rad(5.0),
                       az_center = nothing, az_amplitude = nothing,
-                      el_height = nothing, v_steering = 0.2)
+                      el_height = nothing, v_steering = 0.2, cross_track = nothing)
     t_all = Float64.(sl.time)
+    d_all = cross_track === nothing ? Float64.(sl.var_01) : Float64.(cross_track)
+    length(d_all) == length(t_all) ||
+        throw(ArgumentError("cross_track must have one value per log sample, got \
+                             $(length(d_all)) for $(length(t_all)) samples"))
     # Shrink the settle window to the first convergence below settle_d_threshold,
     # rather than always waiting out the (generously guessed) fixed settle_time.
     converge_idx = findfirst(i -> t_all[i] >= t_start &&
-                                  abs(sl.var_01[i]) < settle_d_threshold,
+                                  abs(d_all[i]) < settle_d_threshold,
                             eachindex(t_all))
     stats_start = converge_idx === nothing ? t_start + settle_time :
                   min(t_start + settle_time, t_all[converge_idx])
     settled = findall(>=(stats_start), t_all)
     isempty(settled) && return nothing
 
-    d = Float64.(sl.var_01[settled])
+    d = d_all[settled]
     # Phase 5 holds a stopped winch at `depower_final` on a lifted path, so its
     # tracking is a different operating point and is scored separately.
     reelout = hasproperty(sl, :sys_state) ?
               [i for i in settled if Int(sl.sys_state[i]) <= 4] : settled
     isempty(reelout) && (reelout = settled)
-    d_ro = Float64.(sl.var_01[reelout])
+    d_ro = d_all[reelout]
     dt = length(t_all) > 1 ? mean(diff(t_all)) : 0.01
 
     fp = Float64.(getindex.(sl.winch_force[settled], 1))
@@ -534,6 +548,9 @@ exceeds `f` — the winch's rating from the `winch:` section of the settings YAM
 (`max_force`, 8400 N for the V3). Checked over the WHOLE run, like the elevation
 floor: a brief overload during the entry transient still counts. Off by default,
 since the limit is plant-specific and only known where the settings file is read.
+
+`cross_track` is passed through to [`fig8_metrics`](@ref): one cross-track error
+per log sample to score instead of `var_01`.
 """
 function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             settle_d_threshold = 5.0,
@@ -544,10 +561,10 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
                             v_steering = 0.2, require_final::Bool = false,
-                            max_force = nothing)
+                            max_force = nothing, cross_track = nothing)
     m = fig8_metrics(sl; t_start, settle_time, settle_d_threshold, hf_window,
                      lap_frac, min_excursion,
-                     az_center, az_amplitude, el_height, v_steering)
+                     az_center, az_amplitude, el_height, v_steering, cross_track)
     if m === nothing
         @warn "No settled samples — no figure-eight metrics."
         return nothing

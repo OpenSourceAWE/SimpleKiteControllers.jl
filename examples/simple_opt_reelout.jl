@@ -294,6 +294,16 @@ for (key, value) in fcs_overrides
 end
 isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
+# `traj_opt.learning: false` switches the elevation-bias learner off. Applied
+# AFTER the overrides so a sweep cannot switch it back on. Both gains go to zero:
+# every part of the learner — the seed read below, the per-lap update and
+# reelout_results.jl's write to EL_BIAS_CACHE — is gated on `fcs.el_bias_gain > 0`,
+# and the run summary then records the gain as 0.
+if !tos.learning
+    fcs.el_bias_gain = 0.0
+    fcs.el_bias_gain_final = 0.0
+    @info "Learning is OFF (traj_opt.learning: false): elevation bias fixed at zero, cache untouched."
+end
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -1528,6 +1538,23 @@ fig8_n = 0
 fig8_idx_prev = fec.last_idx
 fig8_idx_progress = 0.0
 n_path = length(fec.az_path)
+# The reference the TRACKING is scored against: the optimizer's curve as it
+# arrived, resampled and canonicalized exactly like the flown one, and blended
+# through the same ramp when a re-optimized reply is installed — but never
+# lifted. `fec` carries that curve plus the learnt droop profile, the lobe lift
+# and `el_offset_final`, all of them the run's own additions the kite is asked
+# to fly so that it ends up ON the optimizer's curve; a cross-track error read
+# off `fec` (the guidance's `dmin`, still logged as `var_01`) says how well the
+# kite followed the CORRECTED path, and stays small however far the corrections
+# moved it. `cross_track_deg` in the summary is measured against this path
+# instead, so it says how far the kite flew from what the optimizer asked for.
+# An in-air elevation shift changes `fec` alone; this path only moves with a
+# reopt install, in lockstep with `blend_from`/`blend_to` below.
+raw_az, raw_el = prepare_path(opt_paths_raw[1]...;
+                              resample = min(tos.resample_points, length(opt_paths_raw[1][1]) - 1),
+                              up_loops = fcs.up_loops)
+length(raw_az) == n_path ||
+    error("scored reference has $(length(raw_az)) points, the flown path $n_path")
 # Points the path in the air is WORTH checking at — the resolution of the reply
 # it came from, not the count it is flown at. The startup path is native (the
 # first reply is resampled down, never up); every re-optimization reply is 99
@@ -1565,6 +1592,10 @@ geom_t = Float64[]
 geom_az_c = Float64[]
 geom_az_amp = Float64[]
 geom_el_h = Float64[]
+# Cross-track error to the scored reference `raw_az`/`raw_el`, per step, on the
+# same clock as the geometry above; `reelout_results.jl` hands it to
+# `fig8_metrics` per log sample the same way.
+geom_d_raw = Float64[]
 
 # Where in the pattern the kite ends up low — the profile a shaped lift is aimed
 # at, and the one thing a whole-lap mean like `el_bias` cannot see. Binned on
@@ -1616,6 +1647,10 @@ el_min_extra = 0.0
 blend_from = nothing
 blend_to = nothing
 blend_t0 = NaN
+# The scored reference's own endpoints of the SAME blend, set only by a reopt
+# install (an in-air shift leaves them `nothing`: the scored path does not move).
+raw_from = nothing
+raw_to = nothing
 # Same mechanism, scalar, for the optimizer's rel_depower override: ramps over
 # tos.path_blend_time instead of stepping the instant a reply lands.
 depower_flown = depower_flown_opt    # current blended output
@@ -2603,6 +2638,14 @@ try
                                                tos.power_gate_wind_min)
                             global blend_from = cand_from
                             global blend_to = (cand_az, cand_el)
+                            # The scored reference follows the same ramp, from the
+                            # unlifted curve it is on to the unlifted curve that
+                            # just passed, both canonicalized like the flown pair.
+                            global raw_from = prepare_path(raw_az, raw_el;
+                                resample = n_path, up_loops = fcs.up_loops)
+                            global raw_to = prepare_path(cand_raw[1], cand_raw[2];
+                                resample = n_path, up_loops = fcs.up_loops)
+                            global raw_az, raw_el = raw_from
                             # Here, not before the gates: a REJECTED reply is not
                             # a path the kite ever flies, and the pattern plot
                             # draws these as what it flew, undistorted.
@@ -2736,9 +2779,15 @@ try
                 b_az, b_el = blend_paths(blend_from[1], blend_from[2],
                                          blend_to[1], blend_to[2], w)
                 set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
+                if !isnothing(raw_to)
+                    global raw_az, raw_el = blend_paths(raw_from[1], raw_from[2],
+                                                        raw_to[1], raw_to[2], w)
+                end
                 if w >= 1
                     global blend_from = nothing
                     global blend_to = nothing
+                    global raw_from = nothing
+                    global raw_to = nothing
                 end
             end
         end
@@ -2921,6 +2970,9 @@ try
         push!(geom_az_c, 0.5 * (az_hi_g + az_lo_g))
         push!(geom_az_amp, 0.5 * (az_hi_g - az_lo_g))
         push!(geom_el_h, el_hi_g - el_lo_g)
+        push!(geom_d_raw, path_distance(raw_az, raw_el,
+                                        rad2deg(Float64(s.sys_state.azimuth)),
+                                        rad2deg(Float64(s.sys_state.elevation))))
         s.sys_state.fig_8 = Int16(fig8_n)      # live lap count
         s.sys_state.var_10 = l_set             # tether length setpoint [m]
         s.sys_state.var_11 = v_set             # REEL_OUT speed setpoint [m/s]

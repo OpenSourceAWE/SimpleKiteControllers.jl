@@ -580,6 +580,24 @@ differences are compressed by `cos(elevation)`.
 end
 
 """
+    path_distance(az_path, el_path, azimuth, elevation) -> Float64
+
+Cross-track error [deg] of the point `(azimuth, elevation)` [deg] to the closed
+path `(az_path, el_path)` [deg]: the distance to its nearest point, in the same
+flat-sky metric [`calc_attractor`](@ref) reports `dmin` in. Unlike `dmin` it
+knows nothing about branches or the previous Q — it is a plain nearest-point
+distance, which is all a tracking SCORE needs, and it can be taken against a
+path that is not the one the guidance is steering for.
+"""
+function path_distance(az_path, el_path, azimuth, elevation)
+    dmin = Inf
+    for i in eachindex(az_path, el_path)
+        dmin = min(dmin, _dist(azimuth, elevation, az_path[i], el_path[i]))
+    end
+    return dmin
+end
+
+"""
     _update_course!(fec::FigureEightController, az_deg, el_deg)
 
 Update the filtered course and angular speed estimates from the position

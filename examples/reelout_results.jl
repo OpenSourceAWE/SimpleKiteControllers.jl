@@ -114,11 +114,15 @@ have_geom = !isempty(geom_t)
 az_c_log = have_geom ? deg2rad.(on_log(t_log, geom_t, geom_az_c)) : deg2rad(az_c_path)
 az_amp_log = have_geom ? on_log(t_log, geom_t, geom_az_amp) : az_amp_path
 el_h_log = have_geom ? on_log(t_log, geom_t, geom_el_h) : el_height_path
+# The cross-track error scored is the one to the optimizer's UNLIFTED curve
+# (`raw_az`/`raw_el` in the run script), not `var_01`, the guidance's own error
+# to the corrected path it steers for — see the comment at `raw_az`.
+d_raw_log = have_geom ? on_log(t_log, geom_t, geom_d_raw) : nothing
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = az_c_log,
                    az_amplitude = az_amp_log, el_height = el_h_log,
                    min_span_frac = fcs.min_span_frac, require_final = true,
-                   max_force = project_set.max_force)
+                   max_force = project_set.max_force, cross_track = d_raw_log)
 # A run that stopped before the metrics window scores nothing, and every line
 # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
 isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_log[end], digits = 1),
@@ -207,9 +211,9 @@ if fig8m !== nothing
                     @sprintf("longest time for one full figure of eight — lap %d [s]",
                              argmax(laps_flown.dt)))),
         "cross_track_deg" => OrderedDict(
-            "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error [deg]"),
-            "mean" => (round(fig8m.mean_d; digits = 2), "mean cross-track error [deg]"),
-            "max" => (round(fig8m.max_d; digits = 2), "max cross-track error [deg]")),
+            "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error vs the unlifted optimizer path [deg]"),
+            "mean" => (round(fig8m.mean_d; digits = 2), "mean cross-track error vs the unlifted optimizer path [deg]"),
+            "max" => (round(fig8m.max_d; digits = 2), "max cross-track error vs the unlifted optimizer path [deg]")),
         "elevation_deg" => OrderedDict(
             "min_settled" => (round(fig8m.min_elevation_settled; digits = 1), "min elevation, settled window [deg]"),
             "min_whole_run" => (round(fig8m.min_elevation_all; digits = 1), "min elevation, whole run [deg]")),
@@ -696,6 +700,8 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             ev
         end),
     "el_bias" => OrderedDict(
+        "learning" => (tos.learning,
+            "traj_opt.learning; false zeroes the gains and leaves the cache alone"),
         "gain" => (fcs.el_bias_gain,
             "per-lap learning gain for the elevation bias; 0 = off"),
         "final_deg" => (round(mean(el_bias); digits = 2),
@@ -1071,6 +1077,11 @@ if run_archive
         joinpath(output_path, log_name * ".arrow"),
         joinpath(output_path, log_name * ".yaml"),
         opt_paths_file,                                       # optimizer's uncorrected curves
+        # The el_bias seed this run started from (`seeded_from` per key) and the
+        # profile it left behind: with el_bias_seed_laps > 0 the first installed
+        # path already depends on it, so without it the archive cannot
+        # reproduce its own run.
+        EL_BIAS_CACHE,
     ]
     for f in unique(vcat(input_yaml_files, output_files))
         isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
