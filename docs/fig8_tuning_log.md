@@ -4998,6 +4998,18 @@ sits at `f_max` there too) and fix 3 scales phase 5 by ~1.09 / ~1.25 (limiter pe
 old table, limiter never engaging). Same caveat as the previous entry: claims until
 `create_overview.jl` is re-run.
 
+## 2026-09-18 — Cabauw 6 m/s: `min_power_frac_prev` 0.7 -> 0.85
+
+The third re-optimization at 270 m returned 5338 W against the 7391 W it replaced — a
+ratio of 0.72 that the 0.7 floor let through. The reply was the tall-pattern basin
+(elevation amplitude binding at the 10° ceiling, tension 1789 N against 2830 N, 532 IPOPT
+iterations to "acceptable" only), flown for 48 % of the reel-out: 6132 W measured against
+7281 W for the recorded v06 run, and max cross-track 8.9° failed the 8° criterion.
+
+Every good step recorded across 3.5-10 m/s stays above 0.93 of the previous install
+(worst is 0.93 at 11 m/s; the 3.5-10 m/s runs never go below 0.98), so 0.85 rejects this
+basin with room to spare. Commit `25dc8f4`.
+
 ## 2026-09-19 — Cabauw 5.5 m/s: `pattern_azimuth_max` 25° closes the wide basin; the budget moves to the 100 m wind
 
 Two findings from the Cabauw sweep, both at 5.5 m/s (`gui.yaml` `wind_speed: 5.5`,
