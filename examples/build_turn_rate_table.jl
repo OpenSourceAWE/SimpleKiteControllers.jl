@@ -67,7 +67,7 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 # there afterwards), and a `const` of the same name makes their next `include`
 # die on "invalid assignment to constant" (2026-09-18, simple_opt_reelout.jl).
 
-const SWEEP_PROJECT    = project_file("system_reelout_150m.yaml")
+const SWEEP_PROJECT    = project_file("system_reelout_maasvlakte.yaml")
 const V_WIND           = 9.51
 const TETHER_LENGTH    = 150.0
 const ELEVATION        = 73.0

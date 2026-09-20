@@ -11,7 +11,7 @@ a `v3_segments.csv`.
 
 The project is resolved exactly like `simple_reelout.jl`:
 `selected_reelout_project()` (`data/gui.yaml`, set via `select_project()`, and
-falling back to `system_reelout_150m.yaml` whenever the selection is a fig8 one)
+falling back to `system_reelout_maasvlakte.yaml` whenever the selection is a fig8 one)
 names a `system_reelout_*.yaml`, whose `sim_settings` gives `log_file` — the
 arrow log this script loads from `output/`. Run `simple_reelout.jl` first so that
 log exists.

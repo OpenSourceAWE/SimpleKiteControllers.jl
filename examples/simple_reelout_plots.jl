@@ -115,7 +115,7 @@ if !isnothing(scenario_path)
     # Every setting comes from ITS OWN copies inside the folder, not the live
     # data/ directory or whatever a prior run left in `Main` — a scenario exists
     # to freeze exactly the conditions it was flown under. The file's own name
-    # varies by project family (`system_reelout_150m.yaml` at maasvlakte,
+    # varies by project family (`system_reelout_maasvlakte.yaml` at maasvlakte,
     # `system_reelout_cabauw.yaml` at cabauw), so find it rather than assuming one.
     project_files = filter(f -> startswith(f, "system_reelout_") && endswith(f, ".yaml"),
                            readdir(scenario_path))

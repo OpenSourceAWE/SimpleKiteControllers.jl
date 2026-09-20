@@ -37,7 +37,7 @@ time — this script errors at startup otherwise, rather than silently picking
 one. That is why `fcs` here is loaded from `data/fc_settings_reelout.yaml`, a
 copy of `simple_fig8.jl`'s `fc_settings.yaml` with `compliance: 0` and the
 REEL_OUT keys below, not the shared file (whose `compliance: 0.5` is fig8's
-FORCE-mode tuning) — `system_reelout_150m.yaml`'s `fc_settings:` key names it.
+FORCE-mode tuning) — `system_reelout_maasvlakte.yaml`'s `fc_settings:` key names it.
 
 **Two winch controllers, ONE settings file.** Both read the same `WCSettings`
 object (`wc`, and `rcs` which is the same object), loaded from the file the
@@ -136,7 +136,7 @@ The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
 reel-out one: `selected_reelout_project()` (`examples/gui_state.jl`) ignores a
 fig8 selection left over from `simple_fig8.jl` — whose FORCE-mode `fc_settings`
-this script rejects at startup — and flies `system_reelout_150m.yaml` instead, so
+this script rejects at startup — and flies `system_reelout_maasvlakte.yaml` instead, so
 no `select_project()` call is needed in between. Selecting another
 `system_reelout_*.yaml` still switches this script to it (a shorter tether means
 less margin to cover, see Feasibility above).

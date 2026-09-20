@@ -12,7 +12,7 @@ every `include` instead of relying on a REPL variable.
 
 The `simple_reelout*.jl` scripts read the same key through
 [`selected_reelout_project`](@ref), which ignores a fig8 selection and flies
-`system_reelout_150m.yaml` instead, so the two families need no re-selection in
+`system_reelout_maasvlakte.yaml` instead, so the two families need no re-selection in
 between; a `system_reelout_*.yaml` chosen here does reach them.
 """
 

@@ -759,7 +759,7 @@ end
     end
 
     @testset "winch_kv_table" begin
-        p = project_file("system_reelout_150m.yaml")
+        p = project_file("system_reelout_maasvlakte.yaml")
 
         # kv: flat at the identified 0.0408 from 3 to 9 m/s. The 10 m/s row was
         # re-identified to 0.039 on 2026-08-27 (sweep in data/winch_kv_table.yaml,
