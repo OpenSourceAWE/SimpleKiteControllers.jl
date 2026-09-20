@@ -312,15 +312,6 @@ else
                       Float64(sl.var_04[end]), 0.0, 361)
 end
 
-# Every path the optimizer returned that the run went on to fly, BEFORE
-# `el_bias`, `el_offset_final` and `el_offset_wing` were added to it. Every other
-# curve here carries that pre-distortion — the logged attractor included, since it
-# walks the corrected path — so without these there is nothing in the figure to
-# compare the correction against. Read from the `<log>_opt_paths.yaml` that
-# reelout_results.jl writes next to the log, through the same loader an archived
-# run's plot uses; absent for a lemniscate run or a log from before it was written.
-opt_raw = load_opt_paths(output_path, log_name)
-
 # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
 unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
 onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
@@ -337,9 +328,16 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 
 if "pattern" in plots
     @info "Plotting the pattern..."
-    # `opt_raw` (above) is the optimizer's uncorrected curves when the run has
-    # them; the attractor is the fallback for a lemniscate run or a replayed log.
-    p1 = plot_pattern_scenario(output_path; disp = true, opt_raw,
+    # Every path the optimizer returned that the run went on to fly, BEFORE
+    # `el_bias`, `el_offset_final` and `el_offset_wing` were added to it, is drawn
+    # against the flown curve. Every other curve here carries that pre-distortion —
+    # the logged attractor included, since it walks the corrected path — so without
+    # these there is nothing in the figure to compare the correction against. Read
+    # inside `plot_pattern_scenario` from the `<log>_opt_paths.yaml` that
+    # reelout_results.jl writes next to the log, so the paths installed only in the
+    # window it hides from the flown curve are left out too; the attractor is the
+    # fallback for a lemniscate run or a log from before it was written.
+    p1 = plot_pattern_scenario(output_path; disp = true,
                                project = pattern_project, log_name = log_name)
     display(p1)
     sleep(0.1)

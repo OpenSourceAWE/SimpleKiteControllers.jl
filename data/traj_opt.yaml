@@ -107,7 +107,7 @@ traj_opt:
     # The elevation-bias learner (fc_settings el_bias_*): false flies the
     # optimizer's curve uncorrected — no seed read, no per-lap update, and the
     # cache output/el_bias_cache.yaml is left alone — to compare against.
-    learning:          false
+    learning:          true
     # use_awe_trim of a throwaway solve sent BEFORE the startup request, purely to
     # leave its converged profiles in the session for it. 0.0 is off. Only sent when
     # ABOVE wc_settings.yaml's own use_awe_trim. Costs one extra solve at startup and

@@ -15,7 +15,7 @@ create_plots.jl while keeping the interactive script's structure intact.
 # using SimpleKiteControllers
 
 """
-    load_opt_paths(scenario_dir, log_name; phases = (0, 3, 4)) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
+    load_opt_paths(scenario_dir, log_name; phases = (0, 3, 4), t_max = Inf) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
 
 The optimizer's uncorrected paths of an optimized reel-out run, from the
 `<log_name>_opt_paths.yaml` that `reelout_results.jl` writes next to the log, as
@@ -24,17 +24,21 @@ the family in one colour under one legend entry, each closed by repeating its
 first point. Only the paths installed in one of `phases` (the startup path counts
 as phase 0): a path is flown from its install on, so one installed in phase 5 is
 flown by phase 5 alone, which the pattern plot masks out of the flown curve too.
-`nothing` when the file is absent (a lemniscate run, or a log from before it was
-written) or no path is left.
+Likewise only the paths installed before `t_max` [s]: one installed later is
+flown only in the window the pattern plot hides ahead of phase 5 (see
+`hide_before_final`), so nothing of the flown curve belongs to it. `nothing`
+when the file is absent (a lemniscate run, or a log from before it was written)
+or no path is left.
 """
 function load_opt_paths(scenario_dir::AbstractString, log_name::AbstractString;
-                        phases = (0, 3, 4))
+                        phases = (0, 3, 4), t_max::Real = Inf)
     file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
     isfile(file) || return nothing
     paths = get(V3Kite.YAML.load_file(file), "paths", nothing)
     paths isa AbstractVector || return nothing
     # A file from before the phase was recorded keeps every path.
-    paths = [p for p in paths if get(p, "installed_phase", 0) in phases]
+    paths = [p for p in paths if get(p, "installed_phase", 0) in phases &&
+                                 get(p, "installed_t", 0.0) < t_max]
     isempty(paths) && return nothing
     oaz = Float64[]; oel = Float64[]
     for (k, p) in enumerate(paths)
@@ -119,7 +123,8 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
 
     # The optimizer's uncorrected curves, when the run wrote them and the caller
     # passed none: the reference the correction is meant to land the kite on.
-    isnothing(opt_raw) && (opt_raw = load_opt_paths(scenario_dir, log_name))
+    # A path installed inside the hidden window would be drawn against nothing.
+    isnothing(opt_raw) && (opt_raw = load_opt_paths(scenario_dir, log_name; t_max = t_hide))
 
     # Reference path: the logged attractor (live, walking every path under re-opt)
     # or fallback to the lemniscate. Phase 5 is left out, matching the flown mask.
