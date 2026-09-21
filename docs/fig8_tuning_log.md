@@ -5611,3 +5611,102 @@ installs grew x1.12 at most, nowhere near the bound) and Cabauw 10 m/s (`_172159
 end harvests more and tracks worse, the same trade the 5.5 m/s exception of the
 `max_size_growth` entry recorded — the gate/box is a continuity choice, not a power
 one.
+
+## 2026-09-21 — `ff_lead_time` 0.35 s and `heading_p` 0.1891: two shallow sweeps
+
+Both sweeps on `simple_opt_reelout.jl`, Maasvlakte, no turbulence, `ff_gain` 0.7,
+one run per point, every run all 10 criteria passed and 4 of 4 installed unless
+noted. `SHOW_PLOTS = false`, the value edited in `fc_settings_reelout.yaml` between
+runs.
+
+`ff_lead_time`, 11 m/s (`heading_p` 0.1941):
+
+| lead [s] | RMS d | min el. | power ph. 4 | archive |
+|--:|--:|--:|--:|---|
+| 0.15 | 1.61° | 10.6° | 18 543 W | `_191549` |
+| 0.25 | 1.60° | 10.8° | 18 728 W | `_191440` |
+| **0.35** | **1.59° / 1.52°** | 11.1° / 10.9° | 18 791 / 18 828 W | `_191329`, `_191702` |
+| 0.45 (was) | 1.62° | 11.2° | 18 693 W | `_190717` |
+| 0.55 | 1.69° | 11.3° | 18 651 W | `_191213` |
+
+Above the dead time the error climbs (0.55 s: +0.07°); below 0.35 s it is flat. The
+repeat at 0.35 s came back 0.07° lower than the first run — at 11 m/s consecutive
+runs differ by that much through the `el_bias` seed — so the plateau 0.15-0.35 s is
+not resolved and 0.35 s is the top of it. Set to 0.35 s.
+
+`heading_p`, 9 m/s (`ff_lead_time` 0.35):
+
+| heading_p | RMS d | installed | power ph. 4 | max F ph. 4 | archive |
+|--:|--:|--:|--:|--:|---|
+| 0.1841 | 1.62° | 3 of 4 | 20 859 W | 8312 N | `_192712` |
+| **0.1891** | **1.51° / 1.51°** | 4 of 4 | 20 683 W | 8316 N | `_192553`, `_192923` |
+| 0.1941 (was) | 1.59° | 4 of 4 | 20 703 W | 8319 N | `_191949` |
+| 0.1991 | 1.54° | 4 of 4 | 20 716 W | 8330 N | `_192445` |
+| 0.2041 | 1.54° | 4 of 4 | 20 727 W | 8341 N | `_192815` |
+
+The 9 m/s runs are reproducible to the last digit (the repeat at 0.1891 gave the same
+RMS and the same 20 521 W measured), so the -5 % against 0.1941 is real if small.
+0.1841 lost an install, so part of its 1.62° is a different path. Power and force
+do not move at the 0.5 % level either way. Set to 0.1891; 11 m/s and the low wind
+speeds not re-flown with it.
+
+## 2026-09-21 — Learning raises RMS d at 9 m/s: the learner and the score measure different things
+
+Maasvlakte 9 m/s, settings above: `traj_opt.learning: false` scores RMS d 1.14°
+(`_194137`), `true` 1.52° (`_192923`). Three runs with learning on, one knob each,
+none of them recovers it:
+
+| run | seed | bins | gain | RMS d | installed | archive |
+|---|---|--:|--:|--:|--:|---|
+| learning off | — | — | 0 | **1.14°** | 4 of 4 | `_194137` |
+| learning on | cache | 5 | 0.5 | 1.51° | 4 of 4 | `_192923` |
+| `el_bias_seed_laps` 0 | zeros | 5 | 0.5 | 1.46° | 3 of 4 | `_195059` |
+| `el_bias_bins` 1 | 0.69° | 1 | 0.5 | 1.43° | 4 of 4 | `_195215` |
+| `el_bias_gain` 0.25 | cache | 5 | 0.5 → 0.25 | 1.52° | 4 of 4 | `_195324` |
+
+So it is not a stale seed: unseeded, the learner is at `[-0.09 +0.25 +0.90 +1.24
++0.91]°` by lap 3, the seed to within 0.1°. Not the learner's dynamics: at gain 0.25
+the per-lap band profiles repeat those at 0.5 to two decimals (lap 2 `+0.51 +0.17
+-0.40 -0.59 +0.31`, lap 5 `-0.60 -0.38 -0.08 -0.07 +0.24`), so the lap-to-lap swings
+are the run's own transients — the install at 30 s, the final lift at 78 s — not the
+learner chasing them. The bend is worth 0.08° (bins 1). By its own measure the
+learner is converged and right: the lap-mean elevation error vs the optimizer's curve
+is within ±0.2° every lap, and the profile it learns is the same run after run.
+
+Where the difference sits: cross-track error to the RAW optimizer path recomputed
+from the archived paths per |azimuth|/A band, 17.5-78 s (before the final lift), the
+5 s after each install skipped. `var_01` is the guidance's own error to the reference
+it steers for (wing-lifted in both runs, plus the learnt profile with learning on):
+
+| band | d_raw off | d_raw on | var_01 off | var_01 on | mean el. off → on |
+|---|--:|--:|--:|--:|--:|
+| 0-20 % (crossing) | 0.39° | 0.40° | 0.39° | 0.38° | 22.4° → 21.7° |
+| 20-40 % | 0.73° | 0.94° | 0.87° | 0.71° | 21.9° → 21.8° |
+| 40-60 % | 1.04° | **1.67°** | 1.28° | 1.27° | 21.5° → 22.4° |
+| 60-80 % | 0.93° | **1.70°** | 1.53° | 1.54° | 21.6° → 22.8° |
+| 80-100 % (lobe) | 0.59° | 0.94° | 1.32° | 1.19° | 20.4° → 21.5° |
+
+`var_01` is the same band for band: the kite leaves its reference the same way
+either way. The whole difference is on the steep legs into the lobes (40-80 %). There
+the kite's deviation is an inside cut of the leg, 1.3-1.5° from its reference, not a
+vertical sag: without learning that cut lands it 0.9-1.0° from the raw curve; the
+learner reads the same cut at Q as a -1.2…-1.4° ELEVATION error, lifts the reference
+by it, the kite follows (+1.2° mean elevation in those bands) and ends 1.7° from
+the raw curve on the other side. At the crossing, where a lift is a lift, nothing
+changes (0.39° vs 0.40°).
+
+The finding in one line: the learner minimises the signed elevation error at the
+guidance's Q, the score measures the nearest-point distance to the raw curve; at the
+crossing the two agree, on the steep legs they do not, and driving the first to zero
+raises the second.
+
+Consequences. At 9 m/s with `ff_gain` 0.7 and the 1.5° `el_offset_wing`, learning
+OFF is the better setting for RMS d — the learner's purpose (power and clearance
+where the sag is real: low wind, 380 m) is a different objective, and what it sees
+at this wind speed is mostly an artefact of reading elevation on a steep leg. For
+the learner to help the score too it would have to measure the error NORMAL to the
+path — the signed nearest-point distance, or the elevation error weighted by the
+cosine of the path's local slope — so the steep legs contribute nothing and the
+correction concentrates at the crossing and the lobe tops. Not done. Learning left
+at `false` in `traj_opt.yaml`; the learner settings and the bias cache were restored
+to their state before the three tests.
