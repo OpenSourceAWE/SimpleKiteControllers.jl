@@ -42,6 +42,10 @@ traj_opt:
     pattern_azimuth_max: 25.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
     pattern_azimuth_amplitude_min: 0.0
     pattern_elevation_amplitude_max: 8.0   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg]
+    pattern_elevation_amplitude_max_high:     10.0  # cap at/above the ref wind (a step, not a ramp) [deg]
+    pattern_elevation_amplitude_max_wind_ref: 11.0  # wind at/above which the high cap applies; 8° at 11 m/s
+                                                    # loses the 17.3°-tall figure and converges 19° higher,
+                                                    # overshooting 8400 N (2026-09-21) [m/s]
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     reopt_enabled: true      # off by default: a run is reproducible without a server

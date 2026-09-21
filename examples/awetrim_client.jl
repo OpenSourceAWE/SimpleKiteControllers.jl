@@ -1088,7 +1088,26 @@ function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
 end
 
 """
-    pattern_limits_from(tos; elevation_min = nothing) -> Union{PatternLimits, Nothing}
+    elevation_amplitude_max_at(tos, wind_speed) -> Float64
+
+The elevation half-span cap [deg] sent at `wind_speed`:
+`tos.pattern_elevation_amplitude_max_high` at and above
+`tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_elevation_amplitude_max`
+below it. `tos.pattern_elevation_amplitude_max_high == 0.0` disables the step;
+`wind_speed = nothing` means the wind is not known and returns the base cap.
+
+A STEP like [`guess_el_center_seed`](@ref)'s, and for the same reason: the cap
+decides which basin the startup solve can reach.
+"""
+function elevation_amplitude_max_at(tos, wind_speed)
+    tos.pattern_elevation_amplitude_max_high > 0 && !isnothing(wind_speed) &&
+        wind_speed >= tos.pattern_elevation_amplitude_max_wind_ref ?
+        tos.pattern_elevation_amplitude_max_high : tos.pattern_elevation_amplitude_max
+end
+
+"""
+    pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
+        -> Union{PatternLimits, Nothing}
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
 `data/traj_opt.yaml`; each is in degrees and each is off at `0.0`. `nothing` when
@@ -1096,16 +1115,18 @@ all five are off, which leaves the optimizer's own defaults alone.
 
 `elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
 of [`elevation_min_request`](@ref), which depends on the length being asked for and
-so cannot come from the file alone.
+so cannot come from the file alone. `wind_speed` picks the elevation half-span cap
+through [`elevation_amplitude_max_at`](@ref).
 """
-function pattern_limits_from(tos; elevation_min = nothing)
+function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
     on(x) = !isnothing(x) && x > 0 ? Float64(x) : nothing
     limits = PatternLimits(; azimuth_max = on(tos.pattern_azimuth_max),
                            elevation_min = on(something(elevation_min,
                                                         tos.pattern_elevation_min)),
                            elevation_max = on(tos.pattern_elevation_max),
                            azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min),
-                           elevation_amplitude_max = on(tos.pattern_elevation_amplitude_max))
+                           elevation_amplitude_max =
+                               on(elevation_amplitude_max_at(tos, wind_speed)))
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
                     limits.azimuth_amplitude_min, limits.elevation_amplitude_max)) &&
         return nothing

@@ -210,7 +210,8 @@ turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
 opt_r_scale = (1 + turn_radius_reel / l0) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_box = pattern_limits_from(tos;
-                              elevation_min = elevation_min_request(fcs, tos, l0))
+                              elevation_min = elevation_min_request(fcs, tos, l0),
+                              wind_speed = inflow.wind_speed)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",

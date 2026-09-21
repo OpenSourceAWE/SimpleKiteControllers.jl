@@ -522,6 +522,23 @@ multi-modal, so the guess is a choice about the answer.
     the figure is — the span is what the curvature margin reads.
     """
     pattern_elevation_amplitude_max = 0.0
+    """
+    Elevation half-span cap [deg] `pattern_elevation_amplitude_max` STEPS UP to at
+    `pattern_elevation_amplitude_max_wind_ref` and above; `0.0` disables the step.
+
+    A step for the same reason as `guess_el_center_high`: the cap selects a BASIN.
+    The reel-out figure at 11 m/s is 17.3° tall (8.65° half-span); under an 8° cap the
+    startup solve cannot reach it and converges 19° higher instead, at 45° centre
+    elevation, where the optimizer trades depower for power and the entry dive
+    overshoots the 8400 N limit (2026-09-21).
+    """
+    pattern_elevation_amplitude_max_high = 0.0
+    """
+    Wind speed [m/s] at and above which `pattern_elevation_amplitude_max_high`
+    replaces `pattern_elevation_amplitude_max`. Unused while
+    `pattern_elevation_amplitude_max_high` is `0.0`.
+    """
+    pattern_elevation_amplitude_max_wind_ref = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """
@@ -788,9 +805,14 @@ function TrajOptSettings(filename::String; path = skc_data_path())
                           ("pattern_azimuth_amplitude_min",
                            tos.pattern_azimuth_amplitude_min),
                           ("pattern_elevation_amplitude_max",
-                           tos.pattern_elevation_amplitude_max))
+                           tos.pattern_elevation_amplitude_max),
+                          ("pattern_elevation_amplitude_max_high",
+                           tos.pattern_elevation_amplitude_max_high))
         0 <= value <= 90 || error("$name must be in [0, 90], got $value.")
     end
+    tos.pattern_elevation_amplitude_max_wind_ref >= 0 ||
+        error("pattern_elevation_amplitude_max_wind_ref must be >= 0, got "*
+              "$(tos.pattern_elevation_amplitude_max_wind_ref).")
     tos.pattern_elevation_max == 0 ||
         tos.pattern_elevation_max > tos.pattern_elevation_min ||
         error("pattern_elevation_max ($(tos.pattern_elevation_max)) must be greater "*

@@ -1071,6 +1071,11 @@ end
         # iteration limit where it used to converge. See the YAML header, which
         # carries both measurements and what to try if the failure pockets bite.
         @test tos.guess_el_center == 29.0
+        # 8° -> 10° at 11 m/s: the 8° cap that closes the tall basin below 11 m/s
+        # cannot hold the 17.3°-tall figure that IS the good basin there (2026-09-21).
+        @test tos.pattern_elevation_amplitude_max == 8.0
+        @test tos.pattern_elevation_amplitude_max_high == 10.0
+        @test tos.pattern_elevation_amplitude_max_wind_ref == 11.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is
