@@ -55,7 +55,6 @@ fc_settings:
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
   attractor_dist:      6.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
   attractor_lead_time: 0.8     # Lead as flight time, arc = t*v_app/L; 6° at 6 m/s, 8.5° at 10; 0 = off [s]
-  attractor_dist_max:  0.0     # Ceiling on that arc; 0 = 2 x attractor_dist        [deg]
   reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]

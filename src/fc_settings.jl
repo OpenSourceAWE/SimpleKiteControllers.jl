@@ -283,7 +283,7 @@ Add new findings there, not here.
     attractor_dist = 10.0
     """
     Attractor lead as a TIME [s]: the arc becomes `lead_time * v_app / l_tether`,
-    clamped to `[attractor_dist, attractor_dist_max]`, so the attractor stays the
+    clamped to `[attractor_dist, 2 * attractor_dist]`, so the attractor stays the
     same flight time ahead of the kite whatever the speed and tether length.
     `0.0` = off, the lead is the constant arc `attractor_dist`.
 
@@ -298,11 +298,6 @@ Add new findings there, not here.
     opposite of what 8 -> 6° did at 6 m/s: the right lead is a time.
     """
     attractor_lead_time = 0.0
-    """
-    Ceiling on the lead `attractor_lead_time` may ask for [deg]; `0.0` =
-    `2 * attractor_dist`. A lead longer than the lobe cuts the lobe.
-    """
-    attractor_dist_max = 0.0
     """
     How much closer the best point on the WHOLE path must be than the best inside
     the local search window before Q jumps to it [deg].
@@ -801,13 +796,12 @@ The attractor lead [deg] to fly at apparent wind `v_app` [m/s] and tether length
 `l_tether` [m]: a constant `fcs.attractor_dist` while `fcs.attractor_lead_time`
 is off, otherwise the arc that takes `attractor_lead_time` seconds to fly,
 `v_app` floored at `fcs.v_app_min` and the result clamped to
-`[attractor_dist, attractor_dist_max]` (`2 * attractor_dist` when the ceiling
-is `0.0`). Pure kinematics, no plant: the caller writes it into
-`FigureEightSettings.attractor_distance` before each `navigate_fig8`.
+`[attractor_dist, 2 * attractor_dist]`. Pure kinematics, no plant: the caller
+writes it into `FigureEightSettings.attractor_distance` before each
+`navigate_fig8`.
 """
 function attractor_distance(fcs::FC_Settings, v_app, l_tether)
     fcs.attractor_lead_time > 0 || return fcs.attractor_dist
     lead = rad2deg(fcs.attractor_lead_time * max(v_app, fcs.v_app_min) / l_tether)
-    hi = fcs.attractor_dist_max > 0 ? fcs.attractor_dist_max : 2 * fcs.attractor_dist
-    return clamp(lead, fcs.attractor_dist, hi)
+    return clamp(lead, fcs.attractor_dist, 2 * fcs.attractor_dist)
 end

@@ -1082,10 +1082,8 @@ end
         @test attractor_distance(fcs, 22.0, 380.0) == 6.0
         # v_app is floored at v_app_min before it enters.
         @test attractor_distance(fcs, 0.0, 100.0) == attractor_distance(fcs, 10.0, 100.0)
-        # Ceiling: 2 x attractor_dist by default, attractor_dist_max when set.
+        # Ceiling: 2 x attractor_dist.
         @test attractor_distance(fcs, 60.0, 100.0) == 12.0
-        fcs.attractor_dist_max = 9.0
-        @test attractor_distance(fcs, 60.0, 100.0) == 9.0
         tos = TrajOptSettings("traj_opt.yaml")
         @test tos.guess_points == 361
         @test tos.resample_points == 361
