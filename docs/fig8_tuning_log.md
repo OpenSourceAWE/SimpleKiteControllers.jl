@@ -5308,3 +5308,62 @@ long — which keeps the phase-5 floor where 2026-09-19 found it needs >= 6°.
 6 and 4 m/s reproduce their archives (the small RMS d gains there are the re-opt
 scheduling fix of the same day, which those archives predate). 8 m/s (7.6° lead on
 lap 1) and 11 m/s not re-flown yet.
+
+## 2026-09-21 — Cabauw 10 m/s: two 09-19 caps had closed its basin; the force ceiling moves to 7500 N and the phase-5 limiter gets a faster gain
+
+Cabauw 10 m/s (archived 2026-09-18, `0c3508a`, all 10 passed by 18 N of force) had not
+been flown since two `traj_opt.yaml` changes of 2026-09-19 that were tested at Maasvlakte
+and Cabauw 5.5 m/s only. Run from the menu today: three 422s at the startup solve.
+
+1. **`pattern_elevation_amplitude_max` 10 -> 8°.** Cabauw 7-10 m/s were archived with
+   17-22°-tall figures under 10°; under 8° there is no basin at all. The morning's wind
+   step (10° at >= 11 m/s ground wind) did not reach them: the sites' shear differs —
+   Cabauw 10 m/s at 6 m is 19.3 m/s at 100 m, Maasvlakte 11 m/s is 14.2. The step is
+   now keyed on the wind at `pattern_elevation_amplitude_max_wind_height` = 100 m,
+   `_wind_ref` 13.2: Maasvlakte 10 m/s (12.9) keeps 8°, Maasvlakte 11 (14.2) and
+   Cabauw 7-10 (13.5-19.3) get 10°. `cap_wind_speed` in `examples/awetrim_client.jl`
+   scales the ground wind with the project's own profile law.
+2. **`pattern_azimuth_max` 25°.** Set to close the ±33-37° basin at 5.5 m/s, "does not
+   bind on the solutions we want" — but the archived Cabauw 10 m/s startup path is
+   25.3° wide. With the cap binding the reply came back at ±24.1° and margin 0.77,
+   refused by the startup gate (0.82). 28° frees it (±25.7°, margin 0.89) and still
+   excludes the wide basin.
+
+With both, the run flies the archive's figure again (`_145820`: 24.2 kW, ratio 1.01,
+RMS d 2.19°) and fails `max force <= 8400 N` at 8499 N — the lap-1 crossing at
+t = 19.5 s, L = 159 m, v_app 40 m/s, the same place the archive peaked at 8382 N.
+Cabauw 10 m/s runs AT the limit by construction (mean 7.3 kN, crossing swing 1.15x).
+
+| Cabauw 10 m/s | phase-4 max | phase-5 max | verdict | power |
+|---|--:|--:|---|--:|
+| archive `0c3508a` | 8382 N | 8088 N | passed | 24 534 W |
+| `_145820` caps fixed | 8499 N | 8347 N | FAILED | 24 220 W |
+| `_150355` + `first_lap_force_frac` 0.9625 (7700 N) | 8397 N | 8389 N | passed by 3 N | 24 265 W |
+| `_150748` `f_high_awe_trim` 7500 + `first_lap_force_frac` 0.9375 | 8288 N | **8644 N** | FAILED | 23 950 W |
+| **`_151044` + `depower_final_f_gain` 2e-5 -> 6e-5** | **8289 N** | **7784 N** | **passed** | **23 662 W** |
+
+`first_lap_force_frac` — the "unmeasured idea" of the settings file — is measured now:
+lap 1 flies the STARTUP path, the one path solved against the plain 8000 N while every
+re-optimized path has been de-rated to `f_high_awe_trim` since 09-18, so lap 1 was the
+one lap without the de-rating. Lowering its ceiling by 300 N took the crossing peak
+down by only ~100 N under `force_limit: "soft"` — the law shapes the mean, the swing
+rides on top — and the next peak (lap 5, 8389 N) was on a de-rated path anyway, so the
+whole run needed to come down: 7500 N for both, every lap solved against one ceiling.
+
+That exposed **phase 5**: the first dive after the length stop (43° -> 22° at 380 m,
+v_app 46 m/s, drum frozen) peaked at 8644 N while the force limiter's depower crept
+0.366 -> 0.387 through it (2e-5 /(N s) at ~800 N of excess is 0.016/s) and reached
+0.40 a second after the peak. The excursion is in every Cabauw 10 m/s run (8088 N in
+the archive, 8389 N in `_150355`); its size follows the last installed path. Gain
+6e-5 — still under the 1e-4 the soft-stop ramp runs with — reaches 0.412 during the
+dive: 7784 N, 616 N of headroom.
+
+Regression at the two next-most-loaded conditions, all 10 passed at both:
+
+| | archive -> new |
+|---|---|
+| Cabauw 9 m/s (`_151204`) | phase 4/5 max 7699/8104 -> 7445/7812 N; power 23 115 -> 22 041 W (**-4.6 %**, the price of the global 7500 N, its phase-5 peak lived off the same margin); RMS d 2.54 -> 1.92° |
+| Maasvlakte 10 m/s (`_151334`) | phase-4 max 7836 -> **8294 N**: the 28° cap admits a wider, higher, more-powered startup basin (±26.2°, centre 32.8°, depower 0.281 vs ±22.4°, 27.7°, 0.297); power 20 120 -> 20 050 W, RMS d 1.87 -> 1.68°, min el 10.1 -> 10.5°. Passes by 106 N — watch it in a sweep |
+
+`f_high_awe_trim` stays wind-independent on purpose (its own comment,
+PlanImprove_power_ratio.md); making it so would give Cabauw 9 m/s its 4.6 % back.
