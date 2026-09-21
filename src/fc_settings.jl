@@ -276,8 +276,33 @@ Add new findings there, not here.
     every failure at low centre has been an ENERGY failure.
     """
     el_center = 26.0
-    "Arc distance Q -> attractor [deg]"
+    """
+    Arc distance Q -> attractor [deg]. With `attractor_lead_time` on, this is the
+    FLOOR of the lead [`attractor_distance`](@ref) computes each step.
+    """
     attractor_dist = 10.0
+    """
+    Attractor lead as a TIME [s]: the arc becomes `lead_time * v_app / l_tether`,
+    clamped to `[attractor_dist, attractor_dist_max]`, so the attractor stays the
+    same flight time ahead of the kite whatever the speed and tether length.
+    `0.0` = off, the lead is the constant arc `attractor_dist`.
+
+    A constant arc is a lead in TIME that shrinks with `v_app / L`: 6° is 1.2 s
+    of flight at 4 m/s and 150 m, 0.55 s at 10 m/s — under the ~0.5 s steering
+    dead time plus the KCU tape's ramp. Measured 2026-09-21 on the first lobe of
+    the startup path (the tightest turn of a reel-out run, at the shortest
+    tether): overshoot above the path's top +1.1° at 4 m/s, +2.5° at 6, +4.6° at
+    8, +5.3° at 10, with the steering never near its clamp above 4 m/s — the
+    guidance reversal at the crossing arrives late, not the turn. 6 -> 8° at
+    10 m/s took it to +3.4° and cut RMS d 2.13 -> 1.92° over the whole run, the
+    opposite of what 8 -> 6° did at 6 m/s: the right lead is a time.
+    """
+    attractor_lead_time = 0.0
+    """
+    Ceiling on the lead `attractor_lead_time` may ask for [deg]; `0.0` =
+    `2 * attractor_dist`. A lead longer than the lobe cuts the lobe.
+    """
+    attractor_dist_max = 0.0
     """
     How much closer the best point on the WHOLE path must be than the best inside
     the local search window before Q jumps to it [deg].
@@ -814,4 +839,22 @@ function winch_force_gains(fcs::FC_Settings)
             len_kp = fcs.winch_len_kp / fcs.compliance,
             damp = fcs.winch_damp / fcs.compliance,
             force_min = fcs.winch_force_min)
+end
+
+"""
+    attractor_distance(fcs::FC_Settings, v_app, l_tether) -> Float64
+
+The attractor lead [deg] to fly at apparent wind `v_app` [m/s] and tether length
+`l_tether` [m]: a constant `fcs.attractor_dist` while `fcs.attractor_lead_time`
+is off, otherwise the arc that takes `attractor_lead_time` seconds to fly,
+`v_app` floored at `fcs.v_app_min` and the result clamped to
+`[attractor_dist, attractor_dist_max]` (`2 * attractor_dist` when the ceiling
+is `0.0`). Pure kinematics, no plant: the caller writes it into
+`FigureEightSettings.attractor_distance` before each `navigate_fig8`.
+"""
+function attractor_distance(fcs::FC_Settings, v_app, l_tether)
+    fcs.attractor_lead_time > 0 || return fcs.attractor_dist
+    lead = rad2deg(fcs.attractor_lead_time * max(v_app, fcs.v_app_min) / l_tether)
+    hi = fcs.attractor_dist_max > 0 ? fcs.attractor_dist_max : 2 * fcs.attractor_dist
+    return clamp(lead, fcs.attractor_dist, hi)
 end

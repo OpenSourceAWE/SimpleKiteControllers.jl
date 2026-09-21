@@ -5258,3 +5258,53 @@ experiment.
 **`entry_f_min` 350 is not `wc_settings`' `f_low`:** that floor scales with the winch,
 this one with what a depowered wing can pull during the dive. A setpoint the entry
 cannot reach winds the guard's PID up and runs the drum away.
+
+## 2026-09-21 — The attractor lead is a TIME: `attractor_lead_time` 0.8 s
+
+Asked whether `dive_el_margin` could take the first figure of eight at 10 m/s down
+from 40°. It cannot: the dive ends at 44° (t = 11.6 s) and the kite dives through the
+pattern to 17° before joining it; the 40° is the first lobe of the startup path
+(raw top 35.2°) overshot by 5°. Lap-1 overshoot above the startup path's top across
+the archived Maasvlakte scenarios, all flown with `attractor_dist` 6:
+
+| wind | path top | lap-1 max | overshoot | max \|u_s\| lap 1 | v_app | v_app / L |
+|--:|--:|--:|--:|--:|--:|--:|
+| 4 m/s | 32.6° | 33.7° | +1.1° | 0.32 (saturated) | 11.8 m/s | 4.9°/s |
+| 6 m/s | 29.7° | 32.3° | +2.5° | 0.26 | 20.9 m/s | 7.5°/s |
+| 8 m/s | 29.6° | 34.3° | +4.6° | 0.20 | 27.6 m/s | 9.2°/s |
+| 10 m/s | 35.2° | 40.3° | +5.1° | 0.23 | 31.8 m/s | 10.6°/s |
+| 11 m/s | 33.3° | 37.4° | +4.1° | 0.21 | 32.8 m/s | 11.0°/s |
+
+Above 4 m/s the steering never comes near its clamp, so it is not turn authority.
+At 10 m/s, t = 18.5-22 s, the guidance course swings 79° -> -9° (straight up through
+the crossing) -> 117° within 3 s; the kite follows the "up" and the reversal lags,
+regulated error -56…-76° at a steering of 0.05 -> 0.19. A 6° arc is 1.2 s of flight
+at 4 m/s and 150 m but 0.55 s at 10 m/s — under the ~0.5 s steering dead time plus
+the KCU tape's 0.2/s ramp. The lead was cut 8 -> 6 on 2026-09-19 for RMS d at 6 m/s
+with the note that 10 m/s was not regressed; this is the regression.
+
+Quick test first, 10 m/s, same code, `attractor_dist` 6 vs 8 (`_140907`, `_140729`):
+overshoot +5.3° -> +3.4°, RMS d 2.13 -> 1.92°, max d 5.59 -> 5.29°, power 20.0 ->
+20.3 kW, all 10 passed both. The same change that HURT RMS d at 6 m/s helps it at 10:
+the right lead is a time, not an arc.
+
+So `attractor_distance(fcs, v_app, l_tether)` (src/fc_settings.jl): the arc that takes
+`attractor_lead_time` seconds to fly, `lead_time * v_app / L`, v_app floored at
+`v_app_min`, clamped to `[attractor_dist, attractor_dist_max]` (default ceiling
+2 x the floor). Written into `fec.fes.attractor_distance` every step by all three
+examples; `0.0` (the struct default and `fc_settings.yaml`'s) is the old constant arc.
+0.8 s reproduces the 6° tuning point (20.9 m/s / 159 m at 6 m/s), gives 8.5° at
+10 m/s / 172 m, and sits on the 6° floor at 4 m/s and at any wind once the tether is
+long — which keeps the phase-5 floor where 2026-09-19 found it needs >= 6°.
+
+| | 10 m/s, 6° (`_140907`) | 10 m/s, 8° (`_140729`) | **10 m/s, 0.8 s (`_141356`)** | 6 m/s, 0.8 s (`_141537`) vs v06 | 4 m/s, 0.8 s (`_141758`) vs v04 |
+|---|---|---|---|---|---|
+| lap-1 overshoot | +5.3° | +3.4° | **+2.8°** | +2.4° (+2.5°) | +0.8° (+1.1°) |
+| RMS / max d | 2.13 / 5.59° | 1.92 / 5.29° | **1.87 / 4.90°** | 1.14 / 4.97° (1.18 / 4.94°) | 1.01 / 4.96° (1.16 / 4.97°) |
+| min elevation | 10.3° | 10.5° | 10.1° | 9.0° (8.6°) | 10.2° (10.1°) |
+| power | 20.0 kW | 20.3 kW | 20.1 kW | 7266 W (7237 W) | 1524 W (1521 W) |
+| verdict | pass | pass | pass | pass | pass |
+
+6 and 4 m/s reproduce their archives (the small RMS d gains there are the re-opt
+scheduling fix of the same day, which those archives predate). 8 m/s (7.6° lead on
+lap 1) and 11 m/s not re-flown yet.

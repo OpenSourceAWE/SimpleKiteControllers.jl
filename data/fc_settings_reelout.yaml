@@ -53,7 +53,9 @@ fc_settings:
   f8_c:               0.0      # Size of the right part                           [deg]
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
-  attractor_dist:      6.0     # Arc distance Q -> attractor                      [deg]
+  attractor_dist:      6.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
+  attractor_lead_time: 0.8     # Lead as flight time, arc = t*v_app/L; 6° at 6 m/s, 8.5° at 10; 0 = off [s]
+  attractor_dist_max:  0.0     # Ceiling on that arc; 0 = 2 x attractor_dist        [deg]
   reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_bias_gain:        0.5     # Per-lap learning gain for the elevation bias; 0 = off [-]

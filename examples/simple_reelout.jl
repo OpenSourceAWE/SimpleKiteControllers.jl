@@ -375,7 +375,10 @@ try
     for _ in 1:s.steps
         t = s.sys_state.time
 
-        # L0 attractor guidance -> commanded course [rad].
+        # L0 attractor guidance -> commanded course [rad]. The lead is a flight
+        # TIME when attractor_lead_time is set, so it is re-read every step.
+        fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
+                                                        Float64(s.sys_state.l_tether[1]))
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))

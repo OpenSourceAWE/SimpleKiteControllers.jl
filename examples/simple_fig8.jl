@@ -289,11 +289,13 @@ else
         @warn "Pattern is tighter than the kite's minimum turn radius — expect \
                curvature-limited tracking, not a tuning problem."
 
-    # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
-    @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
+    # Dead-time context for the attractor lead: how long the lead arc takes to fly.
+    lead_deg = attractor_distance(fcs, fcs.v_app_ref, l_tether)
+    lead_time = deg2rad(lead_deg) * l_tether / fcs.v_app_ref
+    @info @sprintf("Attractor lead %.1f°%s ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   lead_deg, fcs.attractor_lead_time > 0 ? " (lead time)" : "",
+                   lead_time, fcs.v_app_ref, delay, lead_time / delay)
 end
 
 cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
@@ -320,7 +322,10 @@ try
     for _ in 1:s.steps
         t = s.sys_state.time
 
-        # L0 attractor guidance -> commanded course [rad].
+        # L0 attractor guidance -> commanded course [rad]. The lead is a flight
+        # TIME when attractor_lead_time is set, so it is re-read every step.
+        fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
+                                                        Float64(s.sys_state.l_tether[1]))
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))

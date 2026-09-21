@@ -202,12 +202,15 @@ function check_reelout_feasibility(fec::FigureEightController,
             feas_final.margin, tos.min_feasibility_margin)
     end
 
-    # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
-    @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
+    # Dead-time context for the attractor lead: how long the lead arc takes to
+    # fly, at the starting length and v_app_ref (the lead itself follows the
+    # flown v_app / L when attractor_lead_time is set).
+    lead_deg = attractor_distance(fcs, fcs.v_app_ref, l_tether)
+    lead_time = deg2rad(lead_deg) * l_tether / fcs.v_app_ref
+    @info @sprintf("Attractor lead %.1f°%s ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay,
-                   lead_time / delay)
+                   lead_deg, fcs.attractor_lead_time > 0 ? " (lead time)" : "",
+                   lead_time, fcs.v_app_ref, delay, lead_time / delay)
 
     return ReeloutFeasibility(; c1, c2, delay, feas_start, feas_end,
                               c1_final, feas_final)

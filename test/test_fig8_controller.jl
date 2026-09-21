@@ -1076,6 +1076,26 @@ end
         @test tos.pattern_elevation_amplitude_max == 8.0
         @test tos.pattern_elevation_amplitude_max_high == 10.0
         @test tos.pattern_elevation_amplitude_max_wind_ref == 11.0
+    end
+
+    @testset "attractor_distance" begin
+        fcs = FC_Settings(; attractor_dist = 6.0, v_app_min = 10.0)
+        # Off: the constant arc, whatever the kinematics.
+        @test attractor_distance(fcs, 30.0, 150.0) == 6.0
+        fcs.attractor_lead_time = 0.8
+        # 0.8 s at 20.9 m/s / 159 m (the 6 m/s lap 1) is the 6° it was tuned at.
+        @test attractor_distance(fcs, 20.9, 159.0) ≈ 6.0 atol = 0.1
+        # 10 m/s lap 1: 31.8 m/s / 172 m -> 8.5°.
+        @test attractor_distance(fcs, 31.8, 172.0) ≈ 8.5 atol = 0.1
+        # Floored at attractor_dist: 4 m/s (11.8 m/s / 136 m) and the long tether.
+        @test attractor_distance(fcs, 11.8, 136.0) == 6.0
+        @test attractor_distance(fcs, 22.0, 380.0) == 6.0
+        # v_app is floored at v_app_min before it enters.
+        @test attractor_distance(fcs, 0.0, 100.0) == attractor_distance(fcs, 10.0, 100.0)
+        # Ceiling: 2 x attractor_dist by default, attractor_dist_max when set.
+        @test attractor_distance(fcs, 60.0, 100.0) == 12.0
+        fcs.attractor_dist_max = 9.0
+        @test attractor_distance(fcs, 60.0, 100.0) == 9.0
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is
