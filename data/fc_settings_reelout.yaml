@@ -1,42 +1,17 @@
-# Settings of the flight controller flown by examples/simple_reelout.jl. A copy
-# of fc_settings.yaml (used by simple_fig8.jl) with one change: `compliance: 0`,
-# fixed at POSITION mode because REEL_OUT and V3Kite's own FORCE mode both drive
-# the winch and only one can hold the drum at a time — simple_reelout.jl errors
-# rather than silently picking one if this is left nonzero. Named by
-# system_reelout_150m.yaml next to it; every key below is a field of
-# `FC_Settings` (src/fc_settings.jl), where the full rationale for each value is
-# documented. A missing key falls back to the struct default, an unknown key is
-# an error.
-#
-# The PLANT is not here either: the system project (system_reelout_150m.yaml
-# next to this file) and the simulation settings it names — including sim_time,
-# the sample_freq whose inverse is the timestep, the wind speed (v_wind) and the
-# initial tether length (l_tethers) — describe what is being flown, not how it
-# is controlled.
-#
-# The POSITION-mode winch gains are NOT here — they live in wc_settings.yaml
-# next to this file and are read straight from there; simple_reelout.jl uses
-# them via V3Kite's own POSITION torque loop, driven by the REEL_OUT length
-# setpoint. The winch_force_* keys below are FORCE-mode parameters, unused at
-# compliance = 0; kept so this stays a complete FC_Settings, same as
-# wc_settings.yaml keeps its unused force-mode keys. The REEL_OUT-specific keys
-# (reelout_*) are what actually govern the winch here.
+# Flight-controller settings flown by examples/simple_reelout.jl and
+# simple_opt_reelout.jl, named by the system_reelout_*.yaml projects next to it.
+# A copy of fc_settings.yaml (simple_fig8.jl) with `compliance: 0`: REEL_OUT and
+# V3Kite's FORCE mode both drive the winch, and simple_reelout.jl errors rather
+# than picking one. Every key is a field of `FC_Settings` (src/fc_settings.jl),
+# where each value is explained; a missing key falls back to the struct default,
+# an unknown key is an error. The plant (sim_time, sample_freq, v_wind,
+# l_tethers) is in the system project's settings file, the winch gains in
+# wc_settings.yaml. Tuning history: docs/fig8_tuning_log.md.
 fc_settings:
   # --- simulation conditions ------------------------------------------------
   vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
   compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
-  # 0.275 is a CEILING, not a tuned optimum. Depowering costs turn authority
-  # (c1 0.2819 -> 0.2687 over 0.27 -> 0.28) and the optimizer's path is
-  # curvature-limited, so 0.278 drops the startup margin to
-  # min_feasibility_margin = 0.9 and simple_opt_reelout.jl refuses to fly.
-  #
-  # A longer starting length does NOT lift this, measured 2026-08-18: the
-  # optimizer returns a TIGHTER path the further out it is anchored (path radius
-  # 3.96 deg at 150 m, 3.37 deg at 180 m), which cancels the margin the extra
-  # length buys. The ceiling is 0.278 at 150 m and 0.282 at 180 m. Only a fixed
-  # shape escapes it - the 20/11 lemniscate simple_reelout.jl flies has radius
-  # 4.73 deg at any length, so its ceiling is 0.315 at 150 m and 0.353 at 180 m.
-  depower_setpoint:   0.274    # Depower held on the pattern                        [-]
+  depower_setpoint:   0.274    # Depower on the pattern; 0.278 is the curvature ceiling at 150 m [-]
   elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
   park_time:          2.0      # Park: zero steering while the transients decay     [s]
   warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
@@ -47,106 +22,38 @@ fc_settings:
   winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
   winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
-  # --- REEL_OUT winch -----------------------------------------------------
-  # kv/f_low/f_high/v_sat/t_startup and everything else WinchControllers.jl's
-  # own WinchController tunes are in wc_settings.yaml now, not here —
-  # that is WinchControllers.jl's OWN schema (its `WCSettings`), distinct from
-  # this file's `FC_Settings` schema. The REEL_OUT keys below are this
-  # package's OWN script-level logic in simple_reelout.jl (the l_set
-  # trajectory and phase 5), not WinchControllers.jl fields. Reel-out stops on
-  # TWO independent criteria, reelout_l_max and n_fig_eight — whichever fires
-  # first.
-  # 380 since 2026-08-18. NOTE for the optimized-path runs: AWETrim's own
-  # DEFAULT_LIMITS["distance_radial"] is (100, 360) m and its pattern reels out
-  # ~35 m within a lap, so a re-optimization request above ~325 m of anchor length
-  # is infeasible by construction and comes back as a failed solve. Reaching
-  # further out means more of the window is past that ceiling.
-  reelout_l_max:      380.0    # Tether length at which reel-out stops              [m]
-  # 0 since 2026-08-18: the optimized path flies faster laps than the lemniscate,
-  # so a lap limit stopped the two runs at different tether lengths and made their
-  # power and energy incomparable. Length is now the only criterion for both.
+  # --- REEL_OUT winch (this package's script logic; kv/f_low/f_high/v_sat are
+  # --- WinchControllers.jl's own and live in wc_settings.yaml) ---------------
+  reelout_l_max:      380.0    # Length at which reel-out stops; AWETrim's reopt ceiling is ~325 m [m]
   n_fig_eight:        0        # Laps after which reel-out stops; 0 = length only [-]
-  depower_final:      0.35     # Flown from phase 5 (final), once l_max is reached; tuned
-                               # to hold ~3458 N, the reel-out mean force — see the log   [-]
-  # Phase-5 force limiter, 2026-09-18: with the length frozen the depower is the
-  # only actuator left, and depower_final is one number tuned at 6 m/s while the
-  # frozen-length force follows v_app^2 — 8.1 kN mean, 8.6 kN peaks at Cabauw
-  # 8 m/s (v_app 41.5 m/s), against the 8400 N criterion. Above f_target the
-  # depower integrates up from depower_final, never past depower_final_max; below
-  # it, back down. From the reel-out STOP LATCH, not phase 5: the stop itself
-  # hands the kite its reel-out speed as apparent wind (6.1 -> 10.5 kN in 3 s at
-  # 9 m/s), so through the ramp it integrates on the force the stopped drum is
-  # about to see. Inert wherever phase 5 stays under the target: the strongest
-  # archived phase 5 before this was 7239 N (Cabauw 7 m/s), Maasvlakte 11 m/s 7022 N.
-  # 0.42 is inside the optimizer's own depower range (2.3 m = 0.44 equivalent);
-  # the phase-5 gate is read at depower_final's c1, the heading gain at the
-  # flown depower as far as the turn-rate table reaches (0.40 since 2026-09-18;
-  # rows 0.375/0.40 identified with the sweep's elevation floor at 40°).
+  depower_final:      0.35     # Flown from phase 5; tuned to hold ~3458 N at 6 m/s [-]
   depower_final_max:  0.42     # Ceiling of the phase-5 force limiter; = depower_final is OFF [-]
-  depower_final_f_target: 7500.0 # Force it holds against, below the 8400 N criterion by the lobe swing [N]
-  depower_final_f_gain: 2.0e-5 # Integrator gain, depower per N per s                  [1/(N s)]
-  depower_final_f_gain_stop: 1.0e-4 # The same during the soft-stop ramp: 3 s to move 0.35 -> 0.40,
-                               # the KCU tape's 0.075/s from 750 N of error up          [1/(N s)]
-  depower_blend_time: 2.5      # Seconds over which `rel_depower` ramps to a new phase-ladder target
-                               # instead of stepping to it. `0` restores the hard switch.     [s]
+  depower_final_f_target: 7500.0 # Force the limiter holds, under 8400 N by the lobe swing [N]
+  depower_final_f_gain: 2.0e-5 # Limiter integrator gain, depower per N per s    [1/(N s)]
+  depower_final_f_gain_stop: 1.0e-4 # Same during the soft-stop ramp: 0.35 -> 0.40 in 3 s [1/(N s)]
+  depower_blend_time: 2.5      # Ramp of `rel_depower` to a new ladder target; 0 = step [s]
   reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -> v_set over this long  [s]
-  reelout_softstop:   1.5      # Linear decel trigger at the OTHER end; being tuned
-                               # against the power undershoot — see the log        [s]
+  reelout_softstop:   1.5      # Linear decel trigger at the far end               [s]
   reelout_delay:      4.2      # Wait after phase 3 before reel-out starts          [s]
-  reelout_f_trigger:  6400.0   # force that releases reel-out EARLY, ignoring the delay [N]
-                               # The delay trades harvest for settling, which is the wrong
-                               # trade while the entry swoop is loading the tether: the
-                               # winch is commanded to exactly ZERO until it expires, so
-                               # no force limiter is running at all. Measured at 10 m/s:
-                               # force was 9811 N when the timer released the drum and
-                               # peaked at 12365 N (47 % over the plant's 8400 N rating).
-                               # 5000 N fires ~1.0 s early there and is inert at 6 m/s and
-                               # below, where the entry never reaches it — so a normal run
-                               # still gets its full settling delay. Inf disables it.
+  reelout_f_trigger:  6400.0   # Force that releases reel-out EARLY; Inf disables it [N]
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
-  # -135 since 2026-08-30, set at 3.5 m/s where -125 still dipped to 5.1 deg whole-run
-  # elevation in phase 3. Steeper trades azimuth traverse for descent: at -95 the "dive"
-  # was 5 deg past flat, traversing 110 deg of azimuth and dumping the kite at the edge
-  # of the window. See the tuning log; back off towards -110 if a steeper dive undershoots.
   chi_dive:          -135.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
-  # 17.0 since 2026-08-29: at 13.0 the corrected mass still dipped to 5.9 deg whole-run
-  # elevation, 0.6 deg short of the 6.5 deg gate. Raising the margin gives phase 3 more
-  # altitude to spend; closes the gap to 7.9 deg with no phase-4 regression.
   dive_el_margin:     17.0     # Margin above el_center where the dive ends       [deg]
   hold_time:          0.8      # Duration of the hold                               [s]
   fig8_d_gate:        4.0      # Cross-track error, transition -> fig8            [deg]
 
   # --- plant ----------------------------------------------------------------
-  body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to
-                                        # 0.8x it, so this is the turn_rate_coeffs key
+  body_damping:       [0.0, 0.0, 40.0]  # Per axis; the turn_rate_coeffs key (settles to 0.8x)
 
   # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
-  # 20/11 comes from the shape sweep of 2026-08-15 (examples/optimize_fig8.jl, 30
-  # shapes flown over f8_a 19..30 x f8_b 8..12; see Plan.md). It is +4.8 % of mean
-  # reel-out power over the previous 30/12 — 8129 W against 7762 W — with the
-  # winch's upper force controller never engaging and the steering command never
-  # near its clamp.
-  #
-  # Width is the whole effect and 20 is a genuine interior optimum: 8101 W at 21,
-  # 8130 at 20, 8126 at 19, and below 19 no height is flyable at all. Height is
-  # NOT: at f8_a = 20 the three flown heights differ by 1 W, so 11 is chosen for
-  # curvature MARGIN (1.07, against 1.03 at b = 10 and 1.05 at b = 12) rather than
-  # for power. That margin is the reason to keep an eye on this pair — 1.07 is
-  # thinner than the old 30/12's 1.22, so anything that lowers c1 (a depower or
-  # body_damping change) eats into it faster than it used to.
-  f8_a:               20.0     # Width of the eight, azimuth spans ±A             [deg]
-  f8_b:               11.0     # Height of the eight, elevation spans ±B/2        [deg]
+  f8_a:               20.0     # Width of the eight, azimuth spans ±A; sweep optimum [deg]
+  f8_b:               11.0     # Height, elevation spans ±B/2; picked for margin 1.07 [deg]
   f8_c:               0.0      # Size of the right part                           [deg]
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
   attractor_dist:      6.0     # Arc distance Q -> attractor                      [deg]
-  # 6.0 since 2026-08-30, up from the 3.0 default: at 3.0 the phase-5 sag (~3.7 deg mean
-  # cross-track at 3.5 m/s) is the same size as the threshold, and at t = 359.6 s of the
-  # 12:22 run the global best beat the in-window best by 3.06 deg right at the centre
-  # crossing, handing Q to the reverse branch — course flipped 130 deg, the kite spun an
-  # extra loop and heading range hit 624 deg against the 400 deg gate. See the tuning log.
   reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_bias_gain:        0.5     # Per-lap learning gain for the elevation bias; 0 = off [-]
@@ -154,11 +61,7 @@ fc_settings:
   el_bias_max:         4.0     # Clamp on the learnt elevation correction, per band [deg]
   el_bias_bins:          5     # Azimuth bands the correction is learnt over; 1 = rigid [-]
   el_bias_smooth:     0.25     # How far each band is pulled to its neighbours per lap [-]
-  el_bias_seed_laps:     2     # Remember the correction after this many laps, per project and wind speed; 0 = off [-]
-  # 3.0 since 2026-08-30: at 1.5 the phase-5 sag measured 1.5-3.4 deg in every azimuth
-  # band, deeper than the lift meant to cover it, and 5 m/s failed the elevation gate
-  # there. The lift budget had +1.98 deg at 5 m/s before the elevation-span criterion
-  # binds; see the tuning log and PlanPhase5Sink.md.
+  el_bias_seed_laps:     2     # Remember the correction after this many laps; 0 = off [-]
   el_offset_final:     3.0     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
   el_offset_wing:      1.5     # Extra lift at the LOBES, none in the centre       [deg]
@@ -190,26 +93,9 @@ fc_settings:
   entry_cut_margin:   30.0     # Distance from ±180° where chi_set's sign is noise [deg]
 
   # --- guards and metrics ---------------------------------------------------
-  # NOT wc_settings' f_low: that floor scales with the winch, this one with what
-  # a depowered wing can pull during the dive. A setpoint the entry cannot reach
-  # winds the guard's PID up and runs the drum away.
-  entry_f_min:        350.0    # Force floor of the entry guard, phases 0-2        [N]
-  # Idea: the first lap is flown into an unsettled force state — the pattern is
-  # still converging and the winch has just engaged — so hold the ceiling down for
-  # it. Set back to 1.0 (OFF) before it was ever measured; the machinery is in
-  # place, so raising it is a one-line experiment. Only bites under
-  # force_limit: "soft", where calc_vro_soft reads f_high live, and it moves the
-  # STARTUP request's f_max with it, since that is the path lap 1 flies.
-  first_lap_force_frac: 1.0    # f_high x this during the first figure of eight    [-]
+  entry_f_min:        350.0    # Force floor of the entry guard, phases 0-2; not wc's f_low [N]
+  first_lap_force_frac: 1.0    # f_high x this during the first figure of eight; 1 = OFF [-]
   v_app_abort:        55.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]
-  # 6.5 since 2026-08-18, down from 10: an externally optimized path descends lower
-  # than the lemniscate does, because AWETrim constrains HEIGHT (>= 50 m) and not
-  # elevation, and a fixed height is an ever smaller angle as the tether grows.
-  # Also the gate simple_opt_reelout.jl applies to a re-optimized path BEFORE
-  # installing it, so it bounds what is flown and not only what is scored — and the
-  # kite flies BELOW its reference near the lobe tips (measured 3.0° of undershoot
-  # on 2026-08-18: reference minimum 10.0°, flown 7.0°), so the gate is the more
-  # permissive of the two uses.
-  min_elevation:       6.5     # Floor criterion over the WHOLE run               [deg]
+  min_elevation:       6.5     # Floor criterion over the WHOLE run; also the reopt install gate [deg]
   min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]

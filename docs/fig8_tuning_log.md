@@ -5205,3 +5205,56 @@ and left the rest, so the 2026-09-20 project rename (`system_reelout_150m` ->
 scenarios and `only()` in `simple_reelout_plots.jl` refused every one of them. The
 plots now take the project the run summary names, `move_scenario` empties the target
 folder on overwrite, and the stale copies are deleted from `SimulationResults`.
+
+## 2026-09-21 — Tuning notes moved out of `fc_settings_reelout.yaml`
+
+The settings file carried multi-line histories next to its keys; every key now has a
+one-line comment and the histories live here. Most were already logged under their own
+date (`chi_dive` -135 and `el_offset_final` 3.0 on 2026-08-30, `dive_el_margin` 17 on
+2026-08-29, `reacquire_margin` 6.0 on 2026-08-30, `min_elevation` 6.5 and
+`reelout_l_max` 380 / `n_fig_eight` 0 on 2026-08-18, the phase-5 force limiter and
+`reelout_f_trigger` on 2026-09-18). What was only in the file, transcribed as of
+its measurement date:
+
+**`depower_setpoint` 0.274 is a curvature CEILING, not an optimum (2026-08-18).**
+Depowering costs turn authority (c1 0.2819 -> 0.2687 over 0.27 -> 0.28) and the
+optimizer's path is curvature-limited, so 0.278 drops the startup margin to the
+`min_feasibility_margin` of the day (0.9) and `simple_opt_reelout.jl` refuses to fly.
+A longer starting length does not lift it: the optimizer returns a TIGHTER path the
+further out it is anchored (path radius 3.96° at 150 m, 3.37° at 180 m), cancelling
+the margin the extra length buys — ceiling 0.278 at 150 m, 0.282 at 180 m. Only a
+fixed shape escapes it: the 20/11 lemniscate `simple_reelout.jl` flies has radius
+4.73° at any length, ceiling 0.315 at 150 m and 0.353 at 180 m.
+
+**`f8_a` / `f8_b` 20/11, the shape sweep of 2026-08-15** (`examples/optimize_fig8.jl`,
+30 shapes over `f8_a` 19..30 × `f8_b` 8..12; see Plan.md): +4.8 % of mean reel-out
+power over the previous 30/12 — 8129 W against 7762 W — with the upper force
+controller never engaging and the steering never near its clamp. Width is the whole
+effect and 20 is a genuine interior optimum (8101 W at 21, 8130 at 20, 8126 at 19;
+below 19 no height is flyable). Height is not: at `f8_a` = 20 the three flown heights
+differ by 1 W, so 11 is chosen for curvature MARGIN (1.07, against 1.03 at b = 10 and
+1.05 at b = 12). That 1.07 is thinner than the old 30/12's 1.22, so anything that
+lowers c1 (a depower or `body_damping` change) eats into it faster.
+
+**`reelout_l_max` 380 and AWETrim's reel-out ceiling (2026-08-18).** AWETrim's own
+`DEFAULT_LIMITS["distance_radial"]` is (100, 360) m and its pattern reels out ~35 m
+within a lap, so a re-optimization request above ~325 m of anchor length is
+infeasible by construction; reaching further out puts more of the window past it.
+
+**`reelout_f_trigger` 6400 (measured at 10 m/s, before 2026-09-18).** The delay trades
+harvest for settling, the wrong trade while the entry swoop loads the tether: the
+winch is commanded to exactly zero until the timer expires, so no force limiter runs.
+Force was 9811 N when the timer released the drum and peaked at 12 365 N (47 % over
+the 8400 N rating). 5000 N fired ~1.0 s early there and is inert at 6 m/s and below,
+where the entry never reaches it; 6400 is the value flown since.
+
+**`first_lap_force_frac` 1.0 — an unmeasured idea.** The first lap is flown into an
+unsettled force state (pattern still converging, winch just engaged), so hold the
+ceiling down for it. Set back to OFF before it was ever measured; the machinery is in
+place (bites under `force_limit: "soft"`, where `calc_vro_soft` reads `f_high` live,
+and moves the STARTUP request's `f_max` with it), so raising it is a one-line
+experiment.
+
+**`entry_f_min` 350 is not `wc_settings`' `f_low`:** that floor scales with the winch,
+this one with what a depowered wing can pull during the dive. A setpoint the entry
+cannot reach winds the guard's PID up and runs the drum away.
