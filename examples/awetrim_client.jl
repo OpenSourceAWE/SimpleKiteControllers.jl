@@ -57,6 +57,7 @@ using HTTP, JSON3, StructTypes
 using Dates: now, format
 using Printf: @sprintf
 using YAML
+using AtmosphericModels: AtmosphericModel, calc_wind_factor
 using SimpleKiteControllers: with_file_lock, turn_rate_coeffs
 
 const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
@@ -1088,9 +1089,25 @@ function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
 end
 
 """
+    cap_wind_speed(tos, project_set, v_wind_gnd) -> Float64
+
+The wind speed the elevation-cap step is keyed on: `v_wind_gnd` (the mean wind
+at the project's `h_ref`, as passed to `init`) scaled to
+`tos.pattern_elevation_amplitude_max_wind_height` by the project's own profile
+law, or unscaled when that height is `0.0`.
+"""
+function cap_wind_speed(tos, project_set, v_wind_gnd)
+    h = tos.pattern_elevation_amplitude_max_wind_height
+    h > 0 || return Float64(v_wind_gnd)
+    return calc_wind_factor(AtmosphericModel(project_set; nowindfield = true), h) *
+           v_wind_gnd
+end
+
+"""
     elevation_amplitude_max_at(tos, wind_speed) -> Float64
 
-The elevation half-span cap [deg] sent at `wind_speed`:
+The elevation half-span cap [deg] sent at `wind_speed`, the wind AT
+`tos.pattern_elevation_amplitude_max_wind_height` (see [`cap_wind_speed`](@ref)):
 `tos.pattern_elevation_amplitude_max_high` at and above
 `tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_elevation_amplitude_max`
 below it. `tos.pattern_elevation_amplitude_max_high == 0.0` disables the step;

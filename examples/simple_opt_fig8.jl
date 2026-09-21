@@ -174,6 +174,8 @@ fec = FigureEightController(FigureEightSettings(;
 
 # The conditions of THIS run, read off the files the plant was built from.
 inflow = inflow_from_settings(project_set)
+# The wind the elevation-cap step reads, at the height the step is keyed on.
+cap_wind = cap_wind_speed(tos, project_set, inflow.wind_speed)
 winch = winch_from_wc(wcs)
 @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
                 z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N | \
@@ -211,7 +213,7 @@ opt_r_scale = (1 + turn_radius_reel / l0) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_box = pattern_limits_from(tos;
                               elevation_min = elevation_min_request(fcs, tos, l0),
-                              wind_speed = inflow.wind_speed)
+                              wind_speed = cap_wind)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",

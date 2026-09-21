@@ -1075,7 +1075,9 @@ end
         # cannot hold the 17.3°-tall figure that IS the good basin there (2026-09-21).
         @test tos.pattern_elevation_amplitude_max == 8.0
         @test tos.pattern_elevation_amplitude_max_high == 10.0
-        @test tos.pattern_elevation_amplitude_max_wind_ref == 11.0
+        # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
+        @test tos.pattern_elevation_amplitude_max_wind_ref == 13.2
+        @test tos.pattern_elevation_amplitude_max_wind_height == 100.0
     end
 
     @testset "attractor_distance" begin

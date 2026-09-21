@@ -39,13 +39,15 @@ traj_opt:
     elevation_min_from_gates: true    # raise the floor to what the gates will demand at the requested length
     elevation_min_retry_margin: 0.5   # extra elevation on a re-ask after a clearance/elevation rejection [deg]
     pattern_elevation_max: 0.0
-    pattern_azimuth_max: 25.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
+    pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
     pattern_azimuth_amplitude_min: 0.0
     pattern_elevation_amplitude_max: 8.0   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg]
     pattern_elevation_amplitude_max_high:     10.0  # cap at/above the ref wind (a step, not a ramp) [deg]
-    pattern_elevation_amplitude_max_wind_ref: 11.0  # wind at/above which the high cap applies; 8° at 11 m/s
-                                                    # loses the 17.3°-tall figure and converges 19° higher,
-                                                    # overshooting 8400 N (2026-09-21) [m/s]
+    pattern_elevation_amplitude_max_wind_ref: 13.2  # wind AT the height below at/above which the high cap
+                                                    # applies: Maasvlakte 10 m/s is 12.9 there and flies under
+                                                    # 8°, Maasvlakte 11 (14.2) and Cabauw 7-10 (13.5-19.3) need
+                                                    # 10° or the startup solve loses its basin (2026-09-21) [m/s]
+    pattern_elevation_amplitude_max_wind_height: 100.0  # height that wind is taken at; 0 = the 6 m wind [m]
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     reopt_enabled: true      # off by default: a run is reproducible without a server

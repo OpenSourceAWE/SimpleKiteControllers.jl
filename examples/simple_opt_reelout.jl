@@ -541,6 +541,8 @@ fec = FigureEightController(FigureEightSettings(;
 # is the same WCSettings object the reel-out WinchController is built from, so
 # the optimizer is given the winch law that is actually flown.
 inflow = inflow_from_settings(project_set)
+# The wind the elevation-cap step reads, at the height the step is keyed on.
+cap_wind = cap_wind_speed(tos, project_set, inflow.wind_speed)
 # What AWETrim is SENT, decoupled from the local law: the winch must reel out at a
 # force the kite can pull, the solve must converge, and those want opposite values.
 opt_awe_trim = tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim
@@ -657,7 +659,7 @@ opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
 opt_box = pattern_limits_from(tos;
                               elevation_min = elevation_min_request(fcs, tos, l_set),
-                              wind_speed = inflow.wind_speed)
+                              wind_speed = cap_wind)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
                     pattern box %s.",
@@ -2028,7 +2030,7 @@ try
                     global opt_box_now = pattern_limits_from(tos;
                         elevation_min = elevation_min_request(fcs, tos, l_now;
                                                               extra = el_min_extra),
-                        wind_speed = inflow.wind_speed)
+                        wind_speed = cap_wind)
                     for (attempt, el_seed) in enumerate(el_seeds)
                         # Set only on a cold attempt: it is what the failure cache
                         # keys on, and a warm step has no such key.
@@ -2238,7 +2240,7 @@ try
                                 min_turn_radius = opt_r_min,
                                 pattern_limits = pattern_limits_from(tos;
                                     elevation_min = retry_el_min,
-                                    wind_speed = inflow.wind_speed))
+                                    wind_speed = cap_wind))
                             retry_reply = opt_init(retry_params; url = tos.base_url)
                             opt_step(StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
                                      url = tos.base_url, wait = false)

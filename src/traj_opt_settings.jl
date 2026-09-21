@@ -534,11 +534,27 @@ multi-modal, so the guess is a choice about the answer.
     """
     pattern_elevation_amplitude_max_high = 0.0
     """
-    Wind speed [m/s] at and above which `pattern_elevation_amplitude_max_high`
-    replaces `pattern_elevation_amplitude_max`. Unused while
+    Wind speed [m/s] AT `pattern_elevation_amplitude_max_wind_height` at and above
+    which `pattern_elevation_amplitude_max_high` replaces
+    `pattern_elevation_amplitude_max`. Unused while
     `pattern_elevation_amplitude_max_high` is `0.0`.
+
+    Keyed on the wind aloft, not the 6 m wind the projects are parametrized by,
+    because how tall the optimizer's figure wants to be follows the wind the
+    kite flies in, and the sites' shear differs: Cabauw's 10 m/s at 6 m is
+    19.3 m/s at 100 m, Maasvlakte's 11 m/s is 14.2. A ground-wind step at 11 m/s
+    (2026-09-21, morning) left every Cabauw run from 7 m/s up — archived under
+    the 10° cap with 17-22°-tall figures — without a basin under 8°: three 422s
+    at 10 m/s. At 100 m the sites separate cleanly, Maasvlakte 10 m/s at 12.9
+    (passes under 8°) against Cabauw 7 m/s at 13.5 (needs 10°).
     """
     pattern_elevation_amplitude_max_wind_ref = 0.0
+    """
+    Height [m] `pattern_elevation_amplitude_max_wind_ref` is measured at; the
+    ground wind is scaled to it with the project's own profile law
+    (`calc_wind_factor`). `0.0` = the ground wind as passed to `init`.
+    """
+    pattern_elevation_amplitude_max_wind_height = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """
@@ -813,6 +829,9 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.pattern_elevation_amplitude_max_wind_ref >= 0 ||
         error("pattern_elevation_amplitude_max_wind_ref must be >= 0, got "*
               "$(tos.pattern_elevation_amplitude_max_wind_ref).")
+    tos.pattern_elevation_amplitude_max_wind_height >= 0 ||
+        error("pattern_elevation_amplitude_max_wind_height must be >= 0, got "*
+              "$(tos.pattern_elevation_amplitude_max_wind_height).")
     tos.pattern_elevation_max == 0 ||
         tos.pattern_elevation_max > tos.pattern_elevation_min ||
         error("pattern_elevation_max ($(tos.pattern_elevation_max)) must be greater "*
