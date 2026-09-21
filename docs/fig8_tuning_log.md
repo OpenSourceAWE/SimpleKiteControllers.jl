@@ -5710,3 +5710,48 @@ cosine of the path's local slope — so the steep legs contribute nothing and th
 correction concentrates at the crossing and the lobe tops. Not done. Learning left
 at `false` in `traj_opt.yaml`; the learner settings and the bias cache were restored
 to their state before the three tests.
+
+## 2026-09-21 — Learning off fails Maasvlakte 10 m/s on force; `f_high` 7900 N selects a lower startup basin
+
+With `traj_opt.learning: false` (previous entry) Maasvlakte 10 m/s fails `max force
+<= 8400 N` at 8419 N (`_201302`). The peak is the bottom of the first lobe of lap 1
+(t = 24 s, L = 178 m, az +11°, el 19.7°), the same place the stored `v10` run peaked
+at 8295 N — 0.6° higher, because the learner's cached seed (`[-0.36 +0.38 +1.44
++1.97 +1.33]°`) lifts the lobes of the startup path from lap 1 on. Learning on with
+today's gains passes at 8333 N (`_201555`), so the gains are not the cause; the
+entry of 09-21 that moved the force ceiling had flagged this condition as "passes
+by 106 N — watch it", and learning off spends 86 of them. Same lift, two objectives:
+it costs RMS d at 9 m/s, it buys the force margin at 10.
+
+What did NOT work: the force ceilings. `f_high_awe_trim` 7500 -> 7300 (`_201920`)
+left the peak at 8419 N, because lap 1 flies the startup path, solved at `f_high x
+first_lap_force_frac` regardless. Both at 7300 N (`first_lap_force_frac` 0.9125,
+`_202102`): 8423 N, and the startup solve came back IDENTICAL — 23 785 W predicted,
+l_dp 1.498 m — so the bound does not bind at 150 m at this site. The optimizer's mean
+force there is ~6 kN, the 8.4 kN is the crossing swing of the plant on top of it
+(`force_limit: "soft"` shapes the mean; the Cabauw 10 m/s entry measured ~100 N per
+300 N of ceiling, here it is 0). The lower ceiling did reach the re-optimized paths
+(23.2-23.9 kW predicted instead of 23.8-24.4) and cost 2 % of power for nothing.
+Both reverted.
+
+What did: `f_high` 8000 -> 7900 N (`wc_settings.yaml`), found by hand. Not as a
+limiter — `upper_force_pct` is 0 in every run — but through the startup solve, whose
+`f_max` is `f_high x first_lap_force_frac` = 7406 N now: at that bound the optimizer
+converges on a different figure, 25.9° centre instead of 31.9°, 16.5° tall instead
+of 16.0°, and the lap-1 peak moves to el 13.4° at 7455 N. Repeat identical to the
+watt (`_203208`, `_203723`: 19 999 W measured), so the basin is the one the solve
+finds, not a one-off. Regression, learning off, against `output/scenarios/maasvlakte`:
+
+| wind | max F ph. 4 | min el. | lowest point | RMS d | power ph. 4 | installed | archive |
+|---|--:|--:|--:|--:|--:|--:|---|
+| 9 m/s | 7916 N (8282) | 12.1° (12.2) | 38.9 m (39.8) | 1.19° (1.14) | 20 890 W (20 939) | 3 of 4 (4) | `_203822` |
+| 10 m/s | **7621 N** (8295) | 11.8° (19.9) | 39.5 m (56.5) | 1.46° (1.38) | 20 154 W (19 557) | 3 of 4 (3) | `_203723` |
+| 11 m/s | 7125 N (7158) | 9.7° (9.8) | 38.4 m (38.3) | 1.26° (1.20) | 19 030 W (18 933) | 4 of 4 (4) | `_203928` |
+
+All 10 passed at all three. 9 and 11 m/s barely move (power within 0.5 %, RMS d
++0.05°; 11 m/s was in the low basin already at 26.3° centre). The worst force is now
+9 m/s at 7916 N, 484 N under the limit, where 10 m/s sat 105 N under with learning
+and 19 N over without. The price: at 10 m/s the kite's lowest point drops from
+56.5 m to 39.5 m, on the optimizer's 40 m `min_height` like 9 and 11 m/s already
+were — the run trades altitude for the force margin. Cabauw and the low wind speeds
+not re-flown with 7900 N.
