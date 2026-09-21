@@ -947,6 +947,30 @@ path_min_height(az::AbstractVector, el::AbstractVector, l_tether) =
     l_tether * sind(minimum(el))
 
 """
+    pattern_size_growth(az_from, el_from, az_to, el_to) -> (; growth, az_ratio, el_ratio)
+
+How much larger a candidate reference path `(az_to, el_to)` is than the one it
+would replace `(az_from, el_from)`, both in degrees: `az_ratio` is the ratio of
+the azimuth half-widths, `el_ratio` the ratio of the elevation spans (peak to
+peak), and `growth` the larger of the two. A value of 1 is the same size,
+above 1 is bigger, below 1 is smaller.
+
+A path that SHRINKS as the tether grows is the normal course of a reel-out and
+is not what this measures; it is the sudden jump UP in size that marks a
+re-optimization reply from a different basin (see `max_size_growth` in
+[`TrajOptSettings`](@ref)). A degenerate `from` path with zero width or height
+gives `Inf` in that ratio.
+"""
+function pattern_size_growth(az_from::AbstractVector, el_from::AbstractVector,
+                             az_to::AbstractVector, el_to::AbstractVector)
+    half_width(az) = (maximum(az) - minimum(az)) / 2
+    span(el) = maximum(el) - minimum(el)
+    az_ratio = half_width(az_to) / half_width(az_from)
+    el_ratio = span(el_to) / span(el_from)
+    return (; growth = max(az_ratio, el_ratio), az_ratio, el_ratio)
+end
+
+"""
     check_pattern_height(fec, l_tether, min_height; prn = true)
 
 Compare the reference path's lowest point with a ground-clearance floor

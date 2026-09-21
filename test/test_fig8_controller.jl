@@ -872,6 +872,30 @@ end
         @test res.min_height == 50.0
     end
 
+    @testset "pattern_size_growth" begin
+        az, el = figure_eight_path(16.0, 10.0, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        # Same curve: no growth in either direction.
+        same = pattern_size_growth(az, el, az, el)
+        @test same.growth ≈ 1.0 && same.az_ratio ≈ 1.0 && same.el_ratio ≈ 1.0
+        # The measured reply of 2026-09-21 at 247 m: ±16° / 10° tall answered
+        # with ±24.2° / 15.5° tall. Growth is the LARGER of the two ratios.
+        az2, el2 = figure_eight_path(24.2, 15.5, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        big = pattern_size_growth(az, el, az2, el2)
+        @test big.az_ratio ≈ 24.2 / 16.0 atol = 1e-6
+        @test big.el_ratio ≈ 15.5 / 10.0 atol = 1e-6
+        @test big.growth ≈ big.el_ratio
+        @test big.growth > 1.3            # what the default gate refuses
+        # Shrinking is the normal course of a reel-out: below 1, never refused.
+        @test pattern_size_growth(az2, el2, az, el).growth < 1.0
+        # A lift does not change the size, so raw-vs-raw and lifted-vs-lifted agree.
+        @test pattern_size_growth(az, el .+ 3.0, az2, el2 .+ 3.0).growth ≈ big.growth
+        # One axis alone is enough to trip it.
+        az3, el3 = figure_eight_path(16.0, 15.5, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        one = pattern_size_growth(az, el, az3, el3)
+        @test one.az_ratio ≈ 1.0 atol = 1e-6
+        @test one.growth ≈ 1.55 atol = 1e-6
+    end
+
     @testset "prepare_path_and_blend" begin
         src = _make_test_controller()
         n = 180
@@ -1119,6 +1143,11 @@ end
         # -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held.
         @test tos.power_gate_wind_min == 4.0
         @test TrajOptSettings().power_gate_wind_min == 4.0
+        # The continuity gate: a reply may not be more than this much BIGGER
+        # than the install it replaces. 1.3 refuses the 1.57x jump of 2026-09-21
+        # (7 m/s, 247 m) and clears every other archived install (<= 1.13).
+        @test tos.max_size_growth == 1.3
+        @test TrajOptSettings().max_size_growth == 1.3
         # k_v as a DESIGN VARIABLE. OFF in both since 2026-08-25: the optimizer's
         # model soft-caps force at f_max, and the plant then capped it nowhere, so
         # the low gain it chooses built force to 12684 N against a winch rated 8400
@@ -1168,6 +1197,16 @@ end
             gate = joinpath(dir, "g.yaml")
             write(gate, "traj_opt:\n    power_gate_wind_min: -1.0\n")
             @test_throws ErrorException TrajOptSettings(gate)
+            # A factor below 1 would refuse every reply that is not bigger than
+            # the last one, i.e. the normal course of a reel-out; 0 is "off".
+            grow = joinpath(dir, "sz.yaml")
+            write(grow, "traj_opt:\n    max_size_growth: 0.9\n")
+            @test_throws ErrorException TrajOptSettings(grow)
+            @test TrajOptSettings(begin
+                off = joinpath(dir, "sz0.yaml")
+                write(off, "traj_opt:\n    max_size_growth: 0.0\n")
+                off
+            end).max_size_growth == 0.0
             # 0.0 is the documented "off": no wind is below it, so nothing bypasses.
             @test TrajOptSettings(begin
                 off = joinpath(dir, "o.yaml")

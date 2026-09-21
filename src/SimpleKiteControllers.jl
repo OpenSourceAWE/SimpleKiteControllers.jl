@@ -22,7 +22,7 @@ export set_path!, resample_path, prepare_path, blend_paths, lobe_lift
 export bias_lift, smooth_bins, azimuth_frac, azimuth_bin
 export path_tangent, path_distance
 export min_turn_radius, path_min_radius, path_radius_profile, check_pattern_feasible
-export path_min_height, check_pattern_height
+export path_min_height, check_pattern_height, pattern_size_growth
 
 # Turn-rate-law lookup table
 export V3_TURN_RATE_COEFFS, turn_rate_coeffs, turn_rate_depower_range, V3_TURN_RATE_C1, V3_TURN_RATE_C2

@@ -647,6 +647,37 @@ multi-modal, so the guess is a choice about the answer.
     """
     power_gate_wind_min = 4.0
     """
+    Largest factor by which a re-optimization reply may be BIGGER than the path
+    it replaces — the larger of its azimuth half-width ratio and its elevation
+    span ratio, [`pattern_size_growth`](@ref) — retried exactly like
+    `min_power_frac`; `0.0` is off. The continuity gate: the reply is compared
+    with the previous INSTALL's raw curve (the startup path included), not with
+    any prediction.
+
+    Guards the failure the power gates cannot see. A pattern shrinks as the
+    tether grows (7 m/s, 2026-09-21: ±22° -> ±16° -> ±12.5° -> ±8.8°), so a
+    reply that jumps UP in size is a different local optimum, and one that sits
+    in the corner of the pattern box passes every other gate BY BEING BIG: wide
+    turns clear the curvature margin (1.17 against 0.82), a tall pattern clears
+    the clearance floor, and its predicted power is only mildly worse (10989 W
+    against 12260 W, 0.896 of the previous install against a 0.85 gate).
+    Measured on that run: the warm step at 247 m answered the ±16° / 10° tall
+    optimum with a ±24.2° / 15.5° tall one (azimuth at 24.2 of the 25° box,
+    elevation half-span binding at its 8° ceiling), growth 1.57, installed, and
+    the lap it was flown in took 24.8 s against 15.6-15.8 s for its neighbours
+    at 13 % less power. `1.3` refuses it with room to spare and leaves the
+    ordinary course of a run alone: over the 26 archived runs with a path record
+    (maasvlakte 3.5-7 m/s, cabauw 4-5.75 m/s) every other install is at 1.13 or
+    below, most of them shrinking. The one exception is the kept cabauw 5.5 m/s
+    run, whose 263 m install grew 1.76x with MORE power predicted (19360 W
+    against 18459) and a 26.5 s lap after it; the run passed all criteria, so
+    that is the known cost of this gate — a re-ask from the cold guess there,
+    not a lost run. Only growth is gated, shrinking is never refused. Lowering
+    `pattern_azimuth_max` instead would bind at startup on every scenario that
+    flies ±21-25° (low wind, high wind, and the whole Cabauw set).
+    """
+    max_size_growth = 1.3
+    """
     Send `k_v` as a DESIGN VARIABLE rather than a constant, so the optimizer
     solves for the winch gain and the path together under its own saturating
     tension curve. The server brackets it a factor `K_V_BRACKET_FACTOR` (2.0)
@@ -799,6 +830,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
               "$(tos.min_power_frac_prev).")
     tos.power_gate_wind_min >= 0 ||
         error("power_gate_wind_min must be >= 0, got $(tos.power_gate_wind_min).")
+    tos.max_size_growth == 0 || tos.max_size_growth >= 1 ||
+        error("max_size_growth must be 0 (off) or >= 1, got $(tos.max_size_growth).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     tos.guess_el_center_high >= 0 ||

@@ -2553,6 +2553,10 @@ try
                         # `min_power_frac_prev`).
                         new_pred = Float64(tab["metrics"]["avg_power_W"])
                         cand_folds = blend_folds(cand_from..., cand_az, cand_el)
+                        # Raw against raw: the reply's own curve against the
+                        # previous install's, the startup path included, before
+                        # either carries a lift (`max_size_growth`).
+                        cand_size = pattern_size_growth(opt_paths_raw[end]..., cand_raw...)
                         if margin < tos.min_feasibility_margin
                             event = (; t, l = l_now, status = "rejected",
                                      detail = @sprintf("curvature margin %.2f%s",
@@ -2623,6 +2627,29 @@ try
                             if blend_attempt < tos.blend_max_retries
                                 reject_reason = reason
                                 reject_low = false   # this one is not about height
+                                continue   # a fresh reply is requested at the top
+                            end
+                            event = (; t, l = l_now, status = "rejected",
+                                     detail = @sprintf("%s, after %d retries",
+                                                       reason, tos.blend_max_retries))
+                            break
+                        elseif tos.max_size_growth > 0 && cand_size.growth > tos.max_size_growth
+                            # The continuity gate. A reply from a different basin
+                            # that sits in the corner of the pattern box passes
+                            # every gate above BY BEING BIG: wide turns clear the
+                            # curvature margin, a tall pattern clears the floors,
+                            # and its power is only mildly worse. Measured
+                            # 2026-09-21 at 7 m/s, 247 m: ±16° -> ±24.2°, growth
+                            # 1.57, margin 1.17, 0.896 of the previous power,
+                            # installed, and the lap took 24.8 s against 15.7.
+                            reason = @sprintf("%.2fx the previous install's size \
+                                               (azimuth half-width x%.2f, elevation \
+                                               span x%.2f), above max_size_growth = %.2f",
+                                              cand_size.growth, cand_size.az_ratio, cand_size.el_ratio,
+                                              tos.max_size_growth)
+                            if blend_attempt < tos.blend_max_retries
+                                reject_reason = reason
+                                reject_low = false
                                 continue   # a fresh reply is requested at the top
                             end
                             event = (; t, l = l_now, status = "rejected",
@@ -2723,7 +2750,7 @@ try
                             end
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f%s%s, clearance %.1f m, \
-                                                        %.0f W predicted", margin,
+                                                        size x%.2f, %.0f W predicted", margin,
                                                        (bias_frac < 1 || wing_frac < 1) ?
                                                            @sprintf(" (droop spread at \
                                                                      %.0f %%, lobe lift \
@@ -2734,7 +2761,7 @@ try
                                                            @sprintf(" (phase 5: %.2f at %.0f m)",
                                                                     margin5.margin,
                                                                     fcs.reelout_l_max),
-                                                       clearance, new_pred))
+                                                       clearance, cand_size.growth, new_pred))
                             break
                         end
                     end
