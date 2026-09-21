@@ -18,37 +18,27 @@
 # The dated record of how the `winch_*` values were arrived at stays in V3Kite;
 # new findings belong in docs/fig8_tuning_log.md.
 wc_settings:
-  # --- TORQUE: position mode (winch_position_torque!) -----------------------
-  # The only block simple_fig8.jl reaches at `compliance: 0`.
+  # --- TORQUE: position mode (winch_position_torque!); the only block simple_fig8.jl reaches at compliance 0
   winch_pos_kp:       0.5    # Outer loop: length error [m] -> reel-out speed setpoint [1/s]
   winch_speed_k:      30.0   # Inner speed loop: speed error [m/s] -> torque [N*m*s/m]
   winch_speed_ti:     2.0    # Inner speed-loop integral time [s]; larger = weaker
   winch_torque_limit: 500.0  # Saturation of the inner loop's torque correction [N*m]
   winch_ff_scale:     1.0    # Force feed-forward [-]; 1.0 is a perfectly stiff drum
 
-  # --- TORQUE: force mode; unused here, fc_settings.yaml supplies these ------
-  # At `compliance > 0` simple_fig8.jl builds the force winch from
-  # fc_settings.yaml through `winch_force_gains`, so these are read and ignored.
+  # --- TORQUE: force mode; unused here, at compliance > 0 fc_settings.yaml supplies these via winch_force_gains
   winch_force_tau:  10.0     # Reference-force low-pass time constant [s]
   winch_len_kp:     100.0    # Length trim, length error [m] -> reference force [N/m]
   winch_damp:       500.0    # Viscous damping, reel-out speed -> force [N*s/m]
   winch_force_min:  100.0    # Floor on the reference force [N]
 
   # --- SPEED: WinchControllers.jl's WinchController (simple_reelout.jl) ------
-  # Every LowerForceController/UpperForceController gain below (pf_low, if_low,
-  # df_low, nf_low, kbf_low, ktf_low, fac, and the _high counterparts) was
-  # INVISIBLE before this file absorbed them — the script set only kv, f_low,
-  # f_high, v_sat and t_startup by hand, so the force limiters ran on
-  # WinchControllers.jl's generic package defaults, untuned for this plant.
-  # Retune from here if the force floor needs to react differently.
   dt:            0.02      # overwritten with the plant's dt after loading      [s]
   test:          false     # unused; mode below already selects the REEL_OUT law
   mode:          "reelout" # "reelout" = kv*sqrt(force); "piecewise" reels in below f_low
   fac:           0.25      # factor for I and P of the lower force controller  [-]
   max_iter:      100       # max iterations of the PID solvers                [-]
   iter:          0         # actual iterations used; read-only, diagnostic
-  t_startup:     0.25      # lower/upper force limiters held in reset this long;
-                            # does NOT ramp v_set, see reelout_softstart's docstring [s]
+  t_startup:     0.25      # force limiters held in reset this long; does NOT ramp v_set [s]
   t_blend:       0.25      # blending time of the 3-channel mixer               [s]
   v_sat_error:   1.0       # input saturation of the speed controller        [m/s]
   v_sat:         3.5       # reel-out speed limit; also step!'s speed_limit  [m/s]
@@ -64,26 +54,10 @@ wc_settings:
   nf_low:        7.0       # derivative filter N of the lower force controller  [-]
   kbf_low:       1.0       # anti-windup back-calculation, lower force ctrl     [-]
   ktf_low:       8.0       # tracking constant, lower force controller          [-]
-  f_low:         700.0     # below: LowerForceController reels in, not the law  [N]
-                           # simple_opt_reelout.jl overrides this from
-                           # winch_kv_table.yaml, like kv; 700 is its value at 4+ m/s
+  f_low:         700.0     # below: LowerForceController reels in; overridden per wind speed by winch_kv_table.yaml [N]
   f_reelin:      700.0     # set force during a plain reel-in phase (unused here) [N]
-  f_high:        7900.0    # upper limit; keep below the plant's max_force (8400) [N]
-                           # 7900 since 2026-09-21: 8000 x first_lap_force_frac is
-                           # the startup solve's f_max, and at Maasvlakte 10 m/s
-                           # that bound selects the BASIN (31.9° -> 25.9° centre),
-                           # not the peak: 8419 N failed with learning off, 7621 N
-                           # passes; see the tuning log
-  # 7700 since 2026-09-18: the optimizer's force model is quasi-steady, and the
-  # plant swings 1.13x above the lap mean at the CROSSING of a down-loop pattern
-  # (lowest, fastest point). With v_sat = 3.5 the kv*sqrt(F) law is pinned from
-  # 7360 N up, so the drum cannot relieve that swing and the optimizer's own
-  # depower is the only actuator: at 8000 N asked, Cabauw 10 m/s flew a 7472 N
-  # mean and 8370-8450 N crossing peaks every lap against the 8400 N criterion
-  # (archive 2026-09-18_224220). Derated by the swing, like depower_final_f_target.
-  f_high_awe_trim: 7500.0  # fixed f_high sent to AWETrim instead, 0.0 = disabled,
-                           # use plain f_high (winch_from_wc's default); NOT
-                           # wind-speed dependent, see PlanImprove_power_ratio.md [N]
+  f_high:        7900.0    # upper limit, < max_force (8400); x first_lap_force_frac = the startup solve's f_max [N]
+  f_high_awe_trim: 7500.0  # fixed f_high sent to AWETrim for re-optimizations; 0.0 = plain f_high [N]
   pf_high:       0.00023040 # P constant of the upper force controller          [-]
   if_high:       0.012     # I constant of the upper force controller           [-]
   df_high:       0.000034  # D constant of the upper force controller           [-]
@@ -94,83 +68,15 @@ wc_settings:
   max_acc:       8.0       # acceleration limit, step!'s acceleration_limit  [m/s^2]
   damage_factor: 0.2       # winch damage weighting (unused here)               [-]
   jerk_factor:   0.9       # jerk weighting in the damage calculation (unused here) [-]
-  kv:            0.0408    # v_set = kv * sqrt(force) 0.0408 for optimal performance [-]
+  kv:            0.0408    # v_set = kv * sqrt(force); overridden per wind speed by winch_kv_table.yaml [-]
 
   # --- SPEED: how the force limits are enforced (PlanWinchSpeed.md, stage 4) --
-  # "soft" inverts the SAME saturating tension curve the trajectory optimizer
-  # plans against, so the runtime winch and the optimizer's winch model are one
-  # law rather than two. It replaces the UpperForceController, which is then held
-  # in reset for the whole run — it oscillated, and this is the structure that
-  # removes the switching it oscillated on. "hard" restores the two-limiter
-  # behaviour; "soft" is now the struct default (2026-08-28), since sharpening
-  # softminus_beta locally (below) made every row of winch_kv_table.yaml "soft".
-  force_limit:      "soft" # "soft" | "hard"
-                           # simple_opt_reelout.jl overrides this per wind speed
-                           # from winch_kv_table.yaml's force_limit column, like kv
-                           # and f_low. That table is "soft" for every measured
-                           # wind speed (3-12 m/s); a script that never consults
-                           # it, or a wind speed nobody has measured, still gets
-                           # this same default rather than a value tied to one
-                           # specific project's table.
+  force_limit:      "soft" # "soft" (optimizer's tension curve) | "hard" (two limiters); winch_kv_table.yaml overrides
   softplus_beta:    0.001  # corner sharpness of the UPPER limit; larger = sharper [1/N]
-                           # Left at 1e-3: f_high 8000 >> 1/beta 1000 makes the
-                           # smoothing harmless there, and this is the knee the
-                           # force_limit_tau sweep was tuned against.
-  softminus_beta:   0.03   # corner sharpness of the LOWER limit [1/N]; "hard" force_limit
-                           # and force_limit = "soft" WITHOUT soft_lfc only (with soft_lfc
-                           # below, calc_vro_soft hard-clamps at f_low instead, and this
-                           # plays no part locally — see reel_in_beta). Left sharpened
-                           # (needs * f_low >= 8, 0.03 * 350 = 10.5) for whichever of those
-                           # two a script selects. SAFE to leave sharp here: AWETrim always
-                           # sees a fixed AWETRIM_SOFTMINUS_BETA = 1e-3
-                           # (examples/awetrim_client.jl), never this value — measured
-                           # 2026-08-25, 2e-3/5e-3 already make the 3 m/s solve FAIL (422,
-                           # Max_Iterations_Exceeded), so this field driving the server
-                           # directly is what the pin exists to prevent. See the tuning log.
+  softminus_beta:   0.03   # corner sharpness of the LOWER limit, local law only; AWETrim is pinned to 1e-3 [1/N]
   soft_lfc:         true   # also replace the LowerForceController with a reel-in line
   v_reel_in:        -2.0   # reel-in speed at zero force [m/s]
-  reel_in_beta:     20.0   # sharpness of the smooth line/curve handover [s/m]; needs
-                           # * kv * sqrt(f_low) >= 8, i.e. >= 10.48 at the table's worst
-                           # case (v_wind = 3 m/s, f_low = 350) -- calc_vro_soft itself
-                           # throws if this is violated at any wind speed the table sends.
-                           # reel_in_beta is NOT wind-speed-overridden by winch_kv_table.yaml,
-                           # so this one flat value must clear every row's requirement.
-  use_awe_trim:     0.0    # calc_vro_soft's default blend towards AWETrim's own curve
-                           # constants, in [0, 1]; 0.0 leaves the law exactly as before.
-                           # See calc_vro_soft's docstring (WinchControllers.jl) and
-                           # Winch.tension_curve's (AWETrim, forward direction) for what
-                           # the blend does. examples/awetrim_client.jl's winch_from_wc
-                           # sends this same value to the server, alongside v_reel_in and
-                           # reel_in_beta, so a run that reels in locally optimizes against
-                           # a server winch model that can do the same.
-                           # This is the LOCAL law only. What AWETrim is sent is
-                           # traj_opt.yaml's opt_awe_trim, deliberately decoupled: the two
-                           # sides need opposite values.
-                           #
-                           # 0.0 here because this sets the force at which the winch starts
-                           # reeling out -- 350 N at 0.0 against 883 N at 1.0 -- and at
-                           # 3 m/s the kite cannot pull 883 N. Measured 2026-08-29: 0.875
-                           # stalled the run at 188.7 m of a 380 m target, mean force 707 N,
-                           # every re-optimization failing and 383 s of wall time frozen on
-                           # them, where 0.0 reaches 380 m and passes all 10 criteria.
-                           # Raise it only if the kite can actually pull the crossing force
-                           # at the wind being flown. See PlanFix3m_per_s.md.
-  force_limit_tau:  2.48   # low-pass on the force before inverting; 0 = off        [s]
-                           # dv/dF rises ~50x over the last kN below f_high, against
-                           # a per-lap force std of ~1 kN at 9 m/s — that is why the
-                           # filter exists. Do NOT shorten it to damp the limit cycle:
-                           # 0.2 s was MEASURED worse on every axis (v_ro swing +-2.12
-                           # vs +-1.10 m/s, peak force 9900 vs 9166 N, power 27671 vs
-                           # 29279 W) and the ring got SLOWER, not faster. The filter
-                           # attenuates loop gain; it is not the destabilising phase.
-                           # See docs/fig8_tuning_log.md.
-  force_limit_tau_rise: .nan # same low-pass while the force is RISING; NaN = symmetric [s]
-                           # SYMMETRIC, and a fast attack is CLOSED. 0.25 s (against
-                           # 2.48 s falling) was measured at 10 m/s and lost on every
-                           # count: the limit cycle came BACK (v_ro std 0.11 -> 1.38 m/s,
-                           # zeta 0.096 -> 0.009), power fell 37864 -> 35682 W (-5.8 %),
-                           # and the per-lap excursions it was aimed at got WORSE
-                           # (max 8618 -> 8799 N, steady window 0.0 -> 2.2 % over 8400).
-                           # Same mechanism as force_limit_tau 0.2: the filter stabilises
-                           # the loop by ATTENUATING GAIN, and a fast attack hands that
-                           # gain back on every rising half-cycle. See the tuning log.
+  reel_in_beta:     20.0   # sharpness of the line/curve handover; needs * kv * sqrt(f_low) >= 8 everywhere [s/m]
+  use_awe_trim:     0.0    # blend of the LOCAL law towards AWETrim's curve, in [0, 1]; the server gets opt_awe_trim [-]
+  force_limit_tau:  2.48   # low-pass on the force before inverting; 0 = off; do NOT shorten, see the tuning log [s]
+  force_limit_tau_rise: .nan # same low-pass while the force is RISING; NaN = symmetric, which is CLOSED [s]

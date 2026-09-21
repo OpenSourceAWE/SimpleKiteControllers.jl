@@ -5755,3 +5755,39 @@ and 19 N over without. The price: at 10 m/s the kite's lowest point drops from
 56.5 m to 39.5 m, on the optimizer's 40 m `min_height` like 9 and 11 m/s already
 were — the run trades altitude for the force margin. Cabauw and the low wind speeds
 not re-flown with 7900 N.
+
+## 2026-09-21 — Findings moved out of `wc_settings.yaml`
+
+The file keeps one trailing comment per key now; the dated measurements that had
+accumulated beside the keys are here, or already were (`f_high_awe_trim` 7700 on
+09-18, `softminus_beta` 2e-3/5e-3 breaking the 3 m/s solve on 08-25,
+`force_limit_tau` 0.2 s in the limit-cycle entries). The two that were only in the
+file:
+
+**`use_awe_trim` stays 0.0 (measured 2026-08-29).** It sets the force at which the
+local winch starts reeling out — 350 N at 0.0 against 883 N at 1.0 — and at 3 m/s
+the kite cannot pull 883 N: 0.875 stalled the run at 188.7 m of a 380 m target,
+mean force 707 N, every re-optimization failing and 383 s of wall time frozen on
+them, where 0.0 reaches 380 m and passes all 10 criteria. Raise it only if the kite
+can pull the crossing force at the wind being flown. `winch_from_wc` sends this
+same value to the server alongside `v_reel_in` and `reel_in_beta`, so a run that
+reels in locally optimizes against a winch model that can do the same; what AWETrim
+is asked to blend with is `traj_opt.yaml`'s `opt_awe_trim`, decoupled on purpose —
+the two sides want opposite values.
+
+**`force_limit_tau_rise` stays symmetric (NaN); a fast attack is CLOSED.** 0.25 s
+on the rising side (against 2.48 s falling) was measured at 10 m/s and lost on every
+count: the limit cycle came back (v_ro std 0.11 -> 1.38 m/s, zeta 0.096 -> 0.009),
+power fell 37 864 -> 35 682 W (-5.8 %), and the per-lap excursions it was aimed at
+got worse (max 8618 -> 8799 N, steady window 0.0 -> 2.2 % over 8400 N). Same
+mechanism as `force_limit_tau` 0.2 s: the filter stabilises the loop by attenuating
+gain, and a fast attack hands that gain back on every rising half-cycle.
+
+Also recorded here so the file need not: `softminus_beta` needs `* f_low >= 8`
+(0.03 x 350 = 10.5) and only acts under `"hard"`, or `"soft"` without `soft_lfc`;
+AWETrim always sees `AWETRIM_SOFTMINUS_BETA` = 1e-3 (`examples/awetrim_client.jl`),
+never this field, which is what the pin exists to prevent. `reel_in_beta` needs
+`* kv * sqrt(f_low) >= 8`, i.e. >= 10.48 at the table's worst case (3 m/s, `f_low`
+350), is not overridden per wind speed, and `calc_vro_soft` throws if a table row
+violates it. `softplus_beta` 1e-3 is harmless at `f_high` 8000 >> 1/beta and is the
+knee the `force_limit_tau` sweep was tuned against.
