@@ -73,12 +73,12 @@ fc_settings:
   el_offset_wing_depth: 0.0    # elevation mode: depth where it starts, in half-spans; 1 = the bottom [-]
 
   # --- heading/course PID ---------------------------------------------------
-  heading_p:          0.1941   # Gain at v_app_ref; only their product is physical   [-]
+  heading_p:          0.1891   # Gain at v_app_ref; only their product is physical   [-]
   heading_i:          false    # Integral time [s], or false for no integral action
   heading_d:          0.12     # Derivative time [s]
   heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
   ff_gain:            0.7      # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off [-]
-  ff_lead_time:       0.45     # Read the path's course rate this far ahead of Q; ~the dead time [s]
+  ff_lead_time:       0.35     # Read the path's course rate this far ahead of Q; ~the dead time [s]
   ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
   ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
   ff_d_fade:          6.0      # Cross-track error at which the ff is fully off; fades from half [deg]
