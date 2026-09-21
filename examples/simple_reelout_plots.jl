@@ -116,10 +116,33 @@ if !isnothing(scenario_path)
     # data/ directory or whatever a prior run left in `Main` — a scenario exists
     # to freeze exactly the conditions it was flown under. The file's own name
     # varies by project family (`system_reelout_maasvlakte.yaml` at maasvlakte,
-    # `system_reelout_cabauw.yaml` at cabauw), so find it rather than assuming one.
+    # `system_reelout_cabauw.yaml` at cabauw), so it is read off the run summary's
+    # `simulation.project`, which is what was FLOWN. A folder can hold more than
+    # one — a project renamed between runs left the old copy behind wherever the
+    # scenario was overwritten in place — and only the summary says which is right.
     project_files = filter(f -> startswith(f, "system_reelout_") && endswith(f, ".yaml"),
                            readdir(scenario_path))
-    scenario_project = joinpath(scenario_path, only(project_files))
+    isempty(project_files) && error("No system_reelout_*.yaml in $scenario_path")
+    # The run summary is the one YAML in the folder with a `simulation` section.
+    function flown_project(dir)
+        for f in filter(f -> endswith(f, ".yaml") && !startswith(f, "system_"),
+                        readdir(dir))
+            y = V3Kite.YAML.load_file(joinpath(dir, f))
+            y isa AbstractDict && haskey(y, "simulation") &&
+                haskey(y["simulation"], "project") || continue
+            return y["simulation"]["project"]
+        end
+        return nothing
+    end
+    flown = flown_project(scenario_path)
+    scenario_project = joinpath(scenario_path,
+        if !isnothing(flown) && flown in project_files
+            flown
+        elseif length(project_files) == 1
+            only(project_files)
+        else
+            error("$scenario_path holds $(length(project_files)) project files                    ($(join(project_files, ", "))) and the run summary does not                    name one of them; remove the stale copy.")
+        end)
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
     pattern_project = scenario_project
