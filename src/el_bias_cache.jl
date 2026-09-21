@@ -42,23 +42,89 @@ function el_bias_entries(; file::AbstractString = EL_BIAS_CACHE)
 end
 
 """
-    el_bias_seed(project, wind_speed, bins; file = EL_BIAS_CACHE) -> Union{Nothing, Vector{Float64}}
+    el_bias_seed(project, wind_speed, bins; file = EL_BIAS_CACHE, fallback = true) -> Union{Nothing, Vector{Float64}}
+    el_bias_seed_info(project, wind_speed, bins; file = EL_BIAS_CACHE, fallback = true) -> Union{Nothing, NamedTuple}
 
 The stored elevation correction [deg] for this inflow condition as a profile of
 `bins` azimuth bands, or `nothing` when none has been recorded. A profile stored
 with a different number of bands is not resampled: its mean is returned as a
 rigid shift, which is the part of the correction that does not depend on how the
 bands are cut, and the learner refines the shape from there.
+
+With `fallback` (the default) a condition nobody has flown yet is not started
+from zero, because the cache says the sag hardly depends on the condition: every
+profile recorded so far (Cabauw 4-5.75 m/s, Maasvlakte 6-9 m/s, 2026-09-21) is
+0.3-0.5 deg at the crossing rising to 1.2-1.7 deg in the lobe, so any neighbour
+is a far better first lap than zeros. The fallback is, in order:
+
+1. the same project at other wind speeds: linearly interpolated between the two
+   recorded speeds that bracket `wind_speed`, or the nearest one beyond the ends;
+2. every project: the mean profile, whatever the wind speed.
+
+Each candidate is resampled to `bins` by the rule above before it is combined.
+`el_bias_seed_info` also returns where the seed came from — `source` is
+`"exact"`, `"interpolated"`, `"nearest"` or `"mean"`, `keys` the entries used —
+so a run can log and store it; `el_bias_seed` is the profile alone.
 """
 function el_bias_seed(project::AbstractString, wind_speed::Real, bins::Integer;
-                      file::AbstractString = EL_BIAS_CACHE)
+                      file::AbstractString = EL_BIAS_CACHE, fallback::Bool = true)
+    info = el_bias_seed_info(project, wind_speed, bins; file, fallback)
+    return isnothing(info) ? nothing : info.profile
+end
+
+function el_bias_seed_info(project::AbstractString, wind_speed::Real, bins::Integer;
+                           file::AbstractString = EL_BIAS_CACHE, fallback::Bool = true)
     bins >= 1 || throw(ArgumentError("bins must be positive, got $bins"))
-    entry = get(el_bias_entries(; file), el_bias_key(project, wind_speed), nothing)
+    entries = el_bias_entries(; file)
+    key = el_bias_key(project, wind_speed)
+    exact = el_bias_profile(entries, key, bins)
+    isnothing(exact) || return (profile = exact, source = "exact", keys = [key])
+    fallback || return nothing
+    name = replace(basename(String(project)), r"\.ya?ml$" => "")
+    # Same project, other speeds: (wind speed, profile, key), valid ones only. The
+    # exact key was resolved above (and warned about, if malformed): not twice.
+    same = Tuple{Float64, Vector{Float64}, String}[]
+    other = Tuple{Vector{Float64}, String}[]
+    for (k, e) in entries
+        k == key && continue
+        p = el_bias_profile(entries, k, bins)
+        isnothing(p) && continue
+        if e isa Dict && get(e, "project", nothing) == name && get(e, "wind_speed", nothing) isa Real
+            push!(same, (Float64(e["wind_speed"]), p, k))
+        else
+            push!(other, (p, k))
+        end
+    end
+    if !isempty(same)
+        sort!(same; by = first)
+        v = Float64(wind_speed)
+        if v <= same[1][1]
+            return (profile = same[1][2], source = "nearest", keys = [same[1][3]])
+        elseif v >= same[end][1]
+            return (profile = same[end][2], source = "nearest", keys = [same[end][3]])
+        end
+        i = findlast(t -> t[1] <= v, same)
+        (v0, p0, k0), (v1, p1, k1) = same[i], same[i + 1]
+        w = (v - v0) / (v1 - v0)
+        return (profile = (1 - w) .* p0 .+ w .* p1, source = "interpolated", keys = [k0, k1])
+    end
+    isempty(other) && return nothing
+    return (profile = mean(first.(other)), source = "mean", keys = last.(other))
+end
+
+"""
+    el_bias_profile(entries, key, bins) -> Union{Nothing, Vector{Float64}}
+
+The profile stored under `key`, resampled to `bins` bands by the rule of
+[`el_bias_seed`](@ref), or `nothing` when the entry is absent or malformed.
+"""
+function el_bias_profile(entries::Dict, key::AbstractString, bins::Integer)
+    entry = get(entries, key, nothing)
     isnothing(entry) && return nothing
     profile = try
         Float64.(entry["profile_deg"])
     catch exc
-        @warn "Ignoring a malformed elevation-bias entry for $(el_bias_key(project, wind_speed))." exception = exc
+        @warn "Ignoring a malformed elevation-bias entry for $key." exception = exc
         return nothing
     end
     isempty(profile) && return nothing

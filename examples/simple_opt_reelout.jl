@@ -915,22 +915,27 @@ end
 n_el_bins = max(1, fcs.el_bias_bins)
 flown_wind = something(WIND_SPEED, default_v_wind)
 el_bias_seed0 = zeros(n_el_bins)
+el_bias_seed_source = "none"
 "The elevation correction as one number per azimuth band, crossing first [deg]."
 prof_str(p) = length(p) == 1 ? @sprintf("%+.2f°", p[1]) :
               string("[", join((@sprintf("%+.2f", v) for v in p), " "),
                      "]° (crossing … lobe)")
 if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
-    seed = el_bias_seed(PROJECT, flown_wind, n_el_bins)
+    seed = el_bias_seed_info(PROJECT, flown_wind, n_el_bins)
     if isnothing(seed)
-        @info @sprintf("No elevation bias remembered for %s: the first laps fly \
-                        the optimizer's curve uncorrected and the correction \
-                        after lap %d is stored in %s.",
+        @info @sprintf("No elevation bias remembered for %s or any other condition: \
+                        the first laps fly the optimizer's curve uncorrected and the \
+                        correction after lap %d is stored in %s.",
                        el_bias_key(PROJECT, flown_wind), fcs.el_bias_seed_laps,
                        EL_BIAS_CACHE)
     else
-        el_bias_seed0 = clamp.(seed, -fcs.el_bias_max, fcs.el_bias_max)
-        @info @sprintf("Elevation bias seeded from %s: %s, baked into the startup \
-                        path.", el_bias_key(PROJECT, flown_wind), prof_str(el_bias_seed0))
+        el_bias_seed0 = clamp.(seed.profile, -fcs.el_bias_max, fcs.el_bias_max)
+        el_bias_seed_source = seed.source == "exact" ? "exact" :
+            @sprintf("%s of %s", seed.source, join(seed.keys, ", "))
+        # A neighbour's profile is a guess at this condition; an exact one is a memory.
+        @info @sprintf("Elevation bias seeded for %s (%s): %s, baked into the startup \
+                        path.", el_bias_key(PROJECT, flown_wind), el_bias_seed_source,
+                       prof_str(el_bias_seed0))
     end
 end
 

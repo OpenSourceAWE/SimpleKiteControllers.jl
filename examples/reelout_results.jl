@@ -717,6 +717,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "seed_deg" => (round.(el_bias_seed0; digits = 2),
             "the correction the run started from, remembered per project and wind \
              speed after el_bias_seed_laps laps of the previous run; zeros = none"),
+        "seed_source" => (el_bias_seed_source,
+            "where the seed came from: exact = this condition, else the nearest or \
+             interpolated neighbour of this project, or the mean of every project"),
         "seed_laps" => (fcs.el_bias_seed_laps,
             "el_bias_seed_laps, laps after which this run's correction is remembered; \
              0 = off"),
@@ -1038,7 +1041,8 @@ if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
         record_el_bias_seed!(PROJECT, flown_wind, seed_event.bias;
                              laps = seed_event.lap, log = log_name,
                              turbulence = string(TURBULENCE),
-                             seeded_from = round.(el_bias_seed0; digits = 3))
+                             seeded_from = round.(el_bias_seed0; digits = 3),
+                             seed_source = el_bias_seed_source)
         @info @sprintf("Elevation bias remembered for %s after lap %d: %s (started \
                         the run at %s).", el_bias_key(PROJECT, flown_wind),
                        seed_event.lap, prof_str(seed_event.bias), prof_str(el_bias_seed0))

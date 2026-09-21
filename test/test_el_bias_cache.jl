@@ -34,9 +34,18 @@ import SimpleKiteControllers: YAML
             record_el_bias_seed!("p.yaml", 6.0, profile; laps = 2, file, log = "run_a")
             @test isfile(file)
             @test el_bias_seed("p.yaml", 6.0, 5; file) ≈ profile atol = 1e-3
-            # Another speed or project is another condition.
-            @test isnothing(el_bias_seed("p.yaml", 6.5, 5; file))
-            @test isnothing(el_bias_seed("q.yaml", 6.0, 5; file))
+            # Another speed or project is another condition, but with one entry
+            # every other condition is seeded from it: nearest for the same project,
+            # the mean over projects for another one.
+            @test isnothing(el_bias_seed("p.yaml", 6.5, 5; file, fallback = false))
+            @test isnothing(el_bias_seed("q.yaml", 6.0, 5; file, fallback = false))
+            @test el_bias_seed("p.yaml", 6.5, 5; file) ≈ profile atol = 1e-3
+            @test el_bias_seed_info("p.yaml", 6.5, 5; file).source == "nearest"
+            @test el_bias_seed_info("p.yaml", 6.0, 5; file).source == "exact"
+            q = el_bias_seed_info("q.yaml", 6.0, 5; file)
+            @test q.source == "mean"
+            @test q.profile ≈ profile atol = 1e-3
+            @test q.keys == [el_bias_key("p.yaml", 6.0)]
             # A different number of bands gets the mean as a rigid shift.
             rigid = el_bias_seed("p.yaml", 6.0, 3; file)
             @test length(rigid) == 3
@@ -64,6 +73,23 @@ import SimpleKiteControllers: YAML
             @test Float64.(e["previous_profile_deg"]) ≈ [0.98, 1.46, 2.18, 2.57, 1.65] atol = 1e-3
             @test el_bias_seed("p.yaml", 6.0, 5; file) ≈ [1.0, 1.5, 2.0, 2.5, 1.5]
             @test el_bias_seed("p.yaml", 7.0, 5; file) ≈ fill(0.5, 5)
+        end
+
+        @testset "neighbour fallback" begin
+            # 6.0 and 7.0 m/s are stored: in between is interpolated (the 1-bin
+            # entry as a rigid shift), beyond the ends is the nearest, and another
+            # project gets the mean of everything.
+            mid = el_bias_seed_info("p.yaml", 6.25, 5; file)
+            @test mid.source == "interpolated"
+            @test mid.keys == [el_bias_key("p.yaml", 6.0), el_bias_key("p.yaml", 7.0)]
+            @test mid.profile ≈ 0.75 .* [1.0, 1.5, 2.0, 2.5, 1.5] .+ 0.25 .* fill(0.5, 5)
+            @test el_bias_seed_info("p.yaml", 5.0, 5; file).source == "nearest"
+            @test el_bias_seed("p.yaml", 5.0, 5; file) ≈ [1.0, 1.5, 2.0, 2.5, 1.5]
+            @test el_bias_seed("p.yaml", 9.0, 5; file) ≈ fill(0.5, 5)
+            q = el_bias_seed_info("q.yaml", 6.0, 5; file)
+            @test q.source == "mean"
+            @test length(q.keys) == 2
+            @test q.profile ≈ 0.5 .* ([1.0, 1.5, 2.0, 2.5, 1.5] .+ fill(0.5, 5))
             @test_throws ArgumentError record_el_bias_seed!("p.yaml", 6.0, Float64[]; laps = 1, file)
         end
 

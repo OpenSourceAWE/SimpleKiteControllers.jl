@@ -47,7 +47,7 @@ export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
 export check_reelout_feasibility
 
 # Learnt elevation bias, remembered per inflow condition (examples/simple_opt_reelout.jl)
-export EL_BIAS_CACHE, el_bias_key, el_bias_seed, record_el_bias_seed!
+export EL_BIAS_CACHE, el_bias_key, el_bias_seed, el_bias_seed_info, record_el_bias_seed!
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
