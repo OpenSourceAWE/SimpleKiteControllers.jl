@@ -5116,3 +5116,92 @@ every setting. `fc_settings.yaml` (200 m fig8) is untouched.
 
 Not yet regressed at the other wind speeds; `v03` and `v10` are where the
 pattern's angular size differs most from 6 m/s.
+
+## 2026-09-21 — Maasvlakte 11 m/s: the 8° elevation cap flips the startup basin; `pattern_elevation_amplitude_max` steps to 10° at 11 m/s
+
+`pattern_elevation_amplitude_max` went 10 -> 8° on 2026-09-19 (8c9dc1e, with the
+Cabauw sweep) and every Maasvlakte wind speed from 3.5 to 10 m/s was re-flown under it
+with the startup path centred at 25-30°. 11 m/s was not, and the first run under it
+(`2026-09-21_124609`) failed `max force <= 8400 N` by 35 N — a "slight" overshoot that
+turned out to be a different flight altogether. Against the archived `v11` reference
+(`b3ae558`, 2026-09-19, cap 10°):
+
+| | cap 8° (failed) | reference (cap 10°) |
+|---|---|---|
+| startup path centre / height | **45.0° / 15.4°** | 26.0° / 17.3° |
+| min elevation, whole run | 30.0° | 9.5° |
+| optimizer depower (rel) | 0.294 | 0.323 |
+| max force | 8435 N (t = 11.9 s, phase 3) and 8414 N (t = 36 s, lobe bottom) | 7867 N (phase 5); ≤ 7310 N in phases 3-4 |
+| force mean / CV | 5033 N / 26.5 % | 6288 N / 8.0 % |
+| measured power / ratio | 15.8 kW / 0.77 | 19.3 kW / 0.85 |
+
+Same guess (30°/12° at 30°, retry offset 0), same settings otherwise (`learning`,
+`max_size_growth` were on at every other wind speed already). The reference's
+solution is 17.3° tall, i.e. an 8.65° half-span, which the 8° cap forbids; the
+startup solve then went through IPOPT's restoration phase (272 iterations, "Solved To
+Acceptable Level") and came out 19° higher. At 45° the optimizer buys its power with
+less depower (0.294 vs 0.323), the hold ends at 60° instead of 41°, and the transition
+dives 57 -> 34° with the kite already at 0.30: force 1.4 -> 8.4 kN in 3.5 s while the
+winch is still engaging (v_reelout 0.27 -> 1.84 m/s at t = 11.5-12.0 s). Every lobe
+bottom afterwards repeats it at 8.3 kN. The overshoot is the basin, not the margin.
+
+Re-flown with the cap at 10° by hand (`_125950`): centre 28.0°, height 17.0°, depower
+0.323, max force 7372 N, all 10 passed, 18.9 kW — the reference's flight. So the cap
+is now a wind step, mirroring `guess_el_center_high` / `guess_el_center_wind_ref`:
+`pattern_elevation_amplitude_max: 8.0`, `_high: 10.0`, `_wind_ref: 11.0`
+(`elevation_amplitude_max_at` in `examples/awetrim_client.jl`, threaded through
+`pattern_limits_from(tos; wind_speed)` at all four request sites). 11 rather than 10
+because `v10` is archived passing under 8°; the step changes only the tested
+condition. Verified with the shipped YAML (`_130438`): the server log shows
+`Elevation amplitude ceiling: 10.0 deg` on all solves, centre 27.7°, all 10 passed.
+
+## 2026-09-21 — The in-air elevation shift starved the re-optimizer of lap boundaries
+
+The verified run above harvested only 17.4 kW (ratio 0.81) with **one** re-optimization
+request in 4.5 laps, where the reference had four (31.6 / 47.4 / 64.1 / 85.4 s). The
+re-opt gate fires on a lap boundary only while no blend is running
+(`isnothing(blend_to)`), and the el-bias shift delivery was checked every step: with
+the rung ladder letting 25-50 % of the band-to-band spread through per attempt, the
+remainder was re-asked the very step its 4 s blend ended, so `blend_to` was busy
+back-to-back from 20.1 s to 64.9 s and every lap boundary in between was skipped
+(`shift_delivery` in the summary: blends at 20.1, 28.8, 32.8, 36.8, 40.8, 44.8, 48.8,
+52.8, 56.8, 60.8, 64.9 s, then the one request at 68.9 s). The comment said "retried
+next lap"; the code did not. Seed-dependent, which is why the day's three 11 m/s runs
+got 3, 3 and 1 requests: a shift "held back" leaves a hole a request fits into.
+
+The power follows: each install re-anchors the path to the flown length and raises the
+prediction (reference 20.3 -> 22.2 -> 23.6 -> 23.8 kW); the starved run flew the 150 m
+startup path (20.3 kW) until 309 m.
+
+Two changes in `examples/simple_opt_reelout.jl`, each re-flown at 11 m/s:
+
+| | starved (`_130438`) | once per lap (`_132050`) | re-opt first (`_132514`) | reference |
+|---|---|---|---|---|
+| requests / installed | 1 / 1 | 3 / 3 (39.4, 56.4, 77.2 s) | **4 / 4** (31.4, 47.1, 65.2, 86.8 s) | 4 / 4 |
+| predicted (weighted) | 21.4 kW | 22.5 kW | 22.6 kW | 22.6 kW |
+| measured / ratio | 17.4 kW / 0.81 | 18.7 kW / 0.83 | **19.1 kW / 0.84** | 19.3 kW / 0.85 |
+| laps | 4.5 | 5.0 | 5.5 | 5.5 |
+| mean force / CV | 5.8 kN / 13.9 % | 6.1 kN / 10.2 % | 6.3 kN / 8.4 % | 6.3 kN / 8.0 % |
+| max force (phase 4) | 7227 N | 7226 N | 7227 N | 7286 N |
+| min elevation | 10.3° | 9.0° | 9.6° | 9.5° |
+
+1. **One shift attempt per lap and per target** (`el_shift_lap`, `el_shift_target`):
+   a rationed remainder waits for the next lap boundary, or for a new target (the
+   lap's bias update, the final-lift latch). Three requests back.
+2. **The shift block runs after the re-optimizer**, in its own `if phase >= 4`. On a
+   lap boundary both want `blend_to`; the request is the better use of it, since its
+   install carries the whole pending shift ("carried by an install") where a shift
+   blend started first made the re-optimizer skip that boundary — the lap-1 request
+   at ~31 s was the one still missing. All four back, within 1.5 s of the reference.
+
+The remaining 0.2 kW is the learnt seed's run-to-run scatter (`seed_source: exact`
+picks up the previous run's correction each time). Both changes touch every wind
+speed with `learning: true`; the archived 3.5-10 m/s Maasvlakte scenarios predate
+them and will show more requests, and probably a little more power, when re-swept.
+
+Also found while replotting: `move_scenario(overwrite = true)` replaced files by name
+and left the rest, so the 2026-09-20 project rename (`system_reelout_150m` ->
+`system_reelout_maasvlakte`) had put two project files in all eleven Maasvlakte
+scenarios and `only()` in `simple_reelout_plots.jl` refused every one of them. The
+plots now take the project the run summary names, `move_scenario` empties the target
+folder on overwrite, and the stale copies are deleted from `SimulationResults`.
