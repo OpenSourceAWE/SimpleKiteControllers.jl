@@ -165,7 +165,7 @@ function move_scenario(; overwrite::Bool = false, unique::Bool = false, compress
     # (system_reelout_150m -> system_reelout_maasvlakte, 2026-09-20) left the old
     # copy beside the new one in every overwritten folder, and the plots' project
     # lookup found two where it expected one.
-    overwrite && foreach(rm, readdir(target_dir; join = true))
+    overwrite && foreach(f -> rm(f; recursive = true), readdir(target_dir; join = true))
     for f in readdir(archive_dir; join = true)
         mv(f, joinpath(target_dir, basename(f)); force = overwrite)
     end
