@@ -5367,3 +5367,247 @@ Regression at the two next-most-loaded conditions, all 10 passed at both:
 
 `f_high_awe_trim` stays wind-independent on purpose (its own comment,
 PlanImprove_power_ratio.md); making it so would give Cabauw 9 m/s its 4.6 % back.
+
+## 2026-09-21 — The ~3 s wobble on u_s is the steering loop's own mode, not the winch
+
+Asked what the small oscillation with a ~3 s period on `u_s` at 6, 7 and 8 m/s is.
+Measured on the archived Cabauw and Maasvlakte runs (5-10 m/s, `set_steering` over
+phases 4-5; DFT amplitude spectra and band-pass correlations at 0.28-0.42 Hz):
+
+- There is no sharp line at 3 s. There is a broad, lightly damped bump at 0.3-0.45 Hz
+  (2.2-3.3 s) of ±0.02-0.05 in `u_s`, at every wind speed, largest at 6-8 m/s and in
+  the first ~100 m of the reel-out.
+- It lives in the steering chain only: in that band `heading_rate` follows `u_s` with
+  r = 0.97 and a 0.45 s lag, `side_slip` with r = 0.91; the winch signals are not in it
+  (`winch_force`, `v_reelout`, `v_app`: |r| < 0.4). `force_limit_tau` and the rest of
+  `wc_settings.yaml` are the wrong place to look.
+- The lag chain: `set_steering` -> delivered `steering` 0.3 s (the KCU tape), delivered
+  -> `heading_rate` 0.13-0.2 s. Together the `delay` of `turn_rate_coeffs.yaml`
+  (0.38 s at depower 0.25, 0.52 s at 0.35).
+
+Why 3 s. The course PD loop (`calc_steering`) has a crossover of
+`heading_p * v_app_ref * c1 = 0.1941 * 27 * ~0.245 ≈ 1.3 rad/s`, by construction
+independent of v_app (the schedule) and of depower (`gain_scale`). With 0.45 s of dead
+time, Td 0.12 and N 2, the phase margin is 60-65° and the loop's phase reaches -180° at
+3.7-4.4 rad/s; such a loop has its closed-loop resonance near 2 rad/s, i.e. a 3 s
+period, and every lobe turn, every attractor step along the polyline (the sawtooth on
+`u_s,set`), every path install and depower blend kicks it. On top of that the L0
+guidance around it has a bandwidth of about `1 / attractor_lead_time` = 1/0.8 s =
+1.25 rad/s — the SAME as the inner crossover, so there is no time-scale separation
+between guidance and steering and the pair is underdamped at exactly that frequency.
+
+Why 6-8 m/s: the optimizer flies depower 0.27-0.33 there, so the dead time is
+0.4-0.5 s while `gain_scale` holds the gain at its tuned value — the margin shrinks —
+and the pattern is at full size and low elevation (nominal power from 6 m/s at
+Cabauw), the hardest turns. Consistent with the lead-time reading: the band amplitude
+falls along the reel-out as the 6° `attractor_dist` floor stretches the effective lead
+from 0.8 s (<= 240 m) to 1.1-1.2 s (340 m):
+
+| Cabauw, 12 s windows | L = 173-207 m (lead 0.8 s) | L = 308-342 m (lead 1.0-1.2 s) |
+|---|--:|--:|
+| 6 m/s | 0.019-0.051 | 0.023-0.029 |
+| 7 m/s | 0.053-0.054 | 0.016-0.033 |
+| 8 m/s | 0.037-0.038 | 0.010-0.015 |
+
+Candidate fixes, in order of cost: `attractor_lead_time` 0.8 -> 1.2-1.5 s (separates
+the loops); `heading_p` -20 % or `heading_d` 0.12 -> 0.2 (margin against the delay);
+have `gain_scale` account for the delay growing with depower, not only for c1. The
+first is tried below. Caveat from the 2026-09-19 entry: a longer lead cost RMS d at
+6 m/s once already (8° -> 6° gained 1.80 -> 1.41°), so RMS d is the number to watch.
+
+**Tried: `attractor_lead_time` 0.8 -> 1.2 s, Cabauw 6, 7, 8, 10 m/s.** Baselines: the
+archived v07/v08/v10 (same commit, only the lead differs; v10 is `_151044`) and a fresh
+6 m/s at 0.8 s (`_155435`), since the archived v06 predates three days of changes. New
+runs `_155052` (6), `_154407` (7), `_155201` (8), `_155306` (10). All eight passed all 10.
+
+"Wobble" below is the std of `u_s,set` between a 0.6 s and a 4 s moving mean over
+phase 4 — the band the ring lives in, chatter and lap excluded. (A first look at 7 m/s
+said the 1.2 s trace was "plainly smoother"; that was an artefact: the archived logs
+are decimated to 30 Hz, a fresh log is 90 Hz, and a 120-SAMPLE moving mean is 4 s on
+one and 1.3 s on the other, which erased the ring from the new trace. Detrended in
+seconds, the two are alike.)
+
+| Cabauw | wobble 0.8 -> 1.2 s | RMS d | max d | min el | max F ph. 4 | power |
+|---|--:|--:|--:|--:|--:|--:|
+| 6 m/s | 0.035 -> 0.037 | 1.78 -> 1.84° | 4.92 -> 5.26° | 17.0 -> 16.7° | 7614 -> **8233 N** | 20 269 -> 22 915 W |
+| 7 m/s | 0.037 -> 0.031 | 1.84 -> **1.39°** | 5.35 -> 5.2° | 14.3 -> 14.7° | 7395 -> 7399 N | 20 168 -> 20 216 W |
+| 8 m/s | 0.030 -> 0.032 | 1.89 -> **1.71°** | 5.42 -> 4.91° | 12.3 -> 12.8° | 7386 -> 7514 N | 21 332 -> 21 197 W |
+| 10 m/s | 0.028 -> 0.027 | 2.04 -> **1.68°** | 4.98 -> 5.0° | 10.1 -> 10.9° | 8289 -> 8291 N | 23 662 -> 23 718 W |
+
+The ring is untouched: ±15 % either way, no trend with wind. So the guidance's lead
+is NOT what sets the mode — the inner course loop's crossover and dead time are, and
+option 1 is closed for the wobble. (The lap-1 top at 10 m/s stayed at 44.0 -> 44.1°,
+so the longer lead did not cut the first lobe either.)
+
+What it did do is cut RMS d by 8-24 % at 7-10 m/s, the same direction as the 6 -> 8°
+test of this morning at 10 m/s — and the opposite of the 2026-09-19 finding at 6 m/s,
+which 6 m/s repeats here (RMS d +3 %). The 6 m/s pair is confounded: the two runs sit
+in different optimizer basins (power 20.3 vs 22.9 kW, both ~10 % off their
+predictions in opposite directions) and the 1.2 s run's phase-4 peak force is 8233 N,
+170 N under the criterion, where the 0.8 s run peaked at 7614 N; the `el_bias` seed
+also differs (each run seeds the next at the same wind). Not a lead-time effect one
+can read off.
+
+Reverted to 0.8 s. A longer lead is worth its own regression for RMS d (7-10 m/s
+gained; 6 m/s needs a pair in one basin, and Maasvlakte is unflown), separate from
+the wobble, whose candidates are now options 2 and 3: phase margin against the delay
+(`heading_p` down or `heading_d` up), or a `gain_scale` that also sees the delay grow
+with depower.
+
+**Tried: `heading_d` 0.12 -> 0.16 s, Cabauw 7 m/s** (`_160037` vs the archived v07):
+
+| Cabauw 7 m/s | Td 0.12 | Td 0.16 |
+|---|--:|--:|
+| wobble (u_s,set std, 0.6-4 s band, phase 4) | 0.037 | 0.036 |
+| RMS / max d | 1.84 / 5.35° | 1.74 / 5.16° |
+| min elevation | 14.3° | 14.0° |
+| max force phase 4 | 7395 N | 7387 N |
+| peak \|u_s\| / hf chatter std | 0.23 / 0.0035 | 0.216 / 0.0036 |
+| power | 20 168 W | 20 154 W |
+| verdict | all 10 passed | all 10 passed |
+
+Nothing. Expected in hindsight: with `heading_d_n` = 2 the D path can never add more
+than asin((N-1)/(N+1)) = 19.5° of phase lead whatever Td is, and Td only moves where
+that lead sits — the loop model puts the phase margin at 64.9° (Td 0.12), 67.1° (0.16)
+and 69.1° (0.20). Option 2 through Td is closed; more D would need N raised, which
+buys chatter. Reverted to 0.12.
+
+**What the wobble actually is — a correction to the diagnosis above.** Band-passed
+(0.6-4 s) over one lap of the archived 7 m/s run: `chi_set` itself swings ±10-15° at
+the ~3.5 s period, the course and heading follow it 0.5-1 s later, and the regulated
+error is the difference, ±10-15°; the cross-track error `d` moves ±1° in that band and
+the attractor's azimuth ±2-3°, so the reference is not being pushed around by the
+kite. The installed paths carry that content themselves: the course of the path
+polyline against flight time (250 m, 32 m/s) has a 0.6-4 s band std of 14-16° for all
+four paths of the run (their lap is 14.4-15.6 s; lobes, straights and the crossing put
+harmonics at 4.8, 3.2 and 2.4 s). So the ring is mostly the FORCED response of a
+1.3 rad/s loop to a reference with content at 1.5-2 rad/s — tracking lag, not a lightly
+damped mode — which is why neither the guidance lead (option 1) nor the D time (option
+2) moved it, and a lower `heading_p` (option 2's other half) would make it worse, not
+better. The lag-and-dead-time chain (KCU 0.3 s + yaw 0.15 s) is what caps the
+crossover; nothing in the PD can buy it back.
+
+The remedy that fits is a steering FEED-FORWARD from the path: the installed path's
+curvature at the attractor is known, `psi_dot_ff = kappa * v_kite`, and the turn-rate
+law inverts it, `u_s_ff = psi_dot_ff / (c1 * v_app)` (minus the c2 gravity term), with
+the PD only closing the residual. `calc_steering` has no such input today. Option 3
+(`gain_scale` seeing the delay) stays open but is second-order against this.
+
+## 2026-09-21 — Curvature feed-forward on the steering: `ff_gain`
+
+The forced-response finding above says the PD is late by construction: it can only
+supply the turn the path asks for after the course error has built up. So the
+installed path's own course rate now goes in ahead of the error:
+
+- `path_turn_rate(fec, lead, speed; smooth)` (src/figure_eight_controller.jl): the
+  change of the path tangent per degree of arc, `ff_lead_time` of flight ahead of Q,
+  averaged over `ff_smooth` degrees, times the kite's angular speed — the
+  `psi_dot` the path wants, in the `chi_set`/`heading` convention.
+- `u_ff = ff_gain * psi_dot_path / (c1 * v_app)`, the turn-rate law inverted at the
+  depower actually flown (the same `c1` that `gain_scale` corrects for); the `c2`
+  gravity term (~0.01 rad/s at flight speed) is left to the PD. `calc_steering`
+  adds `u_ff` to the PID output from phase 4 on and clamps the sum.
+- **The chord correction, without which it double-counts.** The attractor is a chord
+  `attractor_distance` ahead, and on a curve that chord sits off the tangent
+  (`path_chord_offset(fec)`, exact on the installed polyline; 35-50° in the lap-1
+  lobes at 150 m). A kite exactly on the path therefore reads a steady error, and
+  that error IS how the plain PD flies the curve. With the feed-forward on, the same
+  turn was asked for twice: `ff_gain` 0.5 without the correction (`_160955`) flew
+  RMS d 2.02°, max d 8.31°, a FAIL. So `chi_ff = ff_gain * path_chord_offset(fec)`
+  is subtracted from the commanded course: on the path the PD sees zero, the
+  feed-forward turns, and the PD closes the residual only.
+- Both are low-passed over `ff_tau` (0.2 s): a re-optimized path has 100 points,
+  ~3.6° of arc per segment, and segment-wise curvature is a staircase (chatter std
+  0.0115 at `ff_tau` 0 against 0.0035 baseline).
+- **Faded out off the branch**: to zero at `ff_d_fade` 6° of cross-track error and
+  at `ff_err_fade` 60° of course error, from half those. Without it the first
+  crossing after a path install took the kite from d 3° to 11-13° in 2 s
+  (`_161538`, FAIL on max d): a Q swap at the crossing hands the feed-forward the
+  other lobe's curvature, which a PD alone absorbs and a feed-forward drives.
+- Phase 3 is excluded: the transition flies the descent limiter 30° off the path,
+  and a feed-forward read at Q there wrecked the entry (`_160821`, three criteria
+  failed, min elevation 7.5°).
+
+Cabauw 7 m/s, `attractor_lead_time` 0.8 s, `heading_d` 0.12, against the archived
+v07. "Settled" = phase 4 from t = 45 s; "phase 4" = from t = 20 s.
+
+| Cabauw 7 m/s | baseline | `ff_gain` 1.0 (`_161727`) | **`ff_gain` 0.7 (`_161854`)** |
+|---|--:|--:|--:|
+| RMS d, whole run / phase 4 / settled | 1.84 / 2.09 / 1.61° | 1.96 / 2.18 / 0.95° | **1.56 / 1.33 / 1.06°** |
+| max d, whole run / settled | 5.35 / 3.93° | 5.79 / 2.48° | **5.22 / 2.38°** |
+| course-error std, phase 4 / settled | 31.9 / 28.0° | 25.3 / 10.5° | **17.5 / 13.6°** |
+| min elevation | 14.3° | 14.2° | **15.5°** |
+| max force phase 4 | 7395 N | 7580 N | 7524 N |
+| peak \|u_s\| / chatter std | 0.23 / 0.0035 | 0.32 / 0.0080 | 0.286 / 0.0052 |
+| u_s,set 0.6-4 s band std, settled | 0.024 | 0.032 | 0.033 |
+| power | 20 168 W | 20 182 W | 20 117 W |
+| verdict | pass | pass | **pass** |
+
+At 1.0 the settled laps are the best ever flown (RMS d 0.95°, the PD part of `u_s`
+near zero, `u_s` ≈ `u_ff`), but laps 2-3 at 150-190 m overturn: the lobe after the
+first install asked `u_ff` -0.22 plus a PD -0.1 at the 0.32 clamp, heading rate
+-2 rad/s against the baseline's -1.3, course error -90°, and the fade had to rescue
+it. 0.7 keeps 70 % of the turn in the feed-forward and passes everywhere: RMS d
+-15 % over the run, -36 % over phase 4, course-error std -45 %, min elevation +1.2°.
+
+What it does NOT do is take the mid-band content out of `u_s`: that band std is
+UP (0.024 -> 0.033 settled), because the steering now carries the path's curvature
+on time instead of lagging it — the wobble on `u_s` was the symptom of the lag, and
+the course error is what came down. The visible steps in `u_s` at the crossings
+(t = 52, 60, 70, 84 s) are the polyline's curvature sign change through `ff_tau`.
+
+Left ON at 0.7 in `fc_settings_reelout.yaml`. Open: 6, 8, 10 m/s and Maasvlakte
+unflown; `ff_lead_time` (0.45 s = the dead time) and `ff_tau` untuned; the lap-1/2
+overturn at 1.0 says the table's `c1` may be high at the shortest tether, or the
+KCU's 0.2/s rate limit is binding there (u_ff swings 0.4 in 2 s). `fc_settings.yaml`
+(the fig8 examples) keeps the struct default, 0.0 = off.
+
+## 2026-09-21 — The size gate's box is SENT with the request: `size_box_growth` 1.3
+
+Asked why a Cabauw 6 m/s run (`_165423`) installed 2 of its 4 re-optimizations. The
+other two were refused by `max_size_growth`: at 241 and 303 m the warm step answered
+the 10-13°-tall figure being flown with a 1.5-1.8x taller one from the tall basin,
+three cold retries each brought the same, and the 191 m path was flown to 380 m
+(RMS d 1.51 -> 1.66°, peak force 7589 -> 8267 N against the same settings five
+minutes earlier, `_164959`, 4 of 4). Not the feed-forward: the 15:50 run without it
+(`_155052`) had the identical pair of rejections. What differs between consecutive
+runs at one wind speed is the `el_bias` seed each run leaves for the next, enough to
+tip a marginal basin. The fixed 8° elevation cap had not stopped them because the
+server's `elevation_amplitude_max` is an RMS half-span, well under a lemniscate's
+peak half-span.
+
+So the gate's bound now goes INTO the request (`with_size_box` in
+examples/simple_opt_reelout.jl, `TrajOptSettings.size_box_growth`): the
+`PatternLimits` box of every re-optimization and every cold retry is tightened to
+1.3x the previous install (raw reply, the same one `max_size_growth` compares
+against) — `azimuth_max`, `elevation_amplitude_max`, and, the one that matters, the
+elevation RANGE as position bounds, top and bottom each let out by 15 % of the span.
+The gate stays as the backstop.
+
+The RMS cap alone was not enough, and that is measured: with only `azimuth_max` and
+`elevation_amplitude_max` relative (`_171552`), the 241 m reply sat exactly on its
+6.8° RMS ceiling ("binding (ub)" in the server log, 1.3 x 5.24°) and was still 1.50x
+taller peak to peak — the tall basin's figure is peakier, so the two measures move
+apart by just the factor the gate refuses. The range bound holds the gate's own
+measure by construction.
+
+Cabauw 6 m/s, four consecutive runs, `ff_gain` 0.7 throughout:
+
+| run | box | installed | retries | blocked | RMS d | max F ph. 4 | power |
+|---|---|--:|--:|--:|--:|--:|--:|
+| `_165423` | fixed | 2 of 4 | 4 | — | 1.66° | 8267 N | 22 858 W |
+| `_171222` | RMS relative | 4 of 4 | 0 | 17.1 s | 1.41° | 7641 N | 20 687 W |
+| `_171408` | RMS relative | 4 of 4 | 2 | — | 1.45° | 7589 N | 20 449 W |
+| `_171552` | RMS relative | **3 of 4** | 4 | 51.7 s | 1.52° | 7998 N | 21 149 W |
+| **`_171814`** | + el range | **4 of 4** | **0** | 17.6 s | 1.61° | 7467 N | 20 566 W |
+| **`_171920`** | + el range | **4 of 4** | **0** | 17.6 s | 1.57° | 7622 N | 20 553 W |
+
+Every cycle with the range box took 4.0-5.2 s of wall time against 20-31 s for a
+cycle that went through retries. Regression with the full box, all 10 passed, 4 of 4
+installed, 0 retries at both: Cabauw 7 m/s (`_172049`: RMS d 1.42°, 20 030 W, the
+installs grew x1.12 at most, nowhere near the bound) and Cabauw 10 m/s (`_172159`: RMS d 1.35°,
+24 107 W, max force 8266 N). Maasvlakte unflown. The power at 6 m/s with 4 installs
+(20.4-20.7 kW) is below the 2-of-4 run's 22.9 kW: the big 191 m path flown to the
+end harvests more and tracks worse, the same trade the 5.5 m/s exception of the
+`max_size_growth` entry recorded — the gate/box is a continuity choice, not a power
+one.

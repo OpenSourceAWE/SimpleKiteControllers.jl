@@ -1182,6 +1182,49 @@ with_azimuth_amplitude_min(box, a_min) = isnothing(box) ?
 half-width its `azimuth_amplitude_min` row bounds, `sqrt(2 * mean((az - mean(az))^2))`."
 azimuth_amplitude(az) = sqrt(2 * mean((az .- mean(az)) .^ 2))
 
+"The server's amplitude measure of a path's elevation [deg]: the RMS-based
+half-span its `elevation_amplitude_max` row caps, same formula as [`azimuth_amplitude`](@ref)."
+elevation_amplitude(el) = sqrt(2 * mean((el .- mean(el)) .^ 2))
+
+"""
+    with_size_box(box, az_prev, el_prev, growth) -> Union{PatternLimits, Nothing}
+
+`box` (a `PatternLimits` or `nothing`) tightened to `growth` times the size of
+the path `(az_prev, el_prev)` [deg]: `azimuth_max` to `growth * max|az_prev|`,
+`elevation_amplitude_max` to `growth * elevation_amplitude(el_prev)`, and the
+elevation range `[elevation_min, elevation_max]` to the path's own, each end let
+out by `(growth - 1)/2` of its span — every side only where that is TIGHTER
+than what the box already holds, the rest kept. `growth <= 0` returns `box`
+unchanged. See `TrajOptSettings.size_box_growth`.
+"""
+function with_size_box(box, az_prev, el_prev, growth)
+    growth > 0 || return box
+    az_lim = growth * maximum(abs, az_prev)
+    el_lim = growth * elevation_amplitude(el_prev)
+    # The RMS half-span alone does not hold the PEAK-TO-PEAK span the gate reads:
+    # measured 2026-09-21, Cabauw 6 m/s, 241 m, a reply sitting exactly on a
+    # 1.3x RMS ceiling ("binding (ub)") was 1.50x taller peak to peak — the tall
+    # basin's figure is peakier. So the elevation RANGE is boxed too, as position
+    # bounds (convex hull, so they hold along the whole curve): the previous
+    # install's top and bottom, each let out by half the permitted growth of the
+    # span. Filling both slacks is exactly `growth` peak to peak, the gate's own
+    # measure; the pattern may still drift down as the tether grows, by that
+    # slack per install, which is more than any archived run moved.
+    el_lo, el_hi = extrema(el_prev)
+    slack = 0.5 * (growth - 1) * (el_hi - el_lo)
+    tighter(old, new) = isnothing(old) ? new : min(old, new)
+    higher(old, new) = isnothing(old) ? new : max(old, new)
+    isnothing(box) && return PatternLimits(; azimuth_max = az_lim,
+                                           elevation_min = el_lo - slack,
+                                           elevation_max = el_hi + slack,
+                                           elevation_amplitude_max = el_lim)
+    return PatternLimits(; azimuth_max = tighter(box.azimuth_max, az_lim),
+                         elevation_min = higher(box.elevation_min, el_lo - slack),
+                         elevation_max = tighter(box.elevation_max, el_hi + slack),
+                         azimuth_amplitude_min = box.azimuth_amplitude_min,
+                         elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim))
+end
+
 # The startup path's curvature margin, read at TOP level: the retry block below
 # defines `incumbent_score` only when it runs (first reply short of the gate),
 # and the failed-trajectory save further down must also work when it doesn't.
@@ -1529,6 +1572,10 @@ stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN =
 stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
+ff_log = Float64[]          # [-] feed-forward steering per step, for the analysis after the run
+ff_chi_log = Float64[]      # [rad] chord correction per step
+ff_u_filt = 0.0             # [-] low-passed feed-forward steering
+ff_chi_filt = 0.0           # [rad] low-passed chord correction
 dp_final_extra = 0.0        # [-] phase-5 force limiter's depower above depower_final
 dp_final_extra_peak = 0.0   # [-] the most it asked for, for the summary
 rel_depower_prev = fcs.depower_setpoint  # [-] depower commanded last step; the gain reads c1 there
@@ -1738,11 +1785,49 @@ try
             local c1_now = c1_at_depower(dp_prev)
             isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_setpoint / c1_now)
         end
+        # Curvature feed-forward: the course rate the installed path asks for
+        # ff_lead_time of flight ahead of Q, inverted through the turn-rate law
+        # at the depower actually flown (the same c1 gain_scale corrects for).
+        # See FC_Settings.ff_gain; the PD closes only what is left.
+        # The chord correction `chi_ff` goes with it: the attractor sits
+        # `attractor_distance` of arc ahead, and on a curve that chord is off
+        # the tangent (path_chord_offset, exact on the installed polyline) — the
+        # steady "error" the PD used to turn into the curvature steering, which
+        # would now be asked for twice. Both are low-passed over ff_tau:
+        # the installed paths are polylines (100 points after a re-opt), and a
+        # segment-wise tangent change is a staircase.
+        local u_ff = 0.0
+        local chi_ff = 0.0
+        if fcs.ff_gain > 0 && cc.phase >= 4
+            local c1_ff = c1_setpoint / gain_scale     # c1 at the flown depower
+            local v_app_ff = max(Float64(s.sys_state.v_app), fcs.v_app_min)
+            local speed_ff = rad2deg(v_kite / Float64(s.sys_state.l_tether[1]))  # [deg/s]
+            if isfinite(c1_ff) && c1_ff > 0 && speed_ff > 0
+                local psi_dot_ff = path_turn_rate(fec, fcs.ff_lead_time * speed_ff, speed_ff;
+                                                  smooth = fcs.ff_smooth)
+                # Faded out when the kite is not actually on this branch of the
+                # path: a Q swap at the crossing hands the feed-forward the other
+                # lobe's curvature, and a PD alone absorbs that where a
+                # feed-forward drives it (measured 2026-09-21, Cabauw 7 m/s:
+                # d 3 -> 11° in 2 s at the first crossing after a path install).
+                local fade_d = clamp((fcs.ff_d_fade - dmin) / (0.5 * fcs.ff_d_fade), 0.0, 1.0)
+                local fade_e = clamp((deg2rad(fcs.ff_err_fade) - abs(cc.err)) /
+                                     (0.5 * deg2rad(fcs.ff_err_fade)), 0.0, 1.0)
+                local g_ff = fcs.ff_gain * fade_d * fade_e
+                local alpha_ff = fcs.ff_tau > 0 ? dt0 / (dt0 + fcs.ff_tau) : 1.0
+                global ff_u_filt += alpha_ff * (g_ff * psi_dot_ff / (c1_ff * v_app_ff) - ff_u_filt)
+                global ff_chi_filt += alpha_ff * (g_ff * path_chord_offset(fec) - ff_chi_filt)
+                u_ff = ff_u_filt
+                chi_ff = ff_chi_filt
+            end
+        end
+        push!(ff_log, u_ff)
+        push!(ff_chi_log, chi_ff)
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
-            dmin, tangent = path_tangent(fec), gain_scale)
+            dmin, tangent = path_tangent(fec), gain_scale, u_ff, chi_ff)
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Overrides calc_steering's fixed fcs.depower_setpoint with the optimizer's
         # own converted depower from the transition (phase 3) on — reel-out begins
@@ -2027,10 +2112,16 @@ try
                     # once at the starting length over-asks by hundreds of metres
                     # of tether. Rebuilt per request, raised by whatever the last
                     # gated-out reply fell short by.
-                    global opt_box_now = pattern_limits_from(tos;
-                        elevation_min = elevation_min_request(fcs, tos, l_now;
-                                                              extra = el_min_extra),
-                        wind_speed = cap_wind)
+                    # And tightened to `size_box_growth` x the previous install
+                    # (raw reply, like `max_size_growth` reads it), in the
+                    # server's own RMS measures: the basin being flown, asked
+                    # for up front instead of refused afterwards.
+                    global opt_box_now = with_size_box(
+                        pattern_limits_from(tos;
+                            elevation_min = elevation_min_request(fcs, tos, l_now;
+                                                                  extra = el_min_extra),
+                            wind_speed = cap_wind),
+                        opt_paths_raw[end]..., tos.size_box_growth)
                     for (attempt, el_seed) in enumerate(el_seeds)
                         # Set only on a cold attempt: it is what the failure cache
                         # keys on, and a warm step has no such key.
@@ -2090,10 +2181,20 @@ try
                         global reopt_lap = fig8_idx_progress / n_path
                         global reopt_next_poll = t + tos.reopt_poll_interval
                         @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
-                                        (lap %.1f, request %d of %d, %s)%s.",
+                                        (lap %.1f, request %d of %d, %s)%s%s.",
                                        l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
                                        isnothing(el_seed) ? "warm start" :
                                            @sprintf("guess el %.0f°", el_seed),
+                                       isnothing(opt_box_now) ? "" :
+                                           @sprintf(", box |az| <= %s, el %s..%s, half-span <= %s",
+                                                    isnothing(opt_box_now.azimuth_max) ? "-" :
+                                                        @sprintf("%.1f°", opt_box_now.azimuth_max),
+                                                    isnothing(opt_box_now.elevation_min) ? "-" :
+                                                        @sprintf("%.1f°", opt_box_now.elevation_min),
+                                                    isnothing(opt_box_now.elevation_max) ? "-" :
+                                                        @sprintf("%.1f°", opt_box_now.elevation_max),
+                                                    isnothing(opt_box_now.elevation_amplitude_max) ? "-" :
+                                                        @sprintf("%.1f°", opt_box_now.elevation_amplitude_max)),
                                        tos.reopt_blocking ? " — holding the simulation" : "")
                         # Freeze here rather than in the collect branch, so the reply
                         # is anchored to `l_now` and not to a length the run drifted to.
@@ -2238,9 +2339,11 @@ try
                                 reg_weight = tos.reg_weight,
                                 detect_simple_bounds = tos.detect_simple_bounds,
                                 min_turn_radius = opt_r_min,
-                                pattern_limits = pattern_limits_from(tos;
-                                    elevation_min = retry_el_min,
-                                    wind_speed = cap_wind))
+                                pattern_limits = with_size_box(
+                                    pattern_limits_from(tos;
+                                        elevation_min = retry_el_min,
+                                        wind_speed = cap_wind),
+                                    opt_paths_raw[end]..., tos.size_box_growth))
                             retry_reply = opt_init(retry_params; url = tos.base_url)
                             opt_step(StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
                                      url = tos.base_url, wait = false)

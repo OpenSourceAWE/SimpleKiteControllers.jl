@@ -595,6 +595,53 @@ Add new findings there, not here.
     """
     depower_blend_time = 4.0
 
+    # ---- Steering feed-forward from the reference path's curvature ---------- #
+    """
+    Gain on the curvature feed-forward, `0.0` = off. The installed path asks for
+    a course rate the PD can only supply AFTER an error has built up: measured
+    2026-09-21 at Cabauw 7 m/s, the course of the path against flight time has
+    ±10-15° of content at 2-4 s (lobes, straights, crossing) that a 1.3 rad/s
+    loop behind ~0.45 s of dead time tracks with a lag, and that lag IS the
+    ~3 s wobble on `u_s` and most of the cross-track error away from the turns.
+    The feed-forward inverts the turn-rate law on the path's own course rate,
+    `u_ff = psi_dot_path / (c1 * v_app)` (the c2 gravity term, ~0.01 rad/s at
+    flight speed, is left to the PD), so the PD closes only the residual. 1.0
+    is the law's own value; lower if the table's c1 overstates the real gain.
+    """
+    ff_gain = 0.0
+    """
+    Where along the path the feed-forward reads the course rate, as flight
+    time ahead of Q [s]. The steering dead time (KCU tape + yaw response,
+    `delay` in `turn_rate_coeffs.yaml`, 0.38-0.52 s) is the natural value: the
+    turn asked for now arrives when the kite is there.
+    """
+    ff_lead_time = 0.45
+    """
+    Arc [deg] over which the path's tangent change is averaged for the
+    feed-forward. The installed paths are polylines of 100-361 points; one
+    segment's turn is noise. ~3° is 1-2 % of a lap.
+    """
+    ff_smooth = 3.0
+    """
+    Low-pass time constant [s] on the feed-forward steering and its chord
+    correction; `0` = none. A 100-point path's tangent changes in steps of
+    ~3.6° of arc, 0.3 s of flight; the filter turns the staircase into a ramp.
+    """
+    ff_tau = 0.2
+    """
+    Cross-track error [deg] at which the feed-forward is fully faded out; it
+    starts fading at half this. Off the path the curvature read at Q is not
+    the turn the kite needs, and at the crossing a Q swap hands it the other
+    lobe's.
+    """
+    ff_d_fade = 6.0
+    """
+    Regulated course error [deg] at which the feed-forward is fully faded out;
+    it starts fading at half this. Same reason: a kite pointing 60° off its
+    reference is not on the curve the feed-forward describes.
+    """
+    ff_err_fade = 60.0
+
     # ---- Feedback: heading when slow, course when fast, on |vel_kite| ------- #
     "[m/s] at/below: pure heading feedback"
     v_kite_heading = 5.0

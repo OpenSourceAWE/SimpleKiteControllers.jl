@@ -148,13 +148,15 @@ mutable struct CourseController
     depower_t0::Float64
     "[-] rel_depower actually commanded (post-blend) of the last `calc_steering` call"
     depower_cmd::Float64
+    "[-] feed-forward steering added to the PID output in the last `calc_steering` call"
+    u_ff::Float64
 end
 
 function CourseController(ccs::CourseControllerSettings)
     pid = DiscretePID(; K = ccs.heading_p, Ti = ccs.heading_i, Td = ccs.heading_d,
                       N = ccs.heading_d_n, Ts = ccs.dt,
                       umin = -ccs.max_steering, umax = ccs.max_steering)
-    CourseController(ccs, pid, 0, NaN, 0, 0.0, 0.0, 0.0, 0.0, 0.0, NaN, NaN, NaN, NaN)
+    CourseController(ccs, pid, 0, NaN, 0, 0.0, 0.0, 0.0, 0.0, 0.0, NaN, NaN, NaN, NaN, 0.0)
 end
 
 """
@@ -175,7 +177,8 @@ end
 
 """
     calc_steering(cc::CourseController, chi_set, heading, course;
-                  t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0)
+                  t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0,
+                  u_ff = 0.0, chi_ff = 0.0)
 
 Inner loop of the figure-of-eight flight controller: raw guidance course
 `chi_set` [rad] in, `(rel_steering, rel_depower, phase)` out. `heading`/
@@ -209,7 +212,14 @@ by phase (`entry_gain` below 3, full gain from 3), and by `gain_scale` (default
 the turn-rate gain `c1` moving with the depower actually flown, when that is
 not `ccs.depower_setpoint` the loop was tuned at; the PID output is
 bypassed to `0.0` at `phase == 0` (park), though it is still stepped so
-engagement stays bumpless. `rel_depower`'s TARGET is `ccs.entry_depower`
+engagement stays bumpless. `u_ff` [-] is a feed-forward steering (the path's
+own curvature through the turn-rate law, see `FC_Settings.ff_gain`) added to
+the PID's output from `phase >= 4` on (the transition flies the descent limiter, off the path where the curvature means nothing) and clamped with it to `max_steering`;
+the PID itself never sees it. `chi_ff` [rad] is subtracted from the commanded
+course over the same phases: the attractor is a chord ahead of the kite, and on
+a curve that chord sits `kappa * lead / 2` off the tangent, so a kite exactly
+on the path reads a steady error the PD turns into the curvature steering — the
+feed-forward's job. Without this correction the two add and the kite overturns. `rel_depower`'s TARGET is `ccs.entry_depower`
 during the dive and hold, `ccs.depower_final` at phase 5, `ccs.depower_setpoint`
 otherwise; a target change ramps `rel_depower` to it over `ccs.depower_blend_time`
 (`0` steps instead), rather than at the phase-ladder's own boundary.
@@ -219,7 +229,8 @@ are left on `cc` as [`chi_cmd`](@ref CourseController)/`w_lim`/`psi_prime`/
 `w_course`/`err` for a caller that logs them.
 """
 function calc_steering(cc::CourseController, chi_set, heading, course;
-                       t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0)
+                       t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0,
+                       u_ff = 0.0, chi_ff = 0.0)
     ccs = cc.ccs
     el_deg = rad2deg(elevation)
     if cc.phase == 0 && t >= ccs.park_time
@@ -253,6 +264,9 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     elseif phase == 2
         chi_cmd = deg2rad(ccs.chi_hold)
     end
+    if phase >= 4
+        chi_cmd = wrap2pi(chi_cmd - chi_ff)
+    end
     cc.chi_cmd = chi_cmd
     cc.w_lim = w_lim
     w_course = if ccs.fig8_pure_course && phase >= 3
@@ -270,11 +284,13 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     v_app_eff = max(v_app, ccs.v_app_min)
     K_phase = phase >= 3 ? ccs.heading_p : ccs.entry_gain * ccs.heading_p
     set_K!(cc.pid, gain_scale * K_phase * ccs.v_app_ref / v_app_eff, 0.0, err)
+    u_ff_used = phase >= 4 ? u_ff : 0.0
+    cc.u_ff = u_ff_used
     rel_steering = if phase == 0
         cc.pid(0.0, 0.0, 0.0)
         0.0
     else
-        cc.pid(0.0, err, 0.0)
+        clamp(cc.pid(0.0, err, 0.0) + u_ff_used, -ccs.max_steering, ccs.max_steering)
     end
     depower_target = if phase == 1 || phase == 2
         ccs.entry_depower

@@ -77,6 +77,32 @@ import KiteUtils: wrap2pi
         @test abs(rel) ≈ ccs.max_steering
     end
 
+    @testset "feed_forward" begin
+        ccs = CourseControllerSettings(; dt = 0.02, heading_p = 1.0, heading_i = false,
+                                       heading_d = false, max_steering = 0.3, entry_gain = 1.0)
+        cc = CourseController(ccs)
+        kw = (t = 0.0, elevation = deg2rad(30.0), v_kite = 30.0, v_app = ccs.v_app_ref,
+              dmin = 0.0, tangent = 0.0)
+        # Phase 3: the feed-forward is ignored, and so is the chord correction.
+        # dmin above fig8_d_gate, or the ladder would advance to 4 on this call.
+        set_phase!(cc, 3)
+        rel3, _, _ = calc_steering(cc, 0.0, 0.0, π; kw..., dmin = 100.0,
+                                   u_ff = 0.1, chi_ff = 0.2)
+        @test rel3 ≈ 0.0 atol = 1e-12
+        @test cc.u_ff == 0.0
+        @test cc.chi_cmd ≈ 0.0
+        # Phase 4: zero error plus u_ff is u_ff; chi_ff shifts the command.
+        set_phase!(cc, 4)
+        rel4, _, _ = calc_steering(cc, 0.0, 0.0, π; kw..., u_ff = 0.1)
+        @test rel4 ≈ 0.1
+        @test cc.u_ff ≈ 0.1
+        calc_steering(cc, 0.0, 0.0, π; kw..., chi_ff = 0.2)
+        @test cc.chi_cmd ≈ -0.2
+        # The sum is clamped, not the PID output alone.
+        rel_c, _, _ = calc_steering(cc, 0.0, 0.0, π; kw..., u_ff = 1.0)
+        @test rel_c ≈ ccs.max_steering
+    end
+
     @testset "wrapped_error" begin
         ccs = CourseControllerSettings(; dt = 0.02)
         cc = CourseController(ccs)

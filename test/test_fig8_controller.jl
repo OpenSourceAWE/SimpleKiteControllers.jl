@@ -1058,6 +1058,32 @@ end
               check_pattern_height(fec, 200.0, 40.0; prn = false).height
     end
 
+    @testset "path_turn_rate_and_chord" begin
+        # A circle of angular radius r on the sphere (small enough for the
+        # az/el metric to be flat): tangent turns 1 rad per r deg of arc, so
+        # the course rate at speed s is s/r, and the chord to a point L ahead
+        # sits L/(2r) off the tangent. Signs follow the traversal direction.
+        r = 5.0
+        th = range(0, 2π; length = 181)[1:end-1]
+        az = 20.0 .+ r .* cos.(th); el = r .* sin.(th)
+        fes = FigureEightSettings(; dt = 0.02, attractor_distance = 4.0, up_loops = true)
+        fec = FigureEightController(fes)
+        set_path!(fec, az, el)
+        fec.last_idx = 30
+        rate = path_turn_rate(fec, 0.0, 10.0; smooth = 6.0)
+        @test abs(rate) ≈ 10.0 / r rtol = 0.05
+        # the lead walks forward, the rate of a circle does not change
+        @test path_turn_rate(fec, 8.0, 10.0; smooth = 6.0) ≈ rate rtol = 0.05
+        @test path_turn_rate(fec, 0.0, 0.0) == 0.0
+        chord = path_chord_offset(fec)
+        @test abs(chord) ≈ 4.0 / (2r) rtol = 0.1
+        @test sign(chord) == sign(rate)
+        # reversing the traversal flips both
+        set_path!(fec, az, el; up_loops = false)
+        @test sign(path_turn_rate(fec, 0.0, 10.0; smooth = 6.0)) == -sign(rate)
+        @test sign(path_chord_offset(fec)) == -sign(chord)
+    end
+
     @testset "traj_opt_settings" begin
         tos = TrajOptSettings("traj_opt.yaml")
         # The shipped file loads, and its guess is NOT the reel-out pattern: those

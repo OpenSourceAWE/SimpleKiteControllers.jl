@@ -20,7 +20,7 @@ export FigureEightSettings, FigureEightController
 export figure_eight_path, calc_attractor, navigate_fig8, set_path_center!
 export set_path!, resample_path, prepare_path, blend_paths, lobe_lift
 export bias_lift, smooth_bins, azimuth_frac, azimuth_bin
-export path_tangent, path_distance
+export path_tangent, path_distance, path_turn_rate, path_chord_offset
 export min_turn_radius, path_min_radius, path_radius_profile, check_pattern_feasible
 export path_min_height, check_pattern_height, pattern_size_growth
 

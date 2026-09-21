@@ -711,6 +711,35 @@ multi-modal, so the guess is a choice about the answer.
     """
     max_size_growth = 1.3
     """
+    Tighten the pattern box SENT with every re-optimization request to this
+    factor times the previous install's size, so the solver is steered back into
+    the basin being flown instead of answering from the tall or wide one and
+    being refused by `max_size_growth` afterwards — three cold retries (~4 s of
+    frozen simulation each) and then the old path flown out to the end of the
+    reel-out. `0` = off, the box stays the fixed `pattern_*` one.
+
+    Measured 2026-09-21, Cabauw 6 m/s (`_165423`, `_155052`): the warm step at
+    241 and 303 m answered the 13°-tall figure flown with 1.5-1.8x taller ones,
+    rejected after 3 retries each, and the 191 m path was flown to 380 m
+    (RMS d 1.51 -> 1.66°, peak force 7589 -> 8267 N). The fixed 8° elevation
+    cap had not stopped them because it is an RMS half-span (see
+    `PatternLimits`), well under a lemniscate's peak half-span; this bound is
+    taken in the server's own measure of the previous install, so it binds
+    where the gate would refuse.
+
+    `azimuth_max` becomes `min(pattern_azimuth_max, factor * max|az|)`,
+    `elevation_amplitude_max` `min(the wind cap, factor * elevation_amplitude)`,
+    and the elevation RANGE is boxed to the previous install's top and bottom
+    each let out by `(factor - 1)/2` of its span — all of the previous install
+    (raw reply, no lift), and no side is ever loosened. The range bound is the
+    one that actually holds the gate's measure: the RMS cap alone let a reply
+    sitting exactly on its 1.3x ceiling come back 1.50x taller peak to peak
+    (`_171552`, the tall basin's figure is peakier). The gate stays as the
+    backstop. There is nothing compounding: each install is bounded by the one
+    actually flown before it, and the fixed caps stay the ceiling.
+    """
+    size_box_growth = 1.3
+    """
     Send `k_v` as a DESIGN VARIABLE rather than a constant, so the optimizer
     solves for the winch gain and the path together under its own saturating
     tension curve. The server brackets it a factor `K_V_BRACKET_FACTOR` (2.0)
@@ -873,6 +902,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("power_gate_wind_min must be >= 0, got $(tos.power_gate_wind_min).")
     tos.max_size_growth == 0 || tos.max_size_growth >= 1 ||
         error("max_size_growth must be 0 (off) or >= 1, got $(tos.max_size_growth).")
+    tos.size_box_growth == 0 || tos.size_box_growth >= 1 ||
+        error("size_box_growth must be 0 (off) or >= 1, got $(tos.size_box_growth).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     tos.guess_el_center_high >= 0 ||

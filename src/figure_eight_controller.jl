@@ -836,14 +836,46 @@ and the cross-track error [deg].
 function navigate_fig8(fec::FigureEightController, azimuth, elevation)
     az_attr, el_attr, dmin =
         calc_attractor(fec, rad2deg(azimuth), rad2deg(elevation))
-    phi = azimuth
-    beta = elevation
-    phi_a = deg2rad(az_attr)
-    beta_a = deg2rad(el_attr)
+    chi_set = _bearing(azimuth, elevation, deg2rad(az_attr), deg2rad(el_attr))
+    return chi_set, az_attr, el_attr, dmin
+end
+
+"""
+    _bearing(phi, beta, phi_a, beta_a) -> Float64
+
+Great-circle initial course [rad] from `(phi, beta)` to `(phi_a, beta_a)`
+(azimuth, elevation in radians), in the `chi_set`/`SysState.heading` convention.
+"""
+function _bearing(phi, beta, phi_a, beta_a)
     y = sin(phi_a - phi) * cos(beta_a)
     x = cos(beta) * sin(beta_a) - sin(beta) * cos(beta_a) * cos(phi_a - phi)
-    chi_set = atan(y, x)
-    return chi_set, az_attr, el_attr, dmin
+    return atan(y, x)
+end
+
+"""
+    path_chord_offset(fec::FigureEightController) -> Float64
+
+Angle [rad] between the path tangent at the closest point Q of the last
+[`calc_attractor`](@ref) call and the great-circle course from Q to the
+attractor `attractor_distance` of arc ahead of it: what `chi_set` would read
+off the tangent for a kite sitting exactly on the path at Q. Positive where the
+path turns positive. A steering feed-forward that flies the path's curvature
+subtracts this from the commanded course, otherwise the guidance's own chord
+asks the PD for the same turn a second time — see `calc_steering`'s `chi_ff`.
+"""
+function path_chord_offset(fec::FigureEightController)
+    n = length(fec.az_path)
+    iq = fec.last_idx
+    k = iq
+    cum = 0.0
+    while cum < fec.fes.attractor_distance
+        cum += fec.seg_len[k]
+        k = mod1(k + 1, n)
+        k == iq && break
+    end
+    chord = _bearing(deg2rad(fec.az_path[iq]), deg2rad(fec.el_path[iq]),
+                     deg2rad(fec.az_path[k]), deg2rad(fec.el_path[k]))
+    return wrap2pi(chord - fec.tangent[iq])
 end
 
 """
@@ -861,6 +893,46 @@ such degeneracy and encodes which way round the path is traversed, so an entry
 flown along it arrives moving in the right direction.
 """
 path_tangent(fec::FigureEightController) = fec.tangent[fec.last_idx]
+
+"""
+    path_turn_rate(fec::FigureEightController, lead, speed; smooth = 0.0) -> Float64
+
+Course rate [rad/s] the reference path asks for `lead` degrees of arc ahead of
+the closest point Q of the last [`calc_attractor`](@ref) call, for a kite moving
+along it at `speed` [deg/s of arc]: the change of the path tangent per degree of
+arc, averaged over `smooth` degrees centred on that point (at least one segment
+each side), times `speed`. Same sign convention as `chi_set`/`SysState.heading`,
+so with the turn-rate law `psi_dot = c1 * v_a * u_s` the steering that flies
+this curvature open loop is `path_turn_rate(...) / (c1 * v_a)`.
+"""
+function path_turn_rate(fec::FigureEightController, lead, speed; smooth = 0.0)
+    n = length(fec.az_path)
+    n >= 3 || return 0.0
+    k = fec.last_idx
+    cum = 0.0
+    while cum < lead
+        cum += fec.seg_len[k]
+        k = mod1(k + 1, n)
+        k == fec.last_idx && break
+    end
+    half = smooth / 2
+    i0 = k; arc_back = 0.0
+    while true
+        ib = mod1(i0 - 1, n)
+        arc_back += fec.seg_len[ib]
+        i0 = ib
+        (arc_back >= half || i0 == k) && break
+    end
+    i1 = k; arc_fwd = 0.0
+    while true
+        arc_fwd += fec.seg_len[i1]
+        i1 = mod1(i1 + 1, n)
+        (arc_fwd >= half || i1 == k) && break
+    end
+    arc = arc_back + arc_fwd
+    arc > 0 || return 0.0
+    return wrap2pi(fec.tangent[i1] - fec.tangent[i0]) / arc * speed
+end
 
 """
     min_turn_radius(l_tether, max_steering; c1=V3_TURN_RATE_C1)

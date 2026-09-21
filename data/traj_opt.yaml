@@ -65,6 +65,7 @@ traj_opt:
     min_power_frac_prev: 0.85 # fraction of the previous install's power; 0 is off [-]
     power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses  [m/s]
     max_size_growth: 1.3     # largest size ratio vs the previous install; 0 is off [-]
+    size_box_growth: 1.3     # box SENT with a re-opt: this x the previous install's size; 0 is off [-]
     optimize_k_v: false      # OFF since 2026-08-25: halving k_v halves the soft force limiter's authority [-]
     reopt_poll_interval: 0.5 # seconds between /status polls (simulated when non-blocking) [s]
     reopt_blocking: true     # freeze the simulation until the reply lands       [-]
