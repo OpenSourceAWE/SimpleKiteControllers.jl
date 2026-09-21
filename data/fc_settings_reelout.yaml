@@ -58,12 +58,6 @@ fc_settings:
   attractor_dist_max:  0.0     # Ceiling on that arc; 0 = 2 x attractor_dist        [deg]
   reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
-  el_bias_gain:        0.5     # Per-lap learning gain for the elevation bias; 0 = off [-]
-  el_bias_gain_final:  1.0     # Same, from state 5 on, where the sag deepens        [-]
-  el_bias_max:         4.0     # Clamp on the learnt elevation correction, per band [deg]
-  el_bias_bins:          5     # Azimuth bands the correction is learnt over; 1 = rigid [-]
-  el_bias_smooth:     0.25     # How far each band is pulled to its neighbours per lap [-]
-  el_bias_seed_laps:     2     # Remember the correction after this many laps; 0 = off [-]
   el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
   el_offset_wing:      1.0     # Extra lift at the LOBES, none in the centre       [deg]

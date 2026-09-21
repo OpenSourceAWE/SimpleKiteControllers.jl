@@ -61,7 +61,7 @@ constant geometry passed per sample is the scalar case exactly.
 `cross_track`, one value per log sample [deg], replaces `var_01` as the
 cross-track error everything above is computed from — the settle detection and
 `rms_d`/`mean_d`/`max_d` alike. A run whose reference is corrected in the air
-(`simple_opt_reelout.jl` lifts the optimizer's curve by the learnt droop profile
+(`simple_opt_reelout.jl` lifts the optimizer's curve by `el_offset_final`
 and the lobe lift) logs the guidance's own error to `var_01`, the distance to the
 path it is steering for; scoring against the optimizer's curve as it arrived,
 blended the same way but never lifted, says how far the kite flew from what was

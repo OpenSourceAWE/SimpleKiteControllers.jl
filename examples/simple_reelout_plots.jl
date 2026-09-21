@@ -352,7 +352,7 @@ err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
 if "pattern" in plots
     @info "Plotting the pattern..."
     # Every path the optimizer returned that the run went on to fly, BEFORE
-    # `el_bias`, `el_offset_final` and `el_offset_wing` were added to it, is drawn
+    # `el_offset_final` and `el_offset_wing` were added to it, is drawn
     # against the flown curve. Every other curve here carries that pre-distortion —
     # the logged attractor included, since it walks the corrected path — so without
     # these there is nothing in the figure to compare the correction against. Read

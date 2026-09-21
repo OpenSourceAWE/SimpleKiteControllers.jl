@@ -151,14 +151,14 @@ span_margins = [(; name, fill, flown = fill * ref,
 span_worst = argmin(m -> m.margin, span_margins)
 i_final = findall(==(5), Int.(sl.sys_state))
 el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_final])))
-# What the path in the air actually carries, not what was asked for: the bias only
+# What the path in the air actually carries, not what was asked for: the lift only
 # reaches the kite through an install or an in-air blend that the curvature gate
 # can refuse.
-lift_mean = mean(el_applied)
-@info @sprintf("Lift budget: %+.2f° of correction delivered (learnt %s, lobes up \
-                to %+.2f°); the tightest size criterion is %s with %+.2f° (%+.0f %%) \
-                to spare; min elevation %.1f° over the run, %.1f° in phase 5.",
-               lift_mean, prof_str(el_applied), fcs.el_offset_wing,
+lift_mean = el_applied
+@info @sprintf("Lift budget: %+.2f° of lift delivered (lobes up to %+.2f°); the \
+                tightest size criterion is %s with %+.2f° (%+.0f %%) to spare; min \
+                elevation %.1f° over the run, %.1f° in phase 5.",
+               lift_mean, fcs.el_offset_wing,
                replace(span_worst.name, "_" => " "), span_worst.margin,
                span_worst.pct, fig8m.min_elevation_all, el_min_final)
 
@@ -650,10 +650,6 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "lobe_lift_pct" => (round(Int, 100 * startup_wing_frac),
             "share of el_offset_wing the STARTUP install carried; held back on the \
              same rungs as a mid-run install when the full lift fails the curvature gate"),
-        "seed_spread_pct" => (round(Int, 100 * startup_bias_frac),
-            "share of the remembered bias's band-to-band SPREAD the STARTUP install \
-             carried; its mean always goes in whole, and the spread is rationed \
-             before the lobe lift is"),
         "downloops" => (opt_downloops, "traversal direction the optimizer solved for")),
     "feasibility" => feasibility_block,
     "reopt" => OrderedDict(
@@ -699,32 +695,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             end
             ev
         end),
-    "el_bias" => OrderedDict(
-        "learning" => (tos.learning,
-            "traj_opt.learning; false zeroes the gains and leaves the cache alone"),
-        "gain" => (fcs.el_bias_gain,
-            "per-lap learning gain for the elevation bias; 0 = off"),
-        "final_deg" => (round(mean(el_bias); digits = 2),
-            "mean elevation correction added to the last installed path [deg]"),
-        "bins" => (n_el_bins,
-            "el_bias_bins, azimuth bands the correction is learnt over; 1 = one \
-             rigid shift"),
-        "smooth" => (fcs.el_bias_smooth,
-            "el_bias_smooth, how far each band is pulled towards its neighbours \
-             after every lap [-]"),
-        "profile_deg" => (n_el_bins == 1 ? "n/a" : round.(el_bias; digits = 2),
-            "the learnt correction per band, crossing first [deg]"),
-        "seed_deg" => (round.(el_bias_seed0; digits = 2),
-            "the correction the run started from, remembered per project and wind \
-             speed after el_bias_seed_laps laps of the previous run; zeros = none"),
-        "seed_source" => (el_bias_seed_source,
-            "where the seed came from: exact = this condition, else the nearest or \
-             interpolated neighbour of this project, or the mean of every project"),
-        "seed_laps" => (fcs.el_bias_seed_laps,
-            "el_bias_seed_laps, laps after which this run's correction is remembered; \
-             0 = off"),
+    "el_lift" => OrderedDict(
         "lift_deg" => (fcs.el_offset_final,
-            "el_offset_final, the fixed lift added on top of the learnt bias [deg]"),
+            "el_offset_final, the fixed lift of the path once reel-out ends [deg]"),
         "lift_lead" => (fcs.el_offset_lead,
             "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
         "wing_deg" => (fcs.el_offset_wing,
@@ -746,27 +719,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "shift_delivery" => OrderedDict(
             @sprintf("t_%05.1f_s", e.t) =>
                 (e.status,
-                 @sprintf("%+.2f° of shift (mean over the bands), curvature margin \
-                           %.2f vs %.2f required",
+                 @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
                           e.delta, e.margin, tos.min_feasibility_margin))
-            for e in el_shift_events),
-        "laps" => OrderedDict(
-            @sprintf("lap_%d", e.lap) =>
-                (round(e.err_opt; digits = 2),
-                 @sprintf("mean elevation error vs the OPTIMIZER's curve; sag under \
-                           the flown path %.2f°, correction became %s",
-                          e.err_el, prof_str(e.bias)))
-            for e in el_bias_events),
-        "lap_profiles" => (n_el_bins == 1 ? OrderedDict("n/a" =>
-                ("one band", "el_bias_bins is 1, so traj_opt.el_bias.laps says it all")) :
-            OrderedDict(
-                @sprintf("lap_%d", e.lap) =>
-                    (join((isnan(v) ? "  -  " : @sprintf("%+.2f", v) for v in e.err_bin),
-                          " "),
-                     @sprintf("error vs the optimizer's curve per band, crossing \
-                               first; %s samples, correction now %s",
-                              join(e.n, "/"), prof_str(e.bias)))
-                for e in el_bias_events))),
+            for e in el_shift_events)),
     "droop_profile" => OrderedDict(
         vcat(
             [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ n_droop_bins,
@@ -784,16 +739,13 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                   round(maximum(filter(!isnan, droop_mean)) - first(droop_mean);
                         digits = 2),
                   "how much deeper the kite flies in its worst azimuth band than in \
-                   the crossing — what a SHAPED lift is aimed at, where el_bias and \
+                   the crossing — what a SHAPED lift is aimed at, where \
                    el_offset_final can only move the pattern rigidly [deg]")])),
     "lift_budget" => OrderedDict(
         vcat(
             ["delivered_deg" => (round(lift_mean; digits = 2),
-                 "mean correction the path in the air actually carries — el_bias plus \
-                  el_offset_final once it has been delivered [deg]"),
-             "delivered_profile_deg" => (n_el_bins == 1 ? "n/a" :
-                                         round.(el_applied; digits = 2),
-                 "the same, per azimuth band, crossing first [deg]"),
+                 "rigid lift the path in the air actually carries — el_offset_final \
+                  once it has been delivered [deg]"),
              "commanded_az_amp_deg" => (round(az_amp_mean; digits = 2),
                  "mean half-width the run was COMMANDED to fly, against the startup \
                   path's in traj_opt.path [deg]"),
@@ -1005,8 +957,7 @@ open(joinpath(output_path, log_name * ".yaml"), "w") do io
 end
 
 # Every path the optimizer returned that the run went on to fly, AS IT ARRIVED —
-# before `el_offset_wing`, the seeded/learnt `el_bias` and `el_offset_final`
-# were added. The logged attractor walks the CORRECTED path, so it rises with the
+# before `el_offset_wing` and `el_offset_final` were added. The logged attractor walks the CORRECTED path, so it rises with the
 # correction and cannot show what the correction did; these are the curves the
 # kite is meant to land on. Its own file next to the log, archived with it, so
 # `plot_pattern_scenario` can draw them for an archived run as well as a live one.
@@ -1022,31 +973,6 @@ if @isdefined(opt_paths_raw) && !isempty(opt_paths_raw)
                     for ((paz, pel), (t_at, ph_at)) in zip(opt_paths_raw, opt_paths_at)]))
 elseif isfile(opt_paths_file)
     rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
-end
-
-# ==================== REMEMBER THE ELEVATION BIAS ==================== #
-
-# The correction as it stood after `fcs.el_bias_seed_laps` completed laps, stored
-# for this project at this wind speed so the next run's FIRST laps start from it
-# (see the seed block of simple_opt_reelout.jl). The end-of-run profile is not
-# what is wanted: the sag deepens as the tether grows, and this seed is applied
-# at the anchor. A run that ended early stores the latest lap it has; one with no
-# completed lap of learning leaves the memory alone.
-if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
-    seed_events = filter(e -> e.lap <= fcs.el_bias_seed_laps, el_bias_events)
-    if isempty(seed_events)
-        @info "Elevation bias not remembered: no lap of learning completed."
-    else
-        seed_event = argmax(e -> e.lap, seed_events)
-        record_el_bias_seed!(PROJECT, flown_wind, seed_event.bias;
-                             laps = seed_event.lap, log = log_name,
-                             turbulence = string(TURBULENCE),
-                             seeded_from = round.(el_bias_seed0; digits = 3),
-                             seed_source = el_bias_seed_source)
-        @info @sprintf("Elevation bias remembered for %s after lap %d: %s (started \
-                        the run at %s).", el_bias_key(PROJECT, flown_wind),
-                       seed_event.lap, prof_str(seed_event.bias), prof_str(el_bias_seed0))
-    end
 end
 
 # ==================== ARCHIVE ==================== #
@@ -1081,11 +1007,6 @@ if run_archive
         joinpath(output_path, log_name * ".arrow"),
         joinpath(output_path, log_name * ".yaml"),
         opt_paths_file,                                       # optimizer's uncorrected curves
-        # The el_bias seed this run started from (`seeded_from` per key) and the
-        # profile it left behind: with el_bias_seed_laps > 0 the first installed
-        # path already depends on it, so without it the archive cannot
-        # reproduce its own run.
-        EL_BIAS_CACHE,
     ]
     for f in unique(vcat(input_yaml_files, output_files))
         isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)

@@ -49,40 +49,23 @@ is dropped and the run keeps flying what it has. One that passes is aligned with
 ([`blend_paths`](@ref)), so the reference never steps and the lap counter is
 re-based in the same move. Every solve is recorded in `traj_opt.reopt`.
 
-# Learning the elevation bias
+# Lifting the path
 
 The kite tracks BELOW the path it is given (1-2 deg, 3.5 deg at 380 m).
-`fcs.el_bias_gain` (`0` = off) learns a correction once per lap from the mean
-signed elevation error, clamped to `fcs.el_bias_max`, and every path installed
-afterwards is RAISED by it. The error fed back is the one against the
-OPTIMIZER's curve (sag plus the correction already in the flown path): closing on
-the sag alone does not converge, because raising the reference raises the kite
-and leaves the sag unchanged (measured 2026-08-18). A whole lap is averaged so
-the error's shape cancels and only its offset survives.
-
 `fcs.el_offset_final` adds a fixed lift once reel-out ends — a setpoint move for
-clearance, which cancels out of the learning. It latches at the STOP LATCH (the
-run's lowest point falls between latch and phase 4 -> 5), or, with
-`reelout_softstop` at 0, once the length left is under
-`v_reelout * el_offset_lead`. State 5 has its own gain
-(`fcs.el_bias_gain_final`) and, since no install is left by then, a lap whose
-correction moved installs the DIFFERENCE on the path in the air through the same
-blend, gated on the curvature margin.
+clearance. It latches at the STOP LATCH (the run's lowest point falls between
+latch and phase 4 -> 5), or, with `reelout_softstop` at 0, once the length left
+is under `v_reelout * el_offset_lead`. It reaches the kite through the next path
+install or, when none is due, as a blend onto the path in the air, gated on the
+curvature margin and rationed down to a quarter of it if the whole lift is
+refused; the remainder waits in `el_target - el_applied` and is retried next lap.
 
-`fcs.el_bias_bins` learns a PROFILE over |azimuth| bands (as a fraction of the
-path's own amplitude) instead of one number, because the sag is deeper at the
-lobes than at the crossing. It is applied with [`bias_lift`](@ref) (smoothstep
-between band centres) and damped by `fcs.el_bias_smooth` ([`smooth_bins`](@ref)).
-The profile's SPREAD is rationed, its mean is not: a bend in the reference costs
-curvature margin the shrinking pattern cannot spare (measured 2026-08-20 at
-380 m: margin 0.97 under the mean, 0.41 under the spread). Candidates and in-air
-shifts alike take the whole mean plus the largest quarter-step of the spread that
-clears `min_feasibility_margin`; the remainder waits in `el_target - el_applied`.
-`el_bias_bins = 1` is the scalar learner exactly.
+`fcs.el_offset_wing` lifts the LOBES only, because the sag is deeper there than
+at the crossing; it is baked into every installed path and rationed the same way.
 
 Every lift is flown narrower, so the pattern-SIZE criteria break first;
 `traj_opt.lift_budget` in the summary puts the lift bought against the room each
-size criterion has left. Per-lap learning is in `traj_opt.el_bias`.
+size criterion has left.
 
 # Why the curvature margin is checked where it is
 
@@ -183,12 +166,6 @@ for (key, value) in fcs_overrides
 end
 isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
-# `traj_opt.learning: false` zeroes both learner gains, AFTER the overrides so a sweep cannot undo it.
-if !tos.learning
-    fcs.el_bias_gain = 0.0
-    fcs.el_bias_gain_final = 0.0
-    @info "Learning is OFF (traj_opt.learning: false): elevation bias fixed at zero, cache untouched."
-end
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -625,7 +602,7 @@ isnothing(opt_result.metrics.turn_radius_min_m) ||
                    isnothing(opt_r_min) ? "" :
                        @sprintf(" (asked for >= %.2f m)", opt_r_min))
 
-# The LOBE lift, applied to every installed path on the reply AS IT ARRIVED, before `el_bias` and `el_offset_final`.
+# The LOBE lift, applied to every installed path on the reply AS IT ARRIVED, before `el_offset_final`.
 wing_lift(az, el) = lobe_lift(az, el; lift = fcs.el_offset_wing,
                               mode = fcs.el_offset_wing_mode,
                               az_full = fcs.el_offset_wing_az,
@@ -657,34 +634,6 @@ elseif fcs.el_offset_wing != 0
                    (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
-# The elevation correction REMEMBERED for this project and wind; written back by reelout_results.jl.
-n_el_bins = max(1, fcs.el_bias_bins)
-flown_wind = something(WIND_SPEED, default_v_wind)
-el_bias_seed0 = zeros(n_el_bins)
-el_bias_seed_source = "none"
-"The elevation correction as one number per azimuth band, crossing first [deg]."
-prof_str(p) = length(p) == 1 ? @sprintf("%+.2f°", p[1]) :
-              string("[", join((@sprintf("%+.2f", v) for v in p), " "),
-                     "]° (crossing … lobe)")
-if fcs.el_bias_seed_laps > 0 && fcs.el_bias_gain > 0
-    seed = el_bias_seed_info(PROJECT, flown_wind, n_el_bins)
-    if isnothing(seed)
-        @info @sprintf("No elevation bias remembered for %s or any other condition: \
-                        the first laps fly the optimizer's curve uncorrected and the \
-                        correction after lap %d is stored in %s.",
-                       el_bias_key(PROJECT, flown_wind), fcs.el_bias_seed_laps,
-                       EL_BIAS_CACHE)
-    else
-        el_bias_seed0 = clamp.(seed.profile, -fcs.el_bias_max, fcs.el_bias_max)
-        el_bias_seed_source = seed.source == "exact" ? "exact" :
-            @sprintf("%s of %s", seed.source, join(seed.keys, ", "))
-        # A neighbour's profile is a guess at this condition; an exact one is a memory.
-        @info @sprintf("Elevation bias seeded for %s (%s): %s, baked into the startup \
-                        path.", el_bias_key(PROJECT, flown_wind), el_bias_seed_source,
-                       prof_str(el_bias_seed0))
-    end
-end
-
 # The turn-rate gain at a depower, NaN off the table; memoized because a blend asks every step.
 const c1_memo = Dict{Float64, Float64}()
 c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
@@ -714,32 +663,20 @@ pattern_depower(reply) =
         awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
 # The turn-rate law the retry reads a path against; `reelout_feasibility.jl` looks it up again later.
 c1_startup = c1_setpoint
-# Resample but never upsample; the lobe lift and the remembered bias are rationed to fit the curvature gate.
+# Resample but never upsample; the lobe lift is rationed to fit the curvature gate.
 startup_wing_frac = 1.0
-startup_bias_frac = 1.0
-startup_bias_applied = zeros(n_el_bins)
 install_optimized_path!(reply) = begin
-    global startup_wing_frac, startup_bias_frac, startup_bias_applied, c1_startup
+    global startup_wing_frac, c1_startup
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
     lift = wing_lift(az, el)
-    bias_mean = mean(el_bias_seed0)
-    bias_dev = el_bias_seed0 .- bias_mean
-    lifted(fs, fw) = el .+ bias_lift(az, bias_mean .+ fs .* bias_dev) .+ fw .* lift
     resample = min(tos.resample_points, length(az) - 1)
     c1_startup = c1_at_depower(pattern_depower(reply))
-    startup_wing_frac, startup_bias_frac = 1.0, 1.0
-    has_spread = any(!=(0), bias_dev)
-    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 &&
-       (any(!=(0), lift) || has_spread)
-        # (spread fraction, lift fraction): spread down to 0 first, lift after.
-        rungs = has_spread ?
-            ((1.0, 1.0), (0.75, 1.0), (0.5, 1.0), (0.25, 1.0), (0.0, 1.0),
-             (0.0, 0.75), (0.0, 0.5), (0.0, 0.25), (0.0, 0.0)) :
-            ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5), (1.0, 0.25), (1.0, 0.0))
-        for (fs, fw) in rungs
-            startup_bias_frac, startup_wing_frac = fs, fw
-            set_path!(fec, az, lifted(fs, fw); resample)
+    startup_wing_frac = 1.0
+    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
+        for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
+            startup_wing_frac = fw
+            set_path!(fec, az, el .+ fw .* lift; resample)
             check_pattern_feasible(fec, l_tether, fcs.max_steering;
                                    c1 = c1_startup, prn = false).margin >=
                 tos.min_feasibility_margin && break
@@ -748,16 +685,9 @@ install_optimized_path!(reply) = begin
             @info @sprintf("Lobe lift held back on the startup path to fit the \
                             curvature gate: %.0f %% of %.2f°.",
                            100 * startup_wing_frac, fcs.el_offset_wing)
-        startup_bias_frac < 1 &&
-            @info @sprintf("Remembered bias held back on the startup path to fit \
-                            the curvature gate: %.0f %% of its %.2f° spread; the \
-                            %+.2f° mean went in whole.",
-                           100 * startup_bias_frac,
-                           maximum(bias_dev) - minimum(bias_dev), bias_mean)
     else
-        set_path!(fec, az, lifted(1.0, 1.0); resample)
+        set_path!(fec, az, el .+ lift; resample)
     end
-    startup_bias_applied = bias_mean .+ startup_bias_frac .* bias_dev
     return (az, el)
 end
 # Every optimizer answer as it arrived, before any lift; installed paths shrink as the tether grows.
@@ -1178,22 +1108,16 @@ length(raw_az) == n_path ||
 # Resolution the path in the air is worth checking at (the reply's own, not `n_path`); updated per install.
 chk_points = n_path
 
-# Elevation bias learner: one update per lap, a PROFILE over `el_bias_bins` azimuth bands, starting from the seed.
-el_bias = copy(el_bias_seed0)   # [deg] learnt correction, per azimuth band
-el_applied = copy(startup_bias_applied)   # [deg] profile the path in the air actually carries
+# Elevation lift: `el_offset_final` once it latches, delivered through an install or an in-air blend.
+el_applied = 0.0            # [deg] lift the path in the air actually carries
 lift_on = false             # `el_offset_final` latched in; never cleared once set
 el_shift_events = NamedTuple[]  # in-air shift attempts, one entry per outcome CHANGE
 lift_t = NaN                # [s] when it latched; NaN = never
 lift_remaining = NaN        # [m] of reel-out left at that moment
-el_lap_skip = false         # skip the learning update for the lap the lift landed in
 el_shift_warned = false     # a held-back shift warns once; re-armed by the next delivery
 # The lap and target of the last in-air shift attempt: one attempt per lap and per target.
 el_shift_lap = 0
-el_shift_target = Float64[]
-el_bias_sum = zeros(n_el_bins)  # [deg] running sum of the sag over the current lap
-el_bias_prof = zeros(n_el_bins)  # [deg] sum of the correction the path carried there
-el_bias_n = zeros(Int, n_el_bins)  # samples in both sums
-el_bias_events = NamedTuple[]
+el_shift_target = NaN
 
 # The pattern the kite is ASKED to fly, per step; the size criteria are scored lap by lap against it.
 geom_t = Float64[]
@@ -1369,7 +1293,7 @@ try
         w_course = cc.w_course
         err = cc.err
 
-        # Elevation shift target: the learnt correction plus `el_offset_final`, latched at the stop latch (or phase 5).
+        # Elevation shift target: `el_offset_final`, latched at the stop latch (or phase 5).
         if !lift_on && phase >= 4
             v_ro_now = Float64(s.sys_state.v_reelout[1])
             if !isnan(stop_start) || phase >= 5 ||
@@ -1378,14 +1302,12 @@ try
                 global lift_on = true
                 global lift_t = t
                 global lift_remaining = fcs.reelout_l_max - l_set
-                # The lap the lift lands in is a climb, not a bias: skip it for learning.
-                global el_lap_skip = true
                 @info @sprintf("Elevation lift of %+.2f° starting at t = %.1f s \
                                 (%.1f m of reel-out left, phase %d).",
                                fcs.el_offset_final, t, fcs.reelout_l_max - l_set, phase)
             end
         end
-        el_target = lift_on ? el_bias .+ fcs.el_offset_final : copy(el_bias)
+        el_target = lift_on ? fcs.el_offset_final : 0.0
 
         # fig_8: 1 the instant phase first reaches >= 4, then +1 per traversal, unwrapped across the `mod1` wrap.
         if phase >= 4
@@ -1408,7 +1330,6 @@ try
                 abs(delta) > n_path ÷ 8 && (delta = 0)
                 global fig8_idx_progress += delta
                 global fig8_idx_prev = fec.last_idx
-                lap_before = fig8_n
                 # Never counted DOWN: Q can slip a fraction of a point backwards at an install.
                 global fig8_n = max(fig8_n, 1 + floor(Int, fig8_idx_progress / n_path))
                 # Lap 1 only: the upper force limit is held down; `F_HIGH_NOMINAL` goes back on lap 2.
@@ -1418,57 +1339,12 @@ try
                     @info @sprintf("Lap %d: upper force limit back to %.0f N.",
                                    fig8_n, F_HIGH_NOMINAL)
                 end
-                # One update per completed lap, per azimuth band.
-                if fcs.el_bias_gain > 0 && fig8_n > lap_before && any(>(0), el_bias_n) &&
-                   el_lap_skip
-                    global el_lap_skip = false
-                    fill!(el_bias_sum, 0.0)
-                    fill!(el_bias_prof, 0.0)
-                    fill!(el_bias_n, 0)
-                    @info @sprintf("Lap %d skipped for learning: the lift landed in it.",
-                                   fig8_n - 1)
-                elseif fcs.el_bias_gain > 0 && fig8_n > lap_before && any(>(0), el_bias_n)
-                    # What has to converge is the error against the OPTIMIZER's curve; phase 5 has its own gain.
-                    gain = phase >= 5 ? fcs.el_bias_gain_final : fcs.el_bias_gain
-                    raw = copy(el_bias)
-                    err_bin = fill(NaN, n_el_bins)
-                    for b in 1:n_el_bins
-                        # A band with no samples keeps its value, carried by its neighbours through the smoothing.
-                        el_bias_n[b] == 0 && continue
-                        err_bin[b] = (el_bias_sum[b] + el_bias_prof[b]) / el_bias_n[b]
-                        raw[b] = el_bias[b] - gain * err_bin[b]
-                    end
-                    global el_bias = clamp.(smooth_bins(raw, fcs.el_bias_smooth),
-                                            -fcs.el_bias_max, fcs.el_bias_max)
-                    n_tot = sum(el_bias_n)
-                    err_el = sum(el_bias_sum) / n_tot
-                    err_opt = err_el + sum(el_bias_prof) / n_tot
-                    push!(el_bias_events,
-                          (; t, lap = fig8_n - 1, err_el, err_opt, bias = copy(el_bias),
-                           err_bin, n = copy(el_bias_n)))
-                    @info @sprintf("Elevation bias after lap %d: kite %.2f° under the \
-                                    path it flies, %+.2f° vs the optimizer's; \
-                                    correction now %s.",
-                                   fig8_n - 1, err_el, err_opt, prof_str(el_bias))
-                    fill!(el_bias_sum, 0.0)
-                    fill!(el_bias_prof, 0.0)
-                    fill!(el_bias_n, 0)
-                end
             end
 
             az_lo, az_hi = extrema(fec.az_path)
             el_lo, el_hi = extrema(fec.el_path)
             az_amp, el_half = 0.5 * (az_hi - az_lo), 0.5 * (el_hi - el_lo)
             el_kite = rad2deg(Float64(s.sys_state.elevation))
-            if fcs.el_bias_gain > 0
-                # Binned where the correction is APPLIED, against the profile's own interpolation there.
-                b = azimuth_bin(fec.az_path[fec.last_idx], az_lo, az_hi, n_el_bins)
-                el_bias_sum[b] += el_kite - fec.el_path[fec.last_idx]
-                el_bias_prof[b] += bias_lift(azimuth_frac(fec.az_path[fec.last_idx],
-                                                          az_lo, az_hi), el_bias)
-                el_bias_n[b] += 1
-            end
-
             if az_amp > 0 && el_half > 0
                 el_c = 0.5 * (el_hi + el_lo)
                 b = azimuth_bin(fec.az_path[fec.last_idx], az_lo, az_hi, n_droop_bins)
@@ -1720,19 +1596,15 @@ try
                         new_el = rad2deg.(Float64.(tab["table"]["elevation"]))
                         # Lifted BEFORE the gates, which must score the curve that will be flown.
                         cand_raw = (copy(new_az), copy(new_el))
-                        # As much of the learnt droop profile as the curvature gate takes: the mean is free, the spread rationed.
+                        # The rigid lift goes in whole; the lobe lift is rationed to fit the curvature gate.
                         wing_delta = wing_lift(new_az, new_el)
-                        el_mean = mean(el_target)
-                        el_dev = el_target .- el_mean
                         n_native = min(tos.resample_points, length(new_az) - 1)
                         # The turn authority THIS reply will be flown with, read off `tab`.
                         cand_c1 = c1_at(phase, tos.fly_opt_depower ?
                             awetrim_depower_to_v3kite(
                                 Float64(tab["optimized_parameters"]["input_depower"])) :
                             fcs.depower_setpoint)
-                        lifted(fs, fw) = new_el .+
-                                         bias_lift(new_az, el_mean .+ fs .* el_dev) .+
-                                         fw .* wing_delta
+                        lifted(fw) = new_el .+ el_target .+ fw .* wing_delta
                         function lifted_margin(e)
                             isnan(feas.c1) && return Inf
                             a, b = prepare_path(new_az, e; resample = n_native,
@@ -1740,40 +1612,17 @@ try
                             check_pattern_feasible(a, b, l_now, fcs.max_steering;
                                                    c1 = cand_c1, prn = false).margin
                         end
-                        # Ration order: lobe lift first, then the measured spread; the floor is the spread already flying.
-                        applied_dev = el_applied .- mean(el_applied)
-                        dev_norm = sum(abs2, el_dev)
-                        bias_floor = dev_norm > 1e-12 ?
-                            clamp(sum(applied_dev .* el_dev) / dev_norm, 0.0, 1.0) : 0.0
-                        rungs = ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5),
-                                 (1.0, 0.25), (1.0, 0.0), (0.75, 0.0),
-                                 (0.5, 0.0), (0.25, 0.0), (0.0, 0.0))
-                        ladder = vcat([r for r in rungs if r[1] >= bias_floor],
-                                      [(bias_floor, 0.0)],
-                                      [r for r in rungs if r[1] < bias_floor])
-                        bias_frac, wing_frac = 1.0, 1.0
-                        for (fs, fw) in ladder
-                            bias_frac, wing_frac = fs, fw
-                            lifted_margin(lifted(fs, fw)) >= tos.min_feasibility_margin &&
+                        wing_frac = 1.0
+                        for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
+                            wing_frac = fw
+                            lifted_margin(lifted(fw)) >= tos.min_feasibility_margin &&
                                 break
                         end
-                        new_el = lifted(bias_frac, wing_frac)
-                        (bias_frac < 1 || wing_frac < 1) &&
-                            @info @sprintf("Lifts held back on the path for L = %.0f m \
-                                            to fit the curvature gate: droop spread at \
-                                            %.0f %% (%.2f° band to band), lobe lift at \
-                                            %.0f %% of %.2f°. The %.2f° mean of the \
-                                            droop goes in whole.",
-                                           l_now, 100 * bias_frac,
-                                           maximum(el_target) - minimum(el_target),
-                                           100 * wing_frac, fcs.el_offset_wing, el_mean)
-                        # Louder than the line above: this install TAKES BACK a correction the kite was already flying.
-                        bias_frac < bias_floor - 1e-9 &&
-                            @warn @sprintf("The path for L = %.0f m cannot carry the \
-                                            spread already flying: %.0f %% installed \
-                                            against %.0f %% applied. The in-air route \
-                                            will retry it as the tether grows.",
-                                           l_now, 100 * bias_frac, 100 * bias_floor)
+                        new_el = lifted(wing_frac)
+                        wing_frac < 1 &&
+                            @info @sprintf("Lobe lift held back on the path for L = %.0f m \
+                                            to fit the curvature gate: %.0f %% of %.2f°.",
+                                           l_now, 100 * wing_frac, fcs.el_offset_wing)
                         # TWO resolutions: the CHECKS at the reply's own, what is FLOWN at `n_path` so the lap counter holds.
                         chk_az, chk_el = prepare_path(new_az, new_el;
                             resample = n_native, up_loops = fcs.up_loops)
@@ -1908,17 +1757,11 @@ try
                                 push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                             end
                             apply_optimized_kv!(tab, t, l_now)
-                            # What went in; the remainder stays in `el_delta` for the in-air route to retry.
-                            el_installed = el_mean .+ bias_frac .* el_dev
-                            maximum(abs, el_installed .- el_applied) > 1e-6 &&
+                            abs(el_target - el_applied) > 1e-6 &&
                                 push!(el_shift_events,
-                                      (; t, delta = mean(el_installed .- el_applied),
-                                       margin,
-                                       status = bias_frac < 1 ?
-                                           @sprintf("carried by an install (%.0f %% of \
-                                                     the spread)", 100 * bias_frac) :
-                                           "carried by an install"))
-                            global el_applied = el_installed
+                                      (; t, delta = el_target - el_applied, margin,
+                                       status = "carried by an install"))
+                            global el_applied = el_target
                             # Arm the in-air warning again: one warning per SHIFT, not per run.
                             global el_shift_warned = false
                             # Install the aligned OLD path (w = 0, new point indices) and re-base the lap counter on it.
@@ -1948,11 +1791,8 @@ try
                             event = (; t, l = l_now, status = "installed",
                                      detail = @sprintf("margin %.2f%s%s, clearance %.1f m, \
                                                         size x%.2f, %.0f W predicted", margin,
-                                                       (bias_frac < 1 || wing_frac < 1) ?
-                                                           @sprintf(" (droop spread at \
-                                                                     %.0f %%, lobe lift \
-                                                                     at %.0f %%)",
-                                                                    100 * bias_frac,
+                                                       wing_frac < 1 ?
+                                                           @sprintf(" (lobe lift at %.0f %%)",
                                                                     100 * wing_frac) : "",
                                                        isnan(margin5.margin) ? "" :
                                                            @sprintf(" (phase 5: %.2f at %.0f m)",
@@ -2000,18 +1840,13 @@ try
         # ---- Deliver the elevation shift in the air, AFTER the re-optimizer, which has first claim on `blend_to` ---- #
         if phase >= 4
             # The shift reaches the kite at an install or, when none is due, as a blend onto the path in the air.
-            el_delta = el_target .- el_applied
-            if maximum(abs, el_delta) > 1e-6 && isnothing(blend_to) && !reopt_pending &&
+            el_delta = el_target - el_applied
+            if abs(el_delta) > 1e-6 && isnothing(blend_to) && !reopt_pending &&
                !(fig8_n == el_shift_lap && el_target == el_shift_target)
                 global el_shift_lap = fig8_n
-                global el_shift_target = copy(el_target)
+                global el_shift_target = el_target
                 # Scored at `chk_points`, the resolution the path in the air came at; only the CHECK is downsampled.
                 chk_n = min(chk_points, length(fec.az_path) - 1)
-                # RATIONED like the install ladder: the mean is a rigid lift, the spread a bend; per point, not rigidly.
-                d_mean = mean(el_delta)
-                d_dev = el_delta .- d_mean
-                shifted_by(fm, fd) = fec.el_path .+
-                    bias_lift(fec.az_path, fm * d_mean .+ fd .* d_dev)
                 function shift_margin(e)
                     isnan(feas.c1) && return Inf
                     a, b = prepare_path(fec.az_path, e; resample = chk_n,
@@ -2019,56 +1854,48 @@ try
                     check_pattern_feasible(a, b, Float64(s.sys_state.l_tether[1]),
                         fcs.max_steering; c1 = c1_at(phase), prn = false).margin
                 end
-                # Spread first, then the mean, never below a quarter of the mean.
-                rungs = ((1.0, 1.0), (1.0, 0.75), (1.0, 0.5), (1.0, 0.25),
-                         (1.0, 0.0), (0.75, 0.0), (0.5, 0.0), (0.25, 0.0))
+                # Rationed down to a quarter of the shift, never below.
                 # A rung that clears the margin can still fold `blend_paths` in between, so that is checked too.
                 hit = nothing
                 margin = NaN
-                for (fm, fd) in rungs
-                    e = shifted_by(fm, fd)
+                for fm in (1.0, 0.75, 0.5, 0.25)
+                    e = fec.el_path .+ fm * el_delta
                     m = shift_margin(e)
                     isnan(margin) && (margin = m)   # the WHOLE shift's margin, reported
                     if m >= tos.min_feasibility_margin &&
                        !blend_folds(fec.az_path, fec.el_path, fec.az_path, e)
-                        hit = (fm, fd, e, m)
+                        hit = (fm, e, m)
                         break
                     end
                 end
-                # A rung that moves no band by more than a hundredth of a degree is not a delivery.
-                if !isnothing(hit) &&
-                   maximum(abs, hit[1] * d_mean .+ hit[2] .* d_dev) <= 0.01
+                # A rung that moves the path by no more than a hundredth of a degree is not a delivery.
+                if !isnothing(hit) && abs(hit[1] * el_delta) <= 0.01
                     hit = nothing
                 end
                 if !isnothing(hit)
-                    fm, fd, shifted, hit_margin = hit
+                    fm, shifted, hit_margin = hit
                     global blend_from = (copy(fec.az_path), copy(fec.el_path))
                     global blend_to = (copy(fec.az_path), shifted)
                     global blend_t0 = t
-                    went_in = fm * d_mean .+ fd .* d_dev
-                    push!(el_shift_events, (; t, delta = mean(went_in),
+                    went_in = fm * el_delta
+                    push!(el_shift_events, (; t, delta = went_in,
                                             margin = hit_margin,
-                                            status = (fm < 1 || fd < 1) ?
-                                                @sprintf("blended in (%.0f %% of the \
-                                                          mean, %.0f %% of the spread)",
-                                                         100 * fm, 100 * fd) :
+                                            status = fm < 1 ?
+                                                @sprintf("blended in (%.0f %%)", 100 * fm) :
                                                 "blended in"))
-                    global el_applied = el_applied .+ went_in
+                    global el_applied = el_applied + went_in
                     global el_shift_warned = false
-                    (fm < 1 || fd < 1) &&
+                    fm < 1 &&
                         @info @sprintf("Elevation shift rationed to fit the curvature \
-                                        gate: %.0f %% of the %+.2f° mean, %.0f %% of \
-                                        the %.2f° spread; the rest is retried next \
-                                        lap.", 100 * fm, d_mean, 100 * fd,
-                                       maximum(d_dev) - minimum(d_dev))
+                                        gate: %.0f %% of %+.2f°; the rest is retried \
+                                        next lap.", 100 * fm, el_delta)
                 elseif !el_shift_warned
-                    push!(el_shift_events, (; t, delta = mean(el_delta),
+                    push!(el_shift_events, (; t, delta = el_delta,
                                             margin, status = "held back"))
                     global el_shift_warned = true
-                    @warn @sprintf("Elevation shift of %s held back: the curvature \
-                                    margin would be %.2f even rationed to a quarter \
-                                    of its mean. Retrying as the tether grows.",
-                                   prof_str(el_delta), margin)
+                    @warn @sprintf("Elevation shift of %+.2f° held back: the curvature \
+                                    margin would be %.2f even rationed to a quarter. \
+                                    Retrying as the tether grows.", el_delta, margin)
                 end
             end
         end

@@ -164,8 +164,7 @@ function check_reelout_feasibility(fec::FigureEightController,
 
     # Phase 5 flies `depower_final`, and c1 falls steeply with depower, so the
     # final laps have a margin the gates above never looked at. Evaluated at
-    # `reelout_l_max`, on the path lifted by the fixed `el_offset_final`. The
-    # LEARNT `el_bias` is not in it: it is not known until the run has flown.
+    # `reelout_l_max`, on the path lifted by the fixed `el_offset_final`.
     coeffs_final = if isapprox(fcs.depower_final, depower; atol = 1e-6)
         coeffs
     else

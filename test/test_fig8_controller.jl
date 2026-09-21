@@ -990,7 +990,7 @@ end
         @test minimum(folded) < folded[argmin(el)]
     end
 
-    @testset "bias_lift" begin
+    @testset "azimuth_bin" begin
         fec = _make_test_controller()
         az = fec.az_path
         az_lo, az_hi = extrema(az)
@@ -1004,44 +1004,6 @@ end
         @test azimuth_bin(az_lo, az_lo, az_hi, 5) == 5
         @test azimuth_bin(10 * az_hi, az_lo, az_hi, 5) == 5   # past the lobe: last band
         @test_throws ArgumentError azimuth_bin(0.0, az_lo, az_hi, 0)
-
-        # One band is a rigid shift, which is what the scalar learner did.
-        @test bias_lift(az, [1.3]) ≈ fill(1.3, length(az))
-        @test bias_lift(0.7, [1.3]) ≈ 1.3
-        @test_throws ArgumentError bias_lift(0.5, Float64[])
-
-        # The profile is held flat outside the outer band centres and rises
-        # monotonically between them — no corner anywhere, which is the whole
-        # point: the curvature gate refuses a reference with one.
-        prof = [0.0, 1.0, 2.0]
-        vals = [bias_lift(f, prof) for f in range(0, 1; length = 201)]
-        @test vals[1] ≈ 0.0
-        @test vals[end] ≈ 2.0
-        @test issorted(vals)
-        @test bias_lift(1 / 6, prof) ≈ 0.0                    # first band centre
-        @test bias_lift(0.5, prof) ≈ 1.0                      # middle band centre
-        @test bias_lift(5 / 6, prof) ≈ 2.0                    # last band centre
-        # The slope vanishes at every band centre, so the bands cannot put a
-        # corner in the reference: a staircase would step by a whole band here.
-        for c in (1 / 6, 0.5, 5 / 6)
-            @test abs(bias_lift(c + 1e-3, prof) - bias_lift(c - 1e-3, prof)) < 1e-3
-        end
-        lift = bias_lift(az, prof)
-        @test lift[argmin(abs.(az .- 0.5 * (az_lo + az_hi)))] ≈ 0.0 atol = 0.05
-        @test lift[argmax(az)] ≈ 2.0
-
-        # Smoothing is a SHAPE constraint: it damps the differences between bands
-        # and leaves the mean — what a scalar learner would have found — alone.
-        rough = [0.0, 2.0, 0.0, 2.0, 0.0]
-        for lambda in (0.0, 0.25, 0.5, 1.0)
-            sm = smooth_bins(rough, lambda)
-            @test sum(sm) ≈ sum(rough)
-            @test maximum(sm) - minimum(sm) <= maximum(rough) - minimum(rough) + 1e-12
-        end
-        @test smooth_bins(rough, 0.0) ≈ rough
-        @test smooth_bins([1.0], 1.0) ≈ [1.0]
-        @test maximum(smooth_bins(rough, 1.0)) < maximum(rough)
-        @test_throws ArgumentError smooth_bins(rough, 1.5)
     end
 
     @testset "path_queries_on_bare_vectors" begin
@@ -1124,6 +1086,7 @@ end
         @test attractor_distance(fcs, 60.0, 100.0) == 12.0
         fcs.attractor_dist_max = 9.0
         @test attractor_distance(fcs, 60.0, 100.0) == 9.0
+        tos = TrajOptSettings("traj_opt.yaml")
         @test tos.guess_points == 361
         @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is

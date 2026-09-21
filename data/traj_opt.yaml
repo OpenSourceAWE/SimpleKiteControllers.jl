@@ -24,7 +24,6 @@ traj_opt:
     detect_simple_bounds: true   # IPOPT flag
     resample_points:   361   # points the path is resampled to                 [-]
     opt_failure_cache: true  # skip requests recorded as failing; see the docstring
-    learning:          false
     opt_warm_start_awe_trim: 1.0   # use_awe_trim of the seeding solve; 0.0 = off  [-]
     opt_length_round:  1.0   # round the REQUEST's tether length to this; 0.0 = off [m]
     opt_awe_trim:      1.0 # use_awe_trim sent to the server; < 0 follows wc_settings [-]

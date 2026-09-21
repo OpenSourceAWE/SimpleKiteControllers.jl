@@ -902,7 +902,7 @@ SHORT END: ~0.87 at 220 m against ~0.92 at 380 m. `reelout_anchor_ratio` measure
 On top of that the gate re-estimates the curvature from the reply's ~99 points
 (`path_radius_profile`, a finite difference on the resampled polyline) and reads
 ~5 % tighter than the exact anchor value — 10.81 m against 11.38 m on the same
-reply — and the run then adds `el_bias`/`el_offset_wing` before checking, which
+reply — and the run then adds `el_offset_wing` before checking, which
 compresses the azimuth axis by `cos(elevation)` a little more.
 `tos.turn_radius_headroom` covers that half.
 

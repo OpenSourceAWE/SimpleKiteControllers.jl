@@ -166,17 +166,6 @@ multi-modal, so the guess is a choice about the answer.
     """
     opt_failure_cache::Bool = true
     """
-    The elevation-bias learner of `examples/simple_opt_reelout.jl`; `false` flies
-    the optimizer's curve uncorrected, for a run to compare against.
-
-    Off, both `FC_Settings.el_bias_gain` and `el_bias_gain_final` are forced to
-    zero after the settings and any sweep overrides are loaded, which every part
-    of the learner is gated on: no remembered seed is read from `EL_BIAS_CACHE`,
-    no per-lap update runs and the cache file is NOT written back, so the run
-    leaves no trace for the next one to start from.
-    """
-    learning::Bool = true
-    """
     `use_awe_trim` of a throwaway solve sent BEFORE the startup request, to seed
     the session for it. `0.0` is off.
 
@@ -334,13 +323,13 @@ multi-modal, so the guess is a choice about the answer.
     - `path_radius_profile` estimates the curvature by finite differences on the
       resampled ~99-point reply and reads ~5 % tighter than the exact value
       (10.81 m against 11.38 m on one reply, measured 2026-08-19);
-    - the run adds `el_bias` and `el_offset_wing` before checking, and lifting the
+    - the run adds `el_offset_wing` before checking, and lifting the
       path compresses its azimuth axis by `cos(elevation)`.
 
     1.10 covers both with a little to spare; `data/traj_opt.yaml` ships 1.20,
     because this is also the only knob that MAKES slack — it raises the request
-    without moving the gate, so the elevation learner's per-band spread has
-    something to spend at the install (`docs/fig8_tuning_log.md`). Raising it buys
+    without moving the gate, so a lift has something to spend at the install
+    (`docs/fig8_tuning_log.md`). Raising it buys
     installs and delivered shape at the cost of a wider, less powerful pattern;
     lowering it towards 1.0 brings back replies that converge, satisfy their own
     constraint and are then rejected — margin ~0.63 against the 0.74 demanded at
