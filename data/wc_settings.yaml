@@ -76,7 +76,7 @@ wc_settings:
   # depower is the only actuator: at 8000 N asked, Cabauw 10 m/s flew a 7472 N
   # mean and 8370-8450 N crossing peaks every lap against the 8400 N criterion
   # (archive 2026-09-18_224220). Derated by the swing, like depower_final_f_target.
-  f_high_awe_trim: 7700.0  # fixed f_high sent to AWETrim instead, 0.0 = disabled,
+  f_high_awe_trim: 7500.0  # fixed f_high sent to AWETrim instead, 0.0 = disabled,
                            # use plain f_high (winch_from_wc's default); NOT
                            # wind-speed dependent, see PlanImprove_power_ratio.md [N]
   pf_high:       0.00023040 # P constant of the upper force controller          [-]
