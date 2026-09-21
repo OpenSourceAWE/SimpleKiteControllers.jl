@@ -6,218 +6,113 @@ Reel out along a path an EXTERNAL OPTIMIZER produced, instead of along a
 lemniscate.
 
 `simple_reelout.jl` with one block added — read that file's docstring for the
-winch, the entry state machine, the log slots and the two stop criteria, all of
-which apply here unchanged. What differs is the reference path: the AWETrim
-optimizer is asked for the power-optimal reel-out path under THIS run's wind and
-winch, and `set_path!` installs it. This is the run
-[`simple_opt_fig8.jl`](simple_opt_fig8.jl) was the rehearsal for — that one flies
-the same path at constant length, which cannot exercise the winch coupling the
-path was optimized for.
+winch, the entry state machine, the log slots and the stop criteria, which all
+apply unchanged. What differs is the reference path: the AWETrim optimizer is
+asked for the power-optimal reel-out path under THIS run's wind and winch, and
+`set_path!` installs it. [`simple_opt_fig8.jl`](simple_opt_fig8.jl) was the
+rehearsal, flying the same path at constant length.
 
 # The number this run exists to produce
 
-The optimizer predicts a mean reel-out power for the path it returns. Reeling out
-along it measures one. Both end up in the `traj_opt:` section of the run summary,
-with their ratio: that comparison is the point of the exercise, and a large gap is
-the finding, not a bug to hide. Everything else here is `simple_reelout.jl`.
+The optimizer predicts a mean reel-out power for its path; reeling out along it
+measures one. Both land in the `traj_opt:` section of the run summary with their
+ratio. A large gap is the finding, not a bug to hide.
 
 # Re-optimizing while the tether grows
 
-`reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run stays
-reproducible without a server) re-anchors the path to the length actually being
-flown. A request goes out on a lap boundary every `reopt_every_n_laps`, at most
-`max_reopt` times, sent with `wait = false`; `/status` is polled every
-`reopt_poll_interval` and the result collected from `opt_trajectory` — whose table
-is in RADIANS, unlike the degrees of every struct. While one runs, and after one
-that fails, the server keeps serving the previous path, so "not ready" needs no
-special case.
+`reopt_enabled` in `data/traj_opt.yaml` (off by default, so a run is
+reproducible without a server) re-anchors the path to the length actually flown:
+a request every `reopt_every_n_laps` laps, at most `max_reopt` times, polled via
+`/status` and collected from `opt_trajectory` (its table is in RADIANS). While a
+solve runs or after one fails, the server keeps serving the previous path.
 
-What the request IS depends on `use_step`. With `use_step: false` it repeats the
-STARTUP solve at the current length — `/init` with the parametric guess of
-`traj_opt.yaml`, then the step — so every solve is cold and independent. With
-`use_step: true` (the shipped setting) `/init` is sent ONCE, before the run, and a
-re-optimization is `/step` alone: the server keeps the session and WARM-STARTS
-from the previous optimum, which it re-anchors to the length sent (moving `r0` and
-shifting its node-wise warm start with it). That is the cheap solve, and under
-`reopt_blocking` it is wall time the simulation is not frozen for. Its price is in
-`TrajOptSettings.use_step`: the failure cache cannot key a warm request, and the
-run follows one branch of a multi-modal problem instead of re-drawing from the
-guess at every length. A warm step that fails falls back to one cold `/init`.
+`use_step: false` repeats the cold STARTUP solve (`/init` from the parametric
+guess, then `/step`) at each length. `use_step: true` (shipped) sends `/init`
+once and re-optimizes with `/step` alone, WARM-STARTING from the previous optimum
+re-anchored to the new length — cheaper, but it follows one branch of a
+multi-modal problem and the failure cache cannot key it; a failed warm step falls
+back to one cold `/init`. The FLOWN path is never fed back as a seed: optimized
+for a much shorter radius, it degrades as the run walks out and the solve escapes
+to near-zenith (measured 2026-08-18: repeated failures from ~210 m, while the
+guess converges at every length tried).
 
-What is NOT done either way is feeding the FLOWN path back as the seed. It is an
-(azimuth, elevation) curve optimized for a much shorter radius, so it degrades as a
-starting point the further the run walks from its anchor, and the solve escapes to
-near-zenith where `C_beta` jams on its 0.9 rad bound, tension collapses to ~1 kN
-and the winch law cannot be met. Measured 2026-08-18: re-optimizations seeded that
-way fail repeatedly from ~210 m out, while the guess converges at 182, 200, 246,
-278, 282, 286 and 317 m — 282 m being one that failed from the flown path and
-solves to 9014 W from the guess. A warm start is a different thing: the seed is the
-optimizer's own iterate in its own variables and never leaves the server.
-
-`reopt_blocking` decides what the loop does during the 7-13 s solve. `true`
-(default) holds the loop at the request until `/status` leaves `"solving"`, so the
-reply matches the length it was asked for; the frozen wall time is reported as
+`reopt_blocking = true` (default) freezes the loop for the 7-13 s solve so the
+reply matches the length asked for; the frozen time is reported as
 `traj_opt.reopt.blocked` and excluded from `performance.realtime_factor`.
-`false` flies on instead, which keeps the run realtime-ish but anchors the reply to
-a radius the run has already left — at 2.4 m/s of reel-out, a 10 s solve is ~24 m
-of lag.
+`false` flies on, anchoring the reply ~24 m behind at 2.4 m/s.
 
 A candidate is checked for curvature, clearance and elevation AT THE CURRENT
-LENGTH before it is installed; one that fails any of them is dropped and the run
-keeps flying what it has. The checks run at the reply's OWN resolution while the
-flown path is resampled to the run's `n_path`, and the split matters both ways:
-`/trajectory` serves fewer points than `/step` echoes, upsampling a coarse
-polyline makes the curvature check read tighter than the curve is, and a flown
-path whose point count changes rescales the lap counter under itself. What passes is blended in over `path_blend_time` ([`blend_paths`](@ref)),
-because installing a new reference in one step is a step in the cross-track error
-and the guidance answers a step with steering. Both paths go through
-[`prepare_path`](@ref) first — same point count, same traversal direction, same
-starting point — since interpolating two paths that are not aligned sweeps the
-reference around the pattern instead of morphing it. Installing the aligned old
-path re-bases the point indices, so the lap counter is re-based in the same step.
-
-Every solve is recorded in the `traj_opt.reopt` section of the run summary with
-its time, tether length and outcome.
+LENGTH, at its OWN resolution (the flown path is resampled to `n_path`; upsampling
+a coarse polyline makes the curvature check read too tight). A rejected candidate
+is dropped and the run keeps flying what it has. One that passes is aligned with
+[`prepare_path`](@ref) and blended in over `path_blend_time`
+([`blend_paths`](@ref)), so the reference never steps and the lap counter is
+re-based in the same move. Every solve is recorded in `traj_opt.reopt`.
 
 # Learning the elevation bias
 
-The kite tracks BELOW the path it is given, in every segment of every run measured
-so far: 1-2 deg, and 3.5 deg at 380 m. `fcs.el_bias_gain` (`0` = off) closes that
-by learning. Once per completed lap the mean signed elevation error is taken, the
-correction moves by that fraction of it (clamped to `fcs.el_bias_max`), and every
-path installed afterwards is RAISED by the correction — so what is flown converges
-on the curve the optimizer solved for, which is also the curve its power number
-was computed for.
+The kite tracks BELOW the path it is given (1-2 deg, 3.5 deg at 380 m).
+`fcs.el_bias_gain` (`0` = off) learns a correction once per lap from the mean
+signed elevation error, clamped to `fcs.el_bias_max`, and every path installed
+afterwards is RAISED by it. The error fed back is the one against the
+OPTIMIZER's curve (sag plus the correction already in the flown path): closing on
+the sag alone does not converge, because raising the reference raises the kite
+and leaves the sag unchanged (measured 2026-08-18). A whole lap is averaged so
+the error's shape cancels and only its offset survives.
 
-`fcs.el_offset_final` lifts the path by a further fixed amount once reel-out ends,
-which is a setpoint move rather than an error: there is no reel-out power left to
-trade for height then, and height is clearance. It cancels out of the learning —
-the sag is measured against the path in the air and the update closes on the
-optimizer's curve PLUS this offset — so the two compose instead of fighting. The
-lift starts at the STOP LATCH, where the winch begins decelerating, not at the
-phase 4 -> 5 transition: measured 2026-08-18, the run's lowest point falls between
-the two, and at the transition the 4 s blend and the climb after it are still
-ahead. With `reelout_softstop` at 0 there is no latch before phase 5 at all, so
-`fcs.el_offset_lead` anticipates the end instead — the lift goes in once the length
-left is under `v_reelout * el_offset_lead`. Whichever fires first latches it, and
-it is never cleared.
+`fcs.el_offset_final` adds a fixed lift once reel-out ends — a setpoint move for
+clearance, which cancels out of the learning. It latches at the STOP LATCH (the
+run's lowest point falls between latch and phase 4 -> 5), or, with
+`reelout_softstop` at 0, once the length left is under
+`v_reelout * el_offset_lead`. State 5 has its own gain
+(`fcs.el_bias_gain_final`) and, since no install is left by then, a lap whose
+correction moved installs the DIFFERENCE on the path in the air through the same
+blend, gated on the curvature margin.
 
-State 5 gets its own gain (`fcs.el_bias_gain_final`): the sag deepens once the
-winch stops and there is a lap or two left to learn in. A correction only reaches
-the kite through an install, and phase 5 usually has none left — `max_reopt` is
-spent by then — so a lap whose correction moved installs the DIFFERENCE on the
-path in the air through the same blend, gated on the curvature margin at the
-current length. A fresh candidate is raised by the whole correction, the path in
-the air by what has changed since it was installed; both end up at the optimizer's
-curve plus the correction.
+`fcs.el_bias_bins` learns a PROFILE over |azimuth| bands (as a fraction of the
+path's own amplitude) instead of one number, because the sag is deeper at the
+lobes than at the crossing. It is applied with [`bias_lift`](@ref) (smoothstep
+between band centres) and damped by `fcs.el_bias_smooth` ([`smooth_bins`](@ref)).
+The profile's SPREAD is rationed, its mean is not: a bend in the reference costs
+curvature margin the shrinking pattern cannot spare (measured 2026-08-20 at
+380 m: margin 0.97 under the mean, 0.41 under the spread). Candidates and in-air
+shifts alike take the whole mean plus the largest quarter-step of the spread that
+clears `min_feasibility_margin`; the remainder waits in `el_target - el_applied`.
+`el_bias_bins = 1` is the scalar learner exactly.
 
-`fcs.el_bias_bins` learns the correction as a PROFILE instead of one number: the
-sag is deeper at the lobes than at the crossing (~2.3° against ~0.4° at 380 m,
-`traj_opt.droop_profile`), so a single number is that profile's mean and lifts the
-crossing it does not need to lift. The same per-lap update then runs per azimuth
-band, keyed on |azimuth| as a fraction of the path's OWN amplitude so the bands
-keep their place on a pattern that shrinks by a third over the run, and what is
-applied to a path is [`bias_lift`](@ref) — the bands interpolated with a
-smoothstep between their centres, never a staircase, because a corner in the
-reference moves the tightest turn of the pattern onto the corner. After every
-update the bands are pulled towards each other by `fcs.el_bias_smooth`
-([`smooth_bins`](@ref)), which leaves the profile's mean alone and only damps the
-differences: a band sees a fifth of the samples the scalar learner had, and the
-noise that buys is what the curvature gate refuses. `el_bias_bins = 1` is the
-scalar learner exactly.
-
-The profile's SPREAD is rationed, its mean is not. A binned correction is a bend in
-the reference where the bands differ, and the pattern shrinks as the tether grows
-until it has no curvature to spare: measured 2026-08-20 at 380 m, a reply that was
-fine on its own (margin 0.95) kept 0.97 under a uniform lift of the profile's 3.06°
-mean and fell to 0.41 under its 1.74° of band-to-band spread — a rejection of the
-optimizer's own path over a correction to it. So a candidate is lifted by the whole
-mean and by the largest quarter-step of the deviation that still clears
-`min_feasibility_margin` at the current length; what is withheld stays in
-`el_target - el_applied` and goes in later through the same in-air route as any
-other shift, on the same gate. `el_bias_bins = 1` has no spread and is unaffected.
-
-The IN-AIR route rations on the same ladder, and did not always: it was
-all-or-nothing, so a shift whose spread failed the gate took its mean down with it.
-That is the run's minimum elevation — the last shift owed before the winch stops is
-`el_offset_final` plus the converged bias, ~1.6°, and two runs at identical settings
-split on it by 0.04 of margin for a degree of ground clearance (see the tuning log,
-"The whole-run minimum is the LAST in-air shift missing the gate by 0.04"). The
-mean now goes in whole wherever the spread cannot, and only the remainder waits.
-
-The error that is fed back is the one against the OPTIMIZER's curve, i.e. the
-measured sag plus the correction already in the flown path. Closing on the sag
-itself does not converge and is what the first version did (measured 2026-08-18):
-the kite drops below whatever path it is given, so raising the reference raises
-the kite with it and leaves the sag unchanged, and the correction integrates to
-the clamp in 7 laps while the flown curve sails past the optimizer's. The sag
-therefore stays in the cross-track error by construction — the correction moves
-WHERE the pattern is flown, not how well.
-
-The correction is applied before the three gates, which have to score the curve
-that will actually be flown, and it rides on the same blend as the install, so it
-never enters as a step. A whole lap is averaged on purpose: the error's SHAPE
-cancels there and only its offset survives, and the shape is the part the kite
-cannot follow anyway — it is bounded by turn authority at the tight shoulder, not
-by the reference. Recorded per lap in `traj_opt.el_bias` of the run summary.
-
-Every lift is paid for on the other axis: a pattern raised is a pattern flown
-narrower, and the pattern-SIZE criteria are what breaks first — the 2.5 s
-`el_offset_lead` failed the azimuth reach by hundredths of a degree while passing
-everything else. `traj_opt.lift_budget` in the summary puts the two halves of that
-trade next to each other: the correction the path in the air actually carries and
-the elevation it bought, against how much room each size criterion has left, with
-`tightest` naming the one the next lift has to spend.
+Every lift is flown narrower, so the pattern-SIZE criteria break first;
+`traj_opt.lift_budget` in the summary puts the lift bought against the room each
+size criterion has left. Per-lap learning is in `traj_opt.el_bias`.
 
 # Why the curvature margin is checked where it is
 
-For ONE path flown all the way out, the start is the worst case. The kite's
-minimum ANGULAR turn radius is `1/(L*c1*u_s)`, so a fixed (azimuth, elevation)
-curve only ever gets easier to fly: measured 2026-08-18, the path returned for
-150 m has margin 0.93 there and 2.18 by the time the tether is at 350 m. That is
-why the startup check runs at the starting length.
-
-With `reopt_enabled` that reasoning does NOT carry over, and the start is not the
-worst case — every re-optimization is. Cancel the `L` in the angular radius and
-the kite's minimum PHYSICAL turn radius is `1/(c1*u_s)`, INDEPENDENT of tether
-length: 11.35 m at `c1 = 0.2752`, `u_s = 0.32`. The optimizer returns a pattern
-whose tightest physical radius is 11.0-11.5 m at every length (measured
-2026-08-18 at 182, 200 and 246 m), because its own `input_steering` (±0.35) and
-`input_steering_rate` (±0.29) bounds are binding in every solve and maximum power
-wants the tightest loops they allow. Two near-equal constants, so the margin sits
-at ~1.0 at EVERY length and a solve landing at 0.85 or 1.01 is which optimum the
-seed reached, not how long the tether is.
-
-So a candidate is checked at the CURRENT length, every time, and rejections are
-the normal case rather than a fault. The optimizer knows nothing of the V3's
-turn-rate law; the real fix is to give it one, not to move the gate.
+For ONE path flown all the way out, the start is the worst case: the angular
+turn radius `1/(L*c1*u_s)` only shrinks with length, so the startup check runs
+at the starting length. With `reopt_enabled` every re-optimization is the worst
+case instead: the PHYSICAL radius `1/(c1*u_s)` = 11.35 m is length-independent,
+and the optimizer's steering bounds put its tightest loop at 11.0-11.5 m at
+every length, so the margin sits at ~1.0 and rejections are the normal case.
+The real fix is to teach the optimizer the V3's turn-rate law, not to move the
+gate.
 
 # What comes from where
 
-The optimizer's own settings — server, initial guess, solver knobs, resampling
-and the margin — are `data/traj_opt.yaml` ([`TrajOptSettings`](@ref)). The
-CONDITIONS are not: the wind comes from the system project's settings file and
-the winch law from its `wc_settings`, through `inflow_from_settings` and
-`winch_from_wc`, so the path is optimized for the ground station that flies it.
-The guess is not a formality — it decides whether the solve converges and which
-of several optima it converges to, so this script never retries with a different
-one behind your back; see `simple_opt_fig8.jl`'s docstring for the measurements.
+Optimizer settings — server, initial guess, solver knobs, resampling, margin —
+are `data/traj_opt.yaml` ([`TrajOptSettings`](@ref)). The CONDITIONS come from
+the system project's settings file (wind) and its `wc_settings` (winch law) via
+`inflow_from_settings` and `winch_from_wc`. The guess decides whether and where
+the solve converges, so this script never retries with a different one; see
+`simple_opt_fig8.jl` for the measurements. `fcs.f8_a`/`f8_b`/`el_center` are NOT
+flown here; the pattern's centre and extent are measured off the installed path.
 
-`fcs.f8_a`/`f8_b`/`el_center` describe a lemniscate that is NOT flown here. The
-pattern's centre (the dive target, and `var_04`) and its extent (the size criteria
-of `fig8_metrics`) are measured off the installed path instead.
+`reelout_feasibility.jl` (abort/warn policy on the gates of
+[`check_reelout_feasibility`](@ref), defining `feas`, `c1_at`, `phase5_margin`)
+and `reelout_results.jl` (scoring, summary YAML, archive, plots, finished-run
+marker) are `include`d at top level and share this script's globals.
 
-Two blocks are `include`d rather than written out here, both at the point they
-used to sit at: `reelout_feasibility.jl` (the abort/warn policy on the gates of
-[`check_reelout_feasibility`](@ref), defining `feas`, `c1_at` and `phase5_margin`)
-and `reelout_results.jl` (scoring, the summary YAML, the archive, the plots and
-the finished-run marker). Both run at top level in the same scope, so they see and
-set this script's globals exactly as inline code did.
-
-Logs to `output/<log_file>_opt.arrow` and `_opt.yaml` — the `_opt` suffix keeps
-the lemniscate run's log and summary intact, so the two are comparable after the
-fact. `REF_PATH` and `LOG_NAME` carry the flown curve and that name to
-`simple_reelout_plots.jl`.
+Logs to `output/<log_file>_opt.arrow` and `_opt.yaml`, leaving the lemniscate
+run's files intact for comparison. `REF_PATH` and `LOG_NAME` carry the flown
+curve and that name to `simple_reelout_plots.jl`.
 """
 
 using Pkg
