@@ -54,7 +54,7 @@ fc_settings:
   f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
   attractor_dist:      6.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
-  attractor_lead_time: 0.8     # Lead as flight time, arc = t*v_app/L; 6° at 6 m/s, 8.5° at 10; 0 = off [s]
+  attractor_lead_time: 0.8     # Lead as flight time, arc = t*v_app/L; 6° at 6 m/s wind, 8.5° at 10 m/s wind (lap 1); 0 = off [s]
   reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
@@ -62,8 +62,7 @@ fc_settings:
   el_offset_wing:      1.0     # Extra lift at the LOBES, none in the centre       [deg]
   el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
   el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring  [same units]
-  el_offset_wing_mode: "azimuth"  # azimuth (deg) | azimuth_frac (of the path's own A) | elevation
-  el_offset_wing_depth: 0.0    # elevation mode: depth where it starts, in half-spans; 1 = the bottom [-]
+  el_offset_wing_mode: "azimuth"  # azimuth (deg) | azimuth_frac (of the path's own A)
 
   # --- heading/course PID ---------------------------------------------------
   heading_p:          0.1891   # Gain at v_app_ref; only their product is physical   [-]

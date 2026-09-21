@@ -606,8 +606,7 @@ isnothing(opt_result.metrics.turn_radius_min_m) ||
 wing_lift(az, el) = lobe_lift(az, el; lift = fcs.el_offset_wing,
                               mode = fcs.el_offset_wing_mode,
                               az_full = fcs.el_offset_wing_az,
-                              az_blend = fcs.el_offset_wing_blend,
-                              depth = fcs.el_offset_wing_depth)
+                              az_blend = fcs.el_offset_wing_blend)
 if fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth"
     @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.1f°, ramped over %.1f°, \
                     zero inside %.1f°.",
@@ -622,16 +621,6 @@ elseif fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth_frac"
                     startup path's ±%.1f°.",
                    fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
                    fcs.el_offset_wing_az * amp0, fcs.el_offset_wing_blend * amp0, amp0)
-elseif fcs.el_offset_wing != 0
-    # The fold bound of `lobe_lift` on the startup path, the LOOSEST half-span this run sees.
-    half0 = 0.5 * (maximum(opt_result.trajectory.elevation) -
-                   minimum(opt_result.trajectory.elevation))
-    @info @sprintf("Lobe lift: %+.2f° at the bottom of the pattern, ramped in from \
-                    %.2f half-spans below its centre (%.2f° of the %.2f° half-span \
-                    at startup); folds above %.2f° of lift there.",
-                   fcs.el_offset_wing, fcs.el_offset_wing_depth,
-                   fcs.el_offset_wing_depth * half0, half0,
-                   (1 - fcs.el_offset_wing_depth) * half0 / 1.5)
 end
 
 # The turn-rate gain at a depower, NaN off the table; memoized because a blend asks every step.

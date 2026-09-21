@@ -941,8 +941,6 @@ end
         az, el = fec.az_path, fec.el_path
         @test all(iszero, lobe_lift(az, el))                   # lift 0 = off
         @test_throws ArgumentError lobe_lift(az, el; lift = 1.0, mode = "height")
-        @test_throws ArgumentError lobe_lift(az, el; lift = 1.0, mode = "elevation",
-                                             depth = 1.0)
         @test_throws ArgumentError lobe_lift(az, el[1:end-1]; lift = 1.0)
 
         # Azimuth mode: zero inside the ramp, full outside it, monotone between —
@@ -967,27 +965,6 @@ end
                                 az_full = 10.0, az_blend = 8.0)) < 1.5
         @test maximum(lobe_lift(small_az, el; lift = 1.5, mode = "azimuth_frac",
                                 az_full = 0.5, az_blend = 0.4)) ≈ 1.5
-
-        # Elevation mode keys on the path's own half-span, so the SAME lift lands
-        # on the same fraction of a pattern half the size — which is what a
-        # shrinking pattern needs and a fixed number of degrees cannot do.
-        el_c = 0.5 * (maximum(el) + minimum(el))
-        small = el_c .+ 0.5 .* (el .- el_c)
-        deep = lobe_lift(az, el; lift = 1.5, mode = "elevation", depth = 0.5)
-        @test deep ≈ lobe_lift(az, small; lift = 1.5, mode = "elevation", depth = 0.5)
-        @test maximum(deep) ≈ 1.5
-        @test all(iszero, deep[el .>= el_c])                   # nothing above the centre
-        @test deep[argmin(el)] ≈ 1.5
-        # A path with no elevation extent has no bottom to lift.
-        @test all(iszero, lobe_lift(az, fill(20.0, length(az)); lift = 1.5,
-                                    mode = "elevation"))
-        # The fold bound of the docstring, checked on the curve itself: at the
-        # limit the lifted path stops being monotone in elevation along the ramp.
-        half = 0.5 * (maximum(el) - minimum(el))
-        ok = el .+ lobe_lift(az, el; lift = 0.4 * half, mode = "elevation")
-        folded = el .+ lobe_lift(az, el; lift = 0.9 * half, mode = "elevation")
-        @test minimum(ok) == ok[argmin(el)]
-        @test minimum(folded) < folded[argmin(el)]
     end
 
     @testset "azimuth_bin" begin

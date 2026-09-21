@@ -703,13 +703,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "wing_deg" => (fcs.el_offset_wing,
             "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
         "wing_mode" => (fcs.el_offset_wing_mode,
-            "el_offset_wing_mode, the coordinate that lift is shaped over"),
+            "el_offset_wing_mode, the units el_offset_wing_az/_blend are read in"),
         "wing_az_deg" => (fcs.el_offset_wing_az,
-            "azimuth mode: azimuth beyond which that lift is full; it ramps over \
-             el_offset_wing_blend below it [deg]"),
-        "wing_depth" => (fcs.el_offset_wing_depth,
-            "elevation mode: depth below the path's elevation centre where the lift \
-             starts, in half-spans; full at its lowest point [-]"),
+            "azimuth beyond which that lift is full; it ramps over \
+             el_offset_wing_blend below it [deg or fraction of A]"),
         "lift_t" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
             "when the lift actually latched [s]"),
         "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :
