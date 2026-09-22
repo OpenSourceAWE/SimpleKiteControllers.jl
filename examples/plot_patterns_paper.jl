@@ -35,6 +35,21 @@ include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 
 const PAPER_FIGURES_DIR = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
 
+"""
+    PAPER_THEME
+
+Makie theme for the figures that go into the LearningControl paper: TeX Gyre
+Termes, the same Times design the Copernicus class sets the body text in (the
+PDF embeds it as Nimbus Roman), and tick labels large enough to stay readable
+once the figure is scaled down to half a text width. Kept in step with the
+copy in `plot_powercurve.jl`, so every figure of the paper is set in one face.
+"""
+const PAPER_THEME = Theme(
+    fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+               italic = "TeX Gyre Termes Italic"),
+    Axis = (; xticklabelsize = 20, yticklabelsize = 20),
+)
+
 const PAPER_SCENARIOS = [
     (site = "maasvlakte", scenario = "v04", project = "system_reelout_maasvlakte.yaml",
      out_file = "maasvlakte_4.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
@@ -75,13 +90,15 @@ function create_paper_pattern_plots()
         scenario_dir = normpath(joinpath(@__DIR__, "..", "output", "scenarios", s.site, s.scenario))
         isdir(scenario_dir) || error("$scenario_dir does not exist.")
 
-        p = plot_pattern_scenario(scenario_dir; disp = true,
-                                  project = joinpath(scenario_dir, s.project),
-                                  xlims = s.xlims, ylims = s.ylims)
-
         pdf_file = joinpath(PAPER_FIGURES_DIR, s.out_file)
-        savefig(pdf_file)
-        MakieControlPlots.close(p.fig)
+        # The save re-runs the builder, so it has to happen under the theme too.
+        with_theme(PAPER_THEME) do
+            p = plot_pattern_scenario(scenario_dir; disp = true,
+                                      project = joinpath(scenario_dir, s.project),
+                                      xlims = s.xlims, ylims = s.ylims)
+            savefig(pdf_file)
+            MakieControlPlots.close(p.fig)
+        end
 
         @info "Saved pattern plot" pdf_file
     end

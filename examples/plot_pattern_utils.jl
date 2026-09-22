@@ -146,13 +146,15 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     p = plotxy(
         isnothing(opt_raw) ? [az_deg, ref_az] : [az_deg, opt_raw[1]],
         isnothing(opt_raw) ? [el_deg, ref_el] : [el_deg, opt_raw[2]];
-        xlabel = L"\mathrm{azimuth}~[°]",
-        ylabel = L"\mathrm{elevation}~[°]",
+        # Plain strings, not LaTeXStrings: these are text, not maths, and a
+        # LaTeXString is typeset in Computer Modern regardless of the theme,
+        # which does not match the Times the paper sets its body text in.
+        xlabel = "azimuth [°]",
+        ylabel = "elevation [°]",
         labelsize = 22,
         legendsize = 22,
-        legend = isnothing(opt_raw) ?
-                 [L"\mathrm{flown}", L"\mathrm{attractor}"] :
-                 [L"\mathrm{flown}", L"\mathrm{path~from~optimizer}"],
+        legend = isnothing(opt_raw) ? ["flown", "attractor"] :
+                 ["flown", "path from optimizer"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
         xlims = xlims,
         ylims = ylims,

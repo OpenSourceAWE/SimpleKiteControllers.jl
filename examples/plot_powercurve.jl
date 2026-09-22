@@ -34,6 +34,22 @@ const MAX_TETHER_FORCE_N =
     YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
 
 """
+    PAPER_THEME
+
+Makie theme for the figures that go into the LearningControl paper: TeX Gyre
+Termes, the same Times design the Copernicus class sets the body text in
+(the PDF embeds it as Nimbus Roman), and tick labels large enough to stay
+readable once the figure is scaled down to half a text width. `savefig`
+re-runs the builder, so the theme has to be active for the save as well as
+for the plot.
+"""
+const PAPER_THEME = Theme(
+    fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+               italic = "TeX Gyre Termes Italic"),
+    Axis = (; xticklabelsize = 20, yticklabelsize = 20),
+)
+
+"""
     scenario_metrics(dir)
 
 `(wind_speed, av_power, max_power, min_power, av_force, max_force, min_force,
@@ -88,24 +104,28 @@ function plot_powercurve()
     v_ro_min = getindex.(rows, 10)
     f_limit_kn = fill(MAX_TETHER_FORCE_N / 1000, length(v_wind))
 
-    plotx(v_wind, [p_kw, p_max_kw, p_min_kw], [f_kn, f_max_kn, f_min_kn, f_limit_kn],
-          [v_ro, v_ro_max, v_ro_min];
-          xlabel = "wind speed at 6 m height [m/s]",
-          ylabels = ["power [kW]", "force [kN]", "reelout speed [m/s]"],
-          labels = [["mean", "max", "min"], ["mean", "max", "min", "limit"], ["mean", "max", "min"]],
-          linestyle = [[nothing, :dash, :dashdot], [nothing, :dash, :dashdot, :dot],
-                       [nothing, :dash, :dashdot]],
-          color = [[nothing, :grey, :grey], [nothing, :grey, :grey, :black],
-                   [nothing, :grey, :grey]],
-          legend_position = [:auto, :lt, :rb],
-          title = "", scatter = true, disp = true,
-          xticks = 3:11, fig = "powercurve")
+    # The save re-runs the builder, so it has to happen under the theme too.
+    with_theme(PAPER_THEME) do
+        plotx(v_wind, [p_kw, p_max_kw, p_min_kw], [f_kn, f_max_kn, f_min_kn, f_limit_kn],
+              [v_ro, v_ro_max, v_ro_min];
+              xlabel = "wind speed at 6 m height [m/s]",
+              ylabels = ["power [kW]", "force [kN]", "reelout speed [m/s]"],
+              labels = [["mean", "max", "min"], ["mean", "max", "min", "limit"], ["mean", "max", "min"]],
+              linestyle = [[nothing, :dash, :dashdot], [nothing, :dash, :dashdot, :dot],
+                           [nothing, :dash, :dashdot]],
+              color = [[nothing, :grey, :grey], [nothing, :grey, :grey, :black],
+                       [nothing, :grey, :grey]],
+              legend_position = [:auto, :lt, :rb],
+              labelsize = 22, legendsize = 16,
+              title = "", scatter = true, disp = true,
+              xticks = 3:11, fig = "powercurve")
 
-    # Save the plot as PDF (no title) to ../LearningControl/figures
-    figures_dir = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
-    mkpath(figures_dir)
-    pdf_file = joinpath(figures_dir, "powercurve_$(scenario_site()).pdf")
-    savefig(pdf_file)
+        # Save the plot as PDF (no title) to ../LearningControl/figures
+        figures_dir = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
+        mkpath(figures_dir)
+        pdf_file = joinpath(figures_dir, "powercurve_$(scenario_site()).pdf")
+        savefig(pdf_file)
+    end
 end
 
 plot_powercurve()
