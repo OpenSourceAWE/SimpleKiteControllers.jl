@@ -152,7 +152,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
         legendsize = 22,
         legend = isnothing(opt_raw) ?
                  [L"\mathrm{flown}", L"\mathrm{attractor}"] :
-                 [L"\mathrm{flown}", L"\mathrm{optimizer,~uncorrected}"],
+                 [L"\mathrm{flown}", L"\mathrm{path~from~optimizer}"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
         xlims = xlims,
         ylims = ylims,

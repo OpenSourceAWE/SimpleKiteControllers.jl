@@ -13,10 +13,10 @@ Also generates the feedforward-comparison pair `cabauw_5.75_fb.pdf` (from
 fixed azimuth range of -28 to 27 deg and elevation range of 13 to 38 deg so
 the two subfigures share one axis scale.
 
-Only the 4.0 m/s and 5.75 m/s entries of [`PAPER_SCENARIOS`](@ref) are
-`enabled` for now; the 7.0 and 10.0 m/s entries are kept in the list but
-disabled until those wind speeds are wanted for the paper too — flip
-`enabled = true` on the ones to render.
+Only the 4.0, 5.75 and 7.0 m/s entries of [`PAPER_SCENARIOS`](@ref) are
+`enabled` for now; the 10.0 m/s entries are kept in the list but disabled
+until that wind speed is wanted for the paper too — flip `enabled = true` on
+the ones to render.
 
     include("plot_patterns_paper.jl")
 """
@@ -43,9 +43,9 @@ const PAPER_SCENARIOS = [
     (site = "cabauw", scenario = "v04", project = "system_reelout_cabauw.yaml",
      out_file = "cabauw_4.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
     (site = "maasvlakte", scenario = "v07", project = "system_reelout_maasvlakte.yaml",
-     out_file = "maasvlakte_7.0_pattern.pdf", enabled = false, xlims = nothing, ylims = nothing),
+     out_file = "maasvlakte_7.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
     (site = "cabauw", scenario = "v07", project = "system_reelout_cabauw.yaml",
-     out_file = "cabauw_7.0_pattern.pdf", enabled = false, xlims = nothing, ylims = nothing),
+     out_file = "cabauw_7.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
     (site = "maasvlakte", scenario = "v10", project = "system_reelout_maasvlakte.yaml",
      out_file = "maasvlakte_10.0_pattern.pdf", enabled = false, xlims = nothing, ylims = nothing),
     (site = "cabauw", scenario = "v10", project = "system_reelout_cabauw.yaml",
