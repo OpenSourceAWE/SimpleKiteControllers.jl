@@ -34,6 +34,7 @@ WinchControllers = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [sources]
+MakieControlPlots = {path = "/home/ufechner/repos/MakieControlPlots"}
 SimpleKiteControllers = {path = ".."}
 V3Kite = {rev = "v1.3.0", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
 

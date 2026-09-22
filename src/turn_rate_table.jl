@@ -77,7 +77,11 @@ function _load_turn_rate_table(project = project_file())
     path = joinpath(skc_data_path(), turn_rate_coeffs_file(project))
     raw = YAML.load_file(path)
     conditions = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in raw["conditions"])
-    entries = [_parse_turn_rate_entry(e) for e in raw["entries"]]
+    # NamedTuple[...] and not a bare comprehension: over an empty `entries: []` the
+    # latter infers Vector{Any}, which does not convert to the field's
+    # Vector{<:NamedTuple}, and a table cleared for a fresh identification run would
+    # fail to load from __init__ (2026-09-22).
+    entries = NamedTuple[_parse_turn_rate_entry(e) for e in raw["entries"]]
     return TurnRateTable(conditions, entries)
 end
 

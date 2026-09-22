@@ -30,11 +30,13 @@ different arguments rather than once with fixed ones. Call it yourself:
     build_turn_rate_table(depowers = [0.25],                 # one cell, capped lower
         max_steering_cap = 0.15)
 
-Expect roughly a quarter of an hour per cell and a settling-cache miss on every
-new `(body_damping, depower)` pair, and expect some cells to fail outright: the
-plant does not survive every depower at every amplitude. Afterwards the table is
-reloaded into the running session, so `test/test_fig8_controller.jl` can be
-re-run without restarting.
+Expect roughly two minutes per cell (measured here 2026-09-22; the quarter of an
+hour this said before was inherited from V3Kite.jl and never re-measured against
+this plant, which made a cheap re-run look expensive) and a settling-cache miss
+on every new `(body_damping, depower)` pair. Expect some cells to fail outright
+too: the plant does not survive every depower at every amplitude. Afterwards
+the table is reloaded into the running session, so
+`test/test_fig8_controller.jl` can be re-run without restarting.
 """
 
 using Pkg
@@ -50,6 +52,7 @@ using WinchControllers: WCSettings, WinchPosController
 import KiteUtils   # for KiteUtils.syslog; V3Kite does not re-export it
 using YAML
 using Printf
+using Statistics: std
 import Dates
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
@@ -92,6 +95,14 @@ const MAX_STEERING_CAP = 0.175
 
 const MIN_ELEVATION    = 50.0
 const MIN_STEERING_FIT = START_STEERING / 2
+
+# Blockwise delay scatter (`_delay_std`). The delay is a single cross-correlation
+# peak over the whole window, so it comes with no error bar of its own; re-estimating
+# it per block is the cheapest honest substitute. The search range is narrowed from
+# `identify_turn_rate_law`'s 10 s default because a short block can correlate the
+# NEXT reversal with the current one and peak a full half-cycle late.
+const DELAY_BLOCKS     = 4
+const DELAY_BLOCK_TMAX = 3.0
 
 const OUT_FILE = "turn_rate_coeffs.yaml"
 
@@ -214,6 +225,34 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
 end
 
 """
+    _delay_std(fit; nblocks=DELAY_BLOCKS) -> Float64
+
+Scatter [s] of the transport delay over `nblocks` equal-length blocks of the
+analysis window of `fit`, each re-estimated with `estimate_delay` exactly as
+`identify_turn_rate_law` estimates the window-wide one. `NaN` if the window is
+too short to split.
+
+This is a spread across sub-runs, not a standard error of the window-wide
+estimate: the delay is quantised to `dt` and rises with steering amplitude, so
+expect it to be dominated by the sweep's own stepping rather than by noise. It
+says how well ONE delay describes the whole sweep, which is what the table's
+single `delay` value claims.
+"""
+function _delay_std(fit; nblocks::Int = DELAY_BLOCKS)
+    n = length(fit.time)
+    edges = round.(Int, range(1, n + 1; length = nblocks + 1))
+    delays = Float64[]
+    for b in 1:nblocks
+        rng = edges[b]:(edges[b + 1] - 1)
+        length(rng) < 4 && continue
+        d, _ = estimate_delay(fit.us[rng], fit.rate[rng] ./ fit.v_app[rng], DT;
+                              t_max = DELAY_BLOCK_TMAX)
+        push!(delays, d * DT)
+    end
+    return length(delays) > 1 ? std(delays) : NaN
+end
+
+"""
     _entry_key(e) -> (Vector{Float64}, Float64)
 
 `(body_damping, depower)` of a YAML entry dict, for matching against existing rows.
@@ -294,7 +333,7 @@ the grid. `elevation_floor` likewise applies to every cell here; a row swept
 under a floor other than `MIN_ELEVATION` records it as `elevation_floor`.
 """
 function build_turn_rate_table(;
-        depowers = [0.25, 0.30, 0.35, 0.40],
+        depowers = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40],
         out::String = OUT_FILE,
         remake::Bool = false,
         max_steering_cap::Real = MAX_STEERING_CAP,
@@ -331,6 +370,11 @@ function build_turn_rate_table(;
             entry["delay"] = r.fit.delay_sec
             entry["c1_rel_std"] = abs(r.fit.se1 / r.fit.c1)
             entry["g_rel_std"] = r.fit.G_rel_std
+            # Absolute scatter alongside the relative one: se1/se2 are the fit's own
+            # standard errors, delay_std the blockwise spread (`_delay_std`).
+            entry["c1_std"] = r.fit.se1
+            entry["c2_std"] = r.fit.se2
+            entry["delay_std"] = _delay_std(r.fit)
         end
         _write_turn_rate_entry!(path, entry; remake)
         push!(results, (; depower = dp, r...))
@@ -341,13 +385,15 @@ function build_turn_rate_table(;
     end
 
     # The quality bar turn_rate_coeffs applies before a row may be a neighbour.
-    println("\n depower   outcome        c1        c2      delay   c1_rel_std  g_rel_std  usable")
+    println("\n depower   outcome        c1   c1_std        c2   c2_std   delay  del_std   " *
+            "c1_rel_std  g_rel_std  usable")
     for r in results
         isnothing(r.fit) && continue
         usable = r.outcome in (:sweep_done, :time_limit) &&
                  abs(r.fit.se1 / r.fit.c1) <= 0.01 && r.fit.G_rel_std <= 0.35
-        @printf("  %.3f   %-12s  %7.4f  %8.4f  %6.3f  %9.4f  %9.4f  %s\n",
-                r.depower, r.outcome, r.fit.c1, r.fit.c2, r.fit.delay_sec,
+        @printf("  %.3f   %-12s  %7.4f  %7.4f  %8.4f  %7.4f  %6.3f  %7.3f  %9.4f  %9.4f  %s\n",
+                r.depower, r.outcome, r.fit.c1, r.fit.se1, r.fit.c2, r.fit.se2,
+                r.fit.delay_sec, _delay_std(r.fit),
                 abs(r.fit.se1 / r.fit.c1), r.fit.G_rel_std, usable ? "yes" : "NO")
     end
 
