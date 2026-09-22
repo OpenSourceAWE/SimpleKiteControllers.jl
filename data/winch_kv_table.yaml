@@ -4,8 +4,10 @@
 # the same name in data/wc_settings.yaml. Add a row and re-identify the curve
 # here, not a new key elsewhere, when another wind speed is tuned.
 #
-# kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 from 3 to 9 m/s; the
-#          10 m/s row is 0.039, identified 2026-08-27 (sweep below). 11 and
+# kv     — `v_set = kv * sqrt(force)`. Flat at 0.0408 from 3 to 12 m/s; the
+#          10 m/s row was 0.039, identified 2026-08-27 (sweep below), and went
+#          back to the sweep's other passing value 2026-09-22 — see the note
+#          under the sweep. 11 and
 #          12 m/s carry 0.0408 UNTESTED at the current tether and winch
 #          controller: the 2026-08-26 notes that used to live here (0.0558 at
 #          10, 0.0738 shipped at 11, 12 m/s out of envelope) described a
@@ -24,7 +26,7 @@
 #            0.0385   6759 N   8411 N  21247 W   0.85   FAILED max force
 #            0.036    7223 N   9371 N  22543 W   0.85   FAILED max force
 #
-#          0.039 shipped: +5.5 % power for a phase-4 peak 499 N under the
+#          0.039 shipped first: +5.5 % power for a phase-4 peak 499 N under the
 #          limit. It is the knee: below it the gain collapses while the peak
 #          keeps climbing (0.0385 bought 86 W and crossed the limit by 11 N)
 #          because the soft law starts clamping against f_high 8000 N — mean
@@ -32,6 +34,21 @@
 #          than the retired 11 m/s sweep suggested. power_ratio stays at
 #          0.84-0.85 throughout: predicted and measured power scale together
 #          with kv, so kv moves the power LEVEL, not the plant-model gap.
+#
+#          0.0408 shipped instead from 2026-09-22, giving up that 5.5 %. The
+#          499 N the knee left was spent by a WIDER first lap: the startup
+#          request's min_turn_radius is now sized at the depower the reply is
+#          flown at rather than at depower_setpoint (it was asking 16.0 m where
+#          the curvature gate wanted 24.5 m), and the wider path pulls harder.
+#          Peak 8410 N at 19.94 s, 1.7 s into phase 4 — over the 8400 N rating
+#          by 10 N. The limiter cannot answer it: at 2.48 s of force_limit_tau
+#          a ~1.5 s spike is half gone before calc_vro_soft sees it, and both
+#          ways out of that (a shorter tau, an asymmetric one) are measured
+#          CLOSED in docs/fig8_tuning_log.md. kv is not filtered, so it is the
+#          lever that still works. The 0.0408 row above was measured on the
+#          NARROWER path, so its 7294 N does not carry over — only its slope
+#          (about -337 N of peak and -617 W per +0.001 of kv) does. Re-identify
+#          this row against the new path and write the measurement in here.
 #
 # f_low  — force floor [N] below which the LowerForceController reels in. It has
 #          to move with the wind because the winch's rating does not and the
@@ -94,7 +111,7 @@ entries:
     f_low: 700.0
     force_limit: "soft"
   - v_wind: 10.0
-    kv: 0.039
+    kv: 0.0408
     f_low: 700.0
     force_limit: "soft"
   - v_wind: 11.0

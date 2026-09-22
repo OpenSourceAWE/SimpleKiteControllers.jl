@@ -413,8 +413,25 @@ ensure_server(tos.base_url; autostart = tos.autostart_server)
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
 opt_r_scale = (1 + turn_radius_reel / l_set) * tos.turn_radius_headroom
-opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
+# The depower the reply will be FLOWN at, which is the c1 the request must be sized
+# at — see min_turn_radius_request. Under fly_opt_depower that is the optimizer's
+# own and so unknown before the solve; the seed it starts from is the only estimate
+# there is, and the setpoint (the default) is NOT one: it is the depower the loop is
+# tuned at, typically far more powered, and a request sized there comes back a third
+# too tight and is then gated out for a curvature the kite never had.
+depower_request = tos.fly_opt_depower ?
+                  awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed)) :
+                  fcs.depower_setpoint
+c1_request = try
+    turn_rate_coeffs(fcs.body_damping, depower_request).c1
+catch exc
+    exc isa ArgumentError || rethrow()
+    nothing       # off the grid: the request falls back to the setpoint and warns
+end
+opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale, c1 = c1_request)
 opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
+# The radius the startup solve actually CONVERGED at; the retry ladder bisects toward it.
+opt_r_sent = opt_r_min
 opt_box = pattern_limits_from(tos;
                               elevation_min = elevation_min_request(fcs, tos, l_set),
                               wind_speed = cap_wind)
@@ -423,10 +440,14 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                     pattern box %s.",
                    isnothing(opt_r_min) ? "unset" :
                        @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
-                                own, x %.3f for %.0f m of assumed reel-out per lap \
-                                and %.2f of headroom)",
-                                opt_r_min, tos.min_feasibility_margin, opt_r_scale,
-                                turn_radius_reel, tos.turn_radius_headroom),
+                                own at depower %.3f%s, x %.3f for %.0f m of assumed \
+                                reel-out per lap and %.2f of headroom)",
+                                opt_r_min, tos.min_feasibility_margin,
+                                depower_request,
+                                tos.fly_opt_depower ? " — the seed's, not the \
+                                    setpoint's, because the reply is flown at its own" : "",
+                                opt_r_scale, turn_radius_reel,
+                                tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 # One row per depower value the optimizer reports back (startup, each ACCEPTED reopt), for summary and plot.
@@ -836,10 +857,11 @@ if opt_r_on && !isnan(c1_startup)
             global width_ok, width_bad, relax_width
             target = max(tos.startup_retry_step * m_reply,
                          tos.startup_retry_slack * tos.min_feasibility_margin)
-            # The last CONVERGED ask; before any retry converged (`r_asked` NaN) the original request, reconstructed.
-            prev_ask = isnan(r_asked) ?
-                       opt_r_min / opt_r_scale * (1 + turn_radius_reel / l_set) *
-                       tos.turn_radius_headroom : r_asked
+            # The last CONVERGED ask; before any retry converged (`r_asked` NaN) the
+            # radius the startup solve was SENT. It must be one that converged, or the
+            # bisection walks an interval with no solution at either end — `opt_r_min`
+            # is re-measured off the reply by then and is NOT that number.
+            prev_ask = isnan(r_asked) ? opt_r_sent : r_asked
             # The ceiling the ratchet would send next, clamped so the incumbent still fits above the box floor.
             inc_top = maximum(inc_raw[2])
             inc_height = inc_top - minimum(inc_raw[2])
@@ -857,14 +879,21 @@ if opt_r_on && !isnan(c1_startup)
                          tos.startup_retry_az_widen_step
             width_room = tos.startup_retry_az_widen_step > 0 &&
                          (isnan(width_bad) || width_next < width_bad)
+            # What a bisection can still REACH: the radius lever is proportional (the
+            # radius step scales the ask by target/measured), so no radius below the
+            # 422'd `bisect_hi` beats `m_reply * bisect_hi / prev_ask`. Once that
+            # ceiling is under the gate, bisecting only walks back to the incumbent's
+            # own margin and the attempts belong to the geometry levers instead.
+            bisect_room = !isnan(bisect_hi) &&
+                          m_reply * bisect_hi / prev_ask >= tos.min_feasibility_margin
             # One lever per attempt; every rung carries the last converged ceiling and width floor.
             az_min = width_ok
-            if !isnan(bisect_hi)
+            if bisect_room
                 # A radius ask 422'd: bisect toward the last converged one instead of repeating it.
                 lever = "radius bisection"
                 r_ask = (prev_ask + bisect_hi) / 2
                 el_cap = cap_ok
-            elseif isnan(r_asked)
+            elseif isnan(bisect_hi) && isnan(r_asked)
                 # Attempt 1 corrects the ASSUMED lap reel-out to the measured ratio, capping the elevation if there is room.
                 lever = "radius correction"
                 r_ask = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
@@ -872,18 +901,27 @@ if opt_r_on && !isnan(c1_startup)
                 el_cap = cap_room ? cap_next : cap_ok
             elseif !relax_cap && cap_room
                 lever = "ceiling step"
-                r_ask = r_asked
+                r_ask = prev_ask
                 el_cap = cap_next
             elseif !relax_width && width_room
                 lever = "width step"
-                r_ask = r_asked
+                r_ask = prev_ask
                 el_cap = cap_ok
                 az_min = width_next
-            else
+            elseif isnan(bisect_hi)
                 # Scale the previous REQUEST by target/measured, clamped to RETRY_GAIN_MAX per converged solve.
                 lever = "radius step"
-                r_ask = r_asked * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
+                r_ask = prev_ask * clamp(target / m_reply, 1.0, RETRY_GAIN_MAX)
                 el_cap = cap_ok
+            else
+                @info @sprintf("Startup retries stop at %d/%d: no radius under the \
+                                %.2f m that 422'd can reach past margin %.3f (the \
+                                gate wants %.2f), and the ceiling and width levers \
+                                are spent.",
+                               attempt, Int(tos.startup_retries_max), bisect_hi,
+                               m_reply * bisect_hi / prev_ask,
+                               tos.min_feasibility_margin)
+                break
             end
             # `nothing` keeps the session's limits; only a changed side builds a box.
             box_ask = nothing
@@ -908,7 +946,9 @@ if opt_r_on && !isnan(c1_startup)
                                         incumbent's is %.1f°)", az_min, inc_amp)),
                            target,
                            isnan(bisect_hi) ? "" :
-                               @sprintf(" (bisecting below the %.2f m that 422'd)",
+                               @sprintf(" (%s the %.2f m that 422'd)",
+                                        bisect_room ? "bisecting below" :
+                                            "the radius lever is spent under",
                                         bisect_hi))
             t_attempt = time()
             local att_result, att_table, att_raw, att_score
