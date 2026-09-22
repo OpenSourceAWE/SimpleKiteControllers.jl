@@ -302,7 +302,7 @@ function depower_series(summary, times; live::Bool)
     idx = searchsortedlast.(Ref(t_dp), times)
     [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
 end
-fig_name ="V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
+fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
 if !isnothing(created_at)
     fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
 end

@@ -102,8 +102,8 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     # override actually flown).
     summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
     flown_wind = get(summary_sim, "wind_speed", project_set.v_wind)
-    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
-    project_name = replace(basename(scenario_project), ".yaml" => "")
+    fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "", "system_" => "")
 
     # Skip t=0 (guidance slots filled from first step! onward)
     rng = 2:length(sl.time)
@@ -183,8 +183,8 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
     # override actually flown).
     summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
     flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
-    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
-    project_name = replace(basename(scenario_project), ".yaml" => "")
+    fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "", "system_" => "")
 
     # Skip t=0 (guidance slots filled from first step! onward)
     rng = 2:length(sl.time)
@@ -302,8 +302,8 @@ function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
     # override actually flown).
     summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
     flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
-    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
-    project_name = replace(basename(scenario_project), ".yaml" => "")
+    fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "", "system_" => "")
 
     rng = 2:length(sl.time)
 
@@ -393,8 +393,8 @@ function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = t
     # override actually flown).
     summary_sim = V3Kite.YAML.load_file(joinpath(scenario_dir, log_name * ".yaml"))["simulation"]
     flown_wind = get(summary_sim, "wind_speed", Settings(scenario_project).v_wind)
-    fig_name = "V3 Kite Reel-out – $(round(flown_wind; digits = 1)) m/s"
-    project_name = replace(basename(scenario_project), ".yaml" => "")
+    fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    project_name = replace(basename(scenario_project), ".yaml" => "", "system_" => "")
 
     rng = 2:length(sl.time)
 
