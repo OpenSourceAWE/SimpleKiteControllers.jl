@@ -55,7 +55,9 @@ end
                          opt_raw::Union{Nothing, Tuple} = nothing,
                          project::Union{Nothing, AbstractString} = nothing,
                          log_name::Union{Nothing, AbstractString} = nothing,
-                         hide_before_final::Union{Nothing, Real} = nothing) -> Figure
+                         hide_before_final::Union{Nothing, Real} = nothing,
+                         xlims::Union{Nothing, Tuple} = nothing,
+                         ylims::Union{Nothing, Tuple} = nothing) -> Figure
 
 Plot the azimuth/elevation flight pattern for a scenario in `scenario_dir`
 (flown path vs. attractor reference, or vs. optimizer-raw if available).
@@ -75,13 +77,16 @@ one `.arrow` file. The flown curve leaves out phase 5 and the
 `hide_before_final` seconds [s] before it, where the pattern is already lifted
 by `el_offset_final` ahead of the end of reel-out; the default is the scenario's
 own `fcs.el_offset_lead`, which is exactly that window, and `0` hides phase 5
-alone.
+alone. `xlims`/`ylims` fix the azimuth/elevation axis ranges [deg] (e.g. for a pair of
+plots that must share the same scale); `nothing` (the default) autoscales as usual.
 """
 function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                opt_raw::Union{Nothing, Tuple} = nothing,
                                project::Union{Nothing, AbstractString} = nothing,
                                log_name::Union{Nothing, AbstractString} = nothing,
-                               hide_before_final::Union{Nothing, Real} = nothing)
+                               hide_before_final::Union{Nothing, Real} = nothing,
+                               xlims::Union{Nothing, Tuple} = nothing,
+                               ylims::Union{Nothing, Tuple} = nothing)
     # Load settings and log; the system project is either the caller's own
     # resolved path, or the scenario folder's own copy
     scenario_project = something(project, joinpath(scenario_dir, "system_reelout_maasvlakte.yaml"))
@@ -143,10 +148,14 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
         isnothing(opt_raw) ? [el_deg, ref_el] : [el_deg, opt_raw[2]];
         xlabel = L"\mathrm{azimuth}~[°]",
         ylabel = L"\mathrm{elevation}~[°]",
+        labelsize = 22,
+        legendsize = 22,
         legend = isnothing(opt_raw) ?
                  [L"\mathrm{flown}", L"\mathrm{attractor}"] :
                  [L"\mathrm{flown}", L"\mathrm{optimizer,~uncorrected}"],
         fig = replace(fig_name, "Reel-out" => project_name) * " – pattern",
+        xlims = xlims,
+        ylims = ylims,
         disp = disp,
     )
     return p
