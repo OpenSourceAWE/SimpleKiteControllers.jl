@@ -650,12 +650,17 @@ multi-modal, so the guess is a choice about the answer.
     path is solved at the starting length from the parametric guess and the
     first re-anchoring may legitimately predict far less (v03: 200 -> 116 W).
     That step keeps `min_power_frac` as its only power gate. Beyond it, every
-    good run measured drops at most to 0.95 of the previous install.
+    good step measured across 3.5-10 m/s stays above 0.93 of the previous
+    install (the worst is 0.93 at 11 m/s; the 3.5-10 m/s runs never go below
+    0.98), so 0.85 rejects a wrong basin with room to spare. Raised from 0.7 on
+    2026-09-18, where Cabauw 6 m/s re-optimized to 5338 W against the 7391 W it
+    replaced — a ratio of 0.72 the old floor let through, then flown for 48 % of
+    the reel-out.
 
     Needs no anti-ratchet of its own: a rejected reply is never installed, so
     the reference cannot move while a retry chain runs.
     """
-    min_power_frac_prev = 0.7
+    min_power_frac_prev = 0.85
     """
     Mean wind [m/s] below which BOTH power gates are bypassed for a candidate
     whose predicted power is NEGATIVE. Below it the optimizer's winch model is

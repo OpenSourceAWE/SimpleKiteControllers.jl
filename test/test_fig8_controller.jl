@@ -600,9 +600,10 @@ end
 
         # Canary: catches an accidental edit of the YAML. EXPECTED to change on
         # a deliberate re-identification -- update it then, nothing else here.
-        # 0.26975787521515693: 11 kg wing, 150 m / 8 mm tether, re-identified
-        # 2026-08-30 (see docs/fig8_tuning_log.md).
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.26975787521515693
+        # 0.2697451625905726: 11 kg wing, 150 m / 8 mm tether, re-identified
+        # 2026-09-22 against system_reelout_maasvlakte.yaml (see
+        # docs/fig8_tuning_log.md); was 0.26975787521515693 from 2026-08-30.
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.2697451625905726
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin
@@ -761,14 +762,16 @@ end
     @testset "winch_kv_table" begin
         p = project_file("system_reelout_maasvlakte.yaml")
 
-        # kv: flat at the identified 0.0408 from 3 to 9 m/s. The 10 m/s row was
-        # re-identified to 0.039 on 2026-08-27 (sweep in data/winch_kv_table.yaml,
-        # +5.5% power); 11 and 12 m/s still carry the untested legacy 0.0408.
+        # kv: flat at the identified 0.0408 from 3 to 12 m/s. The 10 m/s row was
+        # re-identified to 0.039 on 2026-08-27 (+5.5 % power) and went back to
+        # 0.0408 on 2026-09-22: the 499 N of headroom the knee bought was spent
+        # by a wider first lap, which put the force peak 10 N over the 8400 N
+        # rating (sweep and note in data/winch_kv_table.yaml).
         @test winch_kv(9.0; project = p) ≈ 0.0408
         @test winch_kv(3.0; project = p) ≈ 0.0408
         @test winch_kv(6.0; project = p) ≈ 0.0408
-        @test winch_kv(10.0; project = p) ≈ 0.039
-        @test winch_kv(9.5; project = p) ≈ 0.0399   # interpolated 9 -> 10 knee
+        @test winch_kv(10.0; project = p) ≈ 0.0408
+        @test winch_kv(9.5; project = p) ≈ 0.0408   # no knee left: the table is flat
 
         # f_low: 350 N at 3 m/s, 700 N from 4 m/s up, linear between. One flat
         # value cannot serve both — at 3 m/s a 700 N floor put the limiter in
