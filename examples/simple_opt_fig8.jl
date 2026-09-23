@@ -6,7 +6,7 @@ Same plant, entry and inner loop as `simple_fig8.jl` — read that file first, i
 docstring covers the log slots, the parameters, the sign conventions and why the
 pattern must be flown low and wide, all of which apply here unchanged. What
 differs is where the reference path comes from: instead of the lemniscate
-`fcs.f8_a`/`f8_b`/`f8_c`/`f8_d` describe, the AWETrim optimizer is asked for the
+`fcs.f8_a`/`f8_b` describe, the AWETrim optimizer is asked for the
 power-optimal reel-out path under THIS run's wind and winch, and `set_path!`
 installs it. The lemniscate is still built — as the initial guess the optimizer
 starts from, and as the reference the result is plotted against.
@@ -165,7 +165,7 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
 l0 = s.sys_state.l_tether[1]
 
 fec = FigureEightController(FigureEightSettings(;
-    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b, C = fcs.f8_c, D = fcs.f8_d,
+    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b,
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
     reacquire_margin = fcs.reacquire_margin))
@@ -192,8 +192,8 @@ winch = winch_from_wc(wcs)
 # lemniscate the OTHER runs fly. `figure_eight_path` closes the curve itself
 # (last point == first), which is the shape the server expects.
 el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
-guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                       tos.guess_d, 0.0, el_center_seed,
+guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
+                                       0.0, el_center_seed,
                                        0.0, tos.guess_points)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
                tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)

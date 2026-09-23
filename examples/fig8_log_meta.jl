@@ -19,14 +19,12 @@ const FIG8_META_COLUMN = :var_01
 const FIG8_META_KEYS = (
     "F8_A" => :f8_a,
     "F8_B" => :f8_b,
-    "F8_C" => :f8_c,
-    "F8_D" => :f8_d,
     "SET_ELEVATION_FIG_EIGHT" => :f8_el_center,
     "SETTLE_TIME" => :settle_time,
 )
 
 """
-    fig8_colmeta(; f8_a, f8_b, f8_c, f8_d, f8_el_center, settle_time)
+    fig8_colmeta(; f8_a, f8_b, f8_el_center, settle_time)
 
 Build the `colmeta` dictionary for `save_log(logger, name; colmeta)`: the
 KiteUtils defaults (a "name" entry for every `var_XX` column — `load_log`
@@ -34,8 +32,8 @@ reads all sixteen of them, so the full set must be present) plus the
 figure-eight parameters on `FIG8_META_COLUMN`. Read back with
 [`read_fig8_meta`](@ref).
 """
-function fig8_colmeta(; f8_a, f8_b, f8_c, f8_d, f8_el_center, settle_time)
-    params = (; f8_a, f8_b, f8_c, f8_d, f8_el_center, settle_time)
+function fig8_colmeta(; f8_a, f8_b, f8_el_center, settle_time)
+    params = (; f8_a, f8_b, f8_el_center, settle_time)
     colmeta = Dict{Symbol, Vector{Pair{String, String}}}(
         Symbol("var_$(lpad(i, 2, '0'))") => ["name" => "var_$(lpad(i, 2, '0'))"]
         for i = 1:16
@@ -52,7 +50,7 @@ end
 
 Read the figure-eight parameters stored by [`fig8_colmeta`](@ref) from the
 log `name` in `path`. Returns a NamedTuple with the keyword names of
-`plot_fig_eight_results` (`f8_a`, `f8_b`, `f8_c`, `f8_d`, `f8_el_center`,
+`plot_fig_eight_results` (`f8_a`, `f8_b`, `f8_el_center`,
 `settle_time`), or `nothing` if the file does not exist or was written
 before this metadata was added.
 """

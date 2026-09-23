@@ -19,7 +19,6 @@ into `num_points` points and treated as cyclic. Today it is a parameterized lemn
 
 - `f8_a` — width, the azimuth half-span [deg]
 - `f8_b` — height, the elevation span [deg]
-- `f8_c` / `f8_d` — size of the right lobe and asymmetry, both `0` for a symmetric eight
 - `az_center` / `el_center` — where the pattern sits on the sphere
 - `up_loops` — traversal direction; the path is reversed if the direction at the right lobe
   does not match

@@ -323,7 +323,7 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
 l0 = s.sys_state.l_tether[1]
 
 fec = FigureEightController(FigureEightSettings(;
-    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b, C = fcs.f8_c, D = fcs.f8_d,
+    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b,
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
     reacquire_margin = fcs.reacquire_margin))

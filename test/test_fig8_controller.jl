@@ -16,7 +16,6 @@ import SimpleKiteControllers: _dist as _skc_dist
 
 _make_test_controller(; kwargs...) =
     FigureEightController(FigureEightSettings(; dt = 0.02, A = 10.0, B = 5.0,
-                                              C = 0.0, D = -1.0,
                                               el_center = 45.0,
                                               attractor_distance = 10.0,
                                               up_loops = false, kwargs...))
@@ -83,7 +82,7 @@ end
         # The guard only ranks candidates the search offers, so this exercises it
         # with the window off: within a window the far branch is out of reach.
         fec = _make_test_controller(search_window = 0.0)
-        # The self-intersection: both branches pass through it (D = -1 puts it low).
+        # The self-intersection: both branches pass through it.
         n = length(fec.az_path)
         crossings = [i for i in 1:n if abs(fec.az_path[i] - fec.fes.az_center) < 0.2]
         @test length(crossings) >= 2
@@ -876,13 +875,13 @@ end
     end
 
     @testset "pattern_size_growth" begin
-        az, el = figure_eight_path(16.0, 10.0, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        az, el = figure_eight_path(16.0, 10.0, 0.0, 20.0, 0.0, 100)
         # Same curve: no growth in either direction.
         same = pattern_size_growth(az, el, az, el)
         @test same.growth ≈ 1.0 && same.az_ratio ≈ 1.0 && same.el_ratio ≈ 1.0
         # The measured reply of 2026-09-21 at 247 m: ±16° / 10° tall answered
         # with ±24.2° / 15.5° tall. Growth is the LARGER of the two ratios.
-        az2, el2 = figure_eight_path(24.2, 15.5, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        az2, el2 = figure_eight_path(24.2, 15.5, 0.0, 20.0, 0.0, 100)
         big = pattern_size_growth(az, el, az2, el2)
         @test big.az_ratio ≈ 24.2 / 16.0 atol = 1e-6
         @test big.el_ratio ≈ 15.5 / 10.0 atol = 1e-6
@@ -893,7 +892,7 @@ end
         # A lift does not change the size, so raw-vs-raw and lifted-vs-lifted agree.
         @test pattern_size_growth(az, el .+ 3.0, az2, el2 .+ 3.0).growth ≈ big.growth
         # One axis alone is enough to trip it.
-        az3, el3 = figure_eight_path(16.0, 15.5, 0.0, 0.0, 0.0, 20.0, 0.0, 100)
+        az3, el3 = figure_eight_path(16.0, 15.5, 0.0, 20.0, 0.0, 100)
         one = pattern_size_growth(az, el, az3, el3)
         @test one.az_ratio ≈ 1.0 atol = 1e-6
         @test one.growth ≈ 1.55 atol = 1e-6
@@ -1258,7 +1257,7 @@ end
 
         # phase5_margin is NaN without a final coefficient, otherwise it is the
         # curvature margin at the given length.
-        az, el = figure_eight_path(30.0, 12.0, 40.0, 15.0, 0.0, 26.0, 0.0, 60)
+        az, el = figure_eight_path(30.0, 12.0, 0.0, 26.0, 0.0, 60)
         @test isnan(phase5_margin(fallback, az, el, 380.0, 0.32))
         m = phase5_margin(feas, az, el, 380.0, 0.32)
         @test m ≈ check_pattern_feasible(az, el, 380.0, 0.32;

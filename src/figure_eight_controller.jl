@@ -39,18 +39,18 @@ cannot be flown however the PID is tuned.
 """
 
 """
-    figure_eight_path(A, B, C, D, x0, y0, theta, num_points)
+    figure_eight_path(A, B, x0, y0, theta, num_points)
 
-Figure-of-eight reference path. Returns `(x, y)`: azimuth and elevation
-setpoints in degrees.
+Figure-of-eight reference path, a lemniscate of Gerono. Returns `(x, y)`:
+azimuth and elevation setpoints in degrees.
 
-- `A`: width, `B`: height, `C`: size of the right part, `D`: asymmetry
+- `A`: width, `B`: height
 - `x0`, `y0`: center coordinates, `theta`: rotation angle [rad]
 """
-function figure_eight_path(A, B, C, D, x0, y0, theta, num_points)
+function figure_eight_path(A, B, x0, y0, theta, num_points)
     t = range(0, 2π, length=num_points)
     x = A * sin.(t)
-    y = B * sin.(t) .* cos.(t) .+ C .* cos.(t) .+ D .* cos.(2t)
+    y = B * sin.(t) .* cos.(t)
     x_rot = x .* cos(theta) .- y .* sin(theta)
     y_rot = x .* sin(theta) .+ y .* cos(theta)
     y_rot = y_rot / (maximum(y_rot)/(B/2))
@@ -104,8 +104,6 @@ commanded course by ~180°.
     dt
     A = 30.0            # width of the figure-eight [deg]
     B = 12.0            # height of the figure-eight [deg]
-    C = 0.0             # size of the right part [deg]
-    D = 0.0             # asymmetry factor [-]
     az_center = 0.0     # azimuth of the path center [deg]
     el_center = 60.0    # elevation of the path center [deg]
     theta = 0.0         # rotation angle [rad]
@@ -191,7 +189,7 @@ Discretize the reference lemniscate about `(az_center, el_center)` and hand it
 to [`_path_geometry`](@ref).
 """
 function _build_path(fes::FigureEightSettings, az_center, el_center)
-    az, el = figure_eight_path(fes.A, fes.B, fes.C, fes.D,
+    az, el = figure_eight_path(fes.A, fes.B,
                                az_center, el_center, fes.theta,
                                fes.num_points)
     return _path_geometry(az, el, fes.up_loops)

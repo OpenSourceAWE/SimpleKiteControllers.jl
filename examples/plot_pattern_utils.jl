@@ -138,7 +138,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     ref_az, ref_el = if !isempty(live)
         Float64.(sl.var_02[live]), Float64.(sl.var_03[live])
     else
-        figure_eight_path(fcs.f8_a, fcs.f8_b, fcs.f8_c, fcs.f8_d, 0.0,
+        figure_eight_path(fcs.f8_a, fcs.f8_b, 0.0,
                           Float64(sl.var_04[end]), 0.0, 361)
     end
 

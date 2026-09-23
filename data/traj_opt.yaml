@@ -7,8 +7,6 @@ traj_opt:
     # --- Initial guess (seeds a multi-modal solve: changes the answer, not the run time) --- #
     guess_a:          30.0   # width of the guess; azimuth spans ±guess_a    [deg]
     guess_b:          12.0   # height of the guess, peak to peak             [deg]
-    guess_c:           0.0   # size of the right part                        [deg]
-    guess_d:           0.0   # asymmetry factor                                [-]
     guess_el_center:  29.0   # centre elevation of the guess; first knob to move on a 422 [deg]
     guess_el_center_high:      30.0   # centre elevation at/above the ref wind (a step, not a ramp) [deg]
     guess_el_center_wind_ref:   8.0   # wind at/above which guess_el_center_high applies [m/s]

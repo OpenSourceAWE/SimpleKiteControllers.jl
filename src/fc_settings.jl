@@ -265,10 +265,6 @@ Add new findings there, not here.
     f8_a = 40.0
     "Height of the eight [deg] (elevation spans +-`f8_b`/2)"
     f8_b = 15.0
-    "Size of the right part [deg]"
-    f8_c = 0.0
-    "Asymmetry factor [-]"
-    f8_d = 0.0
     """
     Pattern-centre elevation [deg]. Two forces pull opposite ways: a lower
     centre IMPROVES the curvature margin (less `cos(elevation)` compression of
@@ -633,13 +629,22 @@ function FC_Settings(filename::String; path = skc_data_path())
 end
 
 """
+Keys that were removed from the settings structs together with the shape
+parameters `C` and `D` of [`figure_eight_path`](@ref). Archived settings files
+still carry them, always as `0`, which is the shape the path now always has.
+"""
+const RETIRED_YAML_KEYS = ("f8_c", "f8_d", "guess_c", "guess_d")
+
+"""
     load_yaml_fields!(obj, filename, section; path = skc_data_path()) -> obj
 
 Set every field `section` (a top-level key in the YAML file `filename`) names
 on the mutable struct `obj`, converting each value to the field's declared
 type; `filename` is resolved under `path` unless already absolute. An unknown
 key errors, a key the file omits leaves `obj`'s existing value (its struct
-default, for a freshly constructed `obj`) untouched.
+default, for a freshly constructed `obj`) untouched. A key in
+[`RETIRED_YAML_KEYS`](@ref) is skipped if it is `0` and errors otherwise, so
+archived settings files still load.
 
 Purely reflective (`hasfield`/`setfield!`/`fieldtype` on `typeof(obj)`), so it
 works on any mutable struct without `src/` depending on the struct's package.
@@ -655,6 +660,11 @@ function load_yaml_fields!(obj, filename::AbstractString, section::AbstractStrin
     T = typeof(obj)
     for (key, value) in dict
         sym = Symbol(key)
+        if !hasfield(T, sym) && key in RETIRED_YAML_KEYS
+            iszero(value) ||
+                error("Retired key \"$key\" in $filename must be 0, got $value.")
+            continue
+        end
         hasfield(T, sym) ||
             error("Unknown key \"$key\" in $filename — not a field of $T.")
         setfield!(obj, sym, convert(fieldtype(T, sym), value))

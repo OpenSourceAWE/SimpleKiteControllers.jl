@@ -328,7 +328,7 @@ guard_lfc = LowerForceController(rcs)
 l_set = s.sys_state.l_tether[1]
 
 fec = FigureEightController(FigureEightSettings(;
-    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b, C = fcs.f8_c, D = fcs.f8_d,
+    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b,
     az_center = 0.0, el_center = fcs.el_center,
     attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
     reacquire_margin = fcs.reacquire_margin))
@@ -402,8 +402,8 @@ end
 el_center_seed_base = guess_el_center_seed(tos, inflow.wind_speed)
 el_center_seed = el_center_seed_base
 startup_seed_offset = 0.0
-guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                       tos.guess_d, 0.0, el_center_seed,
+guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
+                                       0.0, el_center_seed,
                                        0.0, tos.guess_points)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
                tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
@@ -493,7 +493,7 @@ The startup `/init` request seeded with the guess lemniscate centred at
 first-lap winch.
 """
 function startup_params(el_center)
-    az, el = figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c, tos.guess_d,
+    az, el = figure_eight_path(tos.guess_a, tos.guess_b,
                                0.0, el_center, 0.0, tos.guess_points)
     InitParams(; name = tos.name, length = opt_length(l_set),
                winch_params = winch_first_lap, inflow_conditions = inflow,
@@ -1426,8 +1426,8 @@ try
                                      url = tos.base_url, wait = false)
                         else
                             guess_az_r, guess_el_r =
-                                figure_eight_path(tos.guess_a, tos.guess_b, tos.guess_c,
-                                                  tos.guess_d, 0.0, el_seed,
+                                figure_eight_path(tos.guess_a, tos.guess_b,
+                                                  0.0, el_seed,
                                                   0.0, tos.guess_points)
                             reopt_params = InitParams(; name = tos.name, length = opt_length(l_now),
                                                       winch_params = winch_reopt,
@@ -1568,7 +1568,7 @@ try
                                                                      el_min_extra) : ""),
                                            blend_attempt, tos.blend_max_retries)
                             retry_az, retry_el = figure_eight_path(tos.guess_a,
-                                tos.guess_b, tos.guess_c, tos.guess_d, 0.0,
+                                tos.guess_b, 0.0,
                                 retry_el_seed, 0.0, tos.guess_points)
                             retry_params = InitParams(; name = tos.name, length = opt_length(l_now),
                                 winch_params = winch_reopt, inflow_conditions = inflow,

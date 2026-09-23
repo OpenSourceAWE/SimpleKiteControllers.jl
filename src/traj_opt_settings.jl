@@ -44,10 +44,6 @@ multi-modal, so the guess is a choice about the answer.
     guess_a = 30.0
     "Height of the guess lemniscate; elevation spans `guess_b` peak to peak [deg]"
     guess_b = 12.0
-    "Size of the right part of the guess [deg]"
-    guess_c = 0.0
-    "Asymmetry factor of the guess [-]"
-    guess_d = 0.0
     "Centre elevation of the guess [deg]"
     guess_el_center = 26.0
     """

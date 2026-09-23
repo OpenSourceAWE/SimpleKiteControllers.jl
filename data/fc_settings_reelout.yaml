@@ -50,8 +50,6 @@ fc_settings:
   # --- pattern geometry; a SMALLER lemniscate is a TIGHTER one --------------
   f8_a:               20.0     # Width of the eight, azimuth spans ±A; sweep optimum [deg]
   f8_b:               11.0     # Height, elevation spans ±B/2; picked for margin 1.07 [deg]
-  f8_c:               0.0      # Size of the right part                           [deg]
-  f8_d:               0.0      # Asymmetry factor                                   [-]
   el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
   attractor_dist:      6.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
   attractor_lead_time: 0.8     # Lead as flight time, arc = t*v_app/L; 6° at 6 m/s wind, 8.5° at 10 m/s wind (lap 1); 0 = off [s]
