@@ -50,6 +50,11 @@
 #          (about -337 N of peak and -617 W per +0.001 of kv) does. Re-identify
 #          this row against the new path and write the measurement in here.
 #
+#          The slope holds only below v_sat (3.5 m/s). Cabauw 10 m/s reels out
+#          at 3.42 m/s mean, on the limit, so kv cannot lower its force:
+#          0.043 made the startup solve infeasible (2026-09-23). There the lever
+#          is f_high in data/wc_settings.yaml, see docs/fig8_tuning_log.md.
+#
 # f_low  — force floor [N] below which the LowerForceController reels in. It has
 #          to move with the wind because the winch's rating does not and the
 #          kite's force does (with the square of the wind speed), so one value

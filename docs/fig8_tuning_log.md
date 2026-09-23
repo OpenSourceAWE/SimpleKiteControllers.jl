@@ -5791,3 +5791,54 @@ never this field, which is what the pin exists to prevent. `reel_in_beta` needs
 350), is not overridden per wind speed, and `calc_vro_soft` throws if a table row
 violates it. `softplus_beta` 1e-3 is harmless at `f_high` 8000 >> 1/beta and is the
 knee the `force_limit_tau` sweep was tuned against.
+
+## 2026-09-23 — Cabauw 10 m/s over the force limit again: `f_high` 7200 N, elevation-amplitude cap 11°
+
+Cabauw 10 m/s (`ed8af37` dirty, `f_high` = `f_high_awe_trim` = 7900 N,
+`first_lap_force_frac` 1.0, kv 0.0408) failed `max force <= 8400 N` at 8930 N in
+phase 4 — mean 8088 N, 27.7 kW, ratio 1.03, everything else passing. Cabauw 7-9 m/s
+passed the same evening, 9 m/s at 8328 N. Not a spike: with the ceiling at 7400 N the
+run crossed 8200 N once per lap (8414 N at the lap-1 crossing, t = 19.7 s, then
+8274-8471 N at 26, 32, 40 and 48 s). The mean is high and the lap swing rides on it.
+
+**kv is not a lever at this condition.** The `winch_kv_table.yaml` slope (-337 N
+peak per +0.001) was measured where the winch was below `v_sat`. At Cabauw 10 m/s
+it is not: v_ro mean 3.42 m/s against `v_sat` 3.5, so the drum cannot go faster
+and the force cannot fall with it. kv 0.043 (kv x sqrt(f_high) = 3.8 m/s)
+made the STARTUP solve infeasible at 30/29/32°: in the optimizer `speed_radial` sits
+on its 3.5 m/s bound, so the only way to hold the tension is geometry, which needs
+an elevation half-span of 10.12° against the 10° cap (`elevation_amplitude`
+VIOLATED; `turn_radius`, `input_steering` and its rate all binding too). Reverted.
+
+What worked is the force ceiling sent to the optimizer, which changes the path:
+
+| Cabauw 10 m/s | `f_high` / `_awe_trim` | el. amp. cap | startup | max F ph. 4 | mean F ph. 4 | power | verdict |
+|---|--:|--:|---|--:|--:|--:|---|
+| baseline | 7900 N | 10° | converged at 29° | 8930 N | 8088 N | 27 737 W | FAILED |
+| kv 0.043 | 7900 N | 10° | 422 x3 (needs 10.1°) | — | — | — | — |
+| `_195844` | 7400 N | 10° | converged | 8471 N | 7345 N | 24 820 W | FAILED by 71 N |
+| 7200 N | 7200 N | 10° | 422 x3 (needs 10.5-10.7°) | — | — | — | — |
+| **`_200940`** | **7200 N** | **11°** | converged | **8172 N** | **7219 N** | **24 330 W** | **all 10 passed** |
+
+About 0.9 N of peak per N of ceiling between 7900 and 7400 N — unlike Maasvlakte
+10 m/s on 09-21, where 7300 N did not bind at 150 m at all. The ceiling and the
+elevation-amplitude cap are coupled: pulling less at this wind takes a taller figure (path
+peak to peak 20.9 -> 24.6°), so the cap (`pattern_elevation_amplitude_max_high`,
+`traj_opt.yaml`) went to 11°. `_200940`: 4.5 laps, RMS d 1.24°, min el 11.8°, lowest
+point 36.7 m, ratio 1.04, `max_depower_final` 0.406, 228 N of headroom. The price is
+-12 % power against the failing baseline and roughly what the 7500 N run of 09-21
+flew (23.7 kW).
+
+Both changes are global. The 11° cap reaches Cabauw 7-10 and Maasvlakte 11 (100 m
+wind >= 13.2 m/s); Maasvlakte 10 keeps 8°. The 7200 N ceiling reaches everything
+that pulls near it, and at Maasvlakte 10 m/s the startup ceiling picked the basin
+on 09-21 (8000 -> 7900 N moved its figure from 31.9 to 25.9° centre).
+
+Repeat of `_200940` (`_202022`, now `scenarios/cabauw/v10`): all 10 passed, 24 330 W
+again to the watt. Regression, against the scenario each replaced:
+
+| wind | max F ph. 4 | mean F ph. 4 | power ph. 4 | ratio | RMS d | verdict |
+|---|--:|--:|--:|--:|--:|---|
+| Maasvlakte 10 m/s (`_201437`) | 7353 N (7587) | 6247 N (6424) | 20 272 W (20 226) | 0.83 (0.82) | 1.05° (1.22) | all 10 passed |
+
+NOT yet re-flown: Cabauw 7, 8, 9 and Maasvlakte 9, 11 m/s.

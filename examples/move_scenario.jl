@@ -128,9 +128,9 @@ function unique_scenario_dir(site_dir::AbstractString, name::AbstractString)
 end
 
 """
-    move_scenario(; overwrite = false, unique = false, compress = true, every = 1)
+    move_scenario(; archive_dir = nothing, overwrite = false, unique = false, compress = true, every = 1)
 
-Move the last run's archive (see `last_run_archive`) into
+Move `archive_dir`, by default the last run's archive (see `last_run_archive`), into
 `output/scenarios/<site>/vNN`, `site` the project's site (see `archive_site`)
 and `NN` its wind speed (see `scenario_name`). Refuses
 when the target folder already has files in it unless `overwrite = true` (in
@@ -145,10 +145,15 @@ additionally keeps only every n-th row, resampling to 30 Hz by default
 a viewing artefact, not a scoring input (see the caveat in `docs/log_size.md`).
 Pass `every = 1` to keep the full sample rate instead.
 """
-function move_scenario(; overwrite::Bool = false, unique::Bool = false, compress::Bool = true, every::Int = 3)
-    archive_dir = last_run_archive()
-    status = only(filter(startswith("status: "), readlines(RUN_DONE_FILE)))
-    occursin("ok", status) || @warn "Last run did not finish cleanly: $status"
+function move_scenario(; archive_dir::Union{AbstractString, Nothing} = nothing,
+                       overwrite::Bool = false, unique::Bool = false, compress::Bool = true, every::Int = 3)
+    if isnothing(archive_dir)
+        archive_dir = last_run_archive()
+        status = only(filter(startswith("status: "), readlines(RUN_DONE_FILE)))
+        occursin("ok", status) || @warn "Last run did not finish cleanly: $status"
+    else
+        isdir(archive_dir) || error("Archived directory $archive_dir does not exist.")
+    end
     site_dir = joinpath(SCENARIOS_DIR, archive_site(archive_dir))
     name = scenario_name(archive_dir)
     target_dir = joinpath(site_dir, name)
@@ -179,4 +184,7 @@ end
 # include to archive alongside the existing scenario instead of replacing it.
 unique_scenario = @isdefined(UNIQUE_SCENARIO) ? UNIQUE_SCENARIO : false
 UNIQUE_SCENARIO = false
-move_scenario(overwrite = true, unique = unique_scenario)
+# Same for `SCENARIO_ARCHIVE = "output/archives/<stamp>"`: move that run instead of the last one.
+scenario_archive = @isdefined(SCENARIO_ARCHIVE) ? SCENARIO_ARCHIVE : nothing
+SCENARIO_ARCHIVE = nothing
+move_scenario(archive_dir = scenario_archive, overwrite = true, unique = unique_scenario)

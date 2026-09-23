@@ -130,6 +130,12 @@ Base.@kwdef struct WinchParams
     # predicted power is an UPPER BOUND, not a prediction of this k_v law -- see
     # TrajOptSettings.opt_winch_mode.
     winch_mode::Union{String, Nothing} = nothing
+    # Sharpness [s/m] of the soft reel-speed clamp at `v_max`, the server-side
+    # mirror of `calc_vro_soft`'s `_clamp_v_sat` (`WCSettings.v_sat_beta`): the
+    # tension then rises to `f_max` AT `v_max`, as the controller's curve does,
+    # instead of ending at the `v_max` speed bound. Needs `v_max` or `p_max`;
+    # `nothing` keeps the plain law, i.e. a hard clamp.
+    v_sat_beta::Union{Float64, Nothing} = nothing
 end
 
 "The four-field winch of the original contract; `v_max`/`p_max` stay unset."
@@ -382,34 +388,36 @@ Identity of a request as the SERVER sees it: every field of `p` except `name`,
 which is the caller's label for the run and not part of the problem.
 
 EVERY field has to be in here. A field left out is a false hit — a failure
-recorded under one turn radius, depower mode or pattern box would block a
+recorded under one turn radius, depower mode or winch curve would block a
 request that differs in exactly that, which is the one bug this cache must not
-have. Hence the `"v2-"` prefix: it was grown on 2026-08-19 for the depower /
-turn-radius / pattern-limits fields (and for `alpha` and the `heights`/`speeds`
-of the fitted profiles, which the first version also missed), and the prefix
-retires the entries written under the narrower key rather than reusing them.
+have. The hand-written field list of `"v2-"` missed six winch fields
+(`softplus_beta`, `softminus_beta`, `use_awe_trim`, `v_reel_in`,
+`reel_in_beta`, `winch_mode`), so `"v3-"` walks the structs instead
+([`_key_fields`](@ref)): a field added to any request struct is in the key
+without anyone having to remember it. The prefix retires the entries written
+under the narrower keys rather than reusing them.
+
+The project is NOT part of the key, and needs not be: the server sees only the
+request, so two projects that send the same request pose the same problem and
+share the entry. What the key cannot see is the server's own configuration
+(kite, tether, solver defaults) — clear the cache after an AWETrim upgrade.
 
 `hash` is not stable across Julia versions either, so an upgrade invalidates the
 cache. That is a cache MISS — one wasted solve, then the entry is rewritten —
 never a false hit, since a key that does not match is simply not found.
 """
 function opt_request_key(p::InitParams)
-    w = p.winch_params
-    c = p.inflow_conditions
-    d = p.depower
-    b = p.pattern_limits
-    h = hash((p.length, p.input_depower, p.reg_weight, p.detect_simple_bounds,
-              w.mode, w.k_v, w.f_min, w.f_max, w.v_max, w.p_max, w.optimize_k_v,
-              c.wind_speed, c.wind_direction, c.profile_law, c.alpha, c.z0,
-              c.turbulence, c.heights, c.speeds,
-              p.trajectory.azimuth, p.trajectory.elevation,
-              d === nothing ? nothing : (d.mode, d.value),
-              p.min_turn_radius,
-              b === nothing ? nothing : (b.azimuth_max, b.elevation_min,
-                                         b.elevation_max, b.azimuth_amplitude_min,
-                                         b.elevation_amplitude_max)))
-    return "v2-" * string(h; base = 16)
+    h = hash(Tuple(_key_fields(getfield(p, f)) for f in fieldnames(InitParams) if f !== :name))
+    return "v3-" * string(h; base = 16)
 end
+
+# Request structs flattened to nested tuples of their field VALUES, for `hash`.
+# Hashing the structs themselves would not do: the default `hash` of a struct
+# holding a `Vector` goes by the vector's identity, not its contents, so two
+# equal requests would never share a key.
+_key_fields(x::Union{WinchParams, InflowConditions, Trajectory, DepowerSpec, PatternLimits}) =
+    Tuple(_key_fields(getfield(x, f)) for f in fieldnames(typeof(x)))
+_key_fields(x) = x
 
 """
     opt_failures(; file = OPT_FAILURE_CACHE) -> Dict{String, Any}
@@ -800,6 +808,15 @@ counterpart. See `data/wc_settings.yaml`.
 const AWETRIM_SOFTMINUS_BETA = 1e-3
 
 """
+Whether [`winch_from_wc`](@ref) sends `v_sat_beta`. Needs an AWETrim whose
+`Winch.radial_equation` blends in the speed form `v = V(F)` near `v_max`
+(2026-09-23): with the plain equality `F = T(v)` the clamped curve is nearly
+vertical there, and the 7 m/s Cabauw startup solve at 150 m failed in IPOPT.
+With the blend it converges at 3, 4, 5, 7 and 10 m/s.
+"""
+const SEND_V_SAT_BETA = true
+
+"""
     winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing) -> WinchParams
 
 The winch law of a run, from the `WinchControllers.WCSettings` its
@@ -855,11 +872,21 @@ the local one, since `Winch.tension_curve` blends in the forward direction),
 so a run that reels in locally optimizes against a server winch model that
 can do the same. `wc.use_awe_trim` defaults to `0.0`, leaving the server's
 plain law unchanged unless `data/wc_settings.yaml` opts in.
+
+`v_sat_beta` is sent only while [`SEND_V_SAT_BETA`](@ref) is on, and then only when
+the local law really soft-clamps at the same speed the
+server is bounded by: `force_limit = "soft"` (only `calc_vro_soft` applies the
+clamp), a finite `wc.v_sat_beta` (`Inf` is a hard clamp, the server's plain law)
+and `v_max == wc.v_sat`. The server's tension curve then rises to `f_max` at
+`v_max` like the controller's, instead of ending at about 6.9 kN there.
 """
 winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
               f_max = wc.f_high_awe_trim > 0 ? wc.f_high_awe_trim : wc.f_high,
               use_awe_trim = wc.use_awe_trim, winch_mode = nothing) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
+                v_sat_beta = SEND_V_SAT_BETA && wc.force_limit == "soft" && isfinite(wc.v_sat_beta) &&
+                             v_max !== nothing && v_max == wc.v_sat ?
+                             Float64(wc.v_sat_beta) : nothing,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),

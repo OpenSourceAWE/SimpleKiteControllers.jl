@@ -102,7 +102,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                ylims::Union{Nothing, Tuple} = nothing)
     # Load settings and log; the system project is either the caller's own
     # resolved path, or the scenario folder's own copy
-    scenario_project = something(project, scenario_system_file(scenario_dir))
+    scenario_project = isnothing(project) ? scenario_system_file(scenario_dir) : project
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_dir)
 
@@ -191,7 +191,7 @@ in `scenario_dir`. Loads the flight log from `scenario_dir`, the same way
 function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                    project::Union{Nothing, AbstractString} = nothing,
                                    log_name::Union{Nothing, AbstractString} = nothing)
-    scenario_project = something(project, scenario_system_file(scenario_dir))
+    scenario_project = isnothing(project) ? scenario_system_file(scenario_dir) : project
 
     # Find and load the .arrow log file
     if isnothing(log_name)
@@ -311,7 +311,7 @@ function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
                              project::Union{Nothing, AbstractString} = nothing,
                              log_name::Union{Nothing, AbstractString} = nothing,
                              opt_depower_log = nothing)
-    scenario_project = something(project, scenario_system_file(scenario_dir))
+    scenario_project = isnothing(project) ? scenario_system_file(scenario_dir) : project
 
     if isnothing(log_name)
         arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
@@ -402,7 +402,7 @@ does — see its docstring for `project`/`log_name`/`disp` semantics.
 function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                     project::Union{Nothing, AbstractString} = nothing,
                                     log_name::Union{Nothing, AbstractString} = nothing)
-    scenario_project = something(project, scenario_system_file(scenario_dir))
+    scenario_project = isnothing(project) ? scenario_system_file(scenario_dir) : project
 
     if isnothing(log_name)
         arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
