@@ -1267,4 +1267,110 @@ end
         st = Phase5MarginState()
         @test isnan(st.margin) && !st.warned
     end
+
+    @testset "check_reelout_feasibility" begin
+        import SimpleKiteControllers: TurnRateTable
+
+        # A synthetic table (same idiom as the interpolation testset above): two
+        # rows only, so the pattern's own depower (0.26) and phase 5's
+        # (depower_final = 0.33) resolve to known, distinct coefficients, and
+        # nothing here depends on the fitted table's numbers.
+        bd = [0.0, 0.0, 40.0]
+        entries = [
+            (body_damping = bd, depower = 0.26, c1 = 0.27, c2 = -0.09, delay = 0.05,
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
+            (body_damping = bd, depower = 0.33, c1 = 0.21, c2 = -0.07, delay = 0.05,
+             c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
+        ]
+        synthetic = TurnRateTable(
+            Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
+                              :l_tether => 200.0, :dt => 0.05), entries)
+        old = SimpleKiteControllers._TURN_RATE_TABLE[]
+        SimpleKiteControllers._TURN_RATE_TABLE[] = synthetic
+        try
+            fec = _make_test_controller(el_center = 45.0)
+            fcs = FC_Settings(; body_damping = bd, depower_setpoint = 0.26,
+                              depower_final = 0.33, reelout_l_max = 300.0,
+                              max_steering = 0.32, min_elevation = 20.0,
+                              el_offset_final = 5.0, attractor_dist = 6.0,
+                              v_app_ref = 20.0)
+            tos = TrajOptSettings(; candidate_elevation_margin = 2.0,
+                                  min_height = 0.0, min_feasibility_margin = 1.0)
+            l_tether = 150.0
+
+            feas = check_reelout_feasibility(fec, fcs, tos; l_tether)
+
+            # The pattern's own coefficients, straight off the (synthetic) table.
+            @test feas.c1 == 0.27 && feas.c2 == -0.09 && feas.delay == 0.05
+
+            # feas_start/feas_end reproduce check_pattern_feasible at the starting
+            # length and at reelout_l_max with that c1 -- not a re-derivation, the
+            # SAME computation the function itself did.
+            @test feas.feas_start == check_pattern_feasible(fec, l_tether,
+                fcs.max_steering; c1 = feas.c1, prn = false)
+            @test feas.feas_end == check_pattern_feasible(fec, fcs.reelout_l_max,
+                fcs.max_steering; c1 = feas.c1, prn = false)
+            # A fixed (azimuth, elevation) path only gets easier as the tether grows.
+            @test feas.feas_end.margin > feas.feas_start.margin
+
+            # Phase 5's own coefficient (depower_final != depower here, so it is
+            # looked up separately) and its margin, scored on the path LIFTED by
+            # el_offset_final at reelout_l_max.
+            @test feas.c1_final == 0.21
+            @test feas.feas_final == check_pattern_feasible(fec.az_path,
+                fec.el_path .+ fcs.el_offset_final, fcs.reelout_l_max,
+                fcs.max_steering; c1 = feas.c1_final, prn = false)
+
+            # c1_at, exercised against a REAL result rather than a hand-built one.
+            @test c1_at(feas, 4) == feas.c1
+            @test c1_at(feas, 5) == feas.c1_final
+
+            # Flying the pattern AT depower_final: the separate phase-5 lookup is
+            # skipped (coeffs_final = coeffs), so c1_final equals the pattern's own
+            # c1 -- by construction, not by a repeated table lookup.
+            feas_same = check_reelout_feasibility(fec, fcs, tos; l_tether,
+                                                   depower = fcs.depower_final)
+            @test feas_same.c1 == 0.21
+            @test feas_same.c1_final == feas_same.c1
+
+            # Ground clearance is a WARNING, not a refusal, and does not touch the
+            # returned coefficients: below the floor still returns the same c1.
+            low_h = path_min_height(fec, l_tether)
+            tos_tight = TrajOptSettings(; candidate_elevation_margin = 2.0,
+                                        min_height = low_h + 1,
+                                        min_feasibility_margin = 1.0)
+            feas_tight = @test_logs (:warn, r"lowest point") match_mode = :any check_reelout_feasibility(
+                fec, fcs, tos_tight; l_tether)
+            @test feas_tight.c1 == feas.c1
+            # Comfortably above the floor: the same check this time finds `ok`, so
+            # no warning is due -- checked directly, not by asserting log silence.
+            tos_clear = TrajOptSettings(; candidate_elevation_margin = 2.0,
+                                        min_height = low_h - 1,
+                                        min_feasibility_margin = 1.0)
+            @test check_pattern_height(fec, l_tether, tos_clear.min_height;
+                                       prn = false).ok
+            feas_clear = check_reelout_feasibility(fec, fcs, tos_clear; l_tether)
+            @test feas_clear.c1 == feas.c1
+
+            # A depower the table cannot serve costs the diagnosis, not the run: a
+            # warning, and every field back to its NaN/nothing default.
+            feas_bad = @test_logs (:warn, r"No turn-rate coefficients") match_mode = :any check_reelout_feasibility(
+                fec, fcs, tos; l_tether, depower = 0.99)
+            @test isnan(feas_bad.c1) && isnan(feas_bad.c2) && isnan(feas_bad.delay)
+            @test isnothing(feas_bad.feas_start) && isnothing(feas_bad.feas_end)
+            @test isnan(feas_bad.c1_final) && isnothing(feas_bad.feas_final)
+
+            # depower_final alone unservable: the pattern gates still compute, only
+            # phase 5 is warned and left unchecked -- c1_at then falls back to the
+            # pattern's own c1 from phase 5 on, exactly as its docstring promises.
+            fcs_no_final = FC_Settings(fcs; depower_final = 0.99)
+            feas_nf = @test_logs (:warn, r"phase 5 flies UNCHECKED") match_mode = :any check_reelout_feasibility(
+                fec, fcs_no_final, tos; l_tether)
+            @test feas_nf.c1 == feas.c1
+            @test isnan(feas_nf.c1_final) && isnothing(feas_nf.feas_final)
+            @test c1_at(feas_nf, 5) == feas_nf.c1
+        finally
+            SimpleKiteControllers._TURN_RATE_TABLE[] = old
+        end
+    end
 end
