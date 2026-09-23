@@ -21,3 +21,4 @@ notebooks/images/
 /.claude/settings.local.json
 docs/.$flight_path_controller.drawio.bkp
 docs/.$flight_path_controller2.drawio.bkp
+test/Manifest.toml
