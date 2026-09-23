@@ -15,8 +15,9 @@ The export inlines every image, but not the interactive 3D-path pages
 into an iframe by bare file name, so they are copied next to the export here, and `publish.jl`
 copies them next to `index.html` (their list is left in `PATH3D_FILES` for it). That keeps the
 page itself at ~8 MB instead of ~50, and only the selected wind speed's WebGL page ever loads.
-`SITE` names the site folder the notebook's images live in (`results.jl` shows the Maasvlakte
-runs, so it defaults to `maasvlakte`; override with `SLATE_SITE`).
+`SITE` names the site folder the notebook's images live in: `cabauw` for the `results_cabauw`
+notebook, `maasvlakte` (shown by `results`) otherwise; override with `SLATE_SITE`. The export
+goes to `output/export_<site>/`, since both sites' 3D-path pages share the same file names.
 """
 
 using Downloads
@@ -33,9 +34,10 @@ isdefined(Main, :NOTEBOOK) && NOTEBOOK !== nothing ||
 isdefined(Main, :HUB_URL) && HUB_URL !== nothing ||
     (HUB_URL = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"))
 isdefined(Main, :SITE) && SITE !== nothing ||
-    (SITE = get(ENV, "SLATE_SITE", "maasvlakte"))
+    (SITE = get(ENV, "SLATE_SITE", NOTEBOOK == "results_cabauw" ? "cabauw" : "maasvlakte"))
+# One folder per site: both sites' 3D-path pages share the same file names.
 isdefined(Main, :EXPORT_OUTPUT_PATH) && EXPORT_OUTPUT_PATH !== nothing ||
-    (EXPORT_OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "$(NOTEBOOK)_export.html"))
+    (EXPORT_OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "export_$SITE", "$(NOTEBOOK)_export.html"))
 
 url = "$HUB_URL/api/$NOTEBOOK/export.html?dl=1"
 mkpath(dirname(EXPORT_OUTPUT_PATH))

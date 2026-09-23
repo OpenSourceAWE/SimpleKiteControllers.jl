@@ -74,6 +74,7 @@ wc_settings:
   force_limit:      "soft" # "soft" (optimizer's tension curve) | "hard" (two limiters); winch_kv_table.yaml overrides
   softplus_beta:    0.001  # corner sharpness of the UPPER limit; larger = sharper [1/N]
   softminus_beta:   0.03   # corner sharpness of the LOWER limit, local law only; AWETrim is pinned to 1e-3 [1/N]
+  v_sat_beta:       10.0   # corner sharpness of the v_sat clamp; .inf = hard clamp [s/m]
   soft_lfc:         true   # also replace the LowerForceController with a reel-in line
   v_reel_in:        -2.0   # reel-in speed at zero force [m/s]
   reel_in_beta:     20.0   # sharpness of the line/curve handover; needs * kv * sqrt(f_low) >= 8 everywhere [s/m]

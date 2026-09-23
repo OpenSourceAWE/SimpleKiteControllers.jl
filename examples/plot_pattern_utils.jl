@@ -15,6 +15,19 @@ create_plots.jl while keeping the interactive script's structure intact.
 # using SimpleKiteControllers
 
 """
+    scenario_system_file(scenario_dir) -> String
+
+The one `system_*.yaml` copy in an archived scenario folder, whatever the site
+(`system_reelout_cabauw.yaml`, `system_reelout_maasvlakte.yaml`, …).
+"""
+function scenario_system_file(scenario_dir::AbstractString)
+    files = filter(f -> startswith(f, "system_") && endswith(f, ".yaml"), readdir(scenario_dir))
+    length(files) == 1 ||
+        error("Expected one system_*.yaml in $scenario_dir, found $(length(files)); pass `project` explicitly")
+    return joinpath(scenario_dir, only(files))
+end
+
+"""
     load_opt_paths(scenario_dir, log_name; phases = (0, 3, 4), t_max = Inf) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
 
 The optimizer's uncorrected paths of an optimized reel-out run, from the
@@ -62,7 +75,7 @@ end
 Plot the azimuth/elevation flight pattern for a scenario in `scenario_dir`
 (flown path vs. attractor reference, or vs. optimizer-raw if available).
 Loads the flight log from `scenario_dir`. The system project defaults to
-`scenario_dir`'s own `system_reelout_maasvlakte.yaml` copy, present in an archived
+`scenario_dir`'s own `system_*.yaml` copy, present in an archived
 scenario folder (`output/scenarios/<name>` or `output/archives/<run>`); pass
 `project` explicitly for a live run in `output/`, whose project file lives in
 `data/` and is never copied there. When `disp=false`, the figure is created
@@ -89,7 +102,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                ylims::Union{Nothing, Tuple} = nothing)
     # Load settings and log; the system project is either the caller's own
     # resolved path, or the scenario folder's own copy
-    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_maasvlakte.yaml"))
+    scenario_project = something(project, scenario_system_file(scenario_dir))
     project_set = Settings(scenario_project)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_dir)
 
@@ -178,7 +191,7 @@ in `scenario_dir`. Loads the flight log from `scenario_dir`, the same way
 function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                    project::Union{Nothing, AbstractString} = nothing,
                                    log_name::Union{Nothing, AbstractString} = nothing)
-    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_maasvlakte.yaml"))
+    scenario_project = something(project, scenario_system_file(scenario_dir))
 
     # Find and load the .arrow log file
     if isnothing(log_name)
@@ -298,7 +311,7 @@ function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
                              project::Union{Nothing, AbstractString} = nothing,
                              log_name::Union{Nothing, AbstractString} = nothing,
                              opt_depower_log = nothing)
-    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_maasvlakte.yaml"))
+    scenario_project = something(project, scenario_system_file(scenario_dir))
 
     if isnothing(log_name)
         arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))
@@ -389,7 +402,7 @@ does — see its docstring for `project`/`log_name`/`disp` semantics.
 function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = true,
                                     project::Union{Nothing, AbstractString} = nothing,
                                     log_name::Union{Nothing, AbstractString} = nothing)
-    scenario_project = something(project, joinpath(scenario_dir, "system_reelout_maasvlakte.yaml"))
+    scenario_project = something(project, scenario_system_file(scenario_dir))
 
     if isnothing(log_name)
         arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_dir))

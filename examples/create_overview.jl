@@ -4,8 +4,10 @@
 """
 Write `SimulationResults/scenarios/<site>/overview.md`, `site` the active
 project's (`cabauw` or `maasvlakte`, see `scenario_site` in `gui_state.jl`,
-mirroring `output/scenarios/<site>/`): a table with one row per `vNN`
-scenario folder (`v03`…`v10`, excluding `v08_2` — same wind speed as `v08`),
+mirroring `output/scenarios/<site>/`): a table with one row per wind speed,
+i.e. per `vNN` scenario folder with any `_N` repeat-run suffix ignored
+(`v05.75` and `v05.75_2` give one row, from the unsuffixed folder if it has a
+usable summary, else the first suffixed one),
 read from each folder's own run-summary YAML `summary:` block (the one named
 by the folder's `.arrow` log, `reelout_150m_opt.yaml` at Maasvlakte,
 `reelout_cabauw_opt.yaml` at Cabauw).
@@ -55,7 +57,6 @@ using SimpleKiteControllers: skc_data_path
 include(joinpath(@__DIR__, "gui_state.jl"))
 
 const SIMRESULTS_SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
-const SKIPPED_FOLDERS = ("v08_2",)
 const MAX_TETHER_FORCE_N =
     YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
 # yaml key => displayed column header
@@ -208,10 +209,11 @@ function create_overview()
     site = scenario_site()
     scenarios_dir = joinpath(SIMRESULTS_SCENARIOS_DIR, site)
     isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
-    dirs = filter(readdir(scenarios_dir; join = true)) do dir
-        isdir(dir) && basename(dir) ∉ SKIPPED_FOLDERS
-    end
-    summaries = filter(!isnothing, scenario_summary.(dirs))
+    dirs = filter(isdir, readdir(scenarios_dir; join = true))
+    found = filter(!isnothing ∘ last, [dir => scenario_summary(dir) for dir in dirs])
+    # readdir sorts `v05.75` before `v05.75_2`, so `unique` keeps the unsuffixed run
+    found = unique(p -> replace(basename(first(p)), r"_\d+$" => ""), found)
+    summaries = last.(found)
     isempty(summaries) && error("No usable summary: blocks found in $scenarios_dir")
 
     rows = sort(summaries; by = row -> row["wind_speed_gnd"])

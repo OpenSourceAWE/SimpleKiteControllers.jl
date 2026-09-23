@@ -36,6 +36,7 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [sources]
 SimpleKiteControllers = {path = ".."}
 V3Kite = {rev = "v1.3.0", url = "https://github.com/OpenSourceAWE/V3Kite.jl"}
+WinchControllers = {path = "/home/ufechner/repos/WinchControllers"}
 
 [compat]
 KiteViewers = "0.6"
