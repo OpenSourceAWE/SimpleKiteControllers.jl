@@ -50,5 +50,6 @@ using Test
     include("test_fig8_controller.jl")
     include("test_course_controller.jl")
     include("test_optimization.jl")
+    include("test_reelout_metrics.jl")
 end
 nothing
