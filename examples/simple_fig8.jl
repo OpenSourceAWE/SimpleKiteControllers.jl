@@ -61,6 +61,11 @@ Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 | `var_07` | entry descent limiter weight (0 = raw guidance, 1 = fully limited) |
 | `var_08` | course/heading blend weight (0 = heading, 1 = course) |
 | `var_09` | span-mean geometric AoA [deg]             |
+| `var_11` | curvature feed-forward steering `u_ff` [-] |
+| `var_13` | feed-forward chord correction `chi_ff` [deg] |
+
+`var_10` and `var_12` stay unused: `fig8_metrics.jl` reads them as the reel-out
+length setpoint and winch state and relies on a figure-eight run leaving them at 0.
 
 Not a `var_XX` slot: `fig_8` (0 before phase 4, 1 at first entry, +1 per lap
 after) carries the live lap count, `SysState`'s field of that name. `cycle`
@@ -72,6 +77,18 @@ reel-in phase to count cycles over.
 is kept in `var_05`. `var_06`/`var_08` are `CourseController`'s regulated error
 and heading/course blend weight — see that file's `calc_steering` docstring for
 the feedback-angle fusion and gain schedule behind them.
+
+# Steering feed-forward
+
+With `ff_gain > 0` in `data/fc_settings.yaml` the PID is helped by a curvature
+feed-forward from phase 4 on, the same law `simple_opt_reelout.jl` flies: the
+path's own course rate `ff_lead_time` ahead of Q, inverted through the turn-rate
+law, `u_ff = ff_gain * psi_dot_path / (c1 * v_app)`, plus the chord correction
+`chi_ff` subtracted from the commanded course so the guidance does not ask the
+PD for the same turn a second time. Both are faded out off the path
+(`ff_d_fade`, `ff_err_fade`) and low-passed over `ff_tau`; see
+`FC_Settings.ff_gain` for the rationale. It needs `c1`, so it is OFF when
+`turn_rate_coeffs` has no cell for this `body_damping`/`depower_setpoint`.
 
 The `sys_state` field carries `CourseController`'s ENTRY STATE MACHINE (0 park,
 1 dive, 2 hold, 3 transition, 4 fig8 — this script never reaches 5, which is
@@ -312,6 +329,14 @@ idx_prev = Ref(fec.last_idx)
 idx_progress = Ref(0.0)
 n_path = length(fec.az_path)
 
+# Low-pass state of the steering feed-forward; Refs for the same soft-scope reason.
+ff_u_filt = Ref(0.0)    # [-]   feed-forward steering
+ff_chi_filt = Ref(0.0)  # [rad] chord correction
+if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
+    @warn "ff_gain = $(fcs.ff_gain), but there is no turn-rate coefficient c1 — \
+           flying WITHOUT steering feed-forward."
+end
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -334,11 +359,33 @@ try
         # fusion, PID and rel_depower: see CourseController.
         heading = Float64(s.sys_state.heading)
         local v_kite = norm(s.sys_state.vel_kite)
+
+        # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.
+        local u_ff = 0.0
+        local chi_ff = 0.0
+        if fcs.ff_gain > 0 && cc.phase >= 4 && isfinite(c1) && c1 > 0
+            local v_app_ff = max(Float64(s.sys_state.v_app), fcs.v_app_min)
+            local speed_ff = rad2deg(v_kite / Float64(s.sys_state.l_tether[1]))  # [deg/s]
+            if speed_ff > 0
+                local psi_dot_ff = path_turn_rate(fec, fcs.ff_lead_time * speed_ff, speed_ff;
+                                                  smooth = fcs.ff_smooth)
+                # Faded out when the kite is not on this branch (a Q swap hands it the other lobe's curvature).
+                local fade_d = clamp((fcs.ff_d_fade - dmin) / (0.5 * fcs.ff_d_fade), 0.0, 1.0)
+                local fade_e = clamp((deg2rad(fcs.ff_err_fade) - abs(cc.err)) /
+                                     (0.5 * deg2rad(fcs.ff_err_fade)), 0.0, 1.0)
+                local g_ff = fcs.ff_gain * fade_d * fade_e
+                local alpha_ff = fcs.ff_tau > 0 ? s.dt / (s.dt + fcs.ff_tau) : 1.0
+                ff_u_filt[] += alpha_ff * (g_ff * psi_dot_ff / (c1 * v_app_ff) - ff_u_filt[])
+                ff_chi_filt[] += alpha_ff * (g_ff * path_chord_offset(fec) - ff_chi_filt[])
+                u_ff = ff_u_filt[]
+                chi_ff = ff_chi_filt[]
+            end
+        end
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
-            dmin, tangent = path_tangent(fec))
+            dmin, tangent = path_tangent(fec), u_ff, chi_ff)
         chi_cmd = cc.chi_cmd
         w_lim = cc.w_lim
         w_course = cc.w_course
@@ -396,6 +443,8 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        s.sys_state.var_11 = u_ff              # feed-forward steering [-]
+        s.sys_state.var_13 = rad2deg(chi_ff)   # feed-forward chord correction [deg]
         s.sys_state.fig_8 = Int16(fig8[])      # live lap count
         # Not filled anywhere in the model chain: without this the log and the viewer read 0.
         s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd

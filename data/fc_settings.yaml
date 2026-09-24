@@ -66,6 +66,14 @@ fc_settings:
   fig8_pure_course:   false    # Course alone from phase 3 on; schedule governs entry
   max_steering:       0.32     # Command limit; raising it is CLOSED, see the log    [-]
 
+  # --- steering feed-forward from the path's curvature, phase 4 only --------
+  ff_gain:            1.0      # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off [-]
+  ff_lead_time:       0.3     # Read the path's course rate this far ahead of Q; ~the dead time [s]
+  ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
+  ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
+  ff_d_fade:          6.0      # Cross-track error at which the ff is fully off; fades from half [deg]
+  ff_err_fade:        60.0     # Course error at which the ff is fully off; fades from half  [deg]
+
   # --- entry descent limiter ------------------------------------------------
   entry_chi_max:      95.0     # Steepest course while off-path; 180 disables it   [deg]
   entry_d_gate:       12.0     # Cross-track error below which it is bypassed     [deg]
