@@ -38,7 +38,8 @@ traj_opt:
     pattern_elevation_max: 0.0
     pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
     pattern_azimuth_amplitude_min: 0.0
-    pattern_elevation_amplitude_max: 8.0   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg]
+    pattern_elevation_amplitude_max: 8.5   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg];
+                                           # 8.0 left Maasvlakte 3.5 m/s infeasible at 8.12° (2026-09-24)
     pattern_elevation_amplitude_max_high:     11.0  # cap at/above the ref wind (a step, not a ramp) [deg]
     pattern_elevation_amplitude_max_wind_ref: 13.2  # wind AT the height below at/above which the high cap
                                                     # applies: Maasvlakte 10 m/s is 12.9 there and flies under
