@@ -64,7 +64,8 @@ torque [N·m] for `step!`'s `set_torque`. Replaces the `set_length` keyword
 ([`winch_acc_limit`](@ref)), which is what `step!` defaulted it to. `v_ff` [m/s]
 is the speed feed-forward: a caller integrating a speed setpoint into
 `set_length` should pass that same speed, or the outer P loop has to rediscover
-it from a length error at a cost of `1/kp_pos` of lag.
+it from a length error at a cost of `1/kp_pos` of lag. The plant's drum inertia
+is passed along for the acceleration feed-forward, which `wpc.acc_ff` scales.
 """
 function winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
                        v_ff = 0.0, speed_limit = Inf,
@@ -73,7 +74,8 @@ function winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
     return winch_position_torque!(wpc, set_length, unstretched_length(s),
                                   reel_out_speed(s), winch_force(s),
                                   r, G, friction, s.dt,
-                                  speed_limit, acceleration_limit; v_ff)
+                                  speed_limit, acceleration_limit; v_ff,
+                                  inertia = s.sys.winches[1].inertia_total)
 end
 
 """

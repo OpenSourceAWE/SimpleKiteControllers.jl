@@ -24,6 +24,7 @@ wc_settings:
   winch_speed_ti:     2.0    # Inner speed-loop integral time [s]; larger = weaker
   winch_torque_limit: 500.0  # Saturation of the inner loop's torque correction [N*m]
   winch_ff_scale:     1.0    # Force feed-forward [-]; 1.0 is a perfectly stiff drum
+  winch_acc_ff:       1.0    # Acceleration feed-forward J*a*G/r [-]; 0.0 = off
 
   # --- TORQUE: force mode; unused here, at compliance > 0 fc_settings.yaml supplies these via winch_force_gains
   winch_force_tau:  10.0     # Reference-force low-pass time constant [s]
