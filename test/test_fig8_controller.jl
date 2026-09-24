@@ -1040,8 +1040,10 @@ end
         @test tos.guess_el_center == 29.0
         # 8° -> 10° at 11 m/s: the 8° cap that closes the tall basin below 11 m/s
         # cannot hold the 17.3°-tall figure that IS the good basin there (2026-09-21).
-        @test tos.pattern_elevation_amplitude_max == 8.0
-        @test tos.pattern_elevation_amplitude_max_high == 10.0
+        # 8° -> 8.5°: Maasvlakte 3.5 m/s needs 8.12° (2026-09-24).
+        @test tos.pattern_elevation_amplitude_max == 8.5
+        # 10° -> 11°: Cabauw 10 at f_high 7200 N needs 10.5-10.7° at 150 m (2026-09-23).
+        @test tos.pattern_elevation_amplitude_max_high == 11.0
         # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
         @test tos.pattern_elevation_amplitude_max_wind_ref == 13.2
         @test tos.pattern_elevation_amplitude_max_wind_height == 100.0
