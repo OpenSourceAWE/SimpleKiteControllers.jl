@@ -5912,3 +5912,62 @@ everywhere, and up 3.9-6.2 % at Cabauw 5.75-6.25. Worst margin is Cabauw 10 m/s 
 The Cabauw curve dips at 7 m/s (21.2 kW between 22.1 at 6.25 and 22.3 at 8, power
 ratio 0.86); it did before too, less so. `cabauw/v05.75_2` is a 09-22 duplicate that a
 power-curve plot will show as a second 5.75 m/s point.
+
+## 2026-09-24 — Winch acceleration feed-forward; low-wind elevation cap 8.5°
+
+**The start peak was the drum's inertia.** At reel-out release the force is already at
+`reelout_f_trigger` (6.4-6.6 kN in every run); what came on top was the drum lagging
+its setpoint. `winch_position_torque!` fed forward only the static load and friction,
+so the inner speed PI had to build up an error before the drum accelerated — and the
+drum is heavy: `inertia_total` 0.408 kg·m² at r = 0.1615 m, G = 6.2 is ~600 kg at the
+drum surface. The 2.48 s force filter is NOT part of it: `calc_v_set` is first called at
+release and `LowPass` passes its first sample through, so the filter starts at the
+release force. New in WinchControllers: `winch_acc_ff` (`WCSettings`, default 0),
+adding `acc_ff·J·a_ref·G/r` with `a_ref` the slope of the rate-limited setpoint;
+the adapter passes the plant's `inertia_total`. On here: `wc_settings.yaml` 1.0.
+
+Maasvlakte 9 m/s, both flown in the same Julia 1.13 REPL:
+
+| | ff off (`_052518`) | ff on (`_052021`) |
+|---|--:|--:|
+| max F, first 1 s after release | 7887 N | 6520 N |
+| max F, whole run | 7922 N at +3.3 s | 7687 N at +26.8 s (a lap swing) |
+| speed error, fig-8 RMS / max after release | 0.039 / 1.28 m/s | 0.004 / 0.11 m/s |
+| power ph. 4 | 21 400 W | 22 136 W |
+
+The off run reproduces the 1.12 scenario's forces to 2 N. Power is less clean: the
+off run already sits 3 % above the 1.12 scenario, and the two installed 2 vs 3 paths.
+Cabauw 10 m/s is unchanged (8210 N vs 8209 N): its peak is a lap swing at `v_sat`.
+
+**Julia 1.12 never saw the WinchControllers checkout.** `Manifest-v1.12.toml` pins the
+registered WinchControllers 0.6.1, not the `[sources]` path the 1.13 manifest has, so
+every 1.12 run so far flew 0.6.1 — harmless for the soft law, which 0.6.1 has, but a
+new `WCSettings` field fails to load there. These runs are on 1.13.
+
+**Maasvlakte 3.5 m/s had not started since 09-22.** Re-flown, its startup solve was
+infeasible: the figure needs an elevation half-span of 8.12° against the 8° low-wind cap,
+with the 16.9 m turn radius, steering, steering rate and AoA 14° all binding — the
+startup radius sized at the flown depower (09-22) asks for a taller figure than the
+09-20 archive flew. `pattern_elevation_amplitude_max` 8 -> 8.5°.
+
+All 22 scenarios re-flown with ff 1.0 (cap 8.5° where the low cap applies), all 10
+passed at every one; phase-4 mean power and max force now:
+
+| wind | Cabauw power | Cabauw max F | Maasvlakte power | Maasvlakte max F |
+|---|--:|--:|--:|--:|
+| 3.0 / 3.5 | 2 046 W | 2043 N | 820 W | 1538 N |
+| 4 | 6 527 W | 3514 N | 1 521 W | 1738 N |
+| 5 | 14 065 W | 5721 N | 3 774 W | 2956 N |
+| 5.5 | 18 960 W | 6827 N | | |
+| 5.75 | 21 283 W | 7538 N | | |
+| 6 | 22 197 W | 7772 N | 7 330 W | 4189 N |
+| 6.25 | 22 082 W | 7809 N | | |
+| 7 | 21 294 W | 7223 N | 12 175 W | 5363 N |
+| 8 | 22 054 W | 7363 N | 18 339 W | 6387 N |
+| 8.25 | | | 20 056 W | 6779 N |
+| 8.5 | | | 21 396 W | 7686 N |
+| 9 | 23 497 W | 7768 N | 22 292 W | 7671 N |
+| 10 | 24 551 W | 8210 N | 19 983 W | 6742 N |
+| 11 | | | 19 767 W | 6876 N |
+
+Worst margin is still Cabauw 10 m/s at 190 N.
