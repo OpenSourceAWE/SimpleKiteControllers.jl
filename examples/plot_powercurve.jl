@@ -12,7 +12,7 @@ own run-summary YAML (`summary.av_power_ro`/`max_power_ro`/`min_power_ro`,
 `summary.v_ro_av`/`v_ro_max`/`v_ro_min`, all over the figure-eight flying
 phase, and `simulation.wind_speed`) rather than parsed out of the folder name,
 the same way `scenario_name` in `move_scenario.jl` does. Folders with no files
-in them are skipped. In every panel, max is dashed and min is dash-dotted
+in them, and `_N` repeat-run folders, are skipped. In every panel, max is dashed and min is dash-dotted
 (both grey); the force panel also carries a dotted black reference line at
 `MAX_TETHER_FORCE_N`, the winch's rated `max_force`, read from
 `settings_reelout_150m.yaml`.
@@ -25,7 +25,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using YAML, MakieControlPlots
+using YAML, GLMakie, MakieControlPlots
 using SimpleKiteControllers: skc_data_path
 # `selected_scenarios_dir`: the site folder of the active project.
 include(joinpath(@__DIR__, "gui_state.jl"))
@@ -86,8 +86,9 @@ dotted black `MAX_TETHER_FORCE_N` reference line in the force row.
 function plot_powercurve()
     scenarios_dir = selected_scenarios_dir()
     isdir(scenarios_dir) || error("$scenarios_dir does not exist.")
+    # `vNN_2`, `vNN_3`, ... are repeat runs (copy_scenario.jl); one point per wind speed, as in create_overview.jl.
     dirs = filter(readdir(scenarios_dir; join = true)) do dir
-        isdir(dir) && !isempty(readdir(dir))
+        isdir(dir) && !isempty(readdir(dir)) && !occursin(r"_\d+$", basename(dir))
     end
     isempty(dirs) && error("No non-empty scenario folders found in $scenarios_dir")
 

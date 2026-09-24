@@ -508,7 +508,7 @@ end
     startup_solve(params) -> (result, seed_trajectory)
 
 `/init` with `params`, the optional seeding solve at `opt_warm_start_awe_trim`,
-then the `/step` under the run's own winch. Throws the `HTTP.StatusError` of a
+then the `/step` under the first-lap winch, the one lap 1 flies. Throws the `HTTP.StatusError` of a
 422 unchanged; the caller decides whether that ends the run.
 """
 function startup_solve(params)
@@ -525,7 +525,7 @@ function startup_solve(params)
                                               reply.trajectory);
                                    url = tos.base_url).trajectory
     end
-    result = opt_step(StepParams(opt_length(l_set), winch, seed_trajectory);
+    result = opt_step(StepParams(opt_length(l_set), winch_first_lap, seed_trajectory);
                       url = tos.base_url)
     return result, seed_trajectory
 end

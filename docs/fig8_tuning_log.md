@@ -5840,5 +5840,75 @@ again to the watt. Regression, against the scenario each replaced:
 | wind | max F ph. 4 | mean F ph. 4 | power ph. 4 | ratio | RMS d | verdict |
 |---|--:|--:|--:|--:|--:|---|
 | Maasvlakte 10 m/s (`_201437`) | 7353 N (7587) | 6247 N (6424) | 20 272 W (20 226) | 0.83 (0.82) | 1.05° (1.22) | all 10 passed |
+| Cabauw 9 m/s (`_202448`) | 7884 N (8328) | 6980 N (7504) | 23 759 W (25 644) | 0.97 (0.95) | 1.27° (1.18) | all 10 passed |
+| Cabauw 8 m/s (`_203104`) | 7444 N (8284) | 6708 N (7196) | 22 610 W (24 405) | 0.91 (0.89) | 1.10° (1.10) | all 10 passed |
+| Cabauw 7 m/s (`_203543`) | 7496 N (8188) | 6466 N (7006) | 21 423 W (23 550) | 0.86 (0.86) | 0.91° (0.97) | all 10 passed |
 
-NOT yet re-flown: Cabauw 7, 8, 9 and Maasvlakte 9, 11 m/s.
+Cabauw 7-9 m/s pay 7.4-9.0 % of power for 444-840 N of extra headroom they did not
+need; 10 m/s is the only one the lower ceiling was for. The Cabauw curve is monotonic
+again (21.4 / 22.6 / 23.8 / 24.6 kW at 7-10 m/s, phase-4 mean), where 9 m/s used to
+sit above 10. A wind-dependent `f_high` would give 7-9 m/s their power back — the same
+trade the 09-21 entry noted for `f_high_awe_trim`.
+
+## 2026-09-24 — Maasvlakte 9 m/s over the limit in lap 1: `first_lap_force_frac` 0.93, and the startup `/step` now honours it
+
+With `f_high` 7200 N Maasvlakte 9 m/s failed `max force <= 8400 N` at 8955 N (`_025412`),
+power UP from 20.9 to 23.0 kW. Both overloads were on the startup path: 8955 N 0.9 s into
+phase 4 (L = 159 m, the lap-1 crossing) and 8546 N at 25.5 s; nothing above 8200 N once
+the first re-optimized path was installed at 31 s. The startup figure was ±25.5° wide,
+18.3° tall (the 09-21 archive: ±23.9°, 15.2°).
+
+**The initial guess is not the lever.** Probed on the optimizer alone, with the run's
+own startup request rebuilt in the REPL (it reproduces the flown 23 138 W to 12 W): ten
+guesses — centre 24-32°, `guess_a` 20-30°, `guess_b` 8-16° — all return ±25.2-26.0°,
+17.5-18.3°, 22.9-23.2 kW. A flown `guess_el_center_high` 28° confirmed it (`_030849`:
+23 138 W predicted, 8954 N) and was reverted. What sets the wide figure is the startup
+`min_turn_radius`, 23.6 m, sized at the flown depower since 09-22; the 09-21 archive
+predates that and was solved at the tighter radius. Caution for probing: after the
+startup solve the script overwrites `opt_r_min` with the re-optimization radius
+(16.6 m here), so a probe built from the post-run globals lands in a different,
+narrower basin — the first probe round did, and was wrong.
+
+**`first_lap_force_frac` never reached the startup path.** `startup_solve` sent
+`winch_first_lap` with `/init` but the `/step` whose reply is installed went out under
+the nominal `winch` — the startup RETRIES already used `winch_first_lap`. So the frac
+only de-rated the local law in lap 1, which is why the 09-21 entry saw the startup
+solve come back "IDENTICAL" at frac 0.9125. Fixed (`examples/simple_opt_reelout.jl`,
+the `/step` in `startup_solve`); a no-op at frac 1.0, where both winches are the same
+object. Probed at 0.93: 23 126 W, ±25.5° without the fix, 21 687 W, ±26.5° with it.
+
+| run | `first_lap_force_frac` | max F ph. 4 | power ph. 4 | ratio | RMS d | verdict |
+|---|--:|--:|--:|--:|--:|---|
+| Maasvlakte 9 m/s `_025412` | 1.0 | 8955 N | 23 047 W | 0.93 | 0.82° | FAILED |
+| **Maasvlakte 9 m/s (`scenarios/maasvlakte/v09`, 03:28)** | **0.93** | **7922 N** | **20 783 W** | 0.90 | 0.75° | **all 10 passed** |
+| **Cabauw 10 m/s (`scenarios/cabauw/v10`, 03:32)** | **0.93** | **8209 N** | **24 604 W** | 1.04 | 1.26° | **all 10 passed** |
+
+Cabauw 10 m/s moved by 37 N and 29 W against its 7200 N / frac 1.0 run, its startup
+converging from the shipped 30° seed at 6696 N. Maasvlakte 9 m/s is within 0.7 % of the
+09-21 archive's power. The frac applies at every wind speed, so every earlier regression
+row above predates it.
+
+Regression with frac 0.93, `f_high` 7200 N, cap 11°: every scenario whose peak force was
+above ~6700 N re-flown on 2026-09-24 and moved to `output/scenarios`. All 10 passed at all
+twelve; max F and power over phase 4 (previous scenario in brackets):
+
+| wind | Cabauw max F | Cabauw power | Maasvlakte max F | Maasvlakte power |
+|---|--:|--:|--:|--:|
+| 5.5 m/s | 6836 N (6911) | 18 897 W (18 681) | | |
+| 5.75 m/s | 7506 N (7229) | 21 261 W (20 464) | | |
+| 6.0 m/s | 7562 N (7618) | 21 920 W (20 872) | | |
+| 6.25 m/s | 7828 N (7956) | 22 136 W (20 848) | | |
+| 7 m/s | 7277 N (7496) | 21 228 W (21 423) | | |
+| 8 m/s | 7352 N (7444) | 22 311 W (22 610) | 6268 N (6639) | 18 043 W (18 627) |
+| 8.25 m/s | | | 6774 N (7101) | 20 042 W (19 779) |
+| 8.5 m/s | | | 7455 N (7428) | 21 332 W (20 836) |
+| 9 m/s | 7747 N (7884) | 23 955 W (23 759) | 7922 N | 20 783 W |
+| 10 m/s | 8209 N | 24 604 W | 6894 N (7353) | 19 907 W (20 272) |
+| 11 m/s | | | 6897 N (7125) | 19 536 W (19 187) |
+
+The Cabauw brackets at 7-9 m/s are the 7200 N / frac 1.0 runs of 09-23, the rest the
+older archives. The frac costs no power on balance: -3.1 % (Maasvlakte 8) to +2.4 %
+everywhere, and up 3.9-6.2 % at Cabauw 5.75-6.25. Worst margin is Cabauw 10 m/s at 191 N; Maasvlakte 9 m/s has 478 N.
+The Cabauw curve dips at 7 m/s (21.2 kW between 22.1 at 6.25 and 22.3 at 8, power
+ratio 0.86); it did before too, less so. `cabauw/v05.75_2` is a 09-22 duplicate that a
+power-curve plot will show as a second 5.75 m/s point.
