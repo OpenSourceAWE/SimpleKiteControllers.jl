@@ -5971,3 +5971,48 @@ passed at every one; phase-4 mean power and max force now:
 | 11 | | | 19 767 W | 6876 N |
 
 Worst margin is still Cabauw 10 m/s at 190 N.
+
+## 2026-09-24 — `simple_fig8.jl` flies the curvature feed-forward; `heading_p` 0.35, `heading_d` 0.30
+
+`simple_fig8.jl` now computes `u_ff`/`chi_ff` the way `simple_opt_reelout.jl` does
+(from phase 4 on, `c1` from `turn_rate_coeffs`, no depower gain scaling) and logs
+them to `var_11`/`var_13`. With `ff_gain` 1.0 and `ff_lead_time` 0.3 s in
+`fc_settings.yaml` the old gains flew RMS d 1.36°, so the PD was re-tuned.
+
+200 m project, 7 m/s, no turbulence, 90 s runs, one run per point, the value edited
+in `fc_settings.yaml` between runs with `SHOW_PLOTS = false`. Scored with
+`fig8_metrics` (reproduces the 1.36° of the baseline log). Every run flew 4 laps and
+passed all 8 criteria. "rate-lim." is `tape_rate_frac`, the time the tape sits on its
+0.2/s rate limit; `du` is the RMS per-step change of `set_steering` [1e-3].
+
+| heading_p | heading_d | RMS d | rate-lim. | du |
+|--:|--:|--:|--:|--:|
+| 0.15 | 0.12 | 1.71° | 4 % | 5.76 |
+| 0.1941 (was) | 0.12 (was) | 1.36° | | |
+| 0.1941 | 0.06 | 1.43° | 1 % | 6.05 |
+| 0.1941 | 0.20 | 1.29° | 2 % | 6.08 |
+| 0.25 | 0.12 | 1.13° | 4 % | 6.44 |
+| 0.30 | 0.12 | 1.04° | 12 % | 6.79 |
+| 0.30 | 0.20 | 1.00° | 14 % | 6.83 |
+| 0.30 | 0.25 | 0.98° | 15 % | 6.84 |
+| 0.30 | 0.30 | 0.97° | 16 % | |
+| 0.325 | 0.25 | 0.95° | 17 % | |
+| 0.35 | 0.12 | 1.00° | 17 % | 7.18 |
+| 0.35 | 0.20 | 0.94° | 18 % | 7.23 |
+| 0.35 | 0.25 | 0.93° | 19 % | 7.26 |
+| **0.35** | **0.30** | **0.91°** | 20 % | 7.28 |
+| 0.35 | 0.40 | 0.90° | 23 % | 7.32 |
+| 0.35 | 0.50 | 0.90° | 25 % | 7.34 |
+| 0.375 | 0.20 | 0.93° | 20 % | |
+| 0.40 | 0.12 | 1.04° | 24 % | 7.64 |
+
+`heading_p` carries most of the gain and turns over above 0.35. `heading_d` flattens
+above 0.30: at 0.40 the printed HF std of the steering is 0.0067 and of the turn
+rate 2.9 °/s, against 0.0027-0.0035 and 0.8-0.9 °/s for the runs near the old gains,
+all for 0.01° of RMS, so 0.30 is kept. What now limits the loop is the tape's rate limit,
+reached 20 % of the time against ~4 % before. `max d` stays at ~4.96° in every run,
+independent of the gains, so it is not set by the tracking on the pattern.
+
+Set to 0.35 / 0.30: RMS d 1.36° -> 0.91° (-33 %). Only this condition was flown;
+other wind speeds, the 150/300 m projects and turbulence are not re-checked. The
+reel-out scripts read `fc_settings_reelout.yaml` and are unaffected.

@@ -51,9 +51,9 @@ fc_settings:
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
   # --- heading/course PID ---------------------------------------------------
-  heading_p:          0.1941   # Gain at v_app_ref; only their product is physical   [-]
+  heading_p:          0.35     # Gain at v_app_ref; only their product is physical   [-]
   heading_i:          false    # Integral time [s], or false for no integral action
-  heading_d:          0.12     # Derivative time [s]
+  heading_d:          0.30     # Derivative time [s]
   heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
   v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
   v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
