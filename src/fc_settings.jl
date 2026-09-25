@@ -228,6 +228,11 @@ Add new findings there, not here.
     produces, so a normal run still gets its full settling delay.
     """
     reelout_f_trigger = Inf
+    """
+    Sim time [s] flown in phase 5 (final) before the run ends, `Inf` to fly on
+    until the configured run length. Counted from the first step of phase 5.
+    """
+    final_time = Inf
 
     # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
     """

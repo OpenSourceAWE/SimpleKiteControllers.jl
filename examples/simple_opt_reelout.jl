@@ -1126,6 +1126,7 @@ reelout_start_t = NaN       # [s] time it opened; the soft-start ramp counts fro
 reelout_trigger_fired = false # true if the FORCE trigger opened it, not the timer
 reelout_done = false        # true once either stop criterion has ended reel-out
 stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
+final_start = NaN           # [s] time phase 5 began; the run ends `fcs.final_time` after it
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 # fig_8 live lap count: 0 before phase 4, 1 at first entry, +1 per traversal; the post-run `fig8` is another thing.
@@ -1229,6 +1230,7 @@ t_wall_start = time()
 try
     for _ in 1:s.steps
         t = s.sys_state.time
+        t - final_start >= fcs.final_time && break
 
         # L0 attractor guidance -> commanded course [rad]; the lead is re-read every step.
         fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
@@ -1299,6 +1301,7 @@ try
         if phase in (3, 4) && reelout_done
             set_phase!(cc, 5)
             phase = 5
+            isnan(final_start) && (global final_start = t)
         end
         # Ramps depower toward depower_final with the soft-stop, never BELOW the depower the stop latched at.
         if !isnan(stop_start)

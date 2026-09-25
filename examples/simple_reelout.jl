@@ -355,6 +355,7 @@ stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 reelout_done = false        # true once either stop criterion has ended reel-out
 stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
+final_start = NaN           # [s] time phase 5 began; the run ends `fcs.final_time` after it
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 # fig_8 (SysState field, live lap count): 0 before phase >= 4, 1 at first entry,
@@ -374,6 +375,7 @@ t_wall_start = time()
 try
     for _ in 1:s.steps
         t = s.sys_state.time
+        t - final_start >= fcs.final_time && break
 
         # L0 attractor guidance -> commanded course [rad]. The lead is a flight
         # TIME when attractor_lead_time is set, so it is re-read every step.
@@ -399,6 +401,7 @@ try
         if phase in (3, 4) && reelout_done
             set_phase!(cc, 5)
             phase = 5
+            isnan(final_start) && (global final_start = t)
             rel_depower = fcs.depower_final
         end
         chi_cmd = cc.chi_cmd
