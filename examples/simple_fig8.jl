@@ -203,7 +203,7 @@ AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
 DAMPING_PER_STIFFNESS = 0.001
-PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
+PROJECT = selected_fig8_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind

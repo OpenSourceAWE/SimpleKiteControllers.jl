@@ -94,6 +94,22 @@ function selected_reelout_project()
 end
 
 """
+    selected_fig8_project() -> String
+
+Project the figure-of-eight scripts (`simple_fig8.jl`,
+`stability_course_controller.jl`) fly: the persisted selection when it already
+names a fig8 project (`system_fig8_*.yaml`), otherwise [`default_project`](@ref).
+
+The counterpart of [`selected_reelout_project`](@ref): a reel-out selection left
+over from `simple_opt_reelout.jl` would otherwise run these scripts against a
+reel-out project's `fc_settings.yaml`.
+"""
+function selected_fig8_project()
+    project = selected_project()
+    return startswith(project, "system_fig8") ? project : default_project()
+end
+
+"""
     scenario_site(project = selected_reelout_project()) -> String
 
 The site subfolder of `output/scenarios/` a reel-out project's runs are
