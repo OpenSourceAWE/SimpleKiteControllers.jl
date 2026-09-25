@@ -81,4 +81,3 @@ wc_settings:
   reel_in_beta:     20.0   # sharpness of the line/curve handover; needs * kv * sqrt(f_low) >= 8 everywhere [s/m]
   use_awe_trim:     0.0    # blend of the LOCAL law towards AWETrim's curve, in [0, 1]; the server gets opt_awe_trim [-]
   force_limit_tau:  1.0   # low-pass on the force before inverting; 0 = off [s]
-  force_limit_tau_rise: .nan # same low-pass while the force is RISING; NaN = symmetric, which is CLOSED [s]
