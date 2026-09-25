@@ -424,6 +424,46 @@ simulation and is missing from the model, before tuning again. Candidates:
 - the tether and roll dynamics;
 - the variation over the lap.
 
+## Wind speed and site (2026-09-25, evening)
+
+The script run on six logs: Cabauw and Maasvlakte at 4, 7 and 10 m/s, all
+flown with `pattern_symmetric: true` (see [symmetry.md](symmetry.md)), git
+1c74833, uncompressed logs from `output/archives`.
+
+| | Cabauw 4 | Cabauw 7 | Cabauw 10 | Maasvlakte 4 | Maasvlakte 7 | Maasvlakte 10 |
+|---|---|---|---|---|---|---|
+| Archive `2026-09-25_…` | `222205` | `215215` | `215950` | `223648` | `224252` | `224638` |
+| v_a on the path [m/s] | 17 – 23 | 29 – 33 | 35 – 40 | 10 – 17 | 22 – 24 | 28 – 31 |
+| Identified kite dead time [s] | 0.056 | 0.100 | 0.067 | 0.000 | 0.067 | 0.156 |
+| α inner, minimum | 1.20 | 1.06 | 1.25 | 1.20 | 1.11 | 1.05 |
+| **α guided, minimum** | 0.44 | 0.36 | 0.37 | **0.58** | 0.41 | **0.23** |
+| … at L [m] | 165 | 195 | 195 | 155 | 185 | 195 |
+| α guided, mean 150 – 230 m | 0.56 | 0.39 | 0.44 | 0.69 | 0.47 | 0.31 |
+| α guided, mean 300 – 380 m | 0.78 | 0.51 | 0.51 | 0.92 | 0.69 | 0.50 |
+| ω_g, mean 150 – 230 m → 300 – 380 m [1/s] | 1.09 → 0.65 | 1.34 → 1.00 | 1.34 → 1.18 | 0.93 → 0.46 | 1.30 → 0.73 | 1.33 → 0.90 |
+| Rating of the script | warning | warning | warning | ok | warning | error |
+
+All six runs passed all 10 success criteria. The non-symmetric Cabauw 4 m/s
+run (22:24, `scenarios/cabauw/v04` before compression) gave α = 0.42 against
+0.44 for the symmetric one, so the path symmetry does not change the picture.
+
+1. **The margin falls with wind speed at both sites.** Only Maasvlakte 4 m/s
+   is rated robust. Maasvlakte 10 m/s is in the error band (α < 0.3), with a
+   mean of 0.31 over the first 80 m of reel-out. It is the same run in which
+   the measured power is only 0.83 of the prediction and the lobes fly 6°
+   below the centre crossing.
+2. **The cause is the guidance's corner `ω_g`, as in the 7 m/s analysis
+   above.** At 4 m/s, `D = 0.8 s · v_a / L` is about 6° already at 150 m, so it
+   sits on the floor from the start, `ω_g` falls as `1/L`, and α recovers to
+   0.8 – 0.9 by the end of the reel-out. At 7 and 10 m/s the faster kite keeps
+   `D` at 9 – 11° at 150 m, the floor is only reached at 250 – 300 m, and
+   `ω_g` stays near 1.3 rad/s for most of the reel-out.
+3. **The inner loop stays robust** (α ≥ 1.05) at every wind speed and site.
+4. **The identified dead time scatters** from 0.000 s (Maasvlakte 4 m/s,
+   v_a 10 – 17 m/s) to 0.156 s (Maasvlakte 10 m/s, fit correlation 0.99). The
+   large value is probably real and is what pulls Maasvlakte 10 m/s down; the
+   zero at the lowest airspeed is suspicious and makes that 0.58 optimistic.
+
 ## Caveats
 
 - **The guidance model is unvalidated.** It is the small-angle pure-pursuit
@@ -439,8 +479,13 @@ simulation and is missing from the model, before tuning again. Candidates:
   is combined with every `v_a` and depower corner.
 - The actuator lag and the dead-time exponent were identified on fig8 data at
   depower 0.27 – 0.275. The reel-out flies 0.296 – 0.35.
-- There is only one log, at one wind speed (7 m/s), at cabauw. Maasvlakte has
-  not been analysed.
+- **Compressed logs** (every folder under `output/scenarios/`, see
+  `docs/log_size.md`) keep every 3rd row. Until 2026-09-25 the dead-time
+  identification assumed the simulation's sample time of 1/90 s and so gave a
+  third of the dead time on them: 0.022 s instead of 0.067 s, α = 0.51 instead
+  of 0.42 on the Cabauw 4 m/s run of 22:24. It now uses the log's own sample
+  time and gives 0.067 s and 0.42 on both. The dead time is then resolved to
+  1/30 s instead of 1/90 s.
 
 ## Next steps
 
@@ -454,10 +499,12 @@ simulation and is missing from the model, before tuning again. Candidates:
    or `attractor_dist` (6°) lowers `ω_g`. Check α and tracking
    (the size and elevation criteria) together, since a longer lead cuts
    corners.
-3. **Maasvlakte and other wind speeds.** Run `simple_opt_reelout.jl` for
-   `system_reelout_maasvlakte.yaml` and at higher wind, then re-run the
-   script.
-4. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+3. **Maasvlakte and other wind speeds:** done at 4, 7 and 10 m/s, see
+   [Wind speed and site](#wind-speed-and-site-2026-09-25-evening). Slowing the
+   guidance (step 2) matters most at 7 – 10 m/s and at Maasvlakte 10 m/s.
+4. **Fix the script for compressed logs:** done, it takes the sample time
+   from the log's own time column.
+5. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
    models the inner loop only. The same guidance factor applies there too.
 
 ## Usage

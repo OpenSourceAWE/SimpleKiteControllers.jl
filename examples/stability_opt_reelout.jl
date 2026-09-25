@@ -160,10 +160,12 @@ function fit_actuator_lag(sl, idx)
 end
 
 # The kite's dead time, identified on settled phase 4 (from 10 s after it starts) at the median v_a there.
+# On the log's own sample time: a compressed scenario log keeps every 3rd row, and Ts would scale the delay by 1/3.
+dt_log = median(diff(Float64.(sl.time)))
 let p4 = findall(==(4), sl.sys_state)
-    length(p4) * Ts > 20 || error("$log_name.arrow flies less than 20 s of phase 4; too short to identify the kite's dead time.")
-    i1, i2 = p4[1] + round(Int, 10 / Ts), p4[end]
-    local id = identify_turn_rate_law(sl[i1:i2]; dt = Ts)
+    length(p4) * dt_log > 20 || error("$log_name.arrow flies less than 20 s of phase 4; too short to identify the kite's dead time.")
+    i1, i2 = p4[1] + round(Int, 10 / dt_log), p4[end]
+    local id = identify_turn_rate_law(sl[i1:i2]; dt = dt_log)
     global τ_log, v_log = id.delay_sec, median(Float64.(sl.v_app[i1:i2]))
     global τ_corr = id.delay_corr
 end
