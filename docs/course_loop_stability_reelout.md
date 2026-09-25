@@ -1,0 +1,397 @@
+# Course-loop stability during reel-out (disk margins)
+
+2026-09-25. Findings from `examples/stability_opt_reelout.jl`, a disk-margin
+analysis of the course loop flown by `simple_opt_reelout.jl` over the full
+range of tether length. It extends the fig8 analysis in
+[course_loop_stability.md](course_loop_stability.md); the plant model is
+shared with it (`examples/course_loop_model.jl`).
+
+**Status: the loop's margin has been measured in the simulation (see
+[Measuring the margin](#measuring-the-margin-in-the-simulation-2026-09-25)). It
+is 0.43 – 0.6 near 0.2 Hz, where the model predicts 0.21 – 0.5, so the model is
+right in direction but pessimistic. A fix based on the model ("C", see
+[Attempted fix](#attempted-fix-2026-09-25-not-adopted)) did not raise the
+measured margin, made tracking worse at 5 – 10 m/s on both sites, and was not
+adopted.**
+
+- The inner course loop is robust at every tether length (α ≈ 1.0).
+- The loop with the attractor guidance closed around it is fragile: α 0.14 – 0.50
+  over 150 – 380 m. The margin is lowest from 150 to 270 m.
+- The run the numbers come from passed all 10 success criteria, so the
+  predicted margin is either pessimistic or its effect is hidden in the lap's
+  own motion. Validating it is the next step.
+
+## Model
+
+### Inner loop (as for fig8)
+
+- Actuator: first-order lag of 0.43 s (`ACTUATOR_LAG`), standing in for the
+  rate-limited steering tape.
+- Kite: the turn-rate law of `data/turn_rate_coeffs.yaml`. The kite's dead time
+  scales with the apparent wind speed (`kite_delay`, exponent 1.24).
+- Gravity: both signs of the gravity pole are checked. β is the pattern's
+  centre elevation, read from the log (`var_04`).
+- Controller: the exact discrete PD of `CourseController`, at the project's
+  `1/sample_freq`.
+
+### What differs from fig8
+
+- **Gain schedule.** `simple_opt_reelout.jl` scales the gain by
+  `gain_scale = c1(depower_setpoint)/c1(depower)` in every phase. The loop gain
+  `K·c1·v_a` is therefore that of `depower_setpoint` whatever depower is flown:
+
+      K = gain_scale · heading_p · v_app_ref / max(v_a, v_app_min, v_app_min_pattern)
+
+  `fc_settings_reelout.yaml` has `heading_p = 0.1891`, `heading_d = 0.12 s`,
+  `heading_d_n = 2`, no integral, `v_app_min = 10`, and `v_app_min_pattern` off.
+- **Guidance.** The inner loop does not see the tether length, because the
+  turn-rate law is physical. The guidance does. The attractor sits
+  `D = attractor_distance(fcs, v_a, L)` of arc ahead of the closest point:
+  `attractor_lead_time · v_a / L`, clamped to
+  `[attractor_dist, 2·attractor_dist]` = [6°, 12°]. Linearized about the path:
+  - A cross-track error `d` (angular) commands `δχ_set = −d/D`, the small-angle
+    form of `atan(d/D)`.
+  - The kite closes it at `ḋ = v_k/L · δψ`.
+  - Broken at the plant input, the loop becomes
+
+        L_g = C · (1 + ω_g/s) · P,   ω_g = v_k / (L · D)
+
+    The guidance acts like an integral path with corner `ω_g`. While the lead
+    time sets `D`, `L·D ≈ 0.8 s · v_a` and `ω_g ≈ v_k / (0.8 s · v_a)`, which
+    does not depend on the length. Once `D` sits on its 6° floor (above about
+    250 m here), `ω_g` falls as `1/L`.
+- **Feed-forward.** The curvature feed-forward (`u_ff`, `chi_ff`) acts outside
+  the loop and does not change its margins. Its fades on cross-track and course
+  error are not modelled.
+
+### Operating points
+
+All operating points come from the last log of `simple_opt_reelout.jl` for the
+selected project (`output/<log_file>_opt.arrow`):
+
+- **Samples used:** phases 3 – 5, and only while the kite is within
+  `attractor_dist` (6°) of the path. Further out the approach is not linear.
+- **Bins:** 10 m of tether length, from `l_tether` to `reelout_l_max`.
+- **Per sample:** `L`, `v_a`, the tangential kite speed
+  `v_k = sqrt(|v|² − v_ro²)`, the depower and `ω_g`. A bin covers less than one
+  lap, and `v_k/v_a` varies along the lap, so `ω_g` is computed for each sample.
+- **Worst case per bin:** over `v_a` (lowest, median, highest), depower (lowest,
+  highest) and both gravity signs, all at the bin's highest `ω_g`.
+- **Coverage:** a bin with no samples is reported as an error, because the
+  whole range must be flown before it can be checked.
+
+## Results
+
+Log `output/reelout_cabauw_opt.arrow`, project `system_reelout_cabauw.yaml`,
+7 m/s wind, 2026-09-25 19:21, git 073c688 (dirty). dt = 1/90 s,
+`body_damping = [0, 0, 40]`, `depower_setpoint = 0.274` (c1 = 0.2454). The log
+covers the full range 150 – 380 m.
+
+| L [m] | v_a [m/s] | Depower | D [°] | ω_g [rad/s] | α inner | α guided | f₀ guided | Delay margin, guided |
+|---|---|---|---|---|---|---|---|---|
+| 150 – 160 | 28.7 – 30.3 | 0.296 | 8.75 | 0.97 – 1.43 | 0.998 | 0.143 | 0.24 Hz | 0.096 s |
+| 160 – 170 | 29.4 – 31.7 | 0.296 | 8.43 | 0.89 – 1.30 | 0.998 | 0.194 | 0.23 Hz | 0.132 s |
+| 170 – 180 | 31.0 – 33.5 | 0.296 | 8.58 | 1.29 – 1.40 | 1.018 | 0.169 | 0.24 Hz | 0.113 s |
+| 180 – 190 | 30.5 – 31.9 | 0.296 | 7.66 | 0.95 – 1.29 | 1.018 | 0.215 | 0.23 Hz | 0.147 s |
+| 190 – 200 | 31.0 – 32.2 | 0.296 | 7.38 | 0.95 – 1.33 | 1.018 | 0.196 | 0.23 Hz | 0.133 s |
+| 200 – 210 | 29.7 – 32.5 | 0.296 – 0.298 | 6.91 | 1.00 – 1.44 | 0.998 | 0.140 | 0.24 Hz | 0.093 s |
+| 210 – 220 | 30.7 – 32.6 | 0.298 – 0.300 | 6.71 | 0.95 – 1.18 | 0.998 | 0.241 | 0.23 Hz | 0.168 s |
+| 220 – 230 | 32.2 – 33.5 | 0.300 | 6.65 | 1.10 – 1.42 | 1.018 | 0.165 | 0.24 Hz | 0.110 s |
+| 230 – 240 | 31.6 – 33.7 | 0.300 | 6.25 | 1.03 – 1.44 | 1.018 | 0.157 | 0.24 Hz | 0.105 s |
+| 240 – 250 | 32.0 – 32.6 | 0.300 | 6.04 | 0.96 – 1.03 | 1.018 | 0.326 | 0.22 Hz | 0.234 s |
+| 250 – 260 | 31.6 – 33.6 | 0.300 | 6.00 | 0.98 – 1.39 | 1.018 | 0.175 | 0.24 Hz | 0.117 s |
+| 260 – 270 | 30.7 – 33.9 | 0.300 – 0.303 | 6.00 | 0.88 – 1.43 | 0.998 | 0.142 | 0.24 Hz | 0.095 s |
+| 270 – 280 | 31.1 – 32.1 | 0.303 – 0.305 | 6.00 | 0.82 – 0.88 | 1.017 | 0.404 | 0.21 Hz | 0.299 s |
+| 280 – 290 | 31.4 – 31.9 | 0.305 – 0.306 | 6.00 | 0.86 – 0.95 | 1.017 | 0.366 | 0.22 Hz | 0.267 s |
+| 290 – 300 | 31.8 – 34.4 | 0.306 | 6.00 | 0.95 – 1.27 | 1.017 | 0.220 | 0.23 Hz | 0.151 s |
+| 300 – 310 | 32.2 – 34.2 | 0.306 | 6.00 | 0.87 – 1.25 | 1.017 | 0.228 | 0.23 Hz | 0.157 s |
+| 310 – 320 | 32.1 – 32.7 | 0.306 | 6.00 | 0.71 – 0.87 | 1.017 | 0.410 | 0.21 Hz | 0.304 s |
+| 320 – 330 | 31.2 – 32.5 | 0.306 | 6.00 | 0.67 – 0.71 | 1.017 | 0.503 | 0.21 Hz | 0.385 s |
+| 330 – 340 | 31.2 – 34.1 | 0.306 | 6.00 | 0.71 – 1.10 | 1.017 | 0.292 | 0.22 Hz | 0.207 s |
+| 340 – 350 | 31.2 – 34.3 | 0.306 – 0.308 | 6.00 | 0.79 – 1.11 | 1.017 | 0.286 | 0.22 Hz | 0.203 s |
+| 350 – 360 | 31.2 – 33.7 | 0.308 – 0.311 | 6.00 | 0.76 – 0.84 | 1.016 | 0.425 | 0.21 Hz | 0.317 s |
+| 360 – 370 | 31.9 – 33.7 | 0.311 | 6.00 | 0.60 – 0.78 | 1.016 | 0.461 | 0.21 Hz | 0.348 s |
+| 370 – 380 | 31.9 – 37.4 | 0.311 – 0.350 | 6.00 | 0.63 – 1.03 | 0.990 | 0.300 | 0.22 Hz | 0.216 s |
+
+The inner loop's critical frequency is 0.28 Hz in every bin. The last bin
+includes phase 5 (depower up to 0.35, 1356 samples).
+
+## Observations
+
+1. **The inner loop is not the problem.** With `heading_p = 0.1891` (about
+   half of fig8's 0.35) and `v_a` ≥ 29 m/s on the path, α ≈ 1.0 at every
+   length. The fig8 concern about low `v_a` does not arise here: on the path
+   the reel-out never flies below 28.7 m/s.
+2. **The guidance is nearly as fast as the course loop.** At 27 m/s,
+   `K·c1·v_a = heading_p · c1 · v_app_ref ≈ 1.25 rad/s`, and the D path nearly
+   doubles it near crossover, to about 1.75 rad/s. The guidance's corner `ω_g`
+   is 0.6 – 1.44 rad/s. The two loops are poorly separated, and the guidance's
+   integral-like factor costs `atan(ω_g/ω_c)` ≈ 35 – 40° of phase at
+   crossover. That is enough to take α from 1.0 to 0.14 – 0.3.
+3. **The spread between bins is `v_k/v_a` along the lap.** A 10 m bin is
+   about 3 s of reel-out, less than one lap. Bins that contain the fast part
+   of the lap reach `ω_g` ≈ 1.4 rad/s and α ≈ 0.14; bins without it stay near
+   0.4.
+4. **Longer tether helps, once `D` hits its floor.** Above about 250 m,
+   `D` = 6° and `ω_g` falls as `1/L`. The best bins (α 0.4 – 0.5) are at
+   310 – 370 m. From 150 to 250 m the lead time keeps `ω_g` about constant and
+   the margin at its lowest.
+
+## Attempted fix (2026-09-25): not adopted
+
+The analysis points to two levers: slow the guidance (`attractor_lead_time`,
+`attractor_dist`) and add phase lead in the PD (`heading_d`). Each candidate
+was flown with `simple_opt_reelout.jl` through `FCS_OVERRIDES`, with no
+turbulence. The runs are deterministic: the baseline re-flown gave the same
+20 937 W to the watt. "Band" is the RMS of the regulated course error
+(`var_06`) in 0.18 – 0.30 Hz, the band of the predicted resonance, in settled
+phase 4. The model α is the minimum over the full tether-length range.
+
+Cabauw 7 m/s:
+
+| Candidate | Model α guided | Band | Course-error std | RMS d (run) | Min el. | Power | Criteria |
+|---|--:|--:|--:|--:|--:|--:|---|
+| baseline | 0.14 | 14.7° | 20.5° | 1.25° | 13.7° | 21 155 W | all 10 |
+| `heading_d` 0.3 | 0.34 | 9.5° | 16.2° | 1.45° | 15.2° | 20 991 W | all 10 |
+| lead 1.6 s, `attractor_dist` 8° | 0.46 | 11.8° | 20.0° | 0.98° | 15.2° | 21 596 W | all 10 |
+| **lead 1.6 s, `attractor_dist` 8°, `heading_d` 0.3 ("C")** | **0.65** | **8.3°** | 16.4° | **0.91°** | 15.1° | 21 395 W | all 10 |
+| lead 2.0 s, `attractor_dist` 10°, `heading_d` 0.3 | 0.76 | 9.0° | 20.4° | 1.03° | 14.0° | 21 637 W | all 10 |
+
+At 7 m/s the model's ranking holds: the band shrinks as α grows, and "C"
+also cuts RMS d by 27 %. The regression of "C" at other conditions did not
+hold up:
+
+| Condition | Model α, baseline → C | Band | Course-error std | RMS d (run) | Min el. | Power |
+|---|--:|--:|--:|--:|--:|--:|
+| Cabauw 5 m/s | 0.07 → 0.61 | 14.1 → 14.7° | 23.3 → 30.1° | 0.79 → **1.21°** | 16.2 → 15.9° | 14 068 → 14 096 W |
+| Cabauw 10 m/s | 0.13 → 0.55 | 6.9 → **3.6°** | 14.6 → 15.0° | 1.19 → 1.27° | 11.3 → 11.8° | 24 643 → 24 487 W |
+| Maasvlakte 7 m/s | 0.07 → 0.61 | 14.5 → 14.5° | 23.9 → 30.9° | 0.70 → **0.92°** | 8.5 → 7.2° | 12 156 → 12 218 W |
+| Maasvlakte 10 m/s | 0.12 → 0.63 | 10.6 → 10.1° | 17.0 → 20.9° | 0.98 → **1.22°** | 12.0 → 12.4° | 19 944 → 20 468 W |
+
+All runs passed all 10 criteria. "C" was **not adopted**, and
+`fc_settings_reelout.yaml` is unchanged:
+
+- **Tracking got worse.** RMS d rose in all four regression conditions, by
+  up to 53 % at Cabauw 5 m/s. The minimum elevation fell by 1.3° at Maasvlakte
+  7 m/s.
+- **The model is not predictive at low wind.** At 5 – 7 m/s (v_a ≈ 24 – 26
+  m/s) the model puts the baseline at α ≈ 0.07, close to instability. Yet the
+  baseline tracks best there (RMS d 0.70 – 0.79°), and "C", with α ≈ 0.6, does
+  not reduce the band at all. Only at Cabauw 7 and 10 m/s does the band follow
+  α.
+- **A likely reason is the chord.** A longer lead puts the attractor further
+  ahead, and the chord cuts the curve by more. `chi_ff` removes only
+  `ff_gain` = 70 % of the chord offset, and the remaining 30 % is a steady
+  inside cut that grows with `D`. That would also explain why RMS d rises
+  while the band falls. This has not been checked.
+- **It matches the earlier finding.** In
+  [fig8_tuning_log.md](fig8_tuning_log.md) (2026-09-21), the 0.6 – 4 s ring
+  was found to be mostly the forced response to the path's own curvature
+  content, not a lightly damped mode. Lead 1.2 s left it unchanged, and
+  `heading_d` 0.16 did nothing. The model sees only the loop's damping, not
+  what drives it.
+
+**Status after the attempt:** the guided-loop margin as modelled is not a
+reliable predictor of tracking quality. Low α is not, on its own, a defect
+to fix. Before any setting is changed on its strength, the model has to
+explain why the baseline tracks well at α ≈ 0.07.
+
+## The tape's lag in the reel-out
+
+`ACTUATOR_LAG` = 0.43 s was identified on a fig8 log, where the tape sits on
+its 0.2/s rate limit 20 % of the time. The reel-out steers less hard. A
+least-squares fit of `ẏ = (u − y)/T`, from `set_steering` to `steering`, on
+the baseline runs gives, in phase 4:
+
+| Run | T | Rate-limited | Unexplained |
+|---|--:|--:|--:|
+| Cabauw 5 m/s | 0.327 s | 1.6 % | 1.8 % |
+| Cabauw 10 m/s | 0.327 s | 0.3 % | 2.8 % |
+| Maasvlakte 7 m/s | 0.352 s | 4.8 % | 3.9 % |
+| Maasvlakte 10 m/s | 0.326 s | 0.5 % | 1.9 % |
+| Cabauw 7 m/s | 0.498 s | 5.5 % | 20 % |
+
+- **Phase 4 at 5 and 10 m/s:** the tape is almost linear, and its lag is the
+  small-signal `1/steering_gain` = 0.333 s.
+- **Phase 3:** the entry turns the kite round, and the tape is rate-limited
+  28 % of the time (T = 1.3 s at Cabauw 5 m/s).
+- **Phase 5:** it steers harder, T = 0.45 s.
+- **Cabauw 7 m/s:** the fit is poor (20 % unexplained) and needs a closer
+  look.
+
+`stability_opt_reelout.jl` now fits `T` on the log per tether-length bin,
+from the same on-path samples it analyses (`fit_actuator_lag`), prints it as
+a column and uses it in the plant. `LOG_DIR` points the script at an archived
+run. Worst guided α over the length, with `ACTUATOR_LAG` → with the fitted
+lag:
+
+| Run | α guided, min | Median over the bins | α inner, min | Fitted lag per bin |
+|---|--:|--:|--:|---|
+| Cabauw 5 m/s | 0.07 → **0.19** (175 m) | 0.42 | 0.94 | 0.32 – 0.33 s |
+| Cabauw 7 m/s | 0.14 → 0.00 (165 m) | 0.33 | 0.77 | 0.32 – **0.89** s |
+| Cabauw 10 m/s | 0.13 → 0.25 (195 m) | 0.32 | 1.08 | 0.32 – 0.35 s |
+| Maasvlakte 7 m/s | 0.07 → **0.19** (185 m) | 0.42 | 0.83 | 0.32 – 0.41 s |
+| Maasvlakte 10 m/s | 0.12 → 0.24 (195 m) | 0.37 | 1.05 | 0.32 – 0.35 s |
+
+- **The low-wind anomaly shrinks.** The model's 0.07 at 5 – 7 m/s was largely
+  the fig8 lag, applied to a tape that is linear in the reel-out.
+- **Cabauw 7 m/s is the exception.** One bin there has a rate-limited tape
+  (0.89 s) and α = 0: this condition steers harder than the others.
+  - **It is the entry, not the loop.** The two bins at 150 – 170 m cover
+    t = 18.3 – 23.5 s: the handover from phase 3 to 4 and the first seconds of
+    lap 1. Steering reaches 0.25 – 0.29, and the tape sits on its rate limit
+    54 % and 37 % of the time. This is a large-signal transient. An
+    equivalent lag no longer models the tape there, and a linear margin means
+    nothing. Every later bin fits 0.32 – 0.41 s, with rate limiting of 16 %
+    or less.
+  - **The script now separates such bins.** Where the tape is rate-limited
+    more than `MAX_RATE_LIMITED` = 20 % of the time, a bin is printed with a
+    "large signal" note, left out of the rating and listed in a warning.
+    Large turns are covered by `step_response` in
+    `stability_course_controller.jl`.
+
+Rated on the linear bins, the five baseline runs agree:
+
+| Run | α inner, min | α guided, min (at L) | α guided, median | Large-signal bins |
+|---|--:|--:|--:|---|
+| Cabauw 5 m/s | 0.94 | 0.19 (175 m) | 0.42 | – |
+| Cabauw 7 m/s | 1.03 | 0.24 (205 m) | 0.34 | 156, 165 m |
+| Cabauw 10 m/s | 1.08 | 0.25 (195 m) | 0.32 | – |
+| Maasvlakte 7 m/s | 0.83 | 0.19 (185 m) | 0.42 | – |
+| Maasvlakte 10 m/s | 1.05 | 0.24 (195 m) | 0.37 | – |
+
+- **The model's worst point is the same everywhere:** 0.19 – 0.25 at
+  175 – 205 m. There the lead time sets `D` and `ω_g` is at its highest
+  (1.0 – 1.4 rad/s).
+- **The low-wind anomaly is gone.** Once the tape's lag is fitted, low wind is
+  no worse than high wind.
+- **The model is still pessimistic.** Even with the fitted lag, it stays below
+  the 0.43 – 0.6 measured below, which was itself taken with a partly
+  saturated tape.
+
+## Measuring the margin in the simulation (2026-09-25)
+
+To test the model directly, `simple_opt_reelout.jl` now accepts a test input.
+`STEER_DISTURBANCE` is a function `t -> Δu`, read and cleared like
+`SHOW_PLOTS`, and added to `rel_steering` after the controller. When it is
+set, the run keeps the globals `dist_t`, `dist_d` (the disturbance) and
+`dist_u` (the steering sent to the model).
+
+With `u = d + u_c`, the loop broken at the plant input is `L = −U_c/U`. This
+is measured from the simulation without any model. Its disk margin
+`2/|(1−L)/(1+L)|` can then be compared with the model's at each frequency.
+
+**Setup.** For a long stationary window, the run holds its length for 150 s
+in phase 5 (`final_time = 150`, `sim_time = 260`). The wind is the project's
+default of 5.3 m/s: with a wind-speed override the script sets its own run
+length and ignores `sim_time`. The length is held at 380 m, or at 200 m with
+`reelout_l_max = 200`.
+
+**Random disturbance: loses the key band.** A random binary signal (±0.02 or
+±0.05, held 0.25 or 0.8 s) measured the loop well above 0.35 Hz. From 0.4 to
+0.75 Hz, `|S_i|` matches the model to within 5 – 15 %, which validates the
+inner loop (plant, lag, dead time, PD). Below 0.3 Hz, the steering the path
+itself demands, including `u_ff` of about ±0.2, drowns the disturbance
+(coherence < 0.4). That is exactly where the guided model has its worst point.
+
+**Sine disturbance: gets it.** The sum of four sines
+`0.03·Σ sin(2π f t + k)`, at `f` = 0.135, 0.175, 0.215 and 0.26 Hz (between
+the lap harmonics). `L` is evaluated at each sine frequency over the whole
+window, and again over each half to check consistency. Disk margin at the
+worst measured frequency:
+
+| Case | Worst f | L measured | α measured (halves) | α model guided (at f / overall) | α model inner |
+|---|--:|---|---|---|--:|
+| 380 m, depower 0.35, v_a 28 m/s | 0.175 Hz | 0.62 ∠ −160° | ≈ 0.6 | 0.45 / 0.50 | 0.94 |
+| 200 m, depower 0.35, v_a 28 m/s | 0.215 Hz | 0.65 ∠ −178° | 0.43 (0.49, 0.37) | 0.22 / 0.21 | 0.93 |
+| 200 m, candidate "C" | 0.215 Hz | 0.78 ∠ −158° | 0.47 (0.53, 0.37) | 0.72 / 0.72 | 1.01 |
+
+The 380 m row is from the first sine run. Its halves disagree at 0.135 Hz, so
+only the 0.175 – 0.26 Hz points are used.
+
+What this shows:
+
+1. **The low-frequency problem is real.** Near 0.2 Hz the measured phase of
+   `L` is −160 to −180°, as the guided model predicts and the inner-only model
+   (−120 to −130°) does not. The measured margin there is 0.43 – 0.6, below
+   the inner loop's ≈ 0.95.
+2. **The guided model is pessimistic by about a factor of 2.** At 200 m it
+   predicts α = 0.21, and 0.43 is measured. The measured `|L|` falls faster
+   between 0.135 and 0.26 Hz than the model's.
+3. **"C" does not move the measured margin.** The model predicts 0.21 → 0.72,
+   and 0.43 → 0.47 is measured, within the scatter between the halves. The
+   worst point stays near 0.2 Hz at about −160°. Whatever sets the margin there
+   is not what `attractor_lead_time`, `attractor_dist` and `heading_d` change
+   in the model. That also explains the regression above: "C" bought no
+   measured robustness and cost tracking.
+4. **The loop is time-varying.** v_a, the gravity term and the path curvature
+   all change around the lap, and the halves of one window scatter by
+   ±0.08 in α. A linear time-invariant model can rank settings only roughly.
+
+**Correction: the disturbance saturated the tape.** A fit of the tape over
+those windows (see [The tape's lag](#the-tapes-lag-in-the-reel-out)) shows the
+four sines at 0.03 each (peak 0.12) put it on its rate limit 19 – 24 % of the
+time, with an equivalent lag of 0.48 – 0.69 s. In undisturbed flight it is
+0.33 s. The margins in the table therefore describe a harder-driven loop than
+the one normally flown. A repeat at 0.012 per sine (200 m, lag 0.37 s,
+rate-limited 9 %, the path's own steering) was too noisy to use: the two
+halves gave α = 0.29 and 0.17 at 0.215 Hz, and the whole window 0.76. With a
+large disturbance the tape saturates, with a small one the path's own
+steering drowns it, so this method has reached its limit on this
+time-varying loop.
+
+**Status:** the measured worst-case margin of the reel-out course loop is
+0.43 – 0.6 near 0.2 Hz (5.3 m/s, 200 – 380 m), measured with a partly
+saturated tape. That is marginal but not fragile, and all regression runs pass
+their criteria. No setting tested improves it. The next step is to find what sets the loop near 0.2 Hz in the
+simulation and is missing from the model, before tuning again. Candidates:
+- the course response to heading (side slip), since the fed-back course is
+  not the heading of the turn-rate law;
+- the tether and roll dynamics;
+- the variation over the lap.
+
+## Caveats
+
+- **The guidance model is unvalidated.** It is the small-angle pure-pursuit
+  law on a straight path. The real path is curved, the closest point `Q` moves
+  with the kite, and the curvature feed-forward and its chord correction change
+  the course the PD sees.
+- **The log does not show the resonance clearly.** A loop with α ≈ 0.15
+  should ring at 0.21 – 0.24 Hz. In phase 4 (from 10 s after its start), the
+  regulated error `var_06` has about 95 % of its power below 0.3 Hz. Its
+  largest components are at 0.04 Hz and at 0.12 – 0.26 Hz, which overlaps the
+  lap harmonics. The check was inconclusive.
+- The worst case per bin is deliberately conservative: the bin's highest `ω_g`
+  is combined with every `v_a` and depower corner.
+- The actuator lag and the dead-time exponent were identified on fig8 data at
+  depower 0.27 – 0.275. The reel-out flies 0.296 – 0.35.
+- There is only one log, at one wind speed (7 m/s), at cabauw. Maasvlakte has
+  not been analysed.
+
+## Next steps
+
+1. **Validate the guidance model.** Excite or isolate the cross-track loop in
+   `simple_opt_reelout.jl`, for example with a step in `el_offset` or a short
+   course disturbance in phase 4 at a fixed length. Then compare the ringing of
+   `d` with the predicted 0.21 – 0.24 Hz and damping. Alternatively, fit
+   `δχ_set` against the signed `d` in the log to check `1/D`; the path tangent
+   would need to be logged for that.
+2. **If it holds, slow the guidance.** Raising `attractor_lead_time` (0.8 s)
+   or `attractor_dist` (6°) lowers `ω_g`. Check α and tracking
+   (the size and elevation criteria) together, since a longer lead cuts
+   corners.
+3. **Maasvlakte and other wind speeds.** Run `simple_opt_reelout.jl` for
+   `system_reelout_maasvlakte.yaml` and at higher wind, then re-run the
+   script.
+4. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+   models the inner loop only. The same guidance factor applies there too.
+
+## Usage
+
+    include("examples/stability_opt_reelout.jl")   # from the package root, examples env
+    diskmargin(L)                                  # the worst guided loop
+
+The script is also in the example menu (`menu.jl`). It needs a finished
+`simple_opt_reelout.jl` run for the selected project (cabauw or maasvlakte).
+Set `SHOW_PLOTS = false` before the include to skip the Bode plot of the worst
+guided loop and the plot of the margins over tether length.

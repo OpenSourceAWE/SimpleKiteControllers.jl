@@ -387,6 +387,7 @@ to a step or chirp in `rel_steering`.
    large-signal turn rate.
 5. **Reel-out.** `fc_settings_reelout.yaml` has `v_app_min_pattern` off;
    analyse its loop the same way (it has lower gains, `heading_p` 0.189).
+   Started: see [course_loop_stability_reelout.md](course_loop_stability_reelout.md).
 
 ## Usage
 

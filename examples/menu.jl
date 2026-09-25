@@ -49,6 +49,7 @@ const EXAMPLES = [
     "simple_fig8_plots.jl    - plot the last logged run of active project" => "simple_fig8_plots.jl",
     "simple_opt_fig8.jl      - fly an externally optimized path at constant length (minutes!)" => "simple_opt_fig8.jl",
     "stability_course_controller.jl - disk margins of the course-control loop (fig8 project)" => "stability_course_controller.jl",
+    "stability_opt_reelout.jl - disk margins of the reel-out course loop over tether length" => "stability_opt_reelout.jl",
     "simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)" => "simple_reelout.jl",
     "simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer" => "simple_reelout_play.jl",
     "simple_auto_parking.jl  - fly heading-stabilized parking of the V3 kite" => "simple_auto_parking.jl",

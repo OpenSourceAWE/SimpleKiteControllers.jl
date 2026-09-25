@@ -146,6 +146,8 @@ AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Tether/bridle structural damping as a ratio of stiffness [s]; see simple_fig8.jl's docstring.
 DAMPING_PER_STIFFNESS = 0.001
 PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
+@assert PROJECT in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml") "simple_opt_reelout.jl \
+    supports only system_reelout_cabauw.yaml and system_reelout_maasvlakte.yaml, got $PROJECT"
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind
@@ -166,6 +168,14 @@ for (key, value) in fcs_overrides
 end
 isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
+# Test input: a steering disturbance `t -> Δu` added after the controller, read and cleared like
+# SHOW_PLOTS; `stability_opt_reelout.jl`'s model is validated against the loop's response to it.
+steer_disturbance = @isdefined(STEER_DISTURBANCE) ? STEER_DISTURBANCE : nothing
+STEER_DISTURBANCE = nothing
+isnothing(steer_disturbance) || @info "Steering disturbance in force (test input)."
+dist_t = Float64[]      # [s] time of each disturbed step
+dist_d = Float64[]      # [-] disturbance added
+dist_u = Float64[]      # [-] steering sent to the model, controller plus disturbance
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -663,6 +673,11 @@ c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
 end
 # The turn authority the loop was TUNED at; the sim loop rescales heading_p by c1_setpoint/c1(u_d) in every phase.
 c1_setpoint = c1_at_depower(fcs.depower_setpoint)
+# Phase 4 must fly with the curvature feed-forward, which silently drops out on either of these.
+@assert fcs.ff_gain > 0 "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
+    but ff_gain = $(fcs.ff_gain)"
+@assert isfinite(c1_setpoint) && c1_setpoint > 0 "the curvature feed-forward needs the turn-rate \
+    coefficient c1 at depower_setpoint = $(fcs.depower_setpoint), got $c1_setpoint"
 c1_depower_max = try
     last(turn_rate_depower_range(fcs.body_damping))
 catch exc
@@ -1999,6 +2014,11 @@ try
             end
         end
 
+        if !isnothing(steer_disturbance)
+            local du = steer_disturbance(t)
+            rel_steering += du
+            push!(dist_t, t); push!(dist_d, du); push!(dist_u, rel_steering)
+        end
         # `v_ff = v_set` removes the position loop's 2 s lag; `acceleration_limit` is `rcs.max_acc`, not the plant's own.
         step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
               set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set,
