@@ -269,6 +269,80 @@ Rated on the linear bins, the five baseline runs agree:
   the 0.43 – 0.6 measured below, which was itself taken with a partly
   saturated tape.
 
+## The guidance term and the kite's dead time
+
+**The guidance law is as modelled.** The flown path of a run was probed with
+`navigate_fig8`: the kite was offset ±0.3° normal to the path at each of the
+360 points, and `dχ_set/dd · D` was read off. It comes out at 0.95
+(10 – 90 %: 0.93 – 0.98) at D = 6°, and 0.92 (0.87 – 0.95) at D = 8.4°. The
+pure-pursuit gain `1/D` is right to within 5 – 8 %.
+
+**The kite's dead time is not.** `identify_turn_rate_law` on settled phase 4
+of the baseline runs:
+
+| Run | Depower | v_a | c1 fitted / table | Dead time fitted | `kite_delay` |
+|---|--:|--:|--:|--:|--:|
+| Cabauw 5 m/s | 0.266 | 25.6 m/s | 0.2486 / 0.2530 | **0.067 s** | 0.186 s |
+| Cabauw 7 m/s | 0.306 | 32.1 m/s | 0.2146 / 0.2110 | 0.156 s | 0.154 s |
+| Cabauw 10 m/s | 0.360 | 40.0 m/s | 0.1514 / 0.1565 | 0.100 s | 0.137 s |
+| Maasvlakte 7 m/s | 0.265 | 23.8 m/s | 0.2468 / 0.2545 | **0.067 s** | 0.204 s |
+| Maasvlakte 10 m/s | 0.294 | 30.8 m/s | 0.2249 / 0.2239 | 0.156 s | 0.157 s |
+
+- **`c1` is confirmed** to within 3 %, and every fit has a correlation of
+  0.99 or more.
+- **At low wind the dead time is a third of the extrapolation.** The
+  `v_a^-1.24` law was fitted at depower 0.275, over 13 – 36 m/s. At
+  24 – 26 m/s in the reel-out it overstates the dead time by 0.12 – 0.14 s.
+  Across the runs it follows depower more than `v_a`.
+- **The script now identifies the dead time on the log** (settled phase 4)
+  and scales it over `v_a` within the run with the same exponent. Together
+  with the fitted tape lag, the model now takes both of its time constants
+  from the log it analyses.
+
+Guided α with both time constants from the log (linear bins):
+
+| Run | α inner, min | α guided, min (at L) | α guided, median |
+|---|--:|--:|--:|
+| Cabauw 5 m/s | 1.27 | **0.41** (185 m) | 0.60 |
+| Cabauw 7 m/s | 1.01 | 0.24 (205 m) | 0.33 |
+| Cabauw 10 m/s | 1.17 | 0.32 (305 m) | 0.38 |
+| Maasvlakte 7 m/s | 1.17 | **0.42** (185 m) | 0.63 |
+| Maasvlakte 10 m/s | 1.06 | 0.26 (175 m) | 0.38 |
+
+- **The low-wind pessimism is gone.** At 5 – 7 m/s the model gives 0.41 –
+  0.42, the same range as the 0.43 measured in the simulation.
+- **The weakest conditions are now Cabauw 7 and Maasvlakte 10 m/s**
+  (0.24 – 0.26). The optimizer flies them at depower 0.29 – 0.31, and the kite's
+  dead time is 0.156 s there, more than twice the low-wind value.
+- **Those two conditions have not been measured in the simulation yet.** The
+  measurement above was at 5.3 m/s.
+
+## Feed-forward gain 1.0 (2026-09-25)
+
+`ff_gain` 0.7 → 1.0 through `FCS_OVERRIDES`, against the archived baselines
+(the runs are deterministic):
+
+| Condition | Criteria | RMS d | Course-error std | Band | Min el. | Power | Rate-limited |
+|---|---|--:|--:|--:|--:|--:|--:|
+| Cabauw 5 m/s | pass → pass | 0.79 → **0.62°** | 23.3 → 13.1° | 14.1 → 11.1° | 16.2 → 16.4° | 14 068 → 13 969 W | 3 → 7 % |
+| Cabauw 7 m/s | pass → **FAIL** | 1.25 → 1.42° | 20.5 → 21.4° | 14.7 → 15.0° | 13.7 → 14.3° | 21 155 → 20 463 W | 4 → 9 % |
+| Cabauw 10 m/s | pass → pass | 1.19 → 1.11° | 14.6 → 12.5° | 6.9 → 8.9° | 11.3 → 12.6° | 24 643 → 23 529 W | 0 → 2 % |
+| Maasvlakte 7 m/s | pass → pass | 0.70 → **0.61°** | 23.9 → 11.9° | 14.5 → 10.2° | 8.5 → 8.3° | 12 156 → 12 124 W | 6 → 9 % |
+| Maasvlakte 10 m/s | pass → pass | 0.98 → 1.07° | 17.0 → 16.6° | 10.6 → 13.2° | 12.0 → 10.9° | 19 944 → 20 079 W | 1 → 7 % |
+
+- **Low wind gains.** At 5 – 7 m/s at low depower, RMS d falls by 13 – 22 %
+  and the course-error std halves.
+- **At depower ~0.3 it does not help.** Cabauw 7 m/s fails "heading range
+  < 400°" (415°): the lobe turns overshoot, and the unwrapped heading runs
+  from −22° to 363°. Its max d rises from 5.11 to 6.18°, with 6.5° spikes at
+  the crossings at t = 22 and 36 s. Maasvlakte 10 m/s loses 0.09° of RMS d and
+  1.1° of minimum elevation.
+- **This is the overturn the tuning log recorded at 1.0 on 2026-09-21**, and
+  in the same place: the first laps at short tether.
+- **The tape works harder everywhere,** with rate-limiting up by 2 – 6 points.
+- **Not adopted.** `ff_gain` stays at 0.7. The conditions where 1.0 fails
+  are the ones with the longest dead time and the weakest guided margin.
+
 ## Measuring the margin in the simulation (2026-09-25)
 
 To test the model directly, `simple_opt_reelout.jl` now accepts a test input.

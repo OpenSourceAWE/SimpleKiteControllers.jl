@@ -9,7 +9,7 @@ project's `l_tether` to `reelout_l_max`.
 The plant and the controller are those of `stability_course_controller.jl`
 (shared in `course_loop_model.jl`): the steering tape as a first-order lag, the
 turn-rate law of `data/turn_rate_coeffs.yaml` with the kite's dead time scaled
-over `v_a`, and the exact discrete PD of `CourseController`. Three things
+over `v_a`, and the exact discrete PD of `CourseController`. Four things
 differ in the reel-out:
 
 - **The tape's lag.** `ACTUATOR_LAG` (0.43 s) is the tape's equivalent lag in
@@ -19,6 +19,13 @@ differ in the reel-out:
   phase 4 it is 0.33 s at 5 and 10 m/s, the small-signal `1/steering_gain`,
   with the tape rate-limited 0 – 5 % of the time; phase 5 steers harder
   (0.45 s at 5 m/s).
+
+- **The kite's dead time.** `kite_delay` extrapolates the relay sweeps of
+  `build_turn_rate_table.jl` (13 – 22.5 m/s) and the fig8 point (36 m/s) over
+  `v_a`. The reel-out's own dead time is shorter at low wind: 0.067 s against
+  the extrapolated 0.19 – 0.20 s at 24 – 26 m/s. It is identified on the log
+  instead (`identify_turn_rate_law`, settled phase 4) and scaled over `v_a`
+  with the same exponent, `τ = τ_log · (v_log / v_a)^KITE_DELAY_EXP`.
 
 - **The gain schedule.** `simple_opt_reelout.jl` rescales the gain by
   `gain_scale = c1(depower_setpoint)/c1(depower)` in every phase, so the loop
@@ -67,7 +74,7 @@ end
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
-using V3Kite: load_log, YAML
+using V3Kite: load_log, YAML, identify_turn_rate_law
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
 using LinearAlgebra: diagm, norm
 using Statistics: median
@@ -152,6 +159,17 @@ function fit_actuator_lag(sl, idx)
             unexplained = sum(abs2, dy .- a .* e) / sum(abs2, dy))
 end
 
+# The kite's dead time, identified on settled phase 4 (from 10 s after it starts) at the median v_a there.
+let p4 = findall(==(4), sl.sys_state)
+    length(p4) * Ts > 20 || error("$log_name.arrow flies less than 20 s of phase 4; too short to identify the kite's dead time.")
+    i1, i2 = p4[1] + round(Int, 10 / Ts), p4[end]
+    local id = identify_turn_rate_law(sl[i1:i2]; dt = Ts)
+    global τ_log, v_log = id.delay_sec, median(Float64.(sl.v_app[i1:i2]))
+    global τ_corr = id.delay_corr
+end
+"Dead time [s] from the applied steering to the turn rate at `v_app` [m/s], scaled from the log's own"
+log_delay(v_app) = τ_log * (v_log / v_app)^KITE_DELAY_EXP
+
 "Corner frequency [rad/s] of the guidance at tether length `L` [m], `v_app` and `v_kite` [m/s]"
 guidance_rate(L, v_app, v_kite) = v_kite / (L * deg2rad(attractor_distance(fcs, v_app, L)))
 
@@ -173,7 +191,7 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     G = 1 + ω_g * Ts / (tf("z", Ts) - 1)
-    τ = kite_delay(tc, v_app)
+    τ = log_delay(v_app)
     function margins(Lp)
         dm = try
             diskmargin(Lp)
@@ -196,10 +214,11 @@ end
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
                 heading_p = %.4f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 depower_setpoint = %.3f (c1 = %.4f), v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
-                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag fitted per bin on the log.",
+                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag fitted per bin on the log, kite dead time \
+                %.3f s at %.1f m/s identified on the log (correlation %.3f).",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
                fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
-               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time)
+               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, τ_log, v_log, τ_corr)
 
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
