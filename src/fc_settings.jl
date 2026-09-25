@@ -453,6 +453,14 @@ Add new findings there, not here.
     "Lower clamp on v_app, limits the gain boost [m/s]"
     v_app_min = 10.0
     """
+    Lower clamp on v_app in the gain schedule from phase 3 on [m/s], on top of
+    `v_app_min`; `0` = off. The kite's steering dead time grows as v_app falls
+    (`docs/course_loop_stability.md`), so boosting the full gain at low v_app
+    costs stability margin; the entry phases, at `entry_gain`, need the boost
+    against gravity and keep `v_app_min`.
+    """
+    v_app_min_pattern = 0.0
+    """
     Factor on `heading_p` during the ENTRY phases (dive and hold); phase 3 flies
     at the full gain. The entry is turn-rate limited, so detuning it costs no
     tracking and takes the command off its clamp.

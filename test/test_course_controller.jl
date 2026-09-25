@@ -61,6 +61,19 @@ import KiteUtils: wrap2pi
                                     v_kite = 0.0, v_app = 20.0, dmin = 100.0, tangent = 0.0)
         @test phase == 0
         @test cc2.pid.K ≈ 0.5 * 0.2
+
+        # v_app_min_pattern floors the schedule from phase 3 on only
+        ccs_p = CourseControllerSettings(; dt = 0.02, heading_p = 0.2, v_app_ref = 20.0,
+                                         v_app_min = 5.0, v_app_min_pattern = 15.0,
+                                         entry_gain = 0.5)
+        cc3 = CourseController(ccs_p)
+        calc_steering(cc3, 0.0, 0.0, 0.0; t = -1.0, elevation = deg2rad(80.0),
+                     v_kite = 0.0, v_app = 10.0, dmin = 100.0, tangent = 0.0)
+        @test cc3.pid.K ≈ 0.5 * 0.2 * 20.0 / 10.0   # entry: v_app_min only
+        set_phase!(cc3, 3)
+        calc_steering(cc3, 0.0, 0.0, 0.0; t = 100.0, elevation = deg2rad(80.0),
+                     v_kite = 0.0, v_app = 10.0, dmin = 100.0, tangent = 0.0)
+        @test cc3.pid.K ≈ 0.2 * 20.0 / 15.0
     end
 
     @testset "clamp" begin

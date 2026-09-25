@@ -56,7 +56,8 @@ fc_settings:
   heading_d:          0.30     # Derivative time [s]
   heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
   v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
-  v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
+  v_app_min:          8.0      # Lower clamp on v_app, limits the gain boost      [m/s]
+  v_app_min_pattern:  23.0     # Same, from phase 3 on; the dead time grows at low v_app [m/s]
   entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
   entry_depower:      0.37     # Depower during the entry phases                    [-]
 

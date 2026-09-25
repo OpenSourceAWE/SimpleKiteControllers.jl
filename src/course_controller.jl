@@ -30,6 +30,8 @@ default, matching [`FigureEightSettings`](@ref).
     v_app_ref = 27.0
     "Lower clamp on `v_app`, limits the gain boost [m/s]"
     v_app_min = 10.0
+    "Lower clamp on `v_app` from phase 3 on, on top of `v_app_min` [m/s]; 0 = off"
+    v_app_min_pattern = 0.0
     "Factor on `heading_p` while `phase < 3`"
     entry_gain = 0.25
     "[m/s] at/below: pure heading feedback"
@@ -101,7 +103,8 @@ function CourseControllerSettings(fcs::FC_Settings; dt)
         heading_p = fcs.heading_p, heading_i = fcs.heading_i,
         heading_d = fcs.heading_d, heading_d_n = fcs.heading_d_n,
         max_steering = fcs.max_steering, v_app_ref = fcs.v_app_ref,
-        v_app_min = fcs.v_app_min, entry_gain = fcs.entry_gain,
+        v_app_min = fcs.v_app_min, v_app_min_pattern = fcs.v_app_min_pattern,
+        entry_gain = fcs.entry_gain,
         v_kite_heading = fcs.v_kite_heading, v_kite_course = fcs.v_kite_course,
         fig8_pure_course = fcs.fig8_pure_course,
         entry_chi_max = fcs.entry_chi_max, entry_d_gate = fcs.entry_d_gate,
@@ -206,7 +209,8 @@ reference `chi_cmd`.
 The feedback angle ψ' blends `heading` and `course` by `v_kite` [m/s] between
 `ccs.v_kite_heading` (pure heading) and `ccs.v_kite_course` (pure course);
 `ccs.fig8_pure_course` forces pure course from `phase >= 3`. The gain is
-scheduled by `v_app` [m/s] as `K = heading_p * v_app_ref / max(v_app, v_app_min)`,
+scheduled by `v_app` [m/s] as `K = heading_p * v_app_ref / max(v_app, v_app_min)`
+(from phase 3 on also floored at `v_app_min_pattern`),
 by phase (`entry_gain` below 3, full gain from 3), and by `gain_scale` (default
 `1.0`), a caller-supplied factor for what the schedule cannot see from here —
 the turn-rate gain `c1` moving with the depower actually flown, when that is
@@ -281,7 +285,7 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     cc.w_course = w_course
     cc.psi_prime = psi_prime
     cc.err = err
-    v_app_eff = max(v_app, ccs.v_app_min)
+    v_app_eff = max(v_app, ccs.v_app_min, phase >= 3 ? ccs.v_app_min_pattern : 0.0)
     K_phase = phase >= 3 ? ccs.heading_p : ccs.entry_gain * ccs.heading_p
     set_K!(cc.pid, gain_scale * K_phase * ccs.v_app_ref / v_app_eff, 0.0, err)
     u_ff_used = phase >= 4 ? u_ff : 0.0
