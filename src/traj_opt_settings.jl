@@ -559,6 +559,15 @@ multi-modal, so the guess is a choice about the answer.
     (`calc_wind_factor`). `0.0` = the ground wind as passed to `init`.
     """
     pattern_elevation_amplitude_max_wind_height = 0.0
+    """
+    Force a mirror-symmetric figure-eight: half a period later the kite is at the
+    point mirrored about azimuth 0 (the server's `symmetric` pattern limit, M linear
+    rows on the spline coefficients). Nothing physical prefers one side, but the
+    power objective barely reads the lobe balance, so the multi-modal solve lands
+    on lopsided figures: the Cabauw run of 2026-09-25 started on a figure centred at
+    -2.3° azimuth with 214 of 361 points in the left lobe. `false` is off.
+    """
+    pattern_symmetric::Bool = false
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """

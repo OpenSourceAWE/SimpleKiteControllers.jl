@@ -761,7 +761,8 @@ with_elevation_max(box, el_max) = isnothing(box) ?
     PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
                   elevation_max = el_max,
                   azimuth_amplitude_min = box.azimuth_amplitude_min,
-                  elevation_amplitude_max = box.elevation_amplitude_max)
+                  elevation_amplitude_max = box.elevation_amplitude_max,
+                  symmetric = box.symmetric)
 
 """
     with_azimuth_amplitude_min(box, a_min) -> PatternLimits
@@ -774,7 +775,8 @@ with_azimuth_amplitude_min(box, a_min) = isnothing(box) ?
     PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
                   elevation_max = box.elevation_max,
                   azimuth_amplitude_min = a_min,
-                  elevation_amplitude_max = box.elevation_amplitude_max)
+                  elevation_amplitude_max = box.elevation_amplitude_max,
+                  symmetric = box.symmetric)
 
 "The server's amplitude measure of a path's azimuth [deg]: the RMS-based
 half-width its `azimuth_amplitude_min` row bounds, `sqrt(2 * mean((az - mean(az))^2))`."
@@ -812,7 +814,8 @@ function with_size_box(box, az_prev, el_prev, growth)
                          elevation_min = higher(box.elevation_min, el_lo - slack),
                          elevation_max = tighter(box.elevation_max, el_hi + slack),
                          azimuth_amplitude_min = box.azimuth_amplitude_min,
-                         elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim))
+                         elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim),
+                         symmetric = box.symmetric)
 end
 
 # Read at TOP level: the retry block defines `incumbent_score` only when it runs.

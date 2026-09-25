@@ -49,6 +49,8 @@ traj_opt:
                                                     # 11° since 2026-09-23: Cabauw 10 at f_high 7200 N needs
                                                     # 10.5-10.7° at the 150 m startup [m/s]
     pattern_elevation_amplitude_max_wind_height: 100.0  # height that wind is taken at; 0 = the 6 m wind [m]
+    pattern_symmetric: true           # mirror-symmetric figure about azimuth 0; the solve is multi-modal and
+                                      # otherwise lands lopsided (Cabauw 2026-09-25: centre -2.3°, lobes 214/147 points)
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     reopt_enabled: true      # off by default: a run is reproducible without a server

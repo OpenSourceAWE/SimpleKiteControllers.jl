@@ -1048,6 +1048,9 @@ end
         # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
         @test tos.pattern_elevation_amplitude_max_wind_ref == 13.2
         @test tos.pattern_elevation_amplitude_max_wind_height == 100.0
+        # The optimizer's lopsided basins are closed by the mirror-symmetry rows (2026-09-25).
+        @test tos.pattern_symmetric === true
+        @test TrajOptSettings().pattern_symmetric === false
     end
 
     @testset "attractor_distance" begin

@@ -220,7 +220,7 @@ awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFS
 
 """
     PatternLimits(; azimuth_max, elevation_min, elevation_max,
-                  azimuth_amplitude_min, elevation_amplitude_max)
+                  azimuth_amplitude_min, elevation_amplitude_max, symmetric)
 
 A box, in DEGREES, on where the optimized pattern may go. The server bounds the
 B-spline's control coefficients, so by the convex-hull property the limits hold
@@ -233,7 +233,9 @@ zero-width collapse; `elevation_max` guards the run-away-to-zenith basin — the
 two bad basins a failed re-optimization falls into. `elevation_amplitude_max`
 caps the figure's elevation HALF-SPAN with one smooth row (mean squared
 deviation from the mean elevation <= value²/2) — where `elevation_max` only
-caps where the path may sit, this caps how TALL it is. On `/step` the struct
+caps where the path may sit, this caps how TALL it is. `symmetric = true`
+forces a figure mirror-symmetric about azimuth 0 (half a period later the kite
+is at the mirrored point). On `/step` the struct
 replaces the session's limits as a whole, so an all-`nothing` `PatternLimits()`
 CLEARS them.
 """
@@ -243,6 +245,7 @@ Base.@kwdef struct PatternLimits
     elevation_max::Union{Float64, Nothing} = nothing         # elevation <= this [deg]
     azimuth_amplitude_min::Union{Float64, Nothing} = nothing # half-width >= this [deg]
     elevation_amplitude_max::Union{Float64, Nothing} = nothing # half-span <= this [deg]
+    symmetric::Union{Bool, Nothing} = nothing                # mirror-symmetric figure
 end
 
 "Metrics of one solve; `turn_radius_min_m` is the tightest PHYSICAL turn radius
@@ -430,6 +433,10 @@ stable_hash(x) = bytes2hex(sha256(repr(x)))[1:16]
 _key_fields(x::Union{WinchParams, InflowConditions, Trajectory, DepowerSpec, PatternLimits,
                      StepParams}) =
     Tuple(_key_fields(getfield(x, f)) for f in fieldnames(typeof(x)))
+# `symmetric` came last; left out while off, so the keys cached before it stay valid.
+_key_fields(x::PatternLimits) =
+    Tuple(_key_fields(getfield(x, f)) for f in fieldnames(PatternLimits)
+          if !(f === :symmetric && isnothing(x.symmetric)))
 _key_fields(x) = x
 
 """
@@ -639,7 +646,8 @@ function as_pattern_limits(d)
                          elevation_min = opt_float(d, "elevation_min"),
                          elevation_max = opt_float(d, "elevation_max"),
                          azimuth_amplitude_min = opt_float(d, "azimuth_amplitude_min"),
-                         elevation_amplitude_max = opt_float(d, "elevation_amplitude_max"))
+                         elevation_amplitude_max = opt_float(d, "elevation_amplitude_max"),
+                         symmetric = opt_get(d, "symmetric"))
 end
 
 as_metrics(d) = SolveMetrics(; energy_J = d["energy_J"],
@@ -1525,8 +1533,9 @@ end
         -> Union{PatternLimits, Nothing}
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
-`data/traj_opt.yaml`; each is in degrees and each is off at `0.0`. `nothing` when
-all five are off, which leaves the optimizer's own defaults alone.
+`data/traj_opt.yaml`; each is in degrees and each is off at `0.0`, and
+`tos.pattern_symmetric` adds the mirror-symmetry rows. `nothing` when all six are
+off, which leaves the optimizer's own defaults alone.
 
 `elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
 of [`elevation_min_request`](@ref), which depends on the length being asked for and
@@ -1541,9 +1550,11 @@ function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
                            elevation_max = on(tos.pattern_elevation_max),
                            azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min),
                            elevation_amplitude_max =
-                               on(elevation_amplitude_max_at(tos, wind_speed)))
+                               on(elevation_amplitude_max_at(tos, wind_speed)),
+                           symmetric = tos.pattern_symmetric ? true : nothing)
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
-                    limits.azimuth_amplitude_min, limits.elevation_amplitude_max)) &&
+                    limits.azimuth_amplitude_min, limits.elevation_amplitude_max,
+                    limits.symmetric)) &&
         return nothing
     return limits
 end
