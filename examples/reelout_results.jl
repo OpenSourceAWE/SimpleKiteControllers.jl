@@ -453,6 +453,11 @@ An upper bound, not a prediction of this `k_v` law: `winch_mode = "free_speed"`
 drops the winch law entirely. Solved AFTER the run so it cannot disturb it, and
 never flown — a free-speed path does not sustain the force this winch needs. A
 solve that fails is skipped; `nothing` when none succeed.
+
+Every probe goes through an `OptChain` of its own, not `opt_chain`, so a rerun
+of the same run is served from the solution cache and the run's hit/miss counts
+stay its own. A converged probe is stored as if applied: each is a cold chain
+of one step, and it IS the result this summary uses.
 """
 function free_speed_reference(lengths)
     n = tos.free_speed_reference_points
@@ -464,6 +469,8 @@ function free_speed_reference(lengths)
     # node-0 forward march does, and 1.0 is the value it converges at cold.
     ref_winch = winch_from_wc(rcs; optimize_k_v = false, use_awe_trim = 1.0,
                               winch_mode = "free_speed")
+    ref_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
+                         failures = tos.opt_failure_cache)
     solved = NamedTuple[]
     for l in probes
         try
@@ -474,10 +481,12 @@ function free_speed_reference(lengths)
                                 reg_weight = tos.reg_weight,
                                 detect_simple_bounds = tos.detect_simple_bounds,
                                 min_turn_radius = opt_r_min, pattern_limits = opt_box)
-            reply = opt_init(params; url = tos.base_url)
-            result = opt_step(StepParams(l, ref_winch, reply.trajectory); url = tos.base_url)
-            isnothing(result.metrics) ||
+            reply = chain_init(ref_chain, params)
+            result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))
+            if !isnothing(result.metrics)
+                record_opt_success!(ref_chain)
                 push!(solved, (; l, power = result.metrics.avg_power_W))
+            end
         catch exc
             @debug "free_speed reference failed at L = $l m" exception = exc
         end

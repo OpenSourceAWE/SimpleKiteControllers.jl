@@ -54,6 +54,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using HTTP, JSON3, StructTypes
+using SHA: sha256
 using Dates: now, format
 using Printf: @sprintf
 using YAML
@@ -402,16 +403,27 @@ request, so two projects that send the same request pose the same problem and
 share the entry. What the key cannot see is the server's own configuration
 (kite, tether, solver defaults) — clear the cache after an AWETrim upgrade.
 
-`hash` is not stable across Julia versions either, so an upgrade invalidates the
-cache. That is a cache MISS — one wasted solve, then the entry is rewritten —
-never a false hit, since a key that does not match is simply not found.
+The key is a [`stable_hash`](@ref), not Base's `hash`, so it survives a Julia
+upgrade. `"v4-"` retires the `hash`-based `"v3-"` keys.
 """
 function opt_request_key(p::InitParams)
-    h = hash(Tuple(_key_fields(getfield(p, f)) for f in fieldnames(InitParams) if f !== :name))
-    return "v3-" * string(h; base = 16)
+    return "v4-" * stable_hash(Tuple(_key_fields(getfield(p, f))
+                                      for f in fieldnames(InitParams) if f !== :name))
 end
 
-# Request structs flattened to nested tuples of their field VALUES, for `hash`.
+"""
+    stable_hash(x) -> String
+
+64 bits of the SHA-256 of `repr(x)`, as 16 hex digits. Unlike Base's `hash`, which
+may change between Julia releases, this gives the same key on every Julia version
+and machine, as long as `x` holds only plain values (numbers, strings, symbols,
+`nothing`, tuples and vectors of them) — which [`_key_fields`](@ref) ensures.
+`repr` prints a float as the shortest string that parses back to it, so the key
+is exact, and it also covers `NaN`, `Inf` and `-0.0`.
+"""
+stable_hash(x) = bytes2hex(sha256(repr(x)))[1:16]
+
+# Request structs flattened to nested tuples of their field VALUES, for the key.
 # Hashing the structs themselves would not do: the default `hash` of a struct
 # holding a `Vector` goes by the vector's identity, not its contents, so two
 # equal requests would never share a key.
@@ -844,7 +856,7 @@ OptChain(url::AbstractString = AWETRIM_URL; successes::Bool = true, failures::Bo
 
 # A step's key: its parent's, and everything of the step the server sees. `x` is
 # already flattened by `_key_fields`, see there for why.
-chain_key(parent::AbstractString, x) = "c1-" * string(hash((parent, x)); base = 16)
+chain_key(parent::AbstractString, x) = "c2-" * stable_hash((parent, x))
 
 _chain_file(oc::OptChain, key) = joinpath(oc.dir, key * ".json")
 

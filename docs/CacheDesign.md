@@ -14,8 +14,8 @@ paying for them again:
 
 Both settings are in `data/traj_opt.yaml` and default to `true`. The code is in
 [`examples/awetrim_client.jl`](../examples/awetrim_client.jl): the failure cache near
-[`OPT_FAILURE_CACHE`](../examples/awetrim_client.jl#L382), the solution cache from
-[`OPT_CHAIN_CACHE`](../examples/awetrim_client.jl#L807) on.
+[`OPT_FAILURE_CACHE`](../examples/awetrim_client.jl#L383), the solution cache from
+[`OPT_CHAIN_CACHE`](../examples/awetrim_client.jl#L819) on.
 
 ## The failure cache (unchanged)
 
@@ -56,7 +56,7 @@ The design therefore:
 - A chain starts at `/init`. Its key is `opt_request_key(p)`, shared with the failure
   cache.
 - Every step's key is
-  [`chain_key`](../examples/awetrim_client.jl#L847)`(parent_key, step_fields)`, a hash
+  [`chain_key`](../examples/awetrim_client.jl#L859)`(parent_key, step_fields)`, a hash
   of the parent's key and everything of the step the server sees: the flattened
   `StepParams`, the `inflow_conditions` override and `max_iter`. The `wait` flag is
   transport only and not part of the key.
@@ -65,16 +65,17 @@ The design therefore:
 
 Structs are flattened to tuples of field values by `_key_fields` before hashing. The
 default `hash` of a struct that holds a `Vector` goes by identity, so two equal requests
-would otherwise never share a key. Keys are prefixed with a version (`v3-` for requests,
-`c1-` for chain steps), so a change to what goes into a key retires the old entries
+would otherwise never share a key. Keys are prefixed with a version (`v4-` for requests,
+`c2-` for chain steps), so a change to what goes into a key retires the old entries
 instead of misreading them.
 
-`hash` is not stable across Julia versions. An upgrade therefore turns every entry into
-a miss, one wasted solve each, and never into a false hit.
+The hash is `stable_hash`: 64 bits of the SHA-256 of `repr` of the flattened fields.
+Unlike Base's `hash`, it gives the same key on every Julia version and machine, so the
+cache survives a Julia upgrade. (`v3-` and `c1-` were the `hash`-based keys.)
 
 ## The client object
 
-[`OptChain`](../examples/awetrim_client.jl#L824) is held by the caller (one per run,
+[`OptChain`](../examples/awetrim_client.jl#L836) is held by the caller (one per run,
 `opt_chain` in the script). Its state:
 
 | Field | Meaning |
@@ -93,11 +94,11 @@ applied:
 
 | Chain call | Replaces | Behaviour |
 |---|---|---|
-| [`chain_init`](../examples/awetrim_client.jl#L919) | `opt_init` | starts a new chain; `/init` **always** goes to the server, because it only fits the starting path and the following step needs that fitted path |
-| [`chain_step`](../examples/awetrim_client.jl#L943) | `opt_step` | hit: served without the server; miss: rebuild if needed, then send |
-| [`chain_status`](../examples/awetrim_client.jl#L1020) | `opt_status` | the known outcome for a served or finished step; otherwise asks the server and records the outcome when the solve finishes |
-| [`chain_trajectory`](../examples/awetrim_client.jl#L1042) | `opt_trajectory` | a copy of `table`, so callers that edit it cannot change what gets stored |
-| [`record_opt_success!`](../examples/awetrim_client.jl#L1054) | — | the latest result was applied: store it and its lineage |
+| [`chain_init`](../examples/awetrim_client.jl#L931) | `opt_init` | starts a new chain; `/init` **always** goes to the server, because it only fits the starting path and the following step needs that fitted path |
+| [`chain_step`](../examples/awetrim_client.jl#L955) | `opt_step` | hit: served without the server; miss: rebuild if needed, then send |
+| [`chain_status`](../examples/awetrim_client.jl#L1032) | `opt_status` | the known outcome for a served or finished step; otherwise asks the server and records the outcome when the solve finishes |
+| [`chain_trajectory`](../examples/awetrim_client.jl#L1054) | `opt_trajectory` | a copy of `table`, so callers that edit it cannot change what gets stored |
+| [`record_opt_success!`](../examples/awetrim_client.jl#L1066) | — | the latest result was applied: store it and its lineage |
 
 ## Step lifecycle
 
@@ -130,7 +131,7 @@ carrying the recorded reason. The script's existing
 
 ## Rebuilding the server's state
 
-[`rebuild_session!`](../examples/awetrim_client.jl#L1079) runs before a miss whenever
+[`rebuild_session!`](../examples/awetrim_client.jl#L1091) runs before a miss whenever
 `server ≠ state`:
 
 1. `/init` with the chain's current `config`. When the chain has a converged optimum,
