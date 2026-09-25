@@ -599,10 +599,11 @@ end
 
         # Canary: catches an accidental edit of the YAML. EXPECTED to change on
         # a deliberate re-identification -- update it then, nothing else here.
-        # 0.2697451625905726: 11 kg wing, 150 m / 8 mm tether, re-identified
-        # 2026-09-22 against system_reelout_maasvlakte.yaml (see
-        # docs/fig8_tuning_log.md); was 0.26975787521515693 from 2026-08-30.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.2697451625905726
+        # 0.26976888270335364: re-identified 2026-09-25 to record each row's
+        # v_app (docs/course_loop_stability.md); was 0.2697451625905726 from
+        # 2026-09-22 (11 kg wing, 150 m / 8 mm tether, system_reelout_maasvlakte.yaml,
+        # see docs/fig8_tuning_log.md) and 0.26975787521515693 from 2026-08-30.
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.26976888270335364
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin

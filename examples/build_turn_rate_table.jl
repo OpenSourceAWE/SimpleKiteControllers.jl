@@ -52,7 +52,7 @@ using WinchControllers: WCSettings, WinchPosController
 import KiteUtils   # for KiteUtils.syslog; V3Kite does not re-export it
 using YAML
 using Printf
-using Statistics: std
+using Statistics: mean, std
 import Dates
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
@@ -368,6 +368,9 @@ function build_turn_rate_table(;
             entry["c1"] = r.fit.c1
             entry["c2"] = r.fit.c2
             entry["delay"] = r.fit.delay_sec
+            # The dead time scales with the airspeed (docs/course_loop_stability.md),
+            # so a delay is only meaningful together with the v_app it was flown at.
+            entry["v_app"] = mean(r.fit.v_app)
             entry["c1_rel_std"] = abs(r.fit.se1 / r.fit.c1)
             entry["g_rel_std"] = r.fit.G_rel_std
             # Absolute scatter alongside the relative one: se1/se2 are the fit's own
