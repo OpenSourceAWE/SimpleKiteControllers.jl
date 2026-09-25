@@ -662,6 +662,12 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "simulation held while a solve ran"),
         "blocked" => (round(reopt_blocked_s; digits = 1),
             "wall time the simulation was frozen waiting for replies [s]"),
+        "cache_hits" => (opt_chain.hits,
+            "optimizer steps, startup included, served from the solution or failure \
+             cache (OptChain) without asking the server"),
+        "cache_misses" => (opt_chain.misses, "optimizer steps sent to the server"),
+        "cache_rebuilds" => (opt_chain.rebuilds,
+            "server sessions rebuilt from the cache before a miss"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
         "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()
@@ -853,6 +859,8 @@ if t_sim > 0
     @printf("               %.0f s from the first line of the script, %.0f s of it \
              waiting for the optimizer (%.0f s at startup).\n",
             t_total, t_opt, opt_startup_solve_s)
+    @printf("               Optimizer steps: %d served from the cache, %d sent, %d \
+             session rebuilds.\n", opt_chain.hits, opt_chain.misses, opt_chain.rebuilds)
     summary["performance"] = OrderedDict(
         "sim_time" => (round(t_sim; digits = 1), "simulated time [s]"),
         "wall_time" => (round(t_wall; digits = 1), "wall-clock time [s]"),

@@ -410,6 +410,9 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
 
 # Anchored to the STARTING length; re-optimizing during the run is stage 4, below.
 ensure_server(tos.base_url; autostart = tos.autostart_server)
+# Every request of the run goes through this chain, which replays applied results and known failures (see `OptChain`).
+opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
+                     failures = tos.opt_failure_cache)
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
 opt_r_scale = (1 + turn_radius_reel / l_set) * tos.turn_radius_headroom
@@ -512,7 +515,7 @@ then the `/step` under the first-lap winch, the one lap 1 flies. Throws the `HTT
 422 unchanged; the caller decides whether that ends the run.
 """
 function startup_solve(params)
-    reply = opt_init(params; url = tos.base_url)
+    reply = chain_init(opt_chain, params)
     # Seeding solve: the cold first request fails at low winch force, so it is warmed at `opt_warm_start_awe_trim`.
     seed_trajectory = reply.trajectory
     if tos.opt_warm_start_awe_trim > winch.use_awe_trim
@@ -521,12 +524,11 @@ function startup_solve(params)
                        tos.opt_warm_start_awe_trim, winch.use_awe_trim)
         warm_winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
                                    use_awe_trim = tos.opt_warm_start_awe_trim)
-        seed_trajectory = opt_step(StepParams(opt_length(l_set), warm_winch,
-                                              reply.trajectory);
-                                   url = tos.base_url).trajectory
+        seed_trajectory = chain_step(opt_chain, StepParams(opt_length(l_set), warm_winch,
+                                                           reply.trajectory)).trajectory
     end
-    result = opt_step(StepParams(opt_length(l_set), winch_first_lap, seed_trajectory);
-                      url = tos.base_url)
+    result = chain_step(opt_chain, StepParams(opt_length(l_set), winch_first_lap,
+                                              seed_trajectory))
     return result, seed_trajectory
 end
 
@@ -706,7 +708,9 @@ opt_paths_raw = [install_optimized_path!(opt_result)]
 opt_paths_at = [(0.0, 0)]
 
 # set_path! REVERSES a path that does not match up_loops, so a mismatch must be caught here.
-opt_table = opt_trajectory(; url = tos.base_url)
+opt_table = chain_trajectory(opt_chain)
+# Installed above, so applied: stored for a rerun that sends the same requests.
+record_opt_success!(opt_chain)
 apply_optimized_kv!(opt_table, 0.0, l_tether)
 opt_downloops = opt_table["spline"]["downloops"]
 opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
@@ -953,12 +957,12 @@ if opt_r_on && !isnan(c1_startup)
             t_attempt = time()
             local att_result, att_table, att_raw, att_score
             try
-                att_result = opt_step(StepParams(; length = opt_length(l_set),
-                                                 winch_params = winch_first_lap,
-                                                 min_turn_radius = r_ask,
-                                                 pattern_limits = box_ask);
-                                      url = tos.base_url)
-                att_table = opt_trajectory(; url = tos.base_url)
+                att_result = chain_step(opt_chain,
+                                        StepParams(; length = opt_length(l_set),
+                                                   winch_params = winch_first_lap,
+                                                   min_turn_radius = r_ask,
+                                                   pattern_limits = box_ask))
+                att_table = chain_trajectory(opt_chain)
                 att_raw = install_optimized_path!(att_result)
                 att_score = score_installed()
             catch exc
@@ -1019,6 +1023,7 @@ if opt_r_on && !isnan(c1_startup)
                                att_score.el_ok ? "ok" : "MISSED")
                 break
             elseif takes_over
+                record_opt_success!(opt_chain)
                 incumbent_score = att_score
                 inc_result, inc_table, inc_raw = att_result, att_table, att_raw
                 apply_optimized_kv!(inc_table, 0.0, l_set)
@@ -1416,14 +1421,13 @@ try
                             wind_speed = cap_wind),
                         opt_paths_raw[end]..., tos.size_box_growth)
                     for (attempt, el_seed) in enumerate(el_seeds)
-                        # Set only on a cold attempt: it is what the failure cache keys on.
-                        reopt_params = nothing
                         if isnothing(el_seed)
                             # `min_turn_radius` is re-sent because it MOVES with the length; `nothing` means "keep".
-                            opt_step(StepParams(; length = opt_length(l_now), winch_params = winch_reopt,
-                                                min_turn_radius = opt_r_min,
-                                                pattern_limits = opt_box_now);
-                                     url = tos.base_url, wait = false)
+                            chain_step(opt_chain,
+                                       StepParams(; length = opt_length(l_now), winch_params = winch_reopt,
+                                                  min_turn_radius = opt_r_min,
+                                                  pattern_limits = opt_box_now);
+                                       wait = false)
                         else
                             guess_az_r, guess_el_r =
                                 figure_eight_path(tos.guess_a, tos.guess_b,
@@ -1439,26 +1443,12 @@ try
                                                       detect_simple_bounds = tos.detect_simple_bounds,
                                                       min_turn_radius = opt_r_min,
                                                       pattern_limits = opt_box_now)
-                            # A cached failure costs only the lap: no request goes out and `reopt_n` is NOT spent.
-                            cached = tos.opt_failure_cache ?
-                                     opt_failed_before(reopt_params) : nothing
-                            if !isnothing(cached)
-                                global reopt_lap = fig8_idx_progress / n_path
-                                push!(reopt_events,
-                                      (; t, l = l_now, status = "skipped",
-                                       detail = @sprintf("cached failure from %s (%s)",
-                                                         get(cached, "when", "an earlier run"),
-                                                         get(cached, "reason", "no reason recorded"))))
-                                @info @sprintf("Re-optimization at L = %.0f m skipped: this \
-                                                exact request is cached as failing (%s). \
-                                                clear_opt_failures() to retry it.",
-                                               l_now, get(cached, "reason", "no reason recorded"))
-                                attempt == length(el_seeds) && break
-                                continue
-                            end
-                            reopt_reply = opt_init(reopt_params; url = tos.base_url)
-                            opt_step(StepParams(opt_length(l_now), winch_reopt, reopt_reply.trajectory);
-                                     url = tos.base_url, wait = false)
+                            # A known failure is served by `opt_chain`, not skipped here: skipping would leave
+                            # the chain on the warm lineage, and every later step would miss the cache.
+                            reopt_reply = chain_init(opt_chain, reopt_params)
+                            chain_step(opt_chain,
+                                       StepParams(opt_length(l_now), winch_reopt, reopt_reply.trajectory);
+                                       wait = false)
                         end
                         global reopt_pending = true
                         global reopt_t_request = t
@@ -1484,7 +1474,7 @@ try
                         tos.reopt_blocking || break
                         t_block = time()
                         while (try
-                                   opt_status(tos.base_url)["state"]
+                                   chain_status(opt_chain)["state"]
                                catch exc
                                    @warn "Could not reach the optimizer while \
                                           holding; will retry." exception = exc
@@ -1498,13 +1488,8 @@ try
                         global reopt_next_poll = t
                         # Retry only a solver failure, and only while a seed is left.
                         failed = (try
-                                      opt_status(tos.base_url)["state"]
+                                      chain_status(opt_chain)["state"]
                                   catch; "failed"; end) == "failed"
-                        # Only a cold request can be cached; a failed warm step mutates nothing on the server.
-                        failed && tos.opt_failure_cache && !isnothing(reopt_params) &&
-                            record_opt_failure!(reopt_params,
-                                                @sprintf("solver failed at L = %.1f m, \
-                                                          guess el %.0f°", l_now, el_seed))
                         (failed && attempt < length(el_seeds)) || break
                         @info @sprintf("  ... failed from %s; retrying from %s.",
                                        isnothing(el_seed) ? "the warm start" :
@@ -1527,7 +1512,7 @@ try
             if reopt_pending && t >= reopt_next_poll
                 global reopt_next_poll = t + tos.reopt_poll_interval
                 local state = try
-                    opt_status(tos.base_url)["state"]
+                    chain_status(opt_chain)["state"]
                 catch exc
                     @warn "Could not reach the optimizer; will retry." exception = exc
                     "solving"
@@ -1537,7 +1522,7 @@ try
                     global reopt_n += 1
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
-                        tab = opt_trajectory(; url = tos.base_url)
+                        tab = chain_trajectory(opt_chain)
                         # k_v and input_depower are applied only in the accept gate below, from the `tab` that passes it.
                     # A reply whose blend folds is not flown: a fresh COLD reply is requested, `blend_max_retries` times at most.
                     reject_reason = ""
@@ -1583,15 +1568,16 @@ try
                                         elevation_min = retry_el_min,
                                         wind_speed = cap_wind),
                                     opt_paths_raw[end]..., tos.size_box_growth))
-                            retry_reply = opt_init(retry_params; url = tos.base_url)
-                            opt_step(StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
-                                     url = tos.base_url, wait = false)
+                            retry_reply = chain_init(opt_chain, retry_params)
+                            chain_step(opt_chain,
+                                       StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
+                                       wait = false)
                             t_retry = time()
                             retry_state = "solving"
                             while retry_state == "solving"
                                 sleep(tos.reopt_poll_interval)
                                 retry_state = try
-                                    opt_status(tos.base_url)["state"]
+                                    chain_status(opt_chain)["state"]
                                 catch exc
                                     @warn "Could not reach the optimizer while \
                                            retrying a folded blend; will retry." exception = exc
@@ -1611,7 +1597,7 @@ try
                                                            blend_attempt, retry_state))
                                 break
                             end
-                            tab = opt_trajectory(; url = tos.base_url)
+                            tab = chain_trajectory(opt_chain)
                             # k_v and input_depower are applied only in the accept gate below, see above.
                         end
                         # Re-measure the anchor SCALE off the reply; the radius itself is derived where the request goes out.
@@ -1786,6 +1772,7 @@ try
                                 push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
                             end
                             apply_optimized_kv!(tab, t, l_now)
+                            record_opt_success!(opt_chain)
                             abs(el_target - el_applied) > 1e-6 &&
                                 push!(el_shift_events,
                                       (; t, delta = el_target - el_applied, margin,

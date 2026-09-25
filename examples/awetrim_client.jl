@@ -415,7 +415,8 @@ end
 # Hashing the structs themselves would not do: the default `hash` of a struct
 # holding a `Vector` goes by the vector's identity, not its contents, so two
 # equal requests would never share a key.
-_key_fields(x::Union{WinchParams, InflowConditions, Trajectory, DepowerSpec, PatternLimits}) =
+_key_fields(x::Union{WinchParams, InflowConditions, Trajectory, DepowerSpec, PatternLimits,
+                     StepParams}) =
     Tuple(_key_fields(getfield(x, f)) for f in fieldnames(typeof(x)))
 _key_fields(x) = x
 
@@ -717,16 +718,20 @@ return value is the step index instead. Poll [`opt_status`](@ref) until its
 [`opt_trajectory`](@ref) — which is in RADIANS, unlike the degrees of the
 blocking reply. While a solve runs, and after one that failed, the server keeps
 serving the PREVIOUS path, so a caller is never left without a curve to fly.
+
+`raw = true` returns a blocking reply as the parsed JSON `Dict` instead, which is
+what [`OptChain`](@ref) stores.
 """
 function opt_step(params::StepParams; url = AWETRIM_URL,
-                  inflow_conditions = nothing, wait = true, max_iter = nothing)
+                  inflow_conditions = nothing, wait = true, max_iter = nothing,
+                  raw = false)
     payload = as_dict(params)
     inflow_conditions !== nothing && (payload["inflow_conditions"] = as_dict(inflow_conditions))
     max_iter !== nothing && (payload["max_iter"] = max_iter)
     payload["wait"] = wait
     reply = JSON3.read(post("/step", payload; url), Dict{String,Any})
     wait || return reply["step_index"]::Int
-    return as_step_reply(reply)
+    return raw ? reply : as_step_reply(reply)
 end
 
 """
@@ -759,6 +764,360 @@ slower and is rejected with 409 while a solve is running.
 """
 function opt_trajectory(; url = AWETRIM_URL, resimulate = false)
     return get_json("/trajectory?resimulate=$(resimulate)"; url)
+end
+
+# ---------------------------------------------------------------------------
+# Solution cache: a chain of requests replayed without the server
+#
+# The counterpart of the failed-request cache for the requests that WORKED —
+# and only for those whose result was APPLIED (installed and flown). A converged
+# reply that a gate rejected is not stored as a result.
+#
+# A result cannot be keyed by its request alone the way a failure is. A warm
+# `/step` solves from the optimum the SERVER holds, and that state is made up of
+# every request since the last `/init`: each `/step` also moves the session's
+# length, winch and limits, even when its solve fails. So the key is a CHAIN. A
+# cold request's key is `opt_request_key` of its `InitParams`, and every step's
+# key hashes its parent's key with its own `StepParams`. Equal keys mean equal
+# lineage.
+#
+# A hit is served without asking the server, so the server no longer holds the
+# state the chain has reached. The next MISS therefore first REBUILDS that state:
+# `/init` under the session's current config, seeded with the cached optimum,
+# then one `/step` from there. The result is close to the lost state but not
+# bit-identical, because IPOPT's warm start is gone. The rebuilt state therefore
+# gets a key of its own (the parent's plus "rebuilt"). Whatever is solved from it
+# is stored under that lineage, so it never passes for the original. A second
+# rerun hits it as well.
+#
+# When a chain ends in an applied result, its whole lineage since the `/init`
+# is stored: every reply a warm start built on, rejected ones included, because a
+# replay cannot reach the result without them. A WARM step that fails is stored
+# as soon as it fails (under `opt_failure_cache`), because the failure cache above
+# can only key cold requests.
+#
+# The key cannot see the server itself. Clear this cache
+# (`clear_opt_chain_cache()`) after any AWETrim change, or a replay keeps serving
+# the old optimizer's answers.
+
+"""
+The directory of the solution cache, one JSON file per chain key, shared by
+every script and sweep worker on this machine. Delete it to re-solve everything.
+"""
+const OPT_CHAIN_CACHE = joinpath(SKC_ROOT, "output", "opt_chain_cache")
+
+"""
+    OptChain(url = AWETRIM_URL; successes = true, failures = true,
+             dir = OPT_CHAIN_CACHE)
+
+One optimizer session as a chain of cached requests. [`chain_init`](@ref),
+[`chain_step`](@ref), [`chain_status`](@ref) and [`chain_trajectory`](@ref) stand
+in for `opt_init`, `opt_step`, `opt_status` and `opt_trajectory`: each answers
+from the cache on a hit, and asks the server otherwise (rebuilding the server's
+state first when needed). [`record_opt_success!`](@ref) marks the latest result
+as APPLIED, which is the only point where converged replies are stored.
+
+`successes = false` never serves or stores a converged reply, and
+`failures = false` does the same for failed ones. With both off, the chain passes
+every request straight through.
+"""
+mutable struct OptChain
+    url::String
+    successes::Bool
+    failures::Bool
+    dir::String
+    state::String                        # key of the state a warm /step starts from; "" before any /init
+    server::String                       # key of the state the server REALLY holds; "" = unknown
+    config::Union{InitParams, Nothing}   # session config at `state`: the /init with every step since applied
+    table::Union{Dict{String, Any}, Nothing}    # /trajectory at `state`, as the server would serve it
+    current::Union{Dict{String, Any}, Nothing}  # entry of the latest /step, sent or served
+    served::Bool                         # `current` came from the cache, not the server
+    pending::Vector{Dict{String, Any}}   # steps of this lineage that were sent and are not stored yet
+    hits::Int
+    misses::Int
+    rebuilds::Int
+end
+OptChain(url::AbstractString = AWETRIM_URL; successes::Bool = true, failures::Bool = true,
+         dir::AbstractString = OPT_CHAIN_CACHE) =
+    OptChain(String(url), successes, failures, String(dir), "", "", nothing, nothing,
+             nothing, false, Dict{String, Any}[], 0, 0, 0)
+
+# A step's key: its parent's, and everything of the step the server sees. `x` is
+# already flattened by `_key_fields`, see there for why.
+chain_key(parent::AbstractString, x) = "c1-" * string(hash((parent, x)); base = 16)
+
+_chain_file(oc::OptChain, key) = joinpath(oc.dir, key * ".json")
+
+function _chain_entry(oc::OptChain, key)
+    file = _chain_file(oc, key)
+    isfile(file) || return nothing
+    try
+        JSON3.read(read(file, String), Dict{String, Any})
+    catch exc
+        @warn "Ignoring an unreadable solution-cache entry at $file." exception = exc
+        nothing
+    end
+end
+
+# Written to a temporary file and moved into place, so a parallel worker never
+# reads half an entry.
+function _write_chain_entry(oc::OptChain, entry)
+    mkpath(oc.dir)
+    file = _chain_file(oc, entry["key"])
+    tmp = file * ".tmp-$(getpid())"
+    write(tmp, JSON3.write(entry))
+    mv(tmp, file; force = true)
+    return nothing
+end
+
+"`p` with the fields in `kw` replaced."
+_with(p::InitParams; kw...) =
+    InitParams(; merge(NamedTuple{fieldnames(InitParams)}(
+                           Tuple(getfield(p, f) for f in fieldnames(InitParams))),
+                       values(kw))...)
+
+# What a step leaves the session holding: its length and winch always, and the
+# fields where `nothing` means "keep" only when they are sent.
+function _step_config(p::InitParams, sp::StepParams, inflow_conditions)
+    kw = Dict{Symbol, Any}(:length => sp.length, :winch_params => sp.winch_params)
+    isnothing(sp.depower) || (kw[:depower] = sp.depower)
+    isnothing(sp.min_turn_radius) || (kw[:min_turn_radius] = sp.min_turn_radius)
+    isnothing(sp.pattern_limits) || (kw[:pattern_limits] = sp.pattern_limits)
+    isnothing(inflow_conditions) || (kw[:inflow_conditions] = inflow_conditions)
+    return _with(p; kw...)
+end
+
+# The 422 a cached failure stands for, so that callers catching the real one
+# (`exc isa HTTP.StatusError && exc.status == 422`) need not know the difference.
+_cached_422(entry) =
+    HTTP.StatusError(HTTP.Response(422, [], Vector{UInt8}(JSON3.write(Dict("detail" =>
+                         "cached failure from $(get(entry, "when", "an earlier run")): " *
+                         string(get(entry, "reason", "no reason recorded")))));
+                     request = HTTP.Request("POST", "/step")))
+
+function _chain_converged!(oc::OptChain, entry)
+    entry["status"] = "converged"
+    entry["table"] = opt_trajectory(; url = oc.url)
+    oc.table = entry["table"]
+    return nothing
+end
+
+function _chain_failed!(oc::OptChain, entry, reason)
+    entry["status"] = "failed"
+    entry["reason"] = String(reason)
+    oc.failures && _write_chain_entry(oc, entry)
+    return nothing
+end
+
+"""
+    chain_init(oc::OptChain, p::InitParams) -> InitReply
+
+`opt_init` that starts a new chain. `/init` always goes to the server, because it
+only fits the starting path and a following `/step` needs the fitted path it
+returns.
+"""
+function chain_init(oc::OptChain, p::InitParams)
+    oc.state = opt_request_key(p)
+    oc.server = ""   # unknown until the server has accepted it
+    oc.config = p
+    oc.table = nothing
+    oc.current = nothing
+    oc.served = false
+    empty!(oc.pending)
+    reply = opt_init(p; url = oc.url)
+    oc.server = oc.state
+    return reply
+end
+
+"""
+    chain_step(oc::OptChain, sp::StepParams; wait = true, inflow_conditions = nothing,
+               max_iter = nothing)
+
+`opt_step` on the chain. On a hit the reply comes from the cache and the server
+is not asked: blocking, a converged entry returns its `StepReply` and a failed one
+throws the same `HTTP.StatusError` 422 the server would; with `wait = false` it
+returns at once and [`chain_status`](@ref) reports the outcome. On a miss the
+server's state is rebuilt first if it lags behind the chain, and then the step is
+sent.
+"""
+function chain_step(oc::OptChain, sp::StepParams; wait = true,
+                    inflow_conditions = nothing, max_iter = nothing)
+    isnothing(oc.config) && error("chain_step before chain_init: there is no session to step.")
+    step_fields = (_key_fields(sp), _key_fields(inflow_conditions), max_iter)
+    config = _step_config(oc.config, sp, inflow_conditions)
+    usable(entry) = !isnothing(entry) &&
+                    (entry["status"] == "converged" ?
+                         oc.successes && (!wait || !isnothing(get(entry, "reply", nothing))) :
+                         oc.failures)
+    key = chain_key(oc.state, step_fields)
+    entry = _chain_entry(oc, key)
+    # A server that lags behind would be rebuilt first, and an earlier run stored what came
+    # of that under the rebuilt lineage: look there too, before paying for the rebuild.
+    if !usable(entry) && oc.server != oc.state
+        key = chain_key(chain_key(oc.state, "rebuilt"), step_fields)
+        entry = _chain_entry(oc, key)
+    end
+    if usable(entry)
+        oc.hits += 1
+        oc.state = key
+        oc.config = config
+        oc.current = entry
+        oc.served = true
+        failed = entry["status"] == "failed"
+        failed || (oc.table = entry["table"])
+        @info @sprintf("Optimizer step at L = %.1f m served from the solution cache (%s, \
+                        recorded %s); the server was not asked.",
+                       sp.length, failed ? "failed" : "converged",
+                       get(entry, "when", "at an unknown time"))
+        failed && wait && throw(_cached_422(entry))
+        return wait ? as_step_reply(entry["reply"]) : 0
+    end
+    oc.misses += 1
+    if oc.server != oc.state
+        rebuild_session!(oc)
+        key = chain_key(oc.state, step_fields)
+    end
+    entry = Dict{String, Any}("key" => key, "parent" => oc.state, "status" => "solving",
+                              "length_m" => sp.length, "request" => as_dict(sp),
+                              "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
+    oc.state = oc.server = key
+    oc.config = config
+    oc.current = entry
+    oc.served = false
+    push!(oc.pending, entry)
+    try
+        wait || return opt_step(sp; url = oc.url, inflow_conditions, max_iter, wait = false)
+        entry["reply"] = opt_step(sp; url = oc.url, inflow_conditions, max_iter, raw = true)
+    catch exc
+        if exc isa HTTP.StatusError && exc.status == 422
+            detail = try
+                string(get(JSON3.read(String(copy(exc.response.body)), Dict{String, Any}),
+                           "detail", "no detail"))
+            catch
+                "no detail"
+            end
+            _chain_failed!(oc, entry, "422 from /step: " * first(detail, 300))
+        else
+            # Never reached the solver, or not knowably: the server's state is unknown.
+            pop!(oc.pending)
+            oc.current = nothing
+            oc.server = ""
+        end
+        rethrow()
+    end
+    _chain_converged!(oc, entry)
+    return as_step_reply(entry["reply"])
+end
+
+"""
+    chain_status(oc::OptChain) -> Dict
+
+`opt_status` on the chain. For a step that was served, or whose outcome is
+already known, this is `Dict("state" => outcome)` without asking the server.
+Otherwise it asks the server, and when the step has just finished it records the
+outcome (fetching the trajectory of a converged one).
+"""
+function chain_status(oc::OptChain)
+    entry = oc.current
+    if !isnothing(entry) && (oc.served || entry["status"] != "solving")
+        return Dict{String, Any}("state" => entry["status"])
+    end
+    status = opt_status(oc.url)
+    if !isnothing(entry)
+        status["state"] == "converged" && _chain_converged!(oc, entry)
+        status["state"] == "failed" &&
+            _chain_failed!(oc, entry, something(get(status, "last_error", nothing),
+                                                "solver failed"))
+    end
+    return status
+end
+
+"""
+    chain_trajectory(oc::OptChain) -> Dict
+
+`opt_trajectory` on the chain: the last converged solve at the chain's state,
+from the cache or as fetched when the solve finished. It is a copy, so a caller
+that edits it cannot change what gets stored.
+"""
+function chain_trajectory(oc::OptChain)
+    isnothing(oc.table) && return opt_trajectory(; url = oc.url)
+    return deepcopy(oc.table)
+end
+
+"""
+    record_opt_success!(oc::OptChain)
+
+The latest result was APPLIED: store it, together with the unstored replies of
+its lineage that a replay needs to reach it. Does nothing for a result that was
+served from the cache, since that one is stored already.
+"""
+function record_opt_success!(oc::OptChain)
+    entry = oc.current
+    if isnothing(entry) || entry["status"] != "converged"
+        @warn "record_opt_success! without a converged result on the chain; nothing stored."
+        return nothing
+    end
+    entry["applied"] = true
+    if oc.successes
+        for e in oc.pending
+            e["status"] == "converged" && _write_chain_entry(oc, e)
+        end
+    end
+    empty!(oc.pending)
+    return nothing
+end
+
+"""
+    rebuild_session!(oc::OptChain)
+
+Put the server back into the state the chain has reached after it was served
+from the cache: `/init` under the chain's current config, seeded with the cached
+optimum and its depower, then one `/step` from there. A failed rebuild is not
+fatal. The next step is then sent to whatever the server holds, under a key that
+records the failure.
+"""
+function rebuild_session!(oc::OptChain)
+    oc.rebuilds += 1
+    tab = oc.table
+    p = oc.config
+    if !isnothing(tab)
+        seed = Trajectory(rad2deg.(Float64.(tab["table"]["azimuth"])),
+                          rad2deg.(Float64.(tab["table"]["elevation"])))
+        l_dp = opt_float(get(tab, "optimized_parameters", nothing), "input_depower")
+        p = isnothing(l_dp) ? _with(p; trajectory = seed) :
+                              _with(p; trajectory = seed, input_depower = l_dp)
+    end
+    @info @sprintf("Rebuilding the optimizer's session at L = %.1f m from the solution \
+                    cache before sending a request it has not seen.", p.length)
+    oc.server = ""
+    try
+        opt_init(p; url = oc.url)
+        oc.table = nothing
+        if !isnothing(tab)
+            opt_step(StepParams(; length = p.length, winch_params = p.winch_params);
+                     url = oc.url)
+            oc.table = opt_trajectory(; url = oc.url)
+        end
+        oc.state = chain_key(oc.state, "rebuilt")
+    catch exc
+        exc isa HTTP.StatusError || rethrow()
+        @warn "Could not rebuild the optimizer's session; the next request is solved \
+               from what the server holds now." exception = exc
+        oc.state = chain_key(oc.state, "rebuild failed")
+    end
+    oc.server = oc.state
+    return nothing
+end
+
+"""
+    clear_opt_chain_cache(; dir = OPT_CHAIN_CACHE) -> Bool
+
+Forget every stored chain. `true` if there was a cache to remove.
+"""
+function clear_opt_chain_cache(; dir::AbstractString = OPT_CHAIN_CACHE)
+    had = isdir(dir)
+    rm(dir; recursive = true, force = true)
+    return had
 end
 
 # ---------------------------------------------------------------------------

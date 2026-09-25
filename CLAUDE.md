@@ -118,6 +118,28 @@ everything the server sees and the tether length is EXACT, because the failures 
 isolated pockets in length (180.0 m converges, 180.00027 m does not), so a request
 only hits the cache when a run repeats it exactly.
 
+### The optimizer's solution cache
+
+`simple_opt_reelout.jl` sends every request through an `OptChain`
+(`examples/awetrim_client.jl`). It stores each APPLIED result (an installed path) in
+`output/opt_chain_cache/`, one JSON file per key, so a rerun that sends the same
+requests replays those results without solving. A warm `/step` depends on the state
+the server holds, so the key is the whole request chain since the `/init`. The
+replies a warm start built on are stored along with the applied result, rejected
+ones included. Failed WARM steps are stored there as well (under
+`opt_failure_cache`), since the YAML failure cache above only keys cold requests.
+After a hit the server no longer holds the chain's state, so the next miss first
+rebuilds it (`/init` seeded with the cached optimum, then one `/step`). The rebuilt
+state gets its own key, and results solved from it are stored under that lineage.
+
+```julia
+clear_opt_chain_cache()       # forget them all; or delete the directory
+```
+
+The key cannot see the server: clear the cache, or set `opt_success_cache: false`
+in `data/traj_opt.yaml`, after any AWETrim change. Otherwise a run replays the old
+optimizer's answers.
+
 Only `simple_opt_reelout.jl` writes the marker; copy its two lines (the `rm` next to
 `mkpath(output_path)` in the script itself and the `open(RUN_DONE_FILE, "w")` block at
 the end of `examples/reelout_results.jl`) into another example that needs to be waited

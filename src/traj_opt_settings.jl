@@ -162,6 +162,25 @@ multi-modal, so the guess is a choice about the answer.
     """
     opt_failure_cache::Bool = true
     """
+    Replay optimizer results that were APPLIED before, instead of solving them
+    again.
+
+    A rerun of a scenario sends the same requests and gets the same answers, so
+    `examples/awetrim_client.jl` stores every installed result. It also stores
+    the replies that result was warm-started from, rejected ones included. The
+    key is the whole chain of requests since the `/init`, because a warm `/step`
+    depends on the state the server holds. After a hit the server no longer
+    holds that state, and it is rebuilt before the next request that misses. See
+    `OptChain` there, `OPT_CHAIN_CACHE` for the directory, and
+    `clear_opt_chain_cache()` to forget them.
+
+    The key cannot see the server itself: clear the cache, or set this `false`,
+    after any change to AWETrim, or a run replays the old optimizer's answers.
+    Failed WARM steps are stored in the same place, but under
+    `opt_failure_cache`.
+    """
+    opt_success_cache::Bool = true
+    """
     `use_awe_trim` of a throwaway solve sent BEFORE the startup request, to seed
     the session for it. `0.0` is off.
 
