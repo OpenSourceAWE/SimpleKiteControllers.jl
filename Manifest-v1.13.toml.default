@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "c8d82fd579d3e7ee189fb7f1ecca01a66a58797f"
+project_hash = "9556675b8352022a41a307e9b843ede24b653232"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -2027,10 +2027,10 @@ version = "0.24.14"
 
 [[deps.MakieControlPlots]]
 deps = ["CairoMakie", "GLMakie", "GridLayoutBase", "JLD2", "LaTeXStrings", "Makie", "Pkg", "PrecompileTools", "Printf", "StaticArraysCore"]
-git-tree-sha1 = "fbf7b3dd02367637a9876bc25313506dfc8e0fba"
+git-tree-sha1 = "3b5f044e8156d424e8fcaa63c8943bb2c95a7eac"
 registries = "General"
 uuid = "6d616b69-6563-4f6e-8472-6f6c706c6f74"
-version = "0.1.18"
+version = "0.1.19"
 weakdeps = ["ControlSystemsBase"]
 
     [deps.MakieControlPlots.extensions]
@@ -3728,10 +3728,10 @@ version = "0.1.4"
 
 [[deps.WinchControllers]]
 deps = ["DiscretePIDs", "DocStringExtensions", "FiniteDiff", "KiteUtils", "LinearAlgebra", "NLsolve", "Parameters", "Pkg", "StaticArrays", "Statistics", "StructTypes", "Timers", "WinchModels", "YAML"]
-git-tree-sha1 = "ccfbce82ae8daf20da66bf3d66c49a4ff87226f1"
+git-tree-sha1 = "482a5b6a98b2ac92f7d92eef3afe5ab1157b11a1"
 registries = "General"
 uuid = "9e74470a-8ab1-4f32-b878-f32ebd236ea2"
-version = "0.6.1"
+version = "0.6.2"
 
 [[deps.WinchModels]]
 deps = ["DiscretePIDs", "KiteUtils", "Parameters"]
