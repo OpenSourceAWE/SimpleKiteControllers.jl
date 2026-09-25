@@ -6016,3 +6016,34 @@ independent of the gains, so it is not set by the tracking on the pattern.
 Set to 0.35 / 0.30: RMS d 1.36° -> 0.91° (-33 %). Only this condition was flown;
 other wind speeds, the 150/300 m projects and turbulence are not re-checked. The
 reel-out scripts read `fc_settings_reelout.yaml` and are unaffected.
+
+## 2026-09-24 — `attractor_dist` 10 -> 8° in `fc_settings.yaml`
+
+Same condition and method as the entry above (200 m, 7 m/s, no turbulence, 90 s,
+one run per point, scored with `print_fig8_metrics`); the baseline re-flown gives
+the same 0.91°. "rate-lim." is `tape_rate_frac`, "HF" the steering HF std.
+
+| attractor_dist | heading_p | heading_d | RMS d | laps | rate-lim. | HF | criteria |
+|--:|--:|--:|--:|--:|--:|--:|--|
+| 10 (was) | 0.35 | 0.30 | 0.91° | 4.0 | 20 % | 0.0061 | all pass |
+| 9 | 0.35 | 0.30 | 0.88° | 4.0 | 20 % | 0.0059 | all pass |
+| **8** | **0.35** | **0.30** | **0.87°** | 4.0 | 21 % | 0.0061 | all pass |
+| 8 | 0.35 | 0.40 | 0.86° | 4.0 | 24 % | 0.0067 | all pass |
+| 8 | 0.30 | 0.30 | 0.90° | 4.0 | 18 % | 0.0049 | all pass |
+| 8 | 0.40 | 0.30 | 0.90° | 4.0 | 28 % | 0.0073 | all pass |
+| 7 | 0.35 | 0.30 | 0.94° | 4.0 | 26 % | 0.0065 | all pass |
+| 7 | 0.30 | 0.40 | 0.89° | 4.0 | 21 % | 0.0058 | all pass |
+| 6 | 0.35 | 0.30 | 1.53° | 3.5 | 41 % | 0.0082 | all pass |
+| 6 | 0.30 | 0.30 | 1.06° | 4.0 | 26 % | 0.0061 | all pass |
+| 6 | 0.25 | 0.30 | 0.99° | 4.0 | 18 % | 0.0047 | all pass |
+| 6 | 0.25 | 0.20 | 1.04° | 4.0 | 15 % | 0.0045 | all pass |
+| 6 | 0.20 | 0.20 | 1.07° | 4.0 | 7 % | 0.0033 | all pass |
+| 5 | 0.35 | 0.30 | 3.74° | 3.0 | 63 % | 0.0297 | 2 fail |
+| 4 | 0.35 | 0.30 | 6.76° | 2.0 | 73 % | 0.0386 | 5 fail |
+
+A shorter lead raises the loop gain: below 7° the old gains ring against the tape's
+rate limit, and even with `heading_p` lowered to 0.2-0.3 the 6° runs stay at
+~1.0°, worse than 10°. The optimum is shallow at 8° (a lead of ~1.0 s against
+the 0.42 s dead time, ratio 2.5); `heading_d` 0.40 buys 0.005° for +10 % HF, so
+0.30 is kept. Set to 8° with the gains unchanged: RMS d 0.91° -> 0.87° (-5 %).
+`max d` stays at ~4.96° throughout. Only this condition was flown.
