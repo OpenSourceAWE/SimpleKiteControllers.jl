@@ -6,10 +6,13 @@
 # against the model T = (1 - 1/G)·L/(1 + L) of stability_opt_reelout.jl.
 # WORK IN PROGRESS, see docs/course_loop_stability_reelout.md, "Cross-track step test".
 #
-# Measured part, from a saved test (no simulation needed):
+# Measured part, from the saved 600 s tests at 200 m (no simulation needed):
 #     include("examples/xtrack_step_analysis.jl")
-#     xt = load_xtrack_csv("output/xtrack_step_test_200m.csv")
-#     sr = step_responses(xt.t, xt.δ, xt.d .- xt.d_ref)   # the δ = 0 twin removes the lap forcing
+#     x = load_xtrack_csv("data/steptest/xtrack_step_test_200m_600s_ff0.csv")   # or ..._ff07.csv
+#     keep = x.t .- x.t[1] .>= 10                     # the reference once the offset test has started
+#     sr = step_responses(x.t, x.δ, subtract_by_position(x.d, x.q, x.d_ref[keep], x.q_ref[keep]))
+#     y = vec(mean(reduce(hcat, sr.resp); dims = 2))
+#     fit_second_order_gain(sr.τ, y)                  # K, f_d, ζ, delay: 0.66, 0.208 Hz, 0.25, 0.6 s
 #
 # Model part: needs the globals of stability_opt_reelout.jl (fcs, Ts, course_pid, turn_rate_plant,
 # C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN) plus `log_delay` and `guidance_rate`. On a run that
@@ -88,6 +91,22 @@ function fit_second_order(τ, y)
         r < best[1] && (best = (r, fn * sqrt(max(1 - ζ^2, 0.0)), ζ, Td))
     end
     return (f_d = best[2], ζ = best[3], delay = best[4], rms = best[1])
+end
+
+"Like `fit_second_order`, with a free steady gain `K` (least squares per grid point): (K, f_d [Hz], ζ, delay [s], rms)."
+function fit_second_order_gain(τ, y)
+    best = (Inf, 0.0, 0.0, 0.0, 0.0)
+    for fn in 0.05:0.005:0.5, ζ in 0.02:0.01:1.0, Td in 0.0:0.05:1.0
+        ωn = 2π * fn
+        r1 = sqrt(max(1 - ζ^2, 1e-9))
+        ωd = ωn * r1
+        s = [t <= Td ? 0.0 : 1 - exp(-ζ * ωn * (t - Td)) * (cos(ωd * (t - Td)) + ζ / r1 * sin(ωd * (t - Td)))
+             for t in τ]
+        K = sum(s .* y) / sum(abs2, s)
+        r = sqrt(mean(abs2, K .* s .- y))
+        r < best[1] && (best = (r, K, fn * sqrt(max(1 - ζ^2, 0.0)), ζ, Td))
+    end
+    return (K = best[2], f_d = best[3], ζ = best[4], delay = best[5], rms = best[1])
 end
 
 "Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per gravity sign."

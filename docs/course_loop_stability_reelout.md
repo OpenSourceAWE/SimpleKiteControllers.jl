@@ -554,7 +554,8 @@ first peak 0.69 at 2.2 s and 0.97 at 3.1 s).
 
 **Subtracting by path position (2026-09-26): the test works.** The same two
 600 s pairs, flown again with the closest-point index Q recorded (`xt_q`);
-data in the same CSV files, now with `q_step` and `q_ref`. With the length
+data in `data/steptest/xtrack_step_test_200m_600s_ff07.csv` and `..._ff0.csv`
+(rounded to 1e-4; the step run and twin archives are named in their headers). With the length
 held and the path fixed (last install at 32 – 33.5 s, before phase 5 at
 36.5 s), the reference run is periodic in Q to within 0.03 – 0.04°.
 `subtract_by_position` removes its mean d at each Q from the step run. The
