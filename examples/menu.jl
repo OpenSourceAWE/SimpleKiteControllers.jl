@@ -42,6 +42,7 @@ const EXAMPLES = [
     "plot_scenario.jl        - replot an archived run from output/scenarios/<site>/" => "plot_scenario.jl",
     "move_scenario.jl        - move the last reel-out run into output/scenarios/<site>/vNN" => "move_scenario.jl",
     "copy_scenario.jl        - same, but keeps vNN_2/vNN_3/... instead of overwriting" => "copy_scenario.jl",
+    "build_all_scenarios.jl  - re-fly and replace every scenario of both sites (30 min!)" => "build_all_scenarios.jl",
     "simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)" => "simple_opt_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
     "stability_opt_reelout.jl - disk margins of the reel-out course loop over tether length" => "stability_opt_reelout.jl",
