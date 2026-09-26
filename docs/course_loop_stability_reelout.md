@@ -14,7 +14,9 @@ measured against 0.44 – 0.55 modelled, ringing 0.19 – 0.22 Hz against 0.16 �
 0.19 Hz. The lightly damped ringing (ζ 0.12 – 0.16) found at a held length
 comes from steering saturation: the path re-optimized for the reel-out has a
 curvature margin below 1 there, and the steering sits on its ±0.32 clamp
-21 – 23 % of the time, which the linear model cannot show. The steady gain
+21 – 23 % of the time, which the linear model cannot show; on a path that does not saturate, a held
+length gives ζ 0.63 against 0.65 – 0.71 modelled. In a normal run the last
+re-optimized path saturates the steering in phase 5. The steady gain
 is below 1 (0.75 during the reel-out), which the model does not show either.
 Tuning the guidance to raise the modelled margin ("C", "G") made tracking
 worse and was not adopted.**
@@ -795,6 +797,32 @@ ramp from `blend_from` to `blend_to`, `set_path!`) sits inside
   `2026-09-25_215215`). The held step tests above ran before the fix: with
   re-optimization off they flew the startup path unlifted.
 
+**Confirmed at 380 m (2026-09-26): without saturation the held loop is as
+well damped as the reel-out, and the model fits.** Two more held pairs at the
+normal final length of 380 m (Cabauw 5.3 m/s, `ff_gain` 0.7, 300 s, 26 steps,
+all four runs pass all 10 criteria), with re-optimization on (as flown) and
+off (the startup path; since the blend fix it flies the lift too). Data:
+`data/steptest/xtrack_step_test_380m_300s_{reopt,startup_path}.csv`. The model
+is evaluated at the held operating point (380 m, v_a 27.8 m/s, v_k 24.2 m/s,
+depower 0.35), with dead time 0.022 s and tape lag 0.34 s identified on the
+reference run.
+
+| Held, Cabauw 5.3 m/s | Phase-5 curvature margin | Steering at limit | K | Ringing | **ζ measured** | ζ model |
+|---|---|---|---|---|---|---|
+| **380 m, startup path** | 2.95 | **0 %** | 0.82 | 0.14 Hz | **0.63** | 0.65 – 0.71 (poles 0.13 Hz) |
+| 380 m, re-optimized path | 0.55 | 22 % | 0.16 | 0.198 Hz | 0.15 | – |
+| 200 m, re-optimized path | 0.76 | 21 – 23 % | 0.40 | 0.188 Hz | 0.12 – 0.16 | 0.35 |
+| 200 m, startup path | – | 10 % | 0.55 | 0.194 Hz | 0.32 | – |
+
+1. **Holding the length is not the problem; saturation is.** Without it the
+   held loop gives ζ 0.63 (fit rms 0.011, standard error 0.03), the same as
+   the reel-out, and the model predicts 0.65 – 0.71.
+2. **A normal run ends phase 5 saturated.** With re-optimization on, the
+   paths shrink as the tether grows: the last install before 380 m (at
+   92.4 s, size × 0.75, margin 0.82, lobe lift cut to 75 %) has a phase-5
+   margin of only 0.55, and the steering sits on its clamp 22 % of the phase-5
+   time. The startup path would have had 2.95 there.
+
 The follow-ups are in [Next steps](#next-steps).
 
 ## Caveats
@@ -823,37 +851,50 @@ The follow-ups are in [Next steps](#next-steps).
 
 ## Next steps
 
-1. **Validate the guidance model:** done (2026-09-26), see
-   [Cross-track step test](#cross-track-step-test-2026-09-26). During the
-   reel-out the model's frequency and damping hold; at a held length the
-   steering saturates. The static gain `1/D` was confirmed earlier
-   ([The guidance term](#the-guidance-term-and-the-kites-dead-time)).
-2. **Slowing the guidance: tried, not adopted.** "C" (lead 1.6 s,
-   `attractor_dist` 8°, `heading_d` 0.3, [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
-   and, on symmetric paths on 2026-09-25, "G" (lead 1.6 s and `attractor_dist`
-   8° only) both raise the modelled margin but not the damping: at Cabauw and
-   Maasvlakte 4 / 7 / 10 m/s, "G" raised the 0.18 – 0.30 Hz band of the course
-   error in five of six conditions (by up to 73 %) and RMS d by 1 – 48 %. The
-   step tests show why: during the reel-out the loop is already well damped
-   (ζ ≈ 0.5 – 0.6), and the lightly damped case is saturation.
-3. **Keep the steering off its clamp at a held length.** The path installed
-   for the reel-out can have a phase-5 curvature margin below 1 (0.76 at 200 m
-   in the step tests). Confirm with a held step test on a path whose margin is
-   ≥ 1 there that ζ returns to the reel-out value; if so, the remedy is the
-   phase-5 path (margin gate or lift), not the controller.
-4. **Explain the `depower_final` 0.27 case:** little saturation (2 %) but
+1. **Keep the phase-5 path within the kite's turn authority.** In a normal
+   run the last re-optimized path has a phase-5 curvature margin below 1 (0.55
+   at 380 m, Cabauw 5.3 m/s), so phase 5 flies with the steering on its clamp
+   22 % of the time and the cross-track mode nearly undamped (ζ 0.15). Options:
+   gate late installs on their phase-5 margin (the summaries already report
+   it), fall back to the previous path for phase 5, or lift the phase-5 path
+   until its margin is ≥ 1. Check how often this happens across wind speeds.
+2. **Explain the `depower_final` 0.27 case:** little saturation (2 %) but
    ζ 0.16. It is the only held run in which the phase-5 force limiter moved the
    depower, and with it c1 and the gain schedule, in step with the lap.
-5. **The steady gain below 1:** check the hypothesis that the turns pull the
+3. **The steady gain below 1:** check the hypothesis that the turns pull the
    kite back to the original path by splitting the step responses into turn
    and straight (from Q). The model would need the path curvature for this.
-6. **Maasvlakte and other wind speeds:** margins done at 4, 7 and 10 m/s, see
-   [Wind speed and site](#wind-speed-and-site-2026-09-25-evening); the step
-   tests ran only at Cabauw 5.3 m/s.
-7. **Fix the script for compressed logs:** done, it takes the sample time
-   from the log's own time column.
-8. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+4. **Step tests at other conditions:** so far only at Cabauw 5.3 m/s. The
+   modelled margins cover Cabauw and Maasvlakte at 4, 7 and 10 m/s (see
+   [Wind speed and site](#wind-speed-and-site-2026-09-25-evening)); the step
+   test would check the model where it predicts the weakest margins
+   (Maasvlakte 10 m/s).
+5. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
    models the inner loop only. The same guidance factor applies there too.
+
+## Done
+
+- **Held length without saturation** (2026-09-26): at 380 m on the startup
+  path (margin 2.95) the held loop gives ζ 0.63 against 0.65 – 0.71 modelled,
+  see [Confirmed at 380 m](#cross-track-step-test-2026-09-26). The lightly
+  damped held cases were steering saturation.
+- **Validate the guidance model** (2026-09-26), see
+  [Cross-track step test](#cross-track-step-test-2026-09-26). During the
+  reel-out the model's frequency and damping hold; at a held length the
+  steering saturates. The static gain `1/D` was confirmed earlier
+  ([The guidance term](#the-guidance-term-and-the-kites-dead-time)).
+- **Slowing the guidance: tried, not adopted.** "C" (lead 1.6 s,
+  `attractor_dist` 8°, `heading_d` 0.3, [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
+  and, on symmetric paths on 2026-09-25, "G" (lead 1.6 s and `attractor_dist`
+  8° only) both raise the modelled margin but not the damping: at Cabauw and
+  Maasvlakte 4 / 7 / 10 m/s, "G" raised the 0.18 – 0.30 Hz band of the course
+  error in five of six conditions (by up to 73 %) and RMS d by 1 – 48 %. The
+  step tests show why: during the reel-out the loop is already well damped
+  (ζ ≈ 0.5 – 0.6), and the lightly damped case is saturation.
+- **Margins at other wind speeds and at Maasvlakte** (2026-09-25), see
+  [Wind speed and site](#wind-speed-and-site-2026-09-25-evening).
+- **Fix the script for compressed logs** (2026-09-25): it takes the sample
+  time from the log's own time column.
 
 ## Usage
 
