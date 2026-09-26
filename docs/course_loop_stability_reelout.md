@@ -6,13 +6,18 @@ range of tether length. It extends the fig8 analysis in
 [course_loop_stability.md](course_loop_stability.md); the plant model is
 shared with it (`examples/course_loop_model.jl`).
 
-**Status: the loop's margin has been measured in the simulation (see
-[Measuring the margin](#measuring-the-margin-in-the-simulation-2026-09-25)). It
-is 0.43 – 0.6 near 0.2 Hz, where the model predicts 0.21 – 0.5, so the model is
-right in direction but pessimistic. A fix based on the model ("C", see
-[Attempted fix](#attempted-fix-2026-09-25-not-adopted)) did not raise the
-measured margin, made tracking worse at 5 – 10 m/s on both sites, and was not
-adopted.**
+**Status (2026-09-26): the guided-loop model is validated in the simulation
+while the steering stays off its clamp.** Cross-track step tests (see
+[Cross-track step test](#cross-track-step-test-2026-09-26)) confirm it
+during the reel-out at 1.9 – 3.5 m/s reel-out speed: damping ζ 0.50 – 0.62
+measured against 0.44 – 0.55 modelled, ringing 0.19 – 0.22 Hz against 0.16 –
+0.19 Hz. The lightly damped ringing (ζ 0.12 – 0.16) found at a held length
+comes from steering saturation: the path re-optimized for the reel-out has a
+curvature margin below 1 there, and the steering sits on its ±0.32 clamp
+21 – 23 % of the time, which the linear model cannot show. The steady gain
+is below 1 (0.75 during the reel-out), which the model does not show either.
+Tuning the guidance to raise the modelled margin ("C", "G") made tracking
+worse and was not adopted.**
 
 - The inner course loop is robust at every tether length (α ≈ 1.0).
 - The loop with the attractor guidance closed around it is fragile: α 0.14 – 0.50
@@ -790,19 +795,12 @@ ramp from `blend_from` to `blend_to`, `set_path!`) sits inside
   `2026-09-25_215215`). The held step tests above ran before the fix: with
   re-optimization off they flew the startup path unlifted.
 
-**Next:**
-- Repeat the held test on a path that does not saturate the steering (a
-  re-optimized path with a curvature margin ≥ 1 at the held length, or the
-  held length raised until it is), to confirm that ζ returns to the reel-out
-  value there.
-- Explain the `depower_final` 0.27 case: the phase-5 force limiter changes
-  depower, and with it c1 and the gain schedule, in step with the lap.
-- Check hypothesis 3 (steady gain) by splitting the steps into turn and
-  straight (from Q).
+The follow-ups are in [Next steps](#next-steps).
 
 ## Caveats
 
-- **The guidance model is unvalidated.** It is the small-angle pure-pursuit
+- **The guidance model is validated only in its linear range** (see the
+  status above). It is the small-angle pure-pursuit
   law on a straight path. The real path is curved, the closest point `Q` moves
   with the kite, and the curvature feed-forward and its chord correction change
   the course the PD sees.
@@ -825,23 +823,36 @@ ramp from `blend_from` to `blend_to`, `set_path!`) sits inside
 
 ## Next steps
 
-1. **Validate the guidance model** (dynamic part done at 200 m, see
-   [Cross-track step test](#cross-track-step-test-2026-09-26)). Excite or isolate the cross-track loop in
-   `simple_opt_reelout.jl`, for example with a step in `el_offset` or a short
-   course disturbance in phase 4 at a fixed length. Then compare the ringing of
-   `d` with the predicted 0.21 – 0.24 Hz and damping. Alternatively, fit
-   `δχ_set` against the signed `d` in the log to check `1/D`; the path tangent
-   would need to be logged for that.
-2. **If it holds, slow the guidance.** Raising `attractor_lead_time` (0.8 s)
-   or `attractor_dist` (6°) lowers `ω_g`. Check α and tracking
-   (the size and elevation criteria) together, since a longer lead cuts
-   corners.
-3. **Maasvlakte and other wind speeds:** done at 4, 7 and 10 m/s, see
-   [Wind speed and site](#wind-speed-and-site-2026-09-25-evening). Slowing the
-   guidance (step 2) matters most at 7 – 10 m/s and at Maasvlakte 10 m/s.
-4. **Fix the script for compressed logs:** done, it takes the sample time
+1. **Validate the guidance model:** done (2026-09-26), see
+   [Cross-track step test](#cross-track-step-test-2026-09-26). During the
+   reel-out the model's frequency and damping hold; at a held length the
+   steering saturates. The static gain `1/D` was confirmed earlier
+   ([The guidance term](#the-guidance-term-and-the-kites-dead-time)).
+2. **Slowing the guidance: tried, not adopted.** "C" (lead 1.6 s,
+   `attractor_dist` 8°, `heading_d` 0.3, [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
+   and, on symmetric paths on 2026-09-25, "G" (lead 1.6 s and `attractor_dist`
+   8° only) both raise the modelled margin but not the damping: at Cabauw and
+   Maasvlakte 4 / 7 / 10 m/s, "G" raised the 0.18 – 0.30 Hz band of the course
+   error in five of six conditions (by up to 73 %) and RMS d by 1 – 48 %. The
+   step tests show why: during the reel-out the loop is already well damped
+   (ζ ≈ 0.5 – 0.6), and the lightly damped case is saturation.
+3. **Keep the steering off its clamp at a held length.** The path installed
+   for the reel-out can have a phase-5 curvature margin below 1 (0.76 at 200 m
+   in the step tests). Confirm with a held step test on a path whose margin is
+   ≥ 1 there that ζ returns to the reel-out value; if so, the remedy is the
+   phase-5 path (margin gate or lift), not the controller.
+4. **Explain the `depower_final` 0.27 case:** little saturation (2 %) but
+   ζ 0.16. It is the only held run in which the phase-5 force limiter moved the
+   depower, and with it c1 and the gain schedule, in step with the lap.
+5. **The steady gain below 1:** check the hypothesis that the turns pull the
+   kite back to the original path by splitting the step responses into turn
+   and straight (from Q). The model would need the path curvature for this.
+6. **Maasvlakte and other wind speeds:** margins done at 4, 7 and 10 m/s, see
+   [Wind speed and site](#wind-speed-and-site-2026-09-25-evening); the step
+   tests ran only at Cabauw 5.3 m/s.
+7. **Fix the script for compressed logs:** done, it takes the sample time
    from the log's own time column.
-5. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+8. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
    models the inner loop only. The same guidance factor applies there too.
 
 ## Usage
