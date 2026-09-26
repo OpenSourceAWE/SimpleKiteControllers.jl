@@ -1194,7 +1194,8 @@ include(joinpath(@__DIR__, "reelout_feasibility.jl"))
 # elevation lift it carried: the candidates `final_margin_min` falls back to for phase 5.
 p5_history = [(t = 0.0, az = copy(fec.az_path), el = copy(fec.el_path), raw = opt_paths_raw[end],
                margin = phase5_margin(fec.az_path, fec.el_path), el_applied = 0.0)]
-p5_fallback_done = false    # checked once, from the stop latch on
+p5_fallback_done = false    # checked once, from the stop latch on, at the next crossing
+p5_q_az_prev = NaN          # [deg] Q's azimuth from the path centre, last step; arms the crossing gate
 p5_fallback = nothing       # (; t, from_margin, to_margin, to_t) when a fallback was blended in
 
 @info @sprintf("Elevation lift: el_offset_final = %+.2f°, el_offset_lead = %.1f s \
@@ -2054,7 +2055,16 @@ try
         # ---- Phase-5 path: fall back to an install that phase 5 can fly (`final_margin_min`) ---- #
         # From the stop latch, once no other blend is running; checked once. Phase 5 makes no power,
         # so the smaller, later paths that saturate the steering there buy nothing.
-        if fcs.final_margin_min > 0 && !p5_fallback_done && (!isnan(stop_start) || phase >= 5) &&
+        # Only as Q passes the crossing (its azimuth changes sign about the path centre): the
+        # startup path is far taller at full length (attractor up to ~36° vs ~18°), and blended in
+        # mid-lobe the kite fell 14° behind it and spun an extra loop (Maasvlakte 8.25 m/s, 2026-09-26).
+        local p5_crossing = false
+        if fcs.final_margin_min > 0 && !p5_fallback_done && (!isnan(stop_start) || phase >= 5)
+            local az_q = fec.az_path[fec.last_idx] - (minimum(fec.az_path) + maximum(fec.az_path)) / 2
+            p5_crossing = !isnan(p5_q_az_prev) && signbit(az_q) != signbit(p5_q_az_prev)
+            global p5_q_az_prev = az_q
+        end
+        if fcs.final_margin_min > 0 && !p5_fallback_done && p5_crossing &&
            isnothing(blend_to) && !reopt_pending
             global p5_fallback_done = true
             # Native margins, as each install computed them: on the 360-point resampled path a
