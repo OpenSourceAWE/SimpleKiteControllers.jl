@@ -372,7 +372,10 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
     elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
     system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
-    sim_time = EFFECTIVE_SIM_TIME, warmup_time = fcs.warmup_time,
+    # Room for a full phase 5 past the budget: the budget ends a run only BEFORE phase 5,
+    # which then always flies `final_time` (see the loop). At 10 m/s the budget cut it at 19.7 s.
+    sim_time = EFFECTIVE_SIM_TIME + (isfinite(fcs.final_time) ? fcs.final_time : 0.0),
+    warmup_time = fcs.warmup_time,
     # The warm-up relaxes at constant length, against the same loop the run uses.
     warmup_torque = (m, l) -> winch_torque!(wpc, m, l), remake_model = false)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
@@ -1356,6 +1359,7 @@ try
     for _ in 1:s.steps
         t = s.sys_state.time
         t - final_start >= fcs.final_time && break
+        isnan(final_start) && t >= EFFECTIVE_SIM_TIME && break
 
         # L0 attractor guidance -> commanded course [rad]; the lead is re-read every step.
         fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
