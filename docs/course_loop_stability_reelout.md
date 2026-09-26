@@ -710,15 +710,89 @@ criteria). Data: `data/steptest/xtrack_step_test_phase4_{slow,fast}.csv`.
    takes energy out of the kite's motion. Held, the winch keeps the length
    rigidly.
 
+**A compliant hold does not help either (2026-09-26).** A new test input,
+`HOLD_COMPLIANCE = (gain, τF, τpos)`, keeps integrating the length setpoint in
+phase 5 instead of freezing it: v_set = gain · kv/(2√F̄) · (F − F̄) −
+(l_set − l_hold)/τpos, with F̄ the force low-passed over τF. That is the
+reel-out law's force slope with zero mean speed, plus a slow pull back to the
+held length. Held test at 200 m as before (300 s, 26 steps, τF 10 s, τpos
+30 s), all four runs pass all 10 criteria. Data:
+`data/steptest/xtrack_step_test_200m_300s_{comp1,comp3}.csv`.
+
+| Held at 200 m | Winch speed std | Length std | Force std | K | Ringing | **ζ** |
+|---|---|---|---|---|---|---|
+| Rigid hold (as flown) | 0.001 m/s | 0.00 m | 112 N | 0.40 | 0.188 Hz | **0.14** |
+| Compliant, gain 1 | 0.035 m/s | 0.37 m | 93 N | 0.39 | 0.184 Hz | **0.12** |
+| Compliant, gain 3 | 0.080 m/s | 1.12 m | 85 N | 0.39 | 0.184 Hz | **0.12** |
+
+The winch now follows the force and smooths it, but the damping does not
+change. The winch mode is ruled out too.
+
+**The cause: the re-optimized path drives the steering into its limit
+(2026-09-26).** The held tests had re-optimization on and flew the path
+re-optimized at 32 s; the reel-out tests had it off and flew the startup path.
+Two more held pairs (300 s, 26 steps, all four runs pass all 10 criteria):
+re-optimization off (the startup path), and re-optimization on without the
+lift (`el_offset_final = 0`). Data:
+`data/steptest/xtrack_step_test_200m_300s_{startup_path,reopt_nolift}.csv`.
+Steering saturation from the run summaries (`pct_time_within_2pct_of_peak`,
+the share of time within 2 % of the peak; the peak is the ±0.32 clamp
+`max_steering` in all held runs):
+
+| Case | Steering peak | **Time at the steering limit** | Phase-5 curvature margin | ζ |
+|---|---|---|---|---|
+| Held, re-optimized path, lifted | 0.32 | **22 %** | 0.77 | 0.14 |
+| Held, re-optimized path, no lift | 0.32 | **21 %** | 0.76 | 0.12 |
+| Held, fast tape | 0.32 | **21 %** | 0.75 | 0.16 |
+| Held, compliant hold (gain 1 / 3) | 0.32 | **22 – 23 %** | 0.77 | 0.12 |
+| Held, startup path | 0.32 | **10 %** | – | 0.32 |
+| Held, `depower_final` 0.27 | 0.32 | **2 %** | 1.16 | 0.16 |
+| Reel-out 1.9 / 2.7 / 3.5 m/s | 0.25 – 0.27 | **0 %** | – | 0.50 – 0.62 |
+
+1. **The lift does not matter:** re-optimized path with and without it, ζ
+   0.14 and 0.12.
+2. **The path does:** the startup path held gives ζ 0.32 and K 0.55.
+3. **Steering saturation explains most of the held-length damping loss.** The
+   re-optimized path has a phase-5 curvature margin of only 0.76 at the held
+   200 m, so it asks for about 30 % more turn rate than the kite has there, and
+   the steering sits on its ±0.32 clamp 21 – 23 % of the time. A clamped
+   actuator cuts the loop gain during the turns, which the linear model cannot
+   show. The "fast tape" test removed the rate limit, not this amplitude limit.
+4. **One exception:** with `depower_final` 0.27 the steering saturates only 2 %
+   of the time and ζ is still 0.16. It is the only held run in which the
+   phase-5 force limiter acted (force at its 7500 N target, depower moving),
+   and its fit was poor (rms 0.12), so it is a separate case, not yet
+   explained.
+5. **Consequence for the model:** it describes the guided loop as long as the
+   steering stays off its clamp, as in the whole reel-out. At a curvature margin
+   below 1 it is optimistic. The step tests with the feed-forward off (above)
+   ran on the same re-optimized path and so were saturated too.
+
+**A bug found on the way: path blends run only while re-optimizing in phase
+4.** In `simple_opt_reelout.jl` the code that carries out a path blend (the
+ramp from `blend_from` to `blend_to`, `set_path!`) sits inside
+`if tos.reopt_enabled && phase == 4`. Consequences:
+- **With `reopt_enabled = false`, no blend ever runs.** The in-air elevation
+  lift (`el_offset_final`) is queued, reported as "blended in" in the run
+  summary, and never flown: the held runs with and without the lift were
+  identical to the last sample. The reel-out step tests (re-optimization off)
+  were affected too, but their lift only latched at the end of phase 4.
+- **With re-optimization on, a blend still running when phase 5 starts
+  freezes part-way.** In normal runs the lift latches `el_offset_lead` = 8 s
+  before the end of the reel-out and blends over `path_blend_time` = 4 s, so it
+  usually completes in time.
+- Fix: run the blend whenever one is pending in phase ≥ 4, outside the
+  re-optimization block. Not applied yet; it changes the flown path of
+  re-optimization-off runs.
+
 **Next:**
-- Test a compliant winch at the held length. Not a simple switch here:
-  `fc_settings_reelout.yaml` requires `compliance = 0` (position mode) because
-  the reel-out controller and V3Kite's force mode cannot both drive the drum.
-  Options: hold the length through the speed controller with a soft position
-  loop, or fly phase 5 in V3Kite's force mode.
-- If that restores the damping, the model needs the winch's force-speed
-  coupling, and phase 5 (and parking at a fixed length) may deserve a
-  compliant winch.
+- Fix the blend bug.
+- Repeat the held test on a path that does not saturate the steering (a
+  re-optimized path with a curvature margin ≥ 1 at the held length, or the
+  held length raised until it is), to confirm that ζ returns to the reel-out
+  value there.
+- Explain the `depower_final` 0.27 case: the phase-5 force limiter changes
+  depower, and with it c1 and the gain schedule, in step with the lap.
 - Check hypothesis 3 (steady gain) by splitting the steps into turn and
   straight (from Q).
 

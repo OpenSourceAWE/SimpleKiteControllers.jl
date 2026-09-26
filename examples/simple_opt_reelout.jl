@@ -194,6 +194,15 @@ dist_u = Float64[]      # [-] steering sent to the model, controller plus distur
 # the index of its closest point Q: a reference run's d as a function of Q removes the lap forcing.
 xtrack_offset = @isdefined(XTRACK_OFFSET) ? XTRACK_OFFSET : nothing
 XTRACK_OFFSET = nothing
+# Test input: a COMPLIANT hold in phase 5, `(gain, τF, τpos)`, read and cleared like SHOW_PLOTS. Instead
+# of freezing l_set, the length setpoint moves at gain·kv/(2√F̄)·(F − F̄) − (l_set − l_hold)/τpos: the
+# reel-out law's force slope around the force F̄ low-passed over τF [s], zero mean speed, and a slow
+# pull back to the length the hold began at. `nothing` holds the length rigidly, as flown.
+hold_compliance = @isdefined(HOLD_COMPLIANCE) ? HOLD_COMPLIANCE : nothing
+HOLD_COMPLIANCE = nothing
+isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $hold_compliance"
+hold_f_lp = NaN         # [N] low-passed force of the compliant hold
+hold_l0 = NaN           # [m] length the compliant hold began at
 xtrack_phase = @isdefined(XTRACK_PHASE) ? XTRACK_PHASE : 5
 XTRACK_PHASE = 5
 xt_start = NaN          # [s] first step of phase `xtrack_phase`; τ counts from here
@@ -2109,6 +2118,18 @@ try
                 v_set = v_guard
                 global l_set = l_set + v_set * s.dt
             end
+        end
+        if !isnothing(hold_compliance) && reelout_done && phase == 5
+            local f_now_h = winch_force(s)
+            if isnan(hold_f_lp)
+                global hold_f_lp = f_now_h
+                global hold_l0 = l_set
+            end
+            global hold_f_lp += s.dt / hold_compliance.τF * (f_now_h - hold_f_lp)
+            local slope = rcs.kv / (2 * sqrt(max(hold_f_lp, 1.0)))     # [m/s per N], of v = kv·√F
+            v_set = hold_compliance.gain * slope * (f_now_h - hold_f_lp) -
+                    (l_set - hold_l0) / hold_compliance.τpos
+            global l_set = l_set + v_set * s.dt
         end
 
         if !isnothing(steer_disturbance)
