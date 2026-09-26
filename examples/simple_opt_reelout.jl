@@ -112,6 +112,7 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
@@ -349,6 +350,10 @@ wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, se
 wc.f_low = winch_f_low(project_set.v_wind; project)
 # The soft law's floor cannot go below ~700 N, so it is off at low wind; see `winch_force_limit`'s docstring.
 wc.force_limit = winch_force_limit(project_set.v_wind; project)
+# Winch overrides for a test run, e.g. `v_sat` or `kv`: read and cleared here like SHOW_PLOTS, applied
+# just before the simulation loop, so the optimizer plans the path with the unchanged winch.
+wc_overrides = @isdefined(WC_OVERRIDES) ? WC_OVERRIDES : Dict{Symbol, Any}()
+WC_OVERRIDES = Dict{Symbol, Any}()
 rcs = wc                                 # same object, two controllers read it
 wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
 
@@ -1305,6 +1310,15 @@ toc("Start simulation loop...")
 # ==================== SIMULATION LOOP ==================== #
 
 # Assigned OUTSIDE the try: the loop's wall time must survive an early break.
+for (key, value) in wc_overrides
+    hasfield(typeof(wc), key) || error("WC_OVERRIDES: \"$key\" is not a field of $(typeof(wc)).")
+    setfield!(wc, key, convert(fieldtype(typeof(wc), key), value))
+end
+if !isempty(wc_overrides)
+    # The upper force controller's switching speed was derived from kv when `rc` was built.
+    WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
+    @info "winch overrides in force (simulation only): " * join(("$k = $v" for (k, v) in wc_overrides), ", ")
+end
 t_wall_start = time()
 try
     for _ in 1:s.steps

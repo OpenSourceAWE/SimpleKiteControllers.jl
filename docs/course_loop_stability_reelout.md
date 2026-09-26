@@ -679,12 +679,46 @@ rate limit. With `depower_final` 0.27 the force rose to the phase-5 limiter's
    a decay at v_ro/L ≈ 0.01 1/s, is far too small against a mode at about
    1.2 rad/s. No mechanism is identified yet.
 
+**Reel-out speed (2026-09-26): the damping barely depends on it.** The
+reel-out step test repeated at two more reel-out speeds, with the winch
+changed through a new hook, `WC_OVERRIDES`. It applies just before the
+simulation loop, after the startup solve, so the optimizer plans the same
+path as the baseline and only the flown winch differs. (A first attempt
+applied it before the solve: AWETrim returned 422 for a winch capped at
+1.9 m/s.) When `kv` changes, the upper force controller's switching speed,
+derived from `kv` when the controller is built, is refreshed. Slow: `v_sat`
+1.9 m/s (one δ = 0 run and four step runs; all five fail only "max force ≤
+8400 N", peaking at 8.6 – 8.7 kN, because the capped winch cannot pay out:
+a diagnostic, not an operating point). Fast: `kv` × 1.4 (all five pass all 10
+criteria). Data: `data/steptest/xtrack_step_test_phase4_{slow,fast}.csv`.
+
+| Reel-out speed | Force | v_a | Steps | K | Ringing | **ζ measured** | ζ model | Ringing model |
+|---|---|---|---|---|---|---|---|---|
+| 0 (held, 200 m) | 4.0 kN | 27.8 m/s | 53 | 0.40 | 0.188 Hz | **0.14** | 0.35 | 0.20 Hz |
+| 1.9 m/s | 7.9 kN | 32.2 m/s | 37 | 0.75 | 0.208 Hz | **0.50** | 0.44 | 0.189 Hz |
+| 2.7 m/s (baseline) | 5.3 kN | 26 – 28 m/s | 29 | 0.75 | 0.191 Hz | **0.56** | 0.52 | 0.171 Hz |
+| 3.5 m/s | 5.0 kN | 25.4 m/s | 18 | 0.75 | 0.22 Hz | **0.62** | 0.55 | 0.159 Hz |
+
+1. **During the reel-out the damping rises only mildly with speed** (0.50 →
+   0.62), and the model follows it within 0.04 – 0.07 through v_a and v_k. It
+   underestimates the frequency at 3.5 m/s.
+2. **The steady gain is 0.75 at every reel-out speed,** against 0.40 held.
+3. **So the held length is the outlier, not the slow end of a trend.** With
+   tape, depower, force and reel-out speed ruled out, the remaining difference
+   is how the winch works. Reeling out, it is speed-controlled: a change in
+   force changes the reel-out speed, so the tether is compliant and the winch
+   takes energy out of the kite's motion. Held, the winch keeps the length
+   rigidly.
+
 **Next:**
-- Step test in phase 4 at a lower reel-out speed (a lower winch speed limit),
-  to see whether ζ falls with reel-out speed.
-- Compare course and heading (side slip) in phases 4 and 5: the fed-back
-  course is not the heading of the turn-rate law, and reel-out changes the
-  kite's velocity relative to the tether.
+- Test a compliant winch at the held length. Not a simple switch here:
+  `fc_settings_reelout.yaml` requires `compliance = 0` (position mode) because
+  the reel-out controller and V3Kite's force mode cannot both drive the drum.
+  Options: hold the length through the speed controller with a soft position
+  loop, or fly phase 5 in V3Kite's force mode.
+- If that restores the damping, the model needs the winch's force-speed
+  coupling, and phase 5 (and parking at a fixed length) may deserve a
+  compliant winch.
 - Check hypothesis 3 (steady gain) by splitting the steps into turn and
   straight (from Q).
 
