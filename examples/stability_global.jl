@@ -76,8 +76,9 @@ end
 
 "Run `stability_opt_reelout.jl` on the scenario folder `dir`, muted unless `verbose`"
 function analyse_scenario(dir; plots = false, quiet = true)
-    Main.SHOW_PLOTS = plots
-    Main.LOG_DIR = dir
+    # Evaluated in Main: from a function, `Main.X = ...` needs X to exist already, which it
+    # does not in a fresh session.
+    Core.eval(Main, :(SHOW_PLOTS = $plots; LOG_DIR = $dir))
     analyse() = Base.include(Main, joinpath(@__DIR__, "stability_opt_reelout.jl"))
     quiet ? muted(analyse) : analyse()
     # Globals the include just (re)defined: read them at the latest world age.
