@@ -556,6 +556,9 @@ end
         fcs_ro = FC_Settings("fc_settings_reelout.yaml")
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_setpoint).c1 isa Real
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_final).c1 isa Real
+        # Phase 5 falls back to an install it can fly (2026-09-26); off unless set.
+        @test fcs_ro.final_margin_min == 1.5
+        @test fcs.final_margin_min == 0.0
 
         # c1 decreases monotonically in depower, computed FROM the table -- a
         # physical invariant of any valid identification, not a pinned number.

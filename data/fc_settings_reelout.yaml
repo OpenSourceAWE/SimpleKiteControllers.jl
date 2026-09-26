@@ -58,6 +58,7 @@ fc_settings:
   up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
   el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
   el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
+  final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back to an earlier install; 0 = off [-]
   el_offset_wing:      1.0     # Extra lift at the LOBES, none in the centre       [deg]
   el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
   el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring  [same units]

@@ -328,6 +328,20 @@ Add new findings there, not here.
     """
     el_offset_final = 0.0
     """
+    Smallest phase-5 curvature margin [-] of the path flown after reel-out; `0` is
+    off. The re-optimized paths shrink as the tether grows, and the last one can
+    ask for more turn rate at `reelout_l_max` and `depower_final` than the kite
+    has: at low wind the steering then sits on its clamp 14 - 28 % of phase 5 and
+    the cross-track mode is nearly undamped (2026-09-26,
+    docs/course_loop_stability_reelout.md). From the stop latch, a path below this
+    margin is blended back to the most recent installed path that meets it,
+    carrying the current lift. Phase 5 generates no power, so this costs none.
+    Compared on the NATIVE margins each install computed (a 100-point reply
+    resampled to 360 points reads about half); at 1.0 the paths chosen still
+    saturated 12 - 22 % of phase 5 at low wind, 1.5 removed it.
+    """
+    final_margin_min = 0.0
+    """
     How long before reel-out ends the lift starts [s], `0` to start it at the end.
 
     Measured 2026-08-18: with `reelout_softstop` at 0 there IS no stop latch before

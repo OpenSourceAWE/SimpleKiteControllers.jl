@@ -581,6 +581,14 @@ if !isnothing(feas.feas_final)
             (round(margin5.margin; digits = 2),
              "the same, for the last path the re-optimizer installed — the one \
               phase 5 actually inherited [-]"))
+    if !isnothing(p5_fallback)
+        feasibility_block["final_fallback_t"] = (round(p5_fallback.t; digits = 1),
+            "when phase 5's path fell back to an earlier install (final_margin_min) [s]")
+        feasibility_block["final_fallback_to_t"] = (round(p5_fallback.to_t; digits = 1),
+            "install time of the path it fell back to; 0 = the startup path [s]")
+        feasibility_block["margin_final_fallback"] = (round(p5_fallback.to_margin; digits = 2),
+            "phase-5 margin of that path, carrying the current lift: the one phase 5 flies [-]")
+    end
 end
 droop_mean = [droop_n[b] > 0 ? droop_flown[b] / droop_n[b] : NaN
               for b in 1:n_droop_bins]

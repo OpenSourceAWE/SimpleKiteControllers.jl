@@ -1190,6 +1190,13 @@ opt_downloops == !fcs.up_loops ||
 # The three gates on the installed path; defines `el_floor`, `c1_at` and `phase5_margin` for the loop.
 include(joinpath(@__DIR__, "reelout_feasibility.jl"))
 
+# Every path the kite has flown, as installed (lobe lift included), with its phase-5 margin and the
+# elevation lift it carried: the candidates `final_margin_min` falls back to for phase 5.
+p5_history = [(t = 0.0, az = copy(fec.az_path), el = copy(fec.el_path), raw = opt_paths_raw[end],
+               margin = phase5_margin(fec.az_path, fec.el_path), el_applied = 0.0)]
+p5_fallback_done = false    # checked once, from the stop latch on
+p5_fallback = nothing       # (; t, from_margin, to_margin, to_t) when a fallback was blended in
+
 @info @sprintf("Elevation lift: el_offset_final = %+.2f°, el_offset_lead = %.1f s \
                 (%s), reelout_softstop = %.1f s.",
                fcs.el_offset_final, fcs.el_offset_lead,
@@ -1914,6 +1921,8 @@ try
                             global n_path = n_path_new
                             push!(pred_timeline, (t = t, power = new_pred))
                             global margin5.margin = phase5_margin(chk_az, chk_el)
+                            push!(p5_history, (t, az = copy(cand_az), el = copy(cand_el), raw = cand_raw,
+                                               margin = margin5.margin, el_applied))
                             # Not a rejection reason: said once, so a phase 5 flown on the clamp is not a surprise.
                             if !isnan(margin5.margin) &&
                                margin5.margin < tos.min_feasibility_margin && !margin5.warned
@@ -2038,6 +2047,55 @@ try
                     @warn @sprintf("Elevation shift of %+.2f° held back: the curvature \
                                     margin would be %.2f even rationed to a quarter. \
                                     Retrying as the tether grows.", el_delta, margin)
+                end
+            end
+        end
+
+        # ---- Phase-5 path: fall back to an install that phase 5 can fly (`final_margin_min`) ---- #
+        # From the stop latch, once no other blend is running; checked once. Phase 5 makes no power,
+        # so the smaller, later paths that saturate the steering there buy nothing.
+        if fcs.final_margin_min > 0 && !p5_fallback_done && (!isnan(stop_start) || phase >= 5) &&
+           isnothing(blend_to) && !reopt_pending
+            global p5_fallback_done = true
+            # Native margins, as each install computed them: on the 360-point resampled path a
+            # 100-point reply reads about half its margin, an artefact of the resampling's kinks.
+            local m_now = p5_history[end].margin
+            if !isnan(m_now) && m_now < fcs.final_margin_min
+                local k = findlast(h -> !isnan(h.margin) && h.margin >= fcs.final_margin_min, p5_history)
+                if isnothing(k)
+                    @warn @sprintf("Phase-5 margin %.2f < final_margin_min %.2f and no earlier \
+                                    install meets it: flying phase 5 on the current path.",
+                                   m_now, fcs.final_margin_min)
+                else
+                    local h = p5_history[k]
+                    # The lift the kite carries now, not the one that install was made with.
+                    local to = prepare_path(h.az, h.el .+ (el_applied - h.el_applied);
+                                            resample = n_path, up_loops = fcs.up_loops)
+                    local from = prepare_path(fec.az_path, fec.el_path;
+                                              resample = n_path, up_loops = fcs.up_loops)
+                    local m_to = h.margin
+                    if blend_folds(from..., to...)
+                        @warn @sprintf("Phase-5 fallback to the path installed at t = %.1f s \
+                                        skipped: the blend would fold.", h.t)
+                    else
+                        global blend_from = from
+                        global blend_to = to
+                        global blend_t0 = t
+                        global raw_from = prepare_path(raw_az, raw_el; resample = n_path,
+                                                       up_loops = fcs.up_loops)
+                        global raw_to = prepare_path(h.raw[1], h.raw[2]; resample = n_path,
+                                                     up_loops = fcs.up_loops)
+                        global raw_az, raw_el = raw_from
+                        # Install the aligned current path (w = 0) and re-base the lap counter, as an install does.
+                        set_path!(fec, blend_from[1], blend_from[2]; up_loops = fcs.up_loops)
+                        global fig8_idx_prev = fec.last_idx
+                        global p5_fallback = (; t, from_margin = m_now, to_margin = m_to, to_t = h.t)
+                        @info @sprintf("Phase-5 fallback at t = %.1f s: the flown path has a \
+                                        phase-5 margin of %.2f, below final_margin_min = %.2f; \
+                                        blending to the path installed at t = %.1f s \
+                                        (margin %.2f).", t, m_now, fcs.final_margin_min,
+                                       h.t, m_to)
+                    end
                 end
             end
         end

@@ -16,7 +16,8 @@ comes from steering saturation: the path re-optimized for the reel-out has a
 curvature margin below 1 there, and the steering sits on its ±0.32 clamp
 21 – 23 % of the time, which the linear model cannot show; on a path that does not saturate, a held
 length gives ζ 0.63 against 0.65 – 0.71 modelled. In a normal run the last
-re-optimized path saturates the steering in phase 5. The steady gain
+re-optimized path used to saturate the steering in phase 5; `final_margin_min`
+now falls back to an earlier install there (see [Done](#done)). The steady gain
 is below 1 (0.75 during the reel-out), which the model does not show either.
 Tuning the guidance to raise the modelled margin ("C", "G") made tracking
 worse and was not adopted.**
@@ -851,28 +852,66 @@ The follow-ups are in [Next steps](#next-steps).
 
 ## Next steps
 
-1. **Keep the phase-5 path within the kite's turn authority.** In a normal
-   run the last re-optimized path has a phase-5 curvature margin below 1 (0.55
-   at 380 m, Cabauw 5.3 m/s), so phase 5 flies with the steering on its clamp
-   22 % of the time and the cross-track mode nearly undamped (ζ 0.15). Options:
-   gate late installs on their phase-5 margin (the summaries already report
-   it), fall back to the previous path for phase 5, or lift the phase-5 path
-   until its margin is ≥ 1. Check how often this happens across wind speeds.
-2. **Explain the `depower_final` 0.27 case:** little saturation (2 %) but
+1. **Explain the `depower_final` 0.27 case:** little saturation (2 %) but
    ζ 0.16. It is the only held run in which the phase-5 force limiter moved the
    depower, and with it c1 and the gain schedule, in step with the lap.
-3. **The steady gain below 1:** check the hypothesis that the turns pull the
+2. **The steady gain below 1:** check the hypothesis that the turns pull the
    kite back to the original path by splitting the step responses into turn
    and straight (from Q). The model would need the path curvature for this.
-4. **Step tests at other conditions:** so far only at Cabauw 5.3 m/s. The
+3. **Step tests at other conditions:** so far only at Cabauw 5.3 m/s. The
    modelled margins cover Cabauw and Maasvlakte at 4, 7 and 10 m/s (see
    [Wind speed and site](#wind-speed-and-site-2026-09-25-evening)); the step
    test would check the model where it predicts the weakest margins
    (Maasvlakte 10 m/s).
-5. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+4. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
    models the inner loop only. The same guidance factor applies there too.
+5. **The feasibility check on resampled paths.** Re-optimized paths arrive
+   from AWETrim with 100 points and are resampled to 360 for flying. On the
+   resampled path `check_pattern_feasible` reads roughly half the curvature
+   margin of the native one (Maasvlakte 7 m/s: 1.48 native, 0.54 resampled),
+   while the startup path, delivered with 361 points, reads the same either
+   way. The gates and `final_margin_min` use the native margins, which predict
+   the phase-5 saturation. Check whether the resampling puts kinks into the
+   flown path (which the guidance and feed-forward would see) or only into the
+   check, and resample smoothly if the former.
 
 ## Done
+
+- **Keep the phase-5 path within the turn authority** (2026-09-26):
+  `final_margin_min` (`FC_Settings`, 1.5 in `fc_settings_reelout.yaml`, 0 =
+  off). From the reel-out stop latch, a flown path whose phase-5 margin is below
+  it is blended to the most recent installed path that meets it (the startup
+  path at worst), carrying the current lift; the run summary reports it
+  (`final_fallback_t`, `final_fallback_to_t`, `margin_final_fallback`). Phase 5
+  generates no power. Decided on the native margins each install computed; at
+  1.0 the chosen paths (1.00 – 1.03) still saturated 12 – 22 % of phase 5,
+  hence 1.5.
+
+  **How often (survey of the 24 scenario runs, 2026-09-26):**
+  `margin_final_flown` predicts phase-5 saturation almost perfectly.
+
+  | Phase-5 margin of the last path | Runs | Steering on its clamp, phase 5 | Phase 4 |
+  |---|---|---|---|
+  | < 1 (0.55 – 0.87): Cabauw 3 – 5.75 m/s, Maasvlakte 3.5 – 8.5 m/s | 14 | 14 – 28 % in 13 of them, 4.7 % in one | 0 – 8.5 % |
+  | ≥ 1 (1.0 – 1.6): Cabauw 6 – 10 m/s, Maasvlakte 9 – 11 m/s | 10 | 0 % | 0 % |
+
+  All 24 pass all 10 criteria, but at low wind every run flies phase 5 with
+  the cross-track mode nearly undamped; Cabauw 3 m/s does so for 190 s.
+
+  Verification, each condition flown with the fallback off and at 1.5 (all
+  runs pass all 10 criteria):
+
+  | Condition | Fallback to | Steering on its clamp, phase 5 | Phase-5 RMS / max d | Min. phase-5 elevation | Reel-out energy |
+  |---|---|---|---|---|---|
+  | Cabauw 4 m/s | install at 37.2 s (0.70 → 1.52) | 28.0 → 0 % | 2.55 / 4.64° → 1.14 / 1.68° | 18.5 → 19.2° | 696.1 → 696.1 kJ |
+  | Cabauw 5 m/s | startup path (0.87 → 1.90) | 28.8 → 0 % | 2.30 / 4.48° → 0.91 / 1.66° | 19.0 → 18.5° | 1142.6 → 1142.7 kJ |
+  | Maasvlakte 6 m/s | install at 35.2 s (0.76 → 1.58) | 25.0 → 0 % | 2.04 / 3.72° → 1.55 / 3.25° | 9.9 → 16.7° | 750.7 → 750.6 kJ |
+  | Maasvlakte 7 m/s | startup path (0.78 → 1.93) | 26.3 → 0 % | 2.00 / 3.71° → 2.14 / 5.32° | 10.6 → 18.3° | 1031.2 → 1031.0 kJ |
+
+  The saturation is gone and tracking is better in three of four; at
+  Maasvlakte 7 m/s the switch to the much larger startup path causes a 5.3°
+  transient within the 20 s phase 5. The energy changes by at most 0.02 %
+  because the blend starts during the soft stop.
 
 - **Held length without saturation** (2026-09-26): at 380 m on the startup
   path (margin 2.95) the held loop gives ζ 0.63 against 0.65 – 0.71 modelled,
