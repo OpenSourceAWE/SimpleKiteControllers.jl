@@ -45,6 +45,7 @@ const EXAMPLES = [
     "simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)" => "simple_opt_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
     "stability_opt_reelout.jl - disk margins of the reel-out course loop over tether length" => "stability_opt_reelout.jl",
+    "stability_global.jl     - worst reel-out disk margin of every archived scenario (minutes!)" => "stability_global.jl",
     "simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
     "simple_fig8_live.jl     - the same run, shown live in the 3D viewer (minutes!)" => "simple_fig8_live.jl",
     "simple_fig8_plots.jl    - plot the last logged run of active project" => "simple_fig8_plots.jl",
