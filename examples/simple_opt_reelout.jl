@@ -176,6 +176,39 @@ isnothing(steer_disturbance) || @info "Steering disturbance in force (test input
 dist_t = Float64[]      # [s] time of each disturbed step
 dist_d = Float64[]      # [-] disturbance added
 dist_u = Float64[]      # [-] steering sent to the model, controller plus disturbance
+# Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase 5 began, read and cleared
+# like SHOW_PLOTS. The attractor is moved δ along the path's right-hand normal, so the pursuit
+# aims at the parallel curve δ to the right: a reference step for the guided loop alone. The run
+# keeps `xt_t`, `xt_delta`, `xt_d`, the signed cross-track error to the UNSHIFTED path, and `xt_q`,
+# the index of its closest point Q: a reference run's d as a function of Q removes the lap forcing.
+xtrack_offset = @isdefined(XTRACK_OFFSET) ? XTRACK_OFFSET : nothing
+XTRACK_OFFSET = nothing
+isnothing(xtrack_offset) || @info "Cross-track offset in force (test input)."
+xt_t = Float64[]        # [s] time of each phase-5 step
+xt_delta = Float64[]    # [deg] offset commanded
+xt_d = Float64[]        # [deg] signed cross-track error to the unshifted path, right of travel > 0
+xt_q = Int[]            # [-] index of the closest path point Q
+
+"Index of the attractor point: `attractor_distance` of arc ahead of Q, as `calc_attractor` walks it."
+function attractor_index(fec)
+    n, k, cum = length(fec.az_path), fec.last_idx, 0.0
+    while cum < fec.fes.attractor_distance
+        cum += fec.seg_len[k]
+        k = mod1(k + 1, n)
+        k == fec.last_idx && break
+    end
+    return k
+end
+
+"Right-hand normal (azimuth, elevation) of path point `i`, in degrees of arc; `tangent` is a bearing."
+path_normal(fec, i) = (cos(fec.tangent[i]), -sin(fec.tangent[i]))
+
+"Signed cross-track error [deg] of the kite at `az`, `el` [deg] to the path at Q, right of travel > 0."
+function signed_cross_track(fec, az, el)
+    iq = fec.last_idx
+    na, ne = path_normal(fec, iq)
+    return (az - fec.az_path[iq]) * cosd(el) * na + (el - fec.el_path[iq]) * ne
+end
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -1256,6 +1289,21 @@ try
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))
+        if !isnothing(xtrack_offset) && isfinite(final_start)
+            local δ = xtrack_offset(t - final_start)
+            if δ != 0
+                local na, ne = path_normal(fec, attractor_index(fec))
+                az_attr += δ * na / cosd(el_attr)
+                el_attr += δ * ne
+                chi_set = SimpleKiteControllers._bearing(Float64(s.sys_state.azimuth),
+                                                         Float64(s.sys_state.elevation),
+                                                         deg2rad(az_attr), deg2rad(el_attr))
+            end
+            push!(xt_t, t); push!(xt_delta, δ)
+            push!(xt_d, signed_cross_track(fec, rad2deg(Float64(s.sys_state.azimuth)),
+                                           rad2deg(Float64(s.sys_state.elevation))))
+            push!(xt_q, fec.last_idx)
+        end
 
         # Entry state machine, descent limiter, feedback fusion, PID and rel_depower: see CourseController.
         heading = Float64(s.sys_state.heading)

@@ -464,6 +464,148 @@ run (22:24, `scenarios/cabauw/v04` before compression) gave α = 0.42 against
    large value is probably real and is what pulls Maasvlakte 10 m/s down; the
    zero at the lowest airspeed is suspicious and makes that 0.58 optimistic.
 
+## Cross-track step test (2026-09-26)
+
+Next step 1 below, dynamic part. The static guidance gain was already confirmed
+(`dχ_set/dd · D` = 0.92 – 0.95, see
+[The guidance term](#the-guidance-term-and-the-kites-dead-time)), so this tests
+only the ringing of d.
+
+**Test input.** `XTRACK_OFFSET = τ -> δ` [deg] in `simple_opt_reelout.jl`, τ
+the time since phase 5 began, read and cleared like `SHOW_PLOTS`. The attractor
+is moved δ along the path's right-hand normal, so the pursuit aims at the
+parallel curve δ to the right: a reference step for the guided loop alone. The
+run keeps `xt_t`, `xt_delta` and `xt_d`, the signed cross-track error to the
+unshifted path (right of travel > 0).
+
+**Setup.** Cabauw at the default wind (5.324 m/s, no override so `sim_time`
+holds), `sim_time` 260 s, `FCS_OVERRIDES` `final_time = 150`,
+`reelout_l_max = 200`; δ a ±1° square wave with 11 s half-periods from
+τ = 10 s (12 steps). Held window: 200 m, v_a 27.8 m/s, v_k 24.5 m/s, depower
+0.35, D = 6.4°, tape lag 0.39 s and rate-limited 9 % of the time, kite dead
+time 0.056 s identified on the held window (correlation 0.997). Lap period
+13.8 s.
+
+**The lap forcing hides the step.** With δ = 0 the signed d has a standard
+deviation of 3.1° in the held window. So the test is flown twice, with the
+offset and with `XTRACK_OFFSET = τ -> 0` (the runs are deterministic: the two
+are identical to the sample before the first step), and the difference
+Δd = d − d_ref is analysed. Data: `output/xtrack_step_test_200m.csv` (step run
+archive `2026-09-25_235333`, twin `2026-09-25_235723`); analysis:
+`examples/xtrack_step_analysis.jl`.
+
+| τ after the step [s] | 0.5 | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | 4.0 | 5.0 | 6.0 | 7.0 | 8.0 | 9.0 | 10.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Measured Δd/Δδ, mean of 12 | 0.28 | 0.51 | 0.76 | **0.88** | 0.78 | 0.59 | 0.29 | 0.31 | **0.44** | 0.30 | 0.22 | 0.38 | **0.65** |
+| Model T (both gravity signs) | 0.06 | 0.32 | 0.69 | 1.03 | 1.23 | **1.27** | 1.08 | 0.91 | 0.94 | 1.02 | 1.02 | 1.00 | 0.99 |
+
+The measured mean has a standard error of 0.1 – 0.4. The model's dominant
+poles: 0.21 Hz, ζ = 0.29 – 0.32.
+
+1. **The first response is faster than modelled:** half the step at 1.0 s
+   (model 1.3 s), first peak at 2.0 s (model 2.9 s).
+2. **d does not settle at δ.** After the peak it falls back to about 0.38 δ
+   on average over 3 – 10 s; the model settles at 1. Hypothesis, untested: the
+   curvature feed-forward (`ff_gain` 0.7) is computed for the unshifted path.
+   In a turn an offset to the inside needs more turn rate and one to the
+   outside less, and in both lobes the feed-forward pulls the kite back to the
+   original path, while the PD has no integral action.
+3. **Frequency and damping are not determinable yet.** The mean ripples with
+   peaks at 2, 6 and 10 s (0.25 Hz, near the model's 0.21 Hz) and barely
+   decays, but a turn or crossing passes every 3.4 s (0.29 Hz), and 12 steps
+   cannot separate the two. The per-step fits scatter from 0 to 0.29 Hz.
+
+**Feed-forward off (2026-09-26).** The same twin pair with `ff_gain = 1e-6`
+(the script asserts `ff_gain > 0`, since phase 4 needs it; 1e-6 removes both
+the steering feed-forward and the chord correction). Both runs pass all 10
+criteria. Archives `2026-09-26_003225` (step) and `003345` (twin), data
+`output/xtrack_step_test_200m_ff0.csv`.
+
+| τ after the step [s] | 0.5 | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | 4.0 | 5.0 | 6.0 | 7.0 | 8.0 | 9.0 | 10.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Measured, `ff_gain` 0.7 | 0.28 | 0.51 | 0.76 | 0.88 | 0.78 | 0.59 | 0.29 | 0.31 | 0.44 | 0.30 | 0.22 | 0.38 | 0.65 |
+| Measured, feed-forward off | 0.05 | 0.15 | 0.37 | 0.59 | 0.74 | **0.75** | 0.43 | 0.37 | 0.62 | 0.85 | 0.87 | 0.89 | 1.02 |
+| Model T | 0.06 | 0.32 | 0.69 | 1.03 | 1.23 | **1.27** | 1.08 | 0.91 | 0.94 | 1.02 | 1.02 | 1.00 | 0.99 |
+
+- The mean over 3 – 10 s rises from 0.36 to 0.70, and d reaches 0.9 – 1.0 δ
+  after 7 s. That supports hypothesis 2, but the standard error is 0.5 – 1.0
+  here (0.2 – 0.4 with the feed-forward), so it is not conclusive.
+- The first peak now comes at 3.0 s, as in the model, but at 0.75 instead of
+  1.27, and it is followed by a dip to 0.35 at 4.5 s that the model does not
+  have. Without the feed-forward the initial rise is slower than modelled.
+
+**600 s hold (2026-09-26): the twin method only holds for about 100 s.** Both
+twin pairs flown again with `final_time = 600` (`sim_time` 660 s), 53 steps
+each, all four runs passing all 10 criteria; data
+`output/xtrack_step_test_200m_600s_ff07.csv` and `..._ff0.csv`. The standard
+error did not shrink: 0.3 – 0.5 with the feed-forward, 0.5 – 0.7 without,
+because the twins drift apart. The offset changes the kite's timing along the
+path, and the lap forcing stops cancelling:
+
+| Window of the hold | 0–100 s | 100–200 s | 200–300 s | 300–400 s | 400–500 s | 500–600 s |
+|---|---|---|---|---|---|---|
+| Std of d_step − d_ref, `ff_gain` 0.7 | 1.0° | 2.3° | 3.4° | 4.2° | 4.4° | 4.6° |
+| Std of d_step − d_ref, feed-forward off | 2.0° | 4.0° | 5.0° | 5.7° | 5.0° | 4.0° |
+
+From about 200 s on the difference is that of two unrelated lap motions of 3°
+each. The averages over all 53 steps therefore say little more than the
+150 s tests (mean over 3 – 10 s: 0.27 with the feed-forward, 0.74 without;
+first peak 0.69 at 2.2 s and 0.97 at 3.1 s).
+
+**Subtracting by path position (2026-09-26): the test works.** The same two
+600 s pairs, flown again with the closest-point index Q recorded (`xt_q`);
+data in the same CSV files, now with `q_step` and `q_ref`. With the length
+held and the path fixed (last install at 32 – 33.5 s, before phase 5 at
+36.5 s), the reference run is periodic in Q to within 0.03 – 0.04°.
+`subtract_by_position` removes its mean d at each Q from the step run. The
+difference then stays at 0.83 – 0.89° in every 100 s window (by time it grew
+to 4 – 6°), and all 53 steps are usable. All four runs pass all 10 criteria.
+
+| τ after the step [s] | 0.5 | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | 4.0 | 5.0 | 5.5 | 6.0 | 7.0 | 8.0 | 10.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Measured, `ff_gain` 0.7 (53 steps) | 0.01 | 0.12 | 0.33 | 0.56 | 0.70 | 0.69 | 0.46 | 0.25 | **0.24** | 0.27 | 0.38 | 0.47 | 0.44 |
+| Measured, feed-forward off (53 steps) | −0.02 | 0.10 | 0.35 | 0.63 | 0.81 | **0.89** | 0.74 | 0.52 | **0.50** | 0.55 | 0.71 | **0.78** | 0.66 |
+| Model T | 0.06 | 0.32 | 0.69 | 1.03 | 1.23 | **1.27** | 1.08 | 0.91 | 0.91 | 0.94 | 1.02 | 1.02 | 0.99 |
+
+Standard error 0.01 – 0.11. Fitted with a delayed second-order step response
+with a free gain K (rms 0.03 – 0.04, the two halves of the steps agree), and
+the model's own response fitted the same way:
+
+| | K | Ringing | ζ | Delay |
+|---|---|---|---|---|
+| Model | 1.00 | 0.20 Hz | 0.34 – 0.37 | 0.35 s |
+| Measured, feed-forward off | **0.66** | **0.208 Hz** | 0.25 (0.22 / 0.28) | 0.6 s |
+| Measured, `ff_gain` 0.7 | **0.40** | 0.183 Hz | **0.14** (0.13 / 0.15) | 0.15 s |
+
+1. **The model's ringing frequency is right.** Without the feed-forward the
+   cross-track mode rings at 0.208 Hz against 0.20 Hz modelled. With the
+   feed-forward it is 0.183 Hz.
+2. **The damping is lower than modelled:** 0.25 against 0.35, and only 0.14
+   as flown, with the feed-forward. The feed-forward speeds up the first
+   response (delay 0.15 s instead of 0.6 s) but takes damping out of the
+   cross-track mode. This is the lightly damped ring near 0.2 Hz that the
+   margin analysis pointed to.
+3. **The steady gain is well below 1:** 0.66 without the feed-forward, 0.40
+   with it. The model has a straight path and no feed-forward, so it cannot
+   show this. Hypothesis, untested: in the turns, flying δ inside or outside a
+   lobe changes the turn rate needed. The PD, having no integral action, needs
+   a course error for that turn rate, and the pursuit geometry turns that error
+   into a pull back toward the original path, on both lobes. The feed-forward,
+   computed for the unshifted path, adds to the pull. On the straight parts the
+   kite should reach δ; the gain would then vary along the lap.
+4. **The model's first response is faster than measured without the
+   feed-forward** (delay 0.35 s against 0.6 s).
+
+**Next:**
+- Check hypothesis 3: split the step responses by where on the lap the step
+  falls (turn or straight, from Q) and see whether K is near 1 on the
+  straights.
+- Repeat at a second operating point (380 m, or Cabauw 10 m/s) to see whether
+  the lower damping holds.
+- Compare the damping with the margins: ζ 0.14 at 0.18 Hz as flown is
+  consistent with the lightly damped ring; the disk margin measured at 200 m
+  with sine injection was 0.43.
+
 ## Caveats
 
 - **The guidance model is unvalidated.** It is the small-angle pure-pursuit
@@ -489,7 +631,8 @@ run (22:24, `scenarios/cabauw/v04` before compression) gave α = 0.42 against
 
 ## Next steps
 
-1. **Validate the guidance model.** Excite or isolate the cross-track loop in
+1. **Validate the guidance model** (dynamic part done at 200 m, see
+   [Cross-track step test](#cross-track-step-test-2026-09-26)). Excite or isolate the cross-track loop in
    `simple_opt_reelout.jl`, for example with a step in `el_offset` or a short
    course disturbance in phase 4 at a fixed length. Then compare the ringing of
    `d` with the predicted 0.21 – 0.24 Hz and damping. Alternatively, fit
