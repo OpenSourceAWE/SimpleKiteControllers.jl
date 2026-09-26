@@ -256,7 +256,7 @@ lag:
     more than `MAX_RATE_LIMITED` = 20 % of the time, a bin is printed with a
     "large signal" note, left out of the rating and listed in a warning.
     Large turns are covered by `step_response` in
-    `stability_course_controller.jl`.
+    `stability_fig8.jl`.
 
 Rated on the linear bins, the five baseline runs agree:
 
@@ -863,7 +863,7 @@ The follow-ups are in [Next steps](#next-steps).
    [Wind speed and site](#wind-speed-and-site-2026-09-25-evening)); the step
    test would check the model where it predicts the weakest margins
    (Maasvlakte 10 m/s).
-4. **Add the guidance to the fig8 analysis.** `stability_course_controller.jl`
+4. **Add the guidance to the fig8 analysis.** `stability_fig8.jl`
    models the inner loop only. The same guidance factor applies there too.
 5. **The feasibility check on resampled paths.** Re-optimized paths arrive
    from AWETrim with 100 points and are resampled to 360 for flying. On the

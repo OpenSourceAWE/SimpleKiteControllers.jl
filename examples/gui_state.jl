@@ -97,7 +97,7 @@ end
     selected_fig8_project() -> String
 
 Project the figure-of-eight scripts (`simple_fig8.jl`,
-`stability_course_controller.jl`) fly: the persisted selection when it already
+`stability_fig8.jl`) fly: the persisted selection when it already
 names a fig8 project (`system_fig8_*.yaml`), otherwise [`default_project`](@ref).
 
 The counterpart of [`selected_reelout_project`](@ref): a reel-out selection left

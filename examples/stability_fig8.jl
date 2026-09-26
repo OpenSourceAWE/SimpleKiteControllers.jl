@@ -49,7 +49,7 @@ The disk margin `α` (skew 0) is the radius of the largest disk of simultaneous
 gain and phase variations the loop tolerates; `α ≥ 0.5` is considered robust,
 as in WinchControllers.jl's `stability_lfc.jl`.
 
-    include("stability_course_controller.jl")
+    include("stability_fig8.jl")
 """
 
 using Pkg

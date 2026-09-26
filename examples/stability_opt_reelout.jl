@@ -6,7 +6,7 @@ Disk-based stability analysis of the course-control loop flown by
 `simple_opt_reelout.jl`, over the full range of tether length, from the
 project's `l_tether` to `reelout_l_max`.
 
-The plant and the controller are those of `stability_course_controller.jl`
+The plant and the controller are those of `stability_fig8.jl`
 (shared in `course_loop_model.jl`): the steering tape as a first-order lag, the
 turn-rate law of `data/turn_rate_coeffs.yaml` with the kite's dead time scaled
 over `v_a`, and the exact discrete PD of `CourseController`. Four things

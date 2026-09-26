@@ -1,6 +1,6 @@
 # Course-loop stability analysis (disk margins)
 
-2026-09-25. Findings from `examples/stability_course_controller.jl`, a
+2026-09-25. Findings from `examples/stability_fig8.jl`, a
 disk-margin analysis of the linearized inner loop of `simple_fig8.jl`. The
 method follows WinchControllers.jl's `examples/stability_lfc.jl`.
 **Status: model validated against `simple_fig8.jl` runs and relay sweeps; the
@@ -391,7 +391,7 @@ to a step or chirp in `rel_steering`.
 
 ## Usage
 
-    include("examples/stability_course_controller.jl")   # from the package root, examples env
+    include("examples/stability_fig8.jl")   # from the package root, examples env
     diskmargin(L)                                        # nominal pattern loop
 
 Set `SHOW_PLOTS = false` before the include to skip the Bode plot and the

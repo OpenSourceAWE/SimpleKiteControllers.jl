@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-# The linear course-loop model shared by `stability_course_controller.jl` and
+# The linear course-loop model shared by `stability_fig8.jl` and
 # `stability_opt_reelout.jl`: the plant (actuator lag, turn-rate law, the kite's
 # dead time over v_a), the discrete PD and the margin helpers. Needs
 # ControlSystemsBase and LinearAlgebra.diagm in scope.
