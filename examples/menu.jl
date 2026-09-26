@@ -44,12 +44,12 @@ const EXAMPLES = [
     "copy_scenario.jl        - same, but keeps vNN_2/vNN_3/... instead of overwriting" => "copy_scenario.jl",
     "simple_opt_reelout.jl   - reel out along an externally optimized path (minutes!)" => "simple_opt_reelout.jl",
     "simple_reelout_plots.jl - plot the last logged reel-out run" => "simple_reelout_plots.jl",
+    "stability_opt_reelout.jl - disk margins of the reel-out course loop over tether length" => "stability_opt_reelout.jl",
     "simple_fig8.jl          - fly the figure-of-eight pattern (minutes!)" => "simple_fig8.jl",
     "simple_fig8_live.jl     - the same run, shown live in the 3D viewer (minutes!)" => "simple_fig8_live.jl",
     "simple_fig8_plots.jl    - plot the last logged run of active project" => "simple_fig8_plots.jl",
     "stability_fig8.jl        - disk margins of the course-control loop (fig8 project)" => "stability_fig8.jl",
     "simple_opt_fig8.jl      - fly an externally optimized path at constant length (minutes!)" => "simple_opt_fig8.jl",
-    "stability_opt_reelout.jl - disk margins of the reel-out course loop over tether length" => "stability_opt_reelout.jl",
     "simple_reelout.jl       - fly the pattern, then reel out to reelout_l_max (minutes!)" => "simple_reelout.jl",
     "simple_reelout_play.jl  - replay the last logged reel-out run in the 3D viewer" => "simple_reelout_play.jl",
     "simple_auto_parking.jl  - fly heading-stabilized parking of the V3 kite" => "simple_auto_parking.jl",
@@ -73,7 +73,7 @@ function example_menu()
     push!(options, "quit")
     while true
         choice = TerminalMenus.request("\nChoose example to run or `q` to quit: ",
-                         RadioMenu(options, pagesize=10))
+                         RadioMenu(options, pagesize=11))
         if choice == -1 || choice == length(options)
             println("Left menu. Press <ctrl><d> to quit Julia!")
             return nothing
