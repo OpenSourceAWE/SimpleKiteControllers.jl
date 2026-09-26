@@ -362,6 +362,16 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     # The warm-up relaxes at constant length, against the same loop the run uses.
     warmup_torque = (m, l) -> winch_torque!(wpc, m, l), remake_model = false)
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
+# Plant overrides for a diagnostic run, e.g. `v_steering` (the tape's rate limit, read by the KCU
+# every step), applied to the model's own Settings after init; read and cleared like SHOW_PLOTS.
+set_overrides = @isdefined(SET_OVERRIDES) ? SET_OVERRIDES : Dict{Symbol, Any}()
+SET_OVERRIDES = Dict{Symbol, Any}()
+for (key, value) in set_overrides
+    hasfield(typeof(s.kcu.set), key) || error("SET_OVERRIDES: \"$key\" is not a field of Settings.")
+    setfield!(s.kcu.set, key, convert(fieldtype(typeof(s.kcu.set), key), value))
+end
+isempty(set_overrides) ||
+    @info "plant overrides in force: " * join(("$k = $v" for (k, v) in set_overrides), ", ")
 
 # Built here so the soft-start ramp begins when reel-out starts; `rcs` is `wc`, one file for both winches.
 rcs.dt = s.dt

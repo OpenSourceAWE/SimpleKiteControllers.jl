@@ -645,13 +645,48 @@ Standard error 0.01 – 0.08.
    against 0.40. The model cannot show this (hypothesis 3 above).
 4. **The measured response is 0.2 s slower** than the model's in both cases.
 
+**What makes the held length lightly damped? Not the tape, depower or force
+(2026-09-26).** The held test (200 m, `ff_gain` 0.7) flown as a twin pair with
+one condition changed at a time, 300 s holds (`final_time = 300`, `sim_time`
+360 s), 26 steps each, subtracted by path position. All four runs pass all 10
+criteria. Data: `data/steptest/xtrack_step_test_200m_300s_{tape08,dp027}.csv`.
+The fast tape is set through a new hook, `SET_OVERRIDES`, which changes fields
+of the model's `Settings` after `init`; the KCU reads `v_steering` from them
+every step. It does not persist: the next run's `init` builds fresh settings.
+
+| Held at 200 m | Tape rate-limited | Depower | Force | v_a | K | Ringing | ζ |
+|---|---|---|---|---|---|---|---|
+| Baseline (600 s, 53 steps) | 10.5 % | 0.35 | 3.96 kN | 27.8 m/s | 0.40 | 0.188 Hz | **0.14** |
+| Tape 0.8/s instead of 0.2/s | **0 %** | 0.35 | 3.97 kN | 27.8 m/s | 0.45 | 0.192 Hz | **0.16** |
+| `depower_final` 0.27 | 6.5 % | 0.30 | **7.48 kN** | 34.2 m/s | 0.33 | 0.197 Hz | **0.16** (fit rms 0.12) |
+| Reel-out, phase 4 (above) | 0 % | 0.27 | 5.3 kN | 26 – 28 m/s | 0.75 | 0.191 Hz | **0.56** |
+
+(Rate-limited: share of phase-5 samples with the tape at 97.5 % of its own
+rate limit. With `depower_final` 0.27 the force rose to the phase-5 limiter's
+7500 N target, and the limiter held depower at 0.30.)
+
+1. **The tape rate limit is not the cause:** with the tape never saturating,
+   ζ goes from 0.14 to 0.16.
+2. **Nor are depower or force:** at depower 0.30 and 7.5 kN, more force than
+   in the reel-out, ζ is still 0.16.
+3. **The winch does not couple in:** it holds the length rigidly (reel-out
+   speed std 0.001 m/s), and the force oscillates only at lap harmonics (0.144
+   and 0.288 Hz for a 13.8 s lap, about ±100 N), not near 0.19 Hz.
+4. **The controller is the same in phases 4 and 5** apart from the depower
+   target and the force limiter, both covered by 2.
+5. What remains is the reel-out itself: reel-out speed and the growing length.
+   The geometric effect of a growing tether on the angular cross-track error,
+   a decay at v_ro/L ≈ 0.01 1/s, is far too small against a mode at about
+   1.2 rad/s. No mechanism is identified yet.
+
 **Next:**
-- Separate the held-length conditions: fly the held test once with a faster
-  tape (`v_steering` in the project settings, as a diagnostic only: it changes
-  the plant) and once at depower 0.27, to see which one restores the damping.
-- Check hypothesis 3 by splitting the steps into turn and straight (from Q).
-- Repeat the reel-out test at a higher wind (Cabauw 10 m/s), where the
-  guidance runs faster (D above its floor for longer).
+- Step test in phase 4 at a lower reel-out speed (a lower winch speed limit),
+  to see whether ζ falls with reel-out speed.
+- Compare course and heading (side slip) in phases 4 and 5: the fed-back
+  course is not the heading of the turn-rate law, and reel-out changes the
+  kite's velocity relative to the tether.
+- Check hypothesis 3 (steady gain) by splitting the steps into turn and
+  straight (from Q).
 
 ## Caveats
 
