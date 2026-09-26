@@ -13,17 +13,18 @@ lag from the commanded to the applied steering,
 
 then the turn-rate law of `data/turn_rate_coeffs.yaml`,
 
-    ψ̇ = c1·v_a·u_s(t - τ_kite) + c2/v_a·cos(ψ0)·cos(β)·δψ
+    ψ̇ = c1·v_a·u_k + c2/v_a·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
 
 The lag stands in for the KCU tape's rate limit (`v_steering`), which is
 nonlinear: `ACTUATOR_LAG` is its equivalent at the amplitudes flown in the
 pattern, where the tape is rate-limited a quarter of the time. It was
 identified on a `simple_fig8.jl` log.
 
-The kite's dead time scales with the apparent wind speed, see
-[`kite_delay`](@ref): the table's `delay` is identified by the relay sweeps of
-`build_turn_rate_table.jl` at the row's `v_app` (about 13 m/s), and the same
-fit gives 0.22 s at 22.5 m/s and 0.12 s in the pattern at 36 m/s. See
+The kite responds to the applied steering with a dead time `τ_kite` and a lag
+`T_kite` of its own, both scaling with the apparent wind speed, see
+[`kite_dead_time`](@ref) and [`kite_lag`](@ref): the table's `dead_time` and
+`kite_lag` are identified by the relay sweeps of `build_turn_rate_table.jl` at
+the row's `v_app` (about 13 m/s), 0.141 + 0.267 s at depower 0.275. See
 `docs/course_loop_stability.md`.
 
 The gravity term only adds a slow real pole at `±c2/v_a·cos(β)`; both signs are
@@ -90,9 +91,9 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min)
     K = K_phase * fcs.v_app_ref / max(v_app, v_min)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     cos_beta = cosd(fcs.el_center)
-    τ = kite_delay(tc, v_app)
+    τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
     results = map((-cos_beta, cos_beta)) do gravity
-        L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts)
+        L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; kite_lag = T_kite)
         dm = try
             diskmargin(L)
         catch
@@ -102,7 +103,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min)
         (; L, dm, α, delay_margin = delay_margin(L))
     end
     worst = argmin(r -> r.α, results)
-    return (; worst..., c1 = tc.c1, delay = τ, K)
+    return (; worst..., c1 = tc.c1, delay = τ, kite_lag = T_kite, K)
 end
 
 """
@@ -112,7 +113,7 @@ Nonlinear simulation of the course loop from a course error of `err0_deg` [deg]
 with constant command and constant `v_app` [m/s]: the PD of `CourseController`
 (the `DiscretePID` update, clamped to `max_steering`), the KCU tape as
 KitePodModels steps it, `u̇ = clamp(steering_gain·(u_cmd - u), ±v_steering)`,
-then the kite's dead time and `ψ̇ = c1·v_a·u` (no gravity). Returns the
+then the kite's dead time and lag and `ψ̇ = c1·v_a·u` (no gravity). Returns the
 overshoot [deg], the largest error [deg] over the last 10 s, and the fraction
 of time the tape was rate-limited.
 
@@ -123,7 +124,8 @@ overshoot of a large turn is overstated here.
 function step_response(err0_deg, v_app; depower = fcs.depower_setpoint, K_phase = fcs.heading_p,
                        v_min = V_MIN_PATTERN, t_end = 40.0)
     tc = turn_rate_coeffs(fcs.body_damping, depower)
-    n = round(Int, kite_delay(tc, v_app) / Ts)
+    n = round(Int, kite_dead_time(tc, v_app) / Ts)
+    a_kite = exp(-Ts / kite_lag(tc, v_app))
     K = K_phase * fcs.v_app_ref / max(v_app, v_min)
     Td, N = fcs.heading_d, fcs.heading_d_n
     ad = Td / (Td + N * Ts)
@@ -132,6 +134,7 @@ function step_response(err0_deg, v_app; depower = fcs.depower_setpoint, K_phase 
     err = deg2rad(err0_deg)
     D, yold, u = 0.0, err, 0.0      # engaged on the error, as set_K! leaves it
     buffer = zeros(n)
+    u_lag = 0.0
     steps = round(Int, t_end / Ts)
     errs = zeros(steps)
     limited = 0
@@ -144,7 +147,8 @@ function step_response(err0_deg, v_app; depower = fcs.depower_setpoint, K_phase 
         abs(du) > v_s && (limited += 1)
         u += clamp(du, -v_s, v_s) * Ts
         u_kite = n == 0 ? u : (pushfirst!(buffer, u); pop!(buffer))
-        err += tc.c1 * v_app * u_kite * Ts
+        u_lag = a_kite * u_lag + (1 - a_kite) * u_kite
+        err += tc.c1 * v_app * u_lag * Ts
         errs[k] = rad2deg(err)
     end
     cross = findfirst(e -> sign(e) != sign(err0_deg), errs)
@@ -157,17 +161,17 @@ function print_row(label, x, r)
     gm = isnothing(r.dm) ? (NaN, NaN) : r.dm.gainmargin
     pm = isnothing(r.dm) ? NaN : r.dm.phasemargin
     f0 = isnothing(r.dm) ? NaN : r.dm.ω0 / 2π
-    @printf("  %-9s %6.3f   c1=%.4f  delay=%.3f s  K=%.3f   α=%5.3f at %4.2f Hz  GM=[%.2f, %.2f]  PM=%5.1f°  DM=%5.3f s\n",
-            label, x, r.c1, r.delay, r.K, r.α, f0, gm[1], gm[2], pm, r.delay_margin)
+    @printf("  %-9s %6.3f   c1=%.4f  dead=%.3f s  lag=%.3f s  K=%.3f   α=%5.3f at %4.2f Hz  GM=[%.2f, %.2f]  PM=%5.1f°  DM=%5.3f s\n",
+            label, x, r.c1, r.delay, r.kite_lag, r.K, r.α, f0, gm[1], gm[2], pm, r.delay_margin)
 end
 
 @info @sprintf("Course-controller stability, project %s, body_damping = %s, dt = %.4f s, \
                 heading_p = %.3f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
-                actuator lag = %.2f s, kite dead time = table delay · (sweep v_app / v_app)^%.2f.",
+                actuator lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f.",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d,
                fcs.heading_d_n, fcs.heading_i, fcs.v_app_min, fcs.v_app_min_pattern,
-               ACTUATOR_LAG, KITE_DELAY_EXP)
+               ACTUATOR_LAG, KITE_DEAD_TIME_EXP, KITE_LAG_EXP)
 
 v_apps = [5.0, 10.0, 15.0, 20.0, 27.0, 35.0, 45.0]
 "Floor of the gain schedule from phase 3 on, as `calc_steering` applies it"

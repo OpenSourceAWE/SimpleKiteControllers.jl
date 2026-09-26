@@ -59,6 +59,7 @@ import Dates
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
+include(joinpath(@__DIR__, "delay_lag_fit.jl"))
 
 # ============== FIXED CONDITIONS (data/turn_rate_coeffs.yaml) ============== #
 # Only body_damping and depower vary across the grid. These must agree with the
@@ -96,13 +97,17 @@ const MAX_STEERING_CAP = 0.175
 const MIN_ELEVATION    = 50.0
 const MIN_STEERING_FIT = START_STEERING / 2
 
-# Blockwise delay scatter (`_delay_std`). The delay is a single cross-correlation
-# peak over the whole window, so it comes with no error bar of its own; re-estimating
+# Blockwise delay scatter (`_delay_std`). The delay is a single best-fit shift
+# over the whole window, so it comes with no error bar of its own; re-estimating
 # it per block is the cheapest honest substitute. The search range is narrowed from
-# `identify_turn_rate_law`'s 10 s default because a short block can correlate the
-# NEXT reversal with the current one and peak a full half-cycle late.
+# `identify_turn_rate_law`'s 10 s default because a short block can match the
+# NEXT reversal with the current one and fit a full half-cycle late.
 const DELAY_BLOCKS     = 4
 const DELAY_BLOCK_TMAX = 3.0
+
+# Dead time + lag split (`_split_delay`): the kite's lag is searched on a grid
+# of DT steps up to KITE_LAG_MAX [s]; the dead time over DELAY_BLOCK_TMAX.
+const KITE_LAG_MAX     = 1.0
 
 const OUT_FILE = "turn_rate_coeffs.yaml"
 
@@ -127,9 +132,11 @@ end
 
 """
     _run_turn_rate_sweep(depower; max_steering_cap=MAX_STEERING_CAP,
-                         elevation_floor=MIN_ELEVATION) -> NamedTuple
+                         elevation_floor=MIN_ELEVATION, v_wind=V_WIND) -> NamedTuple
 
 One steering-amplitude sweep at the fixed conditions above, for `depower`.
+`v_wind` [m/s] other than `V_WIND` flies the sweep at another airspeed, for the
+scaling of the dead time and lag over `v_app`; such a run is not a table row.
 
 `elevation_floor` is the elevation below which the sweep is abandoned as
 `:low_elevation`. Relax it for a cell the wing cannot hold at 50° — `c1`/`c2`
@@ -148,10 +155,11 @@ solver diverged — the fit still runs on whatever was logged). `fit` is the
 `identify_turn_rate_law` result, or `nothing` when even that failed.
 """
 function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP,
-                              elevation_floor::Real = MIN_ELEVATION)
+                              elevation_floor::Real = MIN_ELEVATION, v_wind::Real = V_WIND)
     @info @sprintf("build_turn_rate_table: depower = %.3f, max_steering_cap = %.3f, \
-                    elevation floor %.1f°", depower, max_steering_cap, elevation_floor)
-    s = init(V_WIND, TETHER_LENGTH; body_start_damping = BODY_START_DAMPING,
+                    elevation floor %.1f°, wind %.2f m/s", depower, max_steering_cap,
+                   elevation_floor, v_wind)
+    s = init(v_wind, TETHER_LENGTH; body_start_damping = BODY_START_DAMPING,
         body_sim_damping = BODY_SIM_DAMPING, elevation = ELEVATION,
         depower_setpoint = depower, sim_time = SWEEP_SIM_TIME, dt = DT,
         system_yaml = SWEEP_PROJECT, aero_mode = SWEEP_AERO_MODE, remake_model = false)
@@ -228,7 +236,7 @@ end
     _delay_std(fit; nblocks=DELAY_BLOCKS) -> Float64
 
 Scatter [s] of the transport delay over `nblocks` equal-length blocks of the
-analysis window of `fit`, each re-estimated with `estimate_delay` exactly as
+analysis window of `fit`, each re-estimated with `estimate_delay_fit` exactly as
 `identify_turn_rate_law` estimates the window-wide one. `NaN` if the window is
 too short to split.
 
@@ -245,12 +253,49 @@ function _delay_std(fit; nblocks::Int = DELAY_BLOCKS)
     for b in 1:nblocks
         rng = edges[b]:(edges[b + 1] - 1)
         length(rng) < 4 && continue
-        d, _ = estimate_delay(fit.us[rng], fit.rate[rng] ./ fit.v_app[rng], DT;
-                              t_max = DELAY_BLOCK_TMAX)
+        d, _ = estimate_delay_fit(fit.us[rng], fit.rate[rng], fit.v_app[rng],
+                                  fit.psi[rng], fit.beta[rng], DT; t_max = DELAY_BLOCK_TMAX)
         push!(delays, d * DT)
     end
     return length(delays) > 1 ? std(delays) : NaN
 end
+
+"""
+    _delay_over_v_app(fit) -> NamedTuple
+
+The pure delay of `identify_turn_rate_law`, re-fitted on the first and the
+second half of the analysis window of `fit` separately, each at its own mean
+`v_app`, and its exponent over `v_app` as `delay ∝ v_app^-exp`:
+`exp = ln(d1/d2)/ln(v2/v1)`. `NaN` when either delay is 0.
+
+Returns `(; v_app, delay, delay_exp)`, the first two as `(first half, second
+half)`. A check, not a measurement of the scaling: the steering amplitude steps
+up through the sweep and `v_app` rises with it (12.8 → 14.4 m/s at 9.51 m/s of
+wind, 20.5 → 27.4 m/s at 15 m/s, depower 0.275, 2026-09-26), so the halves
+differ in amplitude as much as in airspeed. The dead time and the lag are not
+split per half: the fit trades one against the other between the halves
+(exponents −4 and +5 at 15 m/s) while their sum stays put. Their scaling comes
+from sweeps at two wind speeds (`_run_turn_rate_sweep(...; v_wind)`).
+"""
+function _delay_over_v_app(fit)
+    n = length(fit.us)
+    halves = map((1:n ÷ 2, n ÷ 2 + 1:n)) do rng
+        _, _, d_frac = estimate_delay_fit(fit.us[rng], fit.rate[rng], fit.v_app[rng],
+                                          fit.psi[rng], fit.beta[rng], DT;
+                                          t_max = DELAY_BLOCK_TMAX)
+        (; v_app = mean(fit.v_app[rng]), delay = max(d_frac - 0.5, 0.0) * DT)
+    end
+    v, delay = getfield.(halves, :v_app), getfield.(halves, :delay)
+    delay_exp = all(>(0), delay) ? log(delay[1] / delay[2]) / log(v[2] / v[1]) : NaN
+    return (; v_app = v, delay, delay_exp)
+end
+
+"""
+    _split_delay(fit) -> NamedTuple
+
+[`fit_delay_lag`](@ref) at this script's sample time and search ranges.
+"""
+_split_delay(fit) = fit_delay_lag(fit, DT; lag_max = KITE_LAG_MAX, t_max = DELAY_BLOCK_TMAX)
 
 """
     _entry_key(e) -> (Vector{Float64}, Float64)
@@ -355,6 +400,8 @@ function build_turn_rate_table(;
         end
 
         r = _run_turn_rate_sweep(dp; max_steering_cap, elevation_floor)
+        split = isnothing(r.fit) ? nothing : _split_delay(r.fit)
+        halves = isnothing(r.fit) ? nothing : _delay_over_v_app(r.fit)
         entry = Dict{String, Any}(
             "body_damping" => Float64.(BODY_START_DAMPING),
             "body_sim_damping" => Float64.(BODY_SIM_DAMPING),
@@ -378,9 +425,19 @@ function build_turn_rate_table(;
             entry["c1_std"] = r.fit.se1
             entry["c2_std"] = r.fit.se2
             entry["delay_std"] = _delay_std(r.fit)
+            # `delay` split into a dead time and a lag (`fit_delay_lag`); `delay` stays the
+            # pure-delay equivalent.
+            entry["dead_time"] = split.dead_time
+            entry["kite_lag"] = split.lag
+            entry["rms_delay"] = split.rms_delay
+            entry["rms_lag"] = split.rms_lag
+            # The pure delay per half of the window (`_delay_over_v_app`).
+            entry["v_app_halves"] = collect(halves.v_app)
+            entry["delay_halves"] = collect(halves.delay)
+            entry["delay_exp"] = halves.delay_exp
         end
         _write_turn_rate_entry!(path, entry; remake)
-        push!(results, (; depower = dp, r...))
+        push!(results, (; depower = dp, r..., split, halves))
 
         @printf("  depower=%.2f  outcome=%-12s  u_s_max=%.3f  min_el=%.1f°%s\n",
                 dp, r.outcome, r.u_s_max, r.min_elevation,
@@ -389,17 +446,73 @@ function build_turn_rate_table(;
 
     # The quality bar turn_rate_coeffs applies before a row may be a neighbour.
     println("\n depower   outcome        c1   c1_std        c2   c2_std   delay  del_std   " *
-            "c1_rel_std  g_rel_std  usable")
+            "c1_rel_std  g_rel_std  usable   dead_t     lag  rms gain")
     for r in results
         isnothing(r.fit) && continue
         usable = r.outcome in (:sweep_done, :time_limit) &&
                  abs(r.fit.se1 / r.fit.c1) <= 0.01 && r.fit.G_rel_std <= 0.35
-        @printf("  %.3f   %-12s  %7.4f  %7.4f  %8.4f  %7.4f  %6.3f  %7.3f  %9.4f  %9.4f  %s\n",
+        @printf("  %.3f   %-12s  %7.4f  %7.4f  %8.4f  %7.4f  %6.3f  %7.3f  %9.4f  %9.4f  %-6s  %6.3f  %6.3f  %6.1f %%\n",
                 r.depower, r.outcome, r.fit.c1, r.fit.se1, r.fit.c2, r.fit.se2,
                 r.fit.delay_sec, _delay_std(r.fit),
-                abs(r.fit.se1 / r.fit.c1), r.fit.G_rel_std, usable ? "yes" : "NO")
+                abs(r.fit.se1 / r.fit.c1), r.fit.G_rel_std, usable ? "yes" : "NO",
+                r.split.dead_time, r.split.lag, 100 * (1 - r.split.rms_lag / r.split.rms_delay))
     end
 
+    # Per half of the window: the exponent of delay ∝ v_app^-exp (`_delay_over_v_app`).
+    println("\n depower   v_app halves [m/s]   delay halves [s]   exp")
+    for r in results
+        isnothing(r.halves) && continue
+        h = r.halves
+        @printf("  %.3f   %5.2f  %5.2f        %5.3f  %5.3f     %5.2f\n",
+                r.depower, h.v_app..., h.delay..., h.delay_exp)
+    end
+
+    reload_turn_rate_table!()
+    return results
+end
+
+"""
+    add_delay_lag_split!(; depowers=nothing, out="turn_rate_coeffs.yaml") -> Vector{NamedTuple}
+
+Re-fly the sweep of each passing row of `BODY_START_DAMPING` in `data/out`
+(all of them, or those in `depowers`) and add the dead time + lag split
+([`fit_delay_lag`](@ref)) to it: `dead_time`, `kite_lag`, `rms_delay`,
+`rms_lag` and `split_date`. Nothing else in the row changes, so `c1`, `c2` and
+`delay`, which the flight controllers and the feasibility check read, stay the
+records they were. Each row is re-flown at its own `elevation_floor`, at the
+table's conditions, so its `v_app` is the airspeed of the split too.
+"""
+function add_delay_lag_split!(; depowers = nothing, out::String = OUT_FILE)
+    path = joinpath(skc_data_path(), out)
+    _check_conditions(YAML.load_file(path))
+    rows = filter(e -> Float64.(e["body_damping"]) == BODY_START_DAMPING &&
+                       Symbol(get(e, "outcome", "")) in (:sweep_done, :time_limit) &&
+                       (isnothing(depowers) || Float64(e["depower"]) in depowers),
+                  YAML.load_file(path)["entries"])
+    results = NamedTuple[]
+    for row in rows
+        dp = Float64(row["depower"])
+        r = _run_turn_rate_sweep(dp; max_steering_cap = Float64(row["u_s_max"]),
+                                 elevation_floor = Float64(get(row, "elevation_floor", MIN_ELEVATION)))
+        if isnothing(r.fit)
+            @warn "add_delay_lag_split!: no fit at depower = $dp; row left unchanged."
+            continue
+        end
+        split = _split_delay(r.fit)
+        dict = YAML.load_file(path)
+        e = dict["entries"][findfirst(x -> _entry_key(x) == _entry_key(row), dict["entries"])]
+        e["dead_time"], e["kite_lag"] = split.dead_time, split.lag
+        e["rms_delay"], e["rms_lag"] = split.rms_delay, split.rms_lag
+        e["split_date"] = string(Dates.today())
+        YAML.write_file(path, dict)
+        push!(results, (; depower = dp, v_app = mean(r.fit.v_app), row_v_app = Float64(row["v_app"]),
+                        delay = r.fit.delay_sec, split...))
+    end
+    println("\n depower   v_app [m/s] (row)   delay   dead_t     lag  rms gain")
+    for r in results
+        @printf("  %.3f   %6.2f (%6.2f)     %6.3f  %6.3f  %6.3f  %6.1f %%\n", r.depower, r.v_app,
+                r.row_v_app, r.delay, r.dead_time, r.lag, 100 * (1 - r.rms_lag / r.rms_delay))
+    end
     reload_turn_rate_table!()
     return results
 end

@@ -20,9 +20,9 @@
 #     fit_second_order_gain(st.τ, st.y)               # 0.75, 0.191 Hz, 0.56, 0.45 s
 #
 # Model part: needs the globals of stability_opt_reelout.jl (fcs, Ts, course_pid, turn_rate_plant,
-# C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN) plus `log_delay` and `guidance_rate`. On a run that
-# reels out only to 200 m that script stops at the dead-time identification (phase 4 < 20 s);
-# identify the dead time on the held phase-5 window instead and define the two helpers by hand.
+# C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN, kite_dead_time, kite_lag) plus `guidance_rate`. On a run that
+# reels out only to 200 m that script stops at the dead-time cross-check (phase 4 < 20 s);
+# define `guidance_rate` by hand there.
 
 """
 Columns of a saved cross-track step test: time, δ, d of the step run and of the δ = 0 twin
@@ -190,9 +190,9 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     ωg = guidance_rate(Lt, v_app, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
-    τd = log_delay(v_app)
+    τd = kite_dead_time(tc, v_app)
     map((-cosd(el_c), cosd(el_c))) do gravity
-        P = turn_rate_plant(tc.c1, tc.c2, τd, v_app, gravity, Ts; lag)
+        P = turn_rate_plant(tc.c1, tc.c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
         Lg = C * G * P
         T = minreal(feedback(Lg) * (1 - 1 / G); atol = 1e-8)
         ps = log.(complex(poles(T))) ./ Ts               # continuous equivalents

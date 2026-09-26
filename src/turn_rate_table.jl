@@ -62,6 +62,8 @@ function _parse_turn_rate_entry(edict)
         c2 = Float64(edict["c2"]),
         delay = Float64(edict["delay"]),
         v_app = Float64(get(edict, "v_app", NaN)),
+        dead_time = Float64(get(edict, "dead_time", NaN)),
+        kite_lag = Float64(get(edict, "kite_lag", NaN)),
         c1_rel_std = Float64(get(edict, "c1_rel_std", 0.0)),
         g_rel_std = Float64(get(edict, "g_rel_std", 0.0)),
         outcome = Symbol(get(edict, "outcome", "sweep_done")),
@@ -124,9 +126,11 @@ end
 
 # A table built in code (the tests) may leave the column out.
 _row_v_app(e) = get(e, :v_app, NaN)
+_row_dead_time(e) = get(e, :dead_time, NaN)
+_row_kite_lag(e) = get(e, :kite_lag, NaN)
 
 """
-    turn_rate_coeffs(body_damping, depower; interpolate=true) -> (; c1, c2, delay, v_app, interpolated)
+    turn_rate_coeffs(body_damping, depower; interpolate=true) -> (; c1, c2, delay, v_app, dead_time, kite_lag, interpolated)
 
 Look up the V3 turn-rate-law coefficients for a given `body_damping` and
 `depower_setpoint`, from `data/turn_rate_coeffs.yaml`
@@ -154,6 +158,11 @@ Look up the V3 turn-rate-law coefficients for a given `body_damping` and
 identified at, interpolated linearly like `delay`; `NaN` for a row identified
 before it was recorded. The dead time falls with the airspeed, so `delay` holds
 at that `v_app` only (`docs/course_loop_stability.md`).
+
+`dead_time` and `kite_lag` [s] split `delay` into a dead time and a first-order
+lag of the kite, identified on the same sweep at the same `v_app`
+(`add_delay_lag_split!` in `examples/build_turn_rate_table.jl`); interpolated
+linearly like `delay`, `NaN` for a row without them.
 
 **Both arguments matter.** Depowering 0.25 → 0.55 costs a factor 2.95 of
 steering authority *and* raises the steering dead time from 0.03 s to 0.55 s.
@@ -184,7 +193,8 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
                 "c1_rel_std = $(e.c1_rel_std), g_rel_std = $(e.g_rel_std)). " *
                 "Re-identify with examples/build_turn_rate_table.jl."))
         end
-        return (c1 = e.c1, c2 = e.c2, delay = e.delay, v_app = _row_v_app(e), interpolated = false)
+        return (c1 = e.c1, c2 = e.c2, delay = e.delay, v_app = _row_v_app(e),
+                dead_time = _row_dead_time(e), kite_lag = _row_kite_lag(e), interpolated = false)
     end
 
     interpolate || throw(ArgumentError(
@@ -214,9 +224,11 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
     c2 = lo.c2 + t * (hi.c2 - lo.c2)
     delay = lo.delay + t * (hi.delay - lo.delay)
     v_app = _row_v_app(lo) + t * (_row_v_app(hi) - _row_v_app(lo))
+    dead_time = _row_dead_time(lo) + t * (_row_dead_time(hi) - _row_dead_time(lo))
+    kite_lag = _row_kite_lag(lo) + t * (_row_kite_lag(hi) - _row_kite_lag(lo))
     dt = get(table.conditions, :dt, nothing)
     isnothing(dt) || (delay = ceil(delay / Float64(dt)) * Float64(dt))
-    return (c1 = c1, c2 = c2, delay = delay, v_app = v_app, interpolated = true)
+    return (c1 = c1, c2 = c2, delay = delay, v_app = v_app, dead_time, kite_lag, interpolated = true)
 end
 
 """

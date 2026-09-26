@@ -3,30 +3,40 @@
 
 # The linear course-loop model shared by `stability_fig8.jl` and
 # `stability_opt_reelout.jl`: the plant (actuator lag, turn-rate law, the kite's
-# dead time over v_a), the discrete PD and the margin helpers. Needs
+# dead time and lag over v_a), the discrete PD and the margin helpers. Needs
 # ControlSystemsBase and LinearAlgebra.diagm in scope.
 
 # Identified 2026-09-25, see docs/course_loop_stability.md.
 "Equivalent lag [s] of the rate-limited steering tape, `set_steering` -> `steering`"
 const ACTUATOR_LAG = 0.43   # simple_fig8.jl log, phase 4, depower 0.27, v_app 34-38 m/s
-"Exponent of the kite's dead time over `v_a`, fitted at 13.3, 22.5 and 36.3 m/s"
-const KITE_DELAY_EXP = 1.24
+"""
+Exponents of the kite's dead time and lag over `v_a`, `x ∝ v_a^-exp`: the
+relay sweeps at depower 0.275 at 9.51 and 15 m/s of wind (`v_a` 13.3 and
+22.5 m/s) split into dead time + lag (`fit_delay_lag`), 2026-09-26:
+0.141 + 0.267 s and 0.082 + 0.133 s. Both are roughly a fixed distance flown,
+1.9 m and 3.0 – 3.5 m.
+"""
+const KITE_DEAD_TIME_EXP = 1.03
+const KITE_LAG_EXP = 1.32
 
 """
-    kite_delay(tc, v_app) -> Float64
+    kite_dead_time(tc, v_app) -> Float64
+    kite_lag(tc, v_app) -> Float64
 
-Dead time [s] from the applied steering to the turn rate at `v_app` [m/s], for
-the turn-rate coefficients `tc`: the table's `tc.delay` scaled as
-`(tc.v_app / v_app)^KITE_DELAY_EXP`, where `tc.v_app` is the airspeed of the
-sweep it was identified at. Fitted on `identify_turn_rate_law` at depower 0.275:
-0.417 s at 13.3 m/s and 0.217 s at 22.5 m/s (relay sweeps), 0.12 s at 36.3 m/s
-(`simple_fig8.jl`). Roughly a fixed distance flown, 4 – 6 m. Below the sweep's
-`v_app` it is extrapolated.
+The kite's dead time and first-order lag [s] from the applied steering to the
+turn rate at `v_app` [m/s], for the turn-rate coefficients `tc`: the table's
+`tc.dead_time` and `tc.kite_lag`, scaled as `(tc.v_app / v_app)^exp` with
+[`KITE_DEAD_TIME_EXP`](@ref) and [`KITE_LAG_EXP`](@ref), where `tc.v_app` is the
+airspeed of the sweep they were identified at. Away from it they are extrapolated.
 """
-function kite_delay(tc, v_app)
-    isnan(tc.v_app) && error("kite_delay: the turn-rate table row has no v_app; re-run " *
-                             "examples/build_turn_rate_table.jl for it (remake = true).")
-    return tc.delay * (tc.v_app / v_app)^KITE_DELAY_EXP
+kite_dead_time(tc, v_app) = _scaled_row(tc, :dead_time, v_app, KITE_DEAD_TIME_EXP)
+kite_lag(tc, v_app) = _scaled_row(tc, :kite_lag, v_app, KITE_LAG_EXP)
+
+function _scaled_row(tc, key, v_app, expo)
+    x = getfield(tc, key)
+    (isnan(tc.v_app) || isnan(x)) && error("course_loop_model: the turn-rate table row has no v_app or " *
+        "$key; run add_delay_lag_split! of examples/build_turn_rate_table.jl for it.")
+    return x * (tc.v_app / v_app)^expo
 end
 
 """
@@ -47,16 +57,19 @@ function course_pid(K, Ti, Td, N, Ts)
 end
 
 """
-    turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG) -> StateSpace
+    turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0) -> StateSpace
 
 `rel_steering` -> heading, ZOH-discretized: the actuator lag `lag` [s], then the
-turn-rate law with its dead time `delay` [s] rounded to whole samples.
-`gravity = cos(ψ0)·cos(β)` in [-1, 1] selects the sign and size of the gravity
-pole.
+turn-rate law with the kite's own first-order lag `kite_lag` [s] and its dead
+time `delay` [s] rounded to whole samples. `gravity = cos(ψ0)·cos(β)` in
+[-1, 1] selects the sign and size of the gravity pole.
 """
-function turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG)
+function turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0)
+    first_order(T) = ss(-1 / T, 1 / T, 1.0, 0.0)
     kite = ss(c2 / v_app * gravity, c1 * v_app, 1.0, 0.0)
-    P = c2d(lag > 0 ? kite * ss(-1 / lag, 1 / lag, 1.0, 0.0) : kite, Ts)
+    lag > 0 && (kite = kite * first_order(lag))
+    kite_lag > 0 && (kite = kite * first_order(kite_lag))
+    P = c2d(kite, Ts)
     n = round(Int, delay / Ts)
     n == 0 && return P
     # Dead time as an n-sample shift register; a z^-n transfer function is ill-conditioned.
