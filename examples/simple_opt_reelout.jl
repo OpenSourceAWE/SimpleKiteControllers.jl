@@ -1957,23 +1957,25 @@ try
                                                 t - reopt_t_request))
                 end
             end
+        end
 
-            # Blend: `blend_to` is guaranteed fold-free across all of w by the accept gate, so a plain linear ramp.
-            if !isnothing(blend_to)
-                w = clamp((t - blend_t0) / tos.path_blend_time, 0.0, 1.0)
-                b_az, b_el = blend_paths(blend_from[1], blend_from[2],
-                                         blend_to[1], blend_to[2], w)
-                set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
-                if !isnothing(raw_to)
-                    global raw_az, raw_el = blend_paths(raw_from[1], raw_from[2],
-                                                        raw_to[1], raw_to[2], w)
-                end
-                if w >= 1
-                    global blend_from = nothing
-                    global blend_to = nothing
-                    global raw_from = nothing
-                    global raw_to = nothing
-                end
+        # Blend: `blend_to` is guaranteed fold-free across all of w by the accept gate, so a plain linear ramp.
+        # OUTSIDE the re-optimization block: the in-air lift queues blends too, with re-optimization off and
+        # into phase 5; inside it they were reported as delivered but never ran (2026-09-26).
+        if phase >= 4 && !isnothing(blend_to)
+            w = clamp((t - blend_t0) / tos.path_blend_time, 0.0, 1.0)
+            b_az, b_el = blend_paths(blend_from[1], blend_from[2],
+                                     blend_to[1], blend_to[2], w)
+            set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
+            if !isnothing(raw_to)
+                global raw_az, raw_el = blend_paths(raw_from[1], raw_from[2],
+                                                    raw_to[1], raw_to[2], w)
+            end
+            if w >= 1
+                global blend_from = nothing
+                global blend_to = nothing
+                global raw_from = nothing
+                global raw_to = nothing
             end
         end
 

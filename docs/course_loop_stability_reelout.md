@@ -781,12 +781,16 @@ ramp from `blend_from` to `blend_to`, `set_path!`) sits inside
   freezes part-way.** In normal runs the lift latches `el_offset_lead` = 8 s
   before the end of the reel-out and blends over `path_blend_time` = 4 s, so it
   usually completes in time.
-- Fix: run the blend whenever one is pending in phase ≥ 4, outside the
-  re-optimization block. Not applied yet; it changes the flown path of
-  re-optimization-off runs.
+- **Fixed (2026-09-26):** the blend now runs whenever one is pending in
+  phase ≥ 4, after the re-optimization block and before the lift delivery.
+  Verified: a held run with re-optimization off now flies the lift (attractor
+  25.5° against 24.5° unlifted, kite 24.9° against 23.9°, identical before the
+  lift latches at 27.3 s), and a normal Cabauw 7 m/s run is unchanged to the
+  watt (1467.7 kJ, 21 123 W, RMS d 0.76°, all 10 criteria, as archive
+  `2026-09-25_215215`). The held step tests above ran before the fix: with
+  re-optimization off they flew the startup path unlifted.
 
 **Next:**
-- Fix the blend bug.
 - Repeat the held test on a path that does not saturate the steering (a
   re-optimized path with a curvature margin ≥ 1 at the held length, or the
   held length raised until it is), to confirm that ζ returns to the reel-out
