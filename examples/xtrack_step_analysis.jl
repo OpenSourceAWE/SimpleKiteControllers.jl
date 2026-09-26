@@ -14,6 +14,11 @@
 #     y = vec(mean(reduce(hcat, sr.resp); dims = 2))
 #     fit_second_order_gain(sr.τ, y)                  # K, f_d, ζ, delay: 0.66, 0.208 Hz, 0.25, 0.6 s
 #
+# The same during the reel-out (phase 4, six step runs and one δ = 0 run, re-optimization off):
+#     P4 = load_xtrack_phase4_csv("data/steptest/xtrack_step_test_phase4.csv")
+#     st = phase4_step_responses(P4)                  # 29 steps with their operating points
+#     fit_second_order_gain(st.τ, st.y)               # 0.75, 0.191 Hz, 0.56, 0.45 s
+#
 # Model part: needs the globals of stability_opt_reelout.jl (fcs, Ts, course_pid, turn_rate_plant,
 # C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN) plus `log_delay` and `guidance_rate`. On a run that
 # reels out only to 200 m that script stops at the dead-time identification (phase 4 < 20 s);
@@ -29,6 +34,75 @@ function load_xtrack_csv(file)
     q_ref = length(rows[1]) >= 6 ? round.(Int, getindex.(rows, 6)) : Int[]
     return (t = getindex.(rows, 1), δ = getindex.(rows, 2), d = getindex.(rows, 3), d_ref = getindex.(rows, 4),
             q, q_ref)
+end
+
+"""
+Runs of a saved phase-4 cross-track step test (`output/xtrack_step_test_phase4.csv`), as a Dict
+from the run name ("ref", "s0", ...) to its columns: time, δ, d, Q, phase and the operating
+point L, v_a, v_k, depower.
+"""
+function load_xtrack_phase4_csv(file)
+    runs = Dict{String, Any}()
+    for l in eachline(file)
+        (startswith(l, '#') || startswith(l, "run,")) && continue
+        f = split(l, ',')
+        r = get!(runs, String(f[1])) do
+            (t = Float64[], δ = Float64[], d = Float64[], q = Int[], ph = Int[],
+             L = Float64[], va = Float64[], vk = Float64[], dp = Float64[])
+        end
+        push!(r.t, parse(Float64, f[2])); push!(r.δ, parse(Float64, f[3])); push!(r.d, parse(Float64, f[4]))
+        push!(r.q, parse(Int, f[5])); push!(r.ph, parse(Int, f[6])); push!(r.L, parse(Float64, f[7]))
+        push!(r.va, parse(Float64, f[8])); push!(r.vk, parse(Float64, f[9])); push!(r.dp, parse(Float64, f[10]))
+    end
+    return runs
+end
+
+"""
+    phase4_step_responses(P4; phase = 4, win = 10.0) -> NamedTuple
+
+Step responses of every step run in `P4` (from [`load_xtrack_phase4_csv`](@ref)) against its
+"ref" run, subtracted by time — valid through the reel-out, unlike over a long hold. Only steps
+whose whole `win` window is in `phase` are kept. Returns the time axis `τ`, the mean response `y`
+and its standard error `se`, and `steps`, each with its response and operating point (L, v_a,
+v_k averaged over the window, depower).
+"""
+function phase4_step_responses(P4; phase = 4, win = 10.0, pre = 1.0)
+    ref = P4["ref"]
+    dt = median(diff(ref.t))
+    nw, np = round(Int, win / dt), round(Int, pre / dt)
+    steps = []
+    for k in sort(filter(!=("ref"), collect(keys(P4))))
+        s = P4[k]
+        n = min(length(s.t), length(ref.t))
+        Δ = s.d[1:n] .- ref.d[1:n]
+        for kk in findall(i -> s.δ[i] != s.δ[i - 1], 2:n) .+ 1
+            (kk - np >= 1 && kk + nw <= n && all(==(phase), s.ph[kk:kk + nw])) || continue
+            r = (Δ[kk:kk + nw] .- mean(Δ[kk - np:kk - 1])) ./ (s.δ[kk] - s.δ[kk - 1])
+            push!(steps, (run = k, t = s.t[kk], r, L = s.L[kk], va = mean(s.va[kk:kk + nw]),
+                          vk = mean(s.vk[kk:kk + nw]), dp = s.dp[kk]))
+        end
+    end
+    R = reduce(hcat, [p.r for p in steps])
+    return (τ = collect(0:nw) .* dt, y = vec(mean(R; dims = 2)),
+            se = vec(std(R; dims = 2)) ./ sqrt(size(R, 2)), steps)
+end
+
+"""
+    model_step_average(steps, τ, el_c, lag) -> Vector of 2
+
+The model's step response from δ to d ([`model_T`](@ref)) at each step's own operating point,
+averaged over `steps` like the measurement, per sign of the gravity pole. Needs the globals of
+stability_opt_reelout.jl, included on the reference run's log (for `τ_log` and `Ts`).
+"""
+function model_step_average(steps, τ, el_c, lag)
+    idx = clamp.(round.(Int, τ ./ Ts) .+ 1, 1, typemax(Int))
+    per = map(steps) do p
+        map(model_T(p.L, p.va, p.vk, p.dp, el_c, lag)) do m
+            y, _, _ = step(m.T, τ[end])
+            vec(y)[min.(idx, length(y))]
+        end
+    end
+    return [vec(mean(reduce(hcat, [m[g] for m in per]); dims = 2)) for g in 1:2]
 end
 
 """

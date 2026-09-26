@@ -168,6 +168,16 @@ for (key, value) in fcs_overrides
 end
 isempty(fcs_overrides) ||
     @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
+# The same for the optimizer's settings, e.g. `reopt_enabled = false` for a test run.
+tos_overrides = @isdefined(TOS_OVERRIDES) ? TOS_OVERRIDES : Dict{Symbol, Any}()
+TOS_OVERRIDES = Dict{Symbol, Any}()
+for (key, value) in tos_overrides
+    hasfield(TrajOptSettings, key) ||
+        error("TOS_OVERRIDES: \"$key\" is not a field of TrajOptSettings.")
+    setfield!(tos, key, convert(fieldtype(TrajOptSettings, key), value))
+end
+isempty(tos_overrides) ||
+    @info "tos overrides in force: " * join(("$k = $v" for (k, v) in tos_overrides), ", ")
 # Test input: a steering disturbance `t -> Δu` added after the controller, read and cleared like
 # SHOW_PLOTS; `stability_opt_reelout.jl`'s model is validated against the loop's response to it.
 steer_disturbance = @isdefined(STEER_DISTURBANCE) ? STEER_DISTURBANCE : nothing
@@ -176,18 +186,26 @@ isnothing(steer_disturbance) || @info "Steering disturbance in force (test input
 dist_t = Float64[]      # [s] time of each disturbed step
 dist_d = Float64[]      # [-] disturbance added
 dist_u = Float64[]      # [-] steering sent to the model, controller plus disturbance
-# Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase 5 began, read and cleared
-# like SHOW_PLOTS. The attractor is moved δ along the path's right-hand normal, so the pursuit
+# Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase `XTRACK_PHASE` (default 5)
+# began, both read and cleared like SHOW_PLOTS. The attractor is moved δ along the path's right-hand normal, so the pursuit
 # aims at the parallel curve δ to the right: a reference step for the guided loop alone. The run
 # keeps `xt_t`, `xt_delta`, `xt_d`, the signed cross-track error to the UNSHIFTED path, and `xt_q`,
 # the index of its closest point Q: a reference run's d as a function of Q removes the lap forcing.
 xtrack_offset = @isdefined(XTRACK_OFFSET) ? XTRACK_OFFSET : nothing
 XTRACK_OFFSET = nothing
+xtrack_phase = @isdefined(XTRACK_PHASE) ? XTRACK_PHASE : 5
+XTRACK_PHASE = 5
+xt_start = NaN          # [s] first step of phase `xtrack_phase`; τ counts from here
 isnothing(xtrack_offset) || @info "Cross-track offset in force (test input)."
 xt_t = Float64[]        # [s] time of each phase-5 step
 xt_delta = Float64[]    # [deg] offset commanded
 xt_d = Float64[]        # [deg] signed cross-track error to the unshifted path, right of travel > 0
 xt_q = Int[]            # [-] index of the closest path point Q
+xt_phase = Int[]        # [-] flight phase, and the operating point for the model:
+xt_L = Float64[]        # [m] tether length
+xt_va = Float64[]       # [m/s] apparent wind speed
+xt_vk = Float64[]       # [m/s] kite speed normal to the tether
+xt_dp = Float64[]       # [-] depower
 
 "Index of the attractor point: `attractor_distance` of arc ahead of Q, as `calc_attractor` walks it."
 function attractor_index(fec)
@@ -1289,8 +1307,9 @@ try
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))
-        if !isnothing(xtrack_offset) && isfinite(final_start)
-            local δ = xtrack_offset(t - final_start)
+        if !isnothing(xtrack_offset) && cc.phase >= xtrack_phase
+            isnan(xt_start) && (global xt_start = t)
+            local δ = xtrack_offset(t - xt_start)
             if δ != 0
                 local na, ne = path_normal(fec, attractor_index(fec))
                 az_attr += δ * na / cosd(el_attr)
@@ -1303,6 +1322,9 @@ try
             push!(xt_d, signed_cross_track(fec, rad2deg(Float64(s.sys_state.azimuth)),
                                            rad2deg(Float64(s.sys_state.elevation))))
             push!(xt_q, fec.last_idx)
+            push!(xt_phase, cc.phase); push!(xt_L, Float64(s.sys_state.l_tether[1]))
+            push!(xt_va, Float64(s.sys_state.v_app)); push!(xt_dp, rel_depower_prev)
+            push!(xt_vk, sqrt(max(norm(s.sys_state.vel_kite)^2 - Float64(s.sys_state.v_reelout[1])^2, 0.0)))
         end
 
         # Entry state machine, descent limiter, feedback fusion, PID and rel_depower: see CourseController.

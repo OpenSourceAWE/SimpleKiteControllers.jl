@@ -476,7 +476,10 @@ the time since phase 5 began, read and cleared like `SHOW_PLOTS`. The attractor
 is moved δ along the path's right-hand normal, so the pursuit aims at the
 parallel curve δ to the right: a reference step for the guided loop alone. The
 run keeps `xt_t`, `xt_delta` and `xt_d`, the signed cross-track error to the
-unshifted path (right of travel > 0).
+unshifted path (right of travel > 0), the closest-point index `xt_q`, and the
+operating point `xt_phase`, `xt_L`, `xt_va`, `xt_vk`, `xt_dp`. `XTRACK_PHASE`
+(default 5) picks the phase τ counts from; `TOS_OVERRIDES`, like
+`FCS_OVERRIDES`, overrides `TrajOptSettings` fields, e.g. `reopt_enabled`.
 
 **Setup.** Cabauw at the default wind (5.324 m/s, no override so `sim_time`
 holds), `sim_time` 260 s, `FCS_OVERRIDES` `final_time = 150`,
@@ -597,15 +600,58 @@ the model's own response fitted the same way:
 4. **The model's first response is faster than measured without the
    feed-forward** (delay 0.35 s against 0.6 s).
 
+**During the reel-out (2026-09-26): the model fits much better.** The held
+length differs from the reel-out in the way that matters here: reel-out speed
+≈ 0 instead of 2.7 m/s, tether force ≈ 4.0 instead of 5.3 kN, depower 0.35
+instead of 0.27, and the tape rate-limited 9 % of the time instead of 0 %. So
+the test was repeated in phase 4 (`XTRACK_PHASE = 4`): Cabauw at the default
+wind, reel-out 150 → 380 m in 75 s, `ff_gain` 0.7 as flown, re-optimization
+off (`TOS_OVERRIDES`, so every run flies the same path). One δ = 0 run and six
+step runs, the ±1° square wave started 10 – 21.5 s into phase 4 in steps of
+2.3 s (a sixth of a lap). Subtracted by time, which holds through the reel-out:
+the runs are identical before their first step, and the difference stays at
+0.8 – 1.0° (the response itself) without growing. All seven runs pass all 10
+criteria. 29 steps lie entirely in phase 4, at 182 – 347 m, v_a 26 – 28 m/s,
+depower 0.27. Data: `data/steptest/xtrack_step_test_phase4.csv` (reference
+archive `2026-09-26_074504`); `phase4_step_responses` and `model_step_average`
+in the analysis script. The model is evaluated at each step's own operating
+point, with the dead time (0.022 s) and tape lag (0.33 s) identified on phase 4
+of the reference run, and averaged like the measurement.
+
+| τ after the step [s] | 0.5 | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | 4.0 | 5.0 | 6.0 | 8.0 | 10.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Measured, reel-out (29 steps) | 0.04 | 0.19 | 0.43 | 0.67 | 0.81 | **0.85** | 0.77 | 0.75 | 0.73 | 0.75 | 0.80 |
+| Model, same 29 steps | 0.07 | 0.31 | 0.62 | 0.90 | 1.08 | **1.15** | 1.09 | 1.00 | 0.97 | 1.00 | 1.00 |
+
+Standard error 0.01 – 0.08.
+
+| | K | Ringing | ζ | Delay |
+|---|---|---|---|---|
+| **Reel-out, measured** | **0.75** | 0.191 Hz | **0.56** | 0.45 s |
+| **Reel-out, model** | 1.00 | 0.171 Hz | **0.52** | 0.25 s |
+| Held at 200 m, measured (`ff_gain` 0.7) | 0.40 | 0.183 Hz | 0.14 | 0.15 s |
+| Held at 200 m, model | 1.00 | 0.20 Hz | 0.34 – 0.37 | 0.35 s |
+
+1. **During the reel-out the model's damping and frequency hold:** ζ 0.56
+   against 0.52, 0.19 against 0.17 Hz. The model's own poles move from 0.20 Hz,
+   ζ 0.37 at 180 m to 0.15 Hz, ζ 0.59 at 350 m.
+2. **The lightly damped response belongs to the held length.** There ζ is
+   0.14, a quarter of the reel-out's. Force, reel-out speed and depower all
+   differ between the two, and so does the tape: rate-limited 9 % of the time at
+   the held length and never in the reel-out. A rate limit takes phase out of
+   the loop, which fits the lost damping; this has not been separated from the
+   other three.
+3. **The steady gain is below 1 in both, but less so in the reel-out:** 0.75
+   against 0.40. The model cannot show this (hypothesis 3 above).
+4. **The measured response is 0.2 s slower** than the model's in both cases.
+
 **Next:**
-- Check hypothesis 3: split the step responses by where on the lap the step
-  falls (turn or straight, from Q) and see whether K is near 1 on the
-  straights.
-- Repeat at a second operating point (380 m, or Cabauw 10 m/s) to see whether
-  the lower damping holds.
-- Compare the damping with the margins: ζ 0.14 at 0.18 Hz as flown is
-  consistent with the lightly damped ring; the disk margin measured at 200 m
-  with sine injection was 0.43.
+- Separate the held-length conditions: fly the held test once with a faster
+  tape (`v_steering` in the project settings, as a diagnostic only: it changes
+  the plant) and once at depower 0.27, to see which one restores the damping.
+- Check hypothesis 3 by splitting the steps into turn and straight (from Q).
+- Repeat the reel-out test at a higher wind (Cabauw 10 m/s), where the
+  guidance runs faster (D above its floor for longer).
 
 ## Caveats
 
