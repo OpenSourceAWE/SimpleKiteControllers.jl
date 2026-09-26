@@ -685,6 +685,9 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "cache_misses" => (opt_chain.misses, "optimizer steps sent to the server"),
         "cache_rebuilds" => (opt_chain.rebuilds,
             "server sessions rebuilt from the cache before a miss"),
+        "replayed_from" => (isnothing(replay_paths) ? "" : String(replay_paths),
+            "scenario whose optimizer results were flown instead of asking the \
+             optimizer (REPLAY_PATHS); empty for a normal run"),
         "installed" => (count(e -> e.status == "installed", reopt_events),
             "new paths actually flown"),
         "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()

@@ -856,11 +856,52 @@ mutable struct OptChain
     hits::Int
     misses::Int
     rebuilds::Int
+    # Replay mode (see `replay_entries`): the next steps' entries, served in order whatever
+    # was asked; `nothing` is off. Once empty, every further step fails as a 422.
+    replay::Union{Nothing, Vector{Dict{String, Any}}}
 end
 OptChain(url::AbstractString = AWETRIM_URL; successes::Bool = true, failures::Bool = true,
-         dir::AbstractString = OPT_CHAIN_CACHE) =
+         dir::AbstractString = OPT_CHAIN_CACHE, replay = nothing) =
     OptChain(String(url), successes, failures, String(dir), "", "", nothing, nothing,
-             nothing, false, Dict{String, Any}[], 0, 0, 0)
+             nothing, false, Dict{String, Any}[], 0, 0, 0, replay)
+
+"""
+    replay_entries(scenario_dir, log_name; dir = OPT_CHAIN_CACHE) -> Vector{Dict}
+
+The solution-cache entries of the paths an archived run installed, in the order
+it installed them: each path of `<log_name>_opt_paths.yaml` in `scenario_dir`
+matched to the converged entry whose reply (startup) or trajectory table (a
+re-optimization) carries the same curve, within 0.01°. Errors if a path has no
+match: the cache was cleared since that run, and it cannot be replayed.
+
+Passed as `OptChain(...; replay)`, the run flies the archived run's optimizer
+results on the current plant, without the optimizer: the way to tell a change of
+the kite model from a change of the path the optimizer returns for it.
+"""
+function replay_entries(scenario_dir, log_name; dir = OPT_CHAIN_CACHE)
+    file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
+    isfile(file) || error("replay_entries: no $(basename(file)) in $scenario_dir.")
+    entries = Dict{String, Any}[]
+    for f in filter(endswith(".json"), readdir(dir; join = true))
+        e = JSON3.read(read(f, String), Dict{String, Any})
+        get(e, "status", "") == "converged" && push!(entries, e)
+    end
+    curves(e) = filter(!isnothing, [
+        haskey(e, "reply") ? (Float64.(e["reply"]["trajectory"]["azimuth"]),
+                              Float64.(e["reply"]["trajectory"]["elevation"])) : nothing,
+        haskey(e, "table") ? (rad2deg.(Float64.(e["table"]["table"]["azimuth"])),
+                              rad2deg.(Float64.(e["table"]["table"]["elevation"]))) : nothing])
+    same(az, el, (caz, cel)) = length(caz) == length(az) &&
+        maximum(abs, caz .- az) < 0.01 && maximum(abs, cel .- el) < 0.01
+    return map(YAML.load_file(file)["paths"]) do p
+        az, el = Float64.(p["azimuth"]), Float64.(p["elevation"])
+        i = findfirst(e -> any(c -> same(az, el, c), curves(e)), entries)
+        isnothing(i) && error(@sprintf("replay_entries: the path installed at t = %.1f s \
+                                        in %s is not in the solution cache %s.",
+                                       p["installed_t"], scenario_dir, dir))
+        entries[i]
+    end
+end
 
 # A step's key: its parent's, and everything of the step the server sees. `x` is
 # already flattened by `_key_fields`, see there for why.
@@ -965,6 +1006,20 @@ function chain_step(oc::OptChain, sp::StepParams; wait = true,
     isnothing(oc.config) && error("chain_step before chain_init: there is no session to step.")
     step_fields = (_key_fields(sp), _key_fields(inflow_conditions), max_iter)
     config = _step_config(oc.config, sp, inflow_conditions)
+    if !isnothing(oc.replay)
+        isempty(oc.replay) && throw(_cached_422(Dict{String, Any}("when" => "replay",
+            "reason" => "the replayed run installed no further path")))
+        entry = popfirst!(oc.replay)
+        oc.hits += 1
+        oc.state = entry["key"]
+        oc.config = config
+        oc.current = entry
+        oc.served = true
+        oc.table = entry["table"]
+        @info @sprintf("Optimizer step at L = %.1f m replayed: the archived result at \
+                        L = %.1f m (%s).", sp.length, entry["length_m"], entry["when"])
+        return wait ? as_step_reply(entry["reply"]) : 0
+    end
     usable(entry) = !isnothing(entry) &&
                     (entry["status"] == "converged" ?
                          oc.successes && (!wait || !isnothing(get(entry, "reply", nothing))) :

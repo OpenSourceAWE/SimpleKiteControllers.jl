@@ -496,8 +496,16 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
 # Anchored to the STARTING length; re-optimizing during the run is stage 4, below.
 ensure_server(tos.base_url; autostart = tos.autostart_server)
 # Every request of the run goes through this chain, which replays applied results and known failures (see `OptChain`).
+# REPLAY_PATHS (a scenario folder) flies that run's optimizer results instead of asking the
+# optimizer, see `replay_entries`; read and cleared like SHOW_PLOTS.
+replay_paths = @isdefined(REPLAY_PATHS) ? REPLAY_PATHS : nothing
+REPLAY_PATHS = nothing
 opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
-                     failures = tos.opt_failure_cache)
+                     failures = tos.opt_failure_cache,
+                     replay = isnothing(replay_paths) ? nothing :
+                              replay_entries(replay_paths, log_name))
+isnothing(replay_paths) ||
+    @info "Replaying the $(length(opt_chain.replay)) optimizer results of $replay_paths; the optimizer is not asked."
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
 opt_r_scale = (1 + turn_radius_reel / l_set) * tos.turn_radius_headroom
