@@ -57,7 +57,7 @@ traj_opt:
     use_step: true           # warm /step from the previous optimum; false re-runs /init from the guess
     reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
     max_reopt: 7             # bound on re-optimizations per run                 [-]
-    path_blend_time: 4.0     # seconds over which the new path replaces the old  [s]
+    path_blend_time: 6.0     # seconds over which the new path replaces the old  [s]
     blend_fold_margin: 0.5   # blend_folds: fraction of the endpoints' own radius [-]
     blend_probe_points: 21   # values of w that blend_folds samples              [-]
     blend_max_retries: 3     # fresh solves per rejected reply                   [-]
