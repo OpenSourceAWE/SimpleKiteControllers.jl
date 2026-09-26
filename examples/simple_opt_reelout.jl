@@ -506,9 +506,26 @@ opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
                               replay_entries(replay_paths, log_name))
 isnothing(replay_paths) ||
     @info "Replaying the $(length(opt_chain.replay)) optimizer results of $replay_paths; the optimizer is not asked."
+"""
+    opt_length(l)
+
+Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` metres
+(`0.0` sends `l` unchanged). The flown `l_set` is never rounded — see the setting's
+docstring for why the request is.
+
+Every constraint that depends on the length is sized at this one too, not at the
+flown length: the settled `l_set` moves in the 5th decimal with the plant
+(150.00282 against 150.00290 m after the SymbolicAWEModels 0.18 bump), and a
+`min_turn_radius` changed by 1e-7 of itself missed the failure cache and flipped
+which startup seed converges, and so which of two optima the run flew
+(2026-09-26, 10 m/s: path centre 26.7° or 40.8°).
+"""
+opt_length(l) = tos.opt_length_round > 0 ?
+    round(l / tos.opt_length_round) * tos.opt_length_round : l
+
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
-opt_r_scale = (1 + turn_radius_reel / l_set) * tos.turn_radius_headroom
+opt_r_scale = (1 + turn_radius_reel / opt_length(l_set)) * tos.turn_radius_headroom
 # The depower the reply will be FLOWN at, which is the c1 the request must be sized
 # at — see min_turn_radius_request. Under fly_opt_depower that is the optimizer's
 # own and so unknown before the solve; the seed it starts from is the only estimate
@@ -529,7 +546,7 @@ opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate 
 # The radius the startup solve actually CONVERGED at; the retry ladder bisects toward it.
 opt_r_sent = opt_r_min
 opt_box = pattern_limits_from(tos;
-                              elevation_min = elevation_min_request(fcs, tos, l_set),
+                              elevation_min = elevation_min_request(fcs, tos, opt_length(l_set)),
                               wind_speed = cap_wind)
 isnothing(opt_r_min) && isnothing(opt_box) ||
     @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
@@ -550,16 +567,6 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
 opt_depower_log = NamedTuple[]
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
 depower_flown_opt = fcs.depower_setpoint
-
-"""
-    opt_length(l)
-
-Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` metres
-(`0.0` sends `l` unchanged). The flown `l_set` is never rounded — see the setting's
-docstring for why the request is.
-"""
-opt_length(l) = tos.opt_length_round > 0 ?
-    round(l / tos.opt_length_round) * tos.opt_length_round : l
 
 """
     startup_seed_offsets(listed; max_abs = 10.0) -> Vector{Float64}
@@ -1556,7 +1563,7 @@ try
                     # The floor moves with the length: box rebuilt per request, `size_box_growth` x the previous install.
                     global opt_box_now = with_size_box(
                         pattern_limits_from(tos;
-                            elevation_min = elevation_min_request(fcs, tos, l_now;
+                            elevation_min = elevation_min_request(fcs, tos, opt_length(l_now);
                                                                   extra = el_min_extra),
                             wind_speed = cap_wind),
                         opt_paths_raw[end]..., tos.size_box_growth)
@@ -1678,7 +1685,7 @@ try
                             retry_el_seed = el_center_seed +
                                 (reject_low || isodd(blend_attempt) ? 1 : -1) *
                                 tos.reopt_retry_el_offset
-                            retry_el_min = elevation_min_request(fcs, tos, l_now;
+                            retry_el_min = elevation_min_request(fcs, tos, opt_length(l_now);
                                                                  extra = el_min_extra)
                             @info @sprintf("  ... candidate at L = %.0f m rejected \
                                             (%s); cold-restarting from guess el \
