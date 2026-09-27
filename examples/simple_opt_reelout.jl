@@ -203,6 +203,33 @@ HOLD_COMPLIANCE = nothing
 isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $hold_compliance"
 hold_f_lp = NaN         # [N] low-passed force of the compliant hold
 hold_l0 = NaN           # [m] length the compliant hold began at
+# V1 model-validation test inputs (docs/Plan_model_validation.md, V1, point C):
+# read and cleared like SHOW_PLOTS. STEER_GAIN_FACTOR multiplies rel_steering, and
+# EXTRA_STEER_DELAY adds a FIFO delay to it, in samples. Both act only from
+# HOOK_SETTLE seconds after phase 4 is first reached, so entry, phase 3 and the
+# early part of phase 4 fly identically in every run of a sweep.
+steer_gain_factor = @isdefined(STEER_GAIN_FACTOR) ? STEER_GAIN_FACTOR : 1.0
+STEER_GAIN_FACTOR = 1.0
+# true: scale only the feedback part, rel_steering - u_ff. The feed-forward lies
+# outside the loop, so this scales the loop gain alone; it differs from the
+# default only with ff_gain > 0.
+steer_gain_feedback_only = @isdefined(STEER_GAIN_FEEDBACK_ONLY) ? STEER_GAIN_FEEDBACK_ONLY : false
+STEER_GAIN_FEEDBACK_ONLY = false
+extra_steer_delay = @isdefined(EXTRA_STEER_DELAY) ? EXTRA_STEER_DELAY : 0
+EXTRA_STEER_DELAY = 0
+hook_settle = @isdefined(HOOK_SETTLE) ? HOOK_SETTLE : 15.0
+HOOK_SETTLE = 15.0
+(steer_gain_factor == 1.0 && extra_steer_delay == 0) ||
+    @info @sprintf("V1 stability hook in force: gain factor %.3g%s, extra delay %d \
+                    samples, active %.1f s after phase 4 begins.",
+                   steer_gain_factor, steer_gain_feedback_only ? " (feedback only)" : "",
+                   extra_steer_delay, hook_settle)
+# Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
+# so it is already primed with real history by the time the hook switches on. The
+# feed-forward goes through a FIFO of its own, so the two stay aligned.
+steer_delay_buf = Float64[]
+ff_delay_buf = Float64[]
+t_phase4 = NaN          # [s] time phase 4 was first reached this run; NaN before that
 xtrack_phase = @isdefined(XTRACK_PHASE) ? XTRACK_PHASE : 5
 XTRACK_PHASE = 5
 xt_start = NaN          # [s] first step of phase `xtrack_phase`; τ counts from here
@@ -1499,6 +1526,7 @@ try
             if fig8_n == 0
                 global fig8_n = 1
                 global fig8_idx_prev = fec.last_idx
+                global t_phase4 = t   # V1 hook: this run's phase-4 start
                 if fcs.first_lap_force_frac < 1
                     rcs.f_high = F_HIGH_NOMINAL * fcs.first_lap_force_frac
                     global first_lap_f_high_applied = true
@@ -2225,6 +2253,24 @@ try
             local du = steer_disturbance(t)
             rel_steering += du
             push!(dist_t, t); push!(dist_d, du); push!(dist_u, rel_steering)
+        end
+
+        # V1 stability hooks: see the STEER_GAIN_FACTOR/EXTRA_STEER_DELAY setup above.
+        push!(steer_delay_buf, rel_steering)
+        push!(ff_delay_buf, u_ff)
+        local delayed_u = length(steer_delay_buf) > extra_steer_delay ?
+            popfirst!(steer_delay_buf) : rel_steering
+        local delayed_ff = length(ff_delay_buf) > extra_steer_delay ?
+            popfirst!(ff_delay_buf) : u_ff
+        if !isnan(t_phase4) && t - t_phase4 >= hook_settle
+            local u_scaled = steer_gain_feedback_only ?
+                delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
+                delayed_u * steer_gain_factor
+            # calc_steering already clamped its own output to ±max_steering;
+            # re-clamp here too, or a gain factor > 1 commands the tape angles
+            # it was never calibrated for instead of just saturating earlier,
+            # as scaling heading_p itself would.
+            rel_steering = clamp(u_scaled, -fcs.max_steering, fcs.max_steering)
         end
         # `v_ff = v_set` removes the position loop's 2 s lag; `acceleration_limit` is `rcs.max_acc`, not the plant's own.
         step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,

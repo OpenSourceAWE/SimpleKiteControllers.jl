@@ -337,6 +337,37 @@ if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
            flying WITHOUT steering feed-forward."
 end
 
+# V1 model-validation test inputs (docs/Plan_model_validation.md, V1): read and
+# cleared like SHOW_PLOTS. STEER_GAIN_FACTOR multiplies rel_steering, and
+# EXTRA_STEER_DELAY adds a FIFO delay to it, in samples. Both act only from
+# HOOK_SETTLE seconds after phase 4 is first reached, so the entry and phase 3
+# fly identically in every run of a sweep. With ff_gain = 0 (as V1 requires),
+# scaling rel_steering is the same as scaling heading_p, except at the
+# max_steering clamp.
+steer_gain_factor = @isdefined(STEER_GAIN_FACTOR) ? STEER_GAIN_FACTOR : 1.0
+STEER_GAIN_FACTOR = 1.0
+# true: scale only the feedback part, rel_steering - u_ff. The feed-forward lies
+# outside the loop, so this scales the loop gain alone; it differs from the
+# default only with ff_gain > 0.
+steer_gain_feedback_only = @isdefined(STEER_GAIN_FEEDBACK_ONLY) ? STEER_GAIN_FEEDBACK_ONLY : false
+STEER_GAIN_FEEDBACK_ONLY = false
+extra_steer_delay = @isdefined(EXTRA_STEER_DELAY) ? EXTRA_STEER_DELAY : 0
+EXTRA_STEER_DELAY = 0
+hook_settle = @isdefined(HOOK_SETTLE) ? HOOK_SETTLE : 15.0
+HOOK_SETTLE = 15.0
+(steer_gain_factor == 1.0 && extra_steer_delay == 0) ||
+    @info @sprintf("V1 stability hook in force: gain factor %.3g%s, extra delay %d \
+                    samples (%.3f s), active %.1f s after phase 4 begins.",
+                   steer_gain_factor, steer_gain_feedback_only ? " (feedback only)" : "",
+                   extra_steer_delay, extra_steer_delay * s.dt, hook_settle)
+# Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
+# so it is already primed with real history by the time the hook switches on
+# (extra_steer_delay * s.dt is well under hook_settle at every V1 point). The
+# feed-forward goes through a FIFO of its own, so the two stay aligned.
+steer_delay_buf = Float64[]
+ff_delay_buf = Float64[]
+t_phase4 = Ref(NaN)    # [s] time phase 4 was first reached this run; NaN before that
+
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
@@ -398,6 +429,7 @@ try
             if fig8[] == 0
                 fig8[] = 1
                 idx_prev[] = fec.last_idx
+                t_phase4[] = t   # V1 hook: this run's phase-4 start
             else
                 delta = fec.last_idx - idx_prev[]
                 delta < -(n_path ÷ 2) && (delta += n_path)
@@ -406,6 +438,24 @@ try
                 idx_prev[] = fec.last_idx
                 fig8[] = 1 + floor(Int, idx_progress[] / n_path)
             end
+        end
+
+        # V1 stability hooks: see the STEER_GAIN_FACTOR/EXTRA_STEER_DELAY setup above.
+        push!(steer_delay_buf, rel_steering)
+        push!(ff_delay_buf, u_ff)
+        local delayed_u = length(steer_delay_buf) > extra_steer_delay ?
+            popfirst!(steer_delay_buf) : rel_steering
+        local delayed_ff = length(ff_delay_buf) > extra_steer_delay ?
+            popfirst!(ff_delay_buf) : u_ff
+        if !isnan(t_phase4[]) && t - t_phase4[] >= hook_settle
+            local u_scaled = steer_gain_feedback_only ?
+                delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
+                delayed_u * steer_gain_factor
+            # calc_steering already clamped its own output to ±max_steering;
+            # re-clamp here too, or a gain factor > 1 commands the tape angles
+            # it was never calibrated for instead of just saturating earlier,
+            # as scaling heading_p itself would.
+            rel_steering = clamp(u_scaled, -fcs.max_steering, fcs.max_steering)
         end
 
         # Force mode reels out under load; compliance = 0 holds the length outright.
