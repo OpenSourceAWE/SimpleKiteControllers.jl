@@ -95,6 +95,18 @@ const CYCLES_PER_LEVEL = 2
 const MAX_STEERING_CAP = 0.175
 
 const MIN_ELEVATION    = 50.0
+# Cells that cannot pass MIN_ELEVATION: the relay sweep at depower 0.40 sinks to
+# 48.1° (2026-09-25) and stops 3.6 s into the excitation at the 50° floor
+# (2026-09-27), so it is flown at a lower floor, recorded in its row.
+const ELEVATION_FLOORS = Dict(0.40 => 40.0)
+
+"""
+    _elevation_floor(depower) -> Float64
+
+The elevation floor the sweep at `depower` is flown with: its `ELEVATION_FLOORS`
+entry, or `MIN_ELEVATION`.
+"""
+_elevation_floor(depower) = get(ELEVATION_FLOORS, Float64(depower), MIN_ELEVATION)
 const MIN_STEERING_FIT = START_STEERING / 2
 
 # Blockwise delay scatter (`_delay_std`). The delay is a single best-fit shift
@@ -362,7 +374,7 @@ end
 """
     build_turn_rate_table(; depowers, out="turn_rate_coeffs.yaml", remake=false,
                           max_steering_cap=MAX_STEERING_CAP,
-                          elevation_floor=MIN_ELEVATION) -> Vector{NamedTuple}
+                          elevation_floor=nothing) -> Vector{NamedTuple}
 
 Sweep every depower in `depowers` that is not already a passing row in
 `data/out`, writing each result as it completes and reloading the table at the
@@ -374,15 +386,17 @@ because `reload_turn_rate_table!` anchors `V3_TURN_RATE_C1`/`C2` there.
 
 `max_steering_cap` is the amplitude ceiling for every cell in this call — pass a
 narrower `depowers` to retry one cell at a different cap instead of recomputing
-the grid. `elevation_floor` likewise applies to every cell here; a row swept
-under a floor other than `MIN_ELEVATION` records it as `elevation_floor`.
+the grid. `elevation_floor`, if given, likewise applies to every cell here;
+by default each cell is flown at its own floor, `_elevation_floor(depower)`
+(`ELEVATION_FLOORS`, else `MIN_ELEVATION`). A row swept under a floor other than
+`MIN_ELEVATION` records it as `elevation_floor`.
 """
 function build_turn_rate_table(;
         depowers = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40],
         out::String = OUT_FILE,
         remake::Bool = false,
         max_steering_cap::Real = MAX_STEERING_CAP,
-        elevation_floor::Real = MIN_ELEVATION)
+        elevation_floor::Union{Nothing, Real} = nothing)
     path = joinpath(skc_data_path(), out)
     isfile(path) || error("build_turn_rate_table: $path not found")
     _check_conditions(YAML.load_file(path))
@@ -399,7 +413,8 @@ function build_turn_rate_table(;
             continue
         end
 
-        r = _run_turn_rate_sweep(dp; max_steering_cap, elevation_floor)
+        cell_floor = isnothing(elevation_floor) ? _elevation_floor(dp) : elevation_floor
+        r = _run_turn_rate_sweep(dp; max_steering_cap, elevation_floor = cell_floor)
         split = isnothing(r.fit) ? nothing : _split_delay(r.fit)
         halves = isnothing(r.fit) ? nothing : _delay_over_v_app(r.fit)
         entry = Dict{String, Any}(
@@ -409,8 +424,8 @@ function build_turn_rate_table(;
             "u_s_max" => r.u_s_max, "min_elevation" => r.min_elevation,
             "date" => string(Dates.today()),
         )
-        elevation_floor == MIN_ELEVATION ||
-            (entry["elevation_floor"] = Float64(elevation_floor))
+        cell_floor == MIN_ELEVATION ||
+            (entry["elevation_floor"] = Float64(cell_floor))
         if !isnothing(r.fit)
             entry["c1"] = r.fit.c1
             entry["c2"] = r.fit.c2
@@ -493,7 +508,7 @@ function add_delay_lag_split!(; depowers = nothing, out::String = OUT_FILE)
     for row in rows
         dp = Float64(row["depower"])
         r = _run_turn_rate_sweep(dp; max_steering_cap = Float64(row["u_s_max"]),
-                                 elevation_floor = Float64(get(row, "elevation_floor", MIN_ELEVATION)))
+                                 elevation_floor = Float64(get(row, "elevation_floor", _elevation_floor(dp))))
         if isnothing(r.fit)
             @warn "add_delay_lag_split!: no fit at depower = $dp; row left unchanged."
             continue

@@ -2,10 +2,17 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Plot the turn-rate-law coefficients `c1` and `c2` and the steering `delay`
-against relative depower `u_s`, with error bars, one figure per `body_damping`
-present in the table — the three quantities are only comparable across rows
+Plot the turn-rate-law coefficient `c1` and the steering `delay`,
+together with its split into `dead_time` and `kite_lag`, against relative
+depower `u_d`, with error bars, one figure per `body_damping`
+present in the table — the quantities are only comparable across rows
 swept at the same damping.
+
+`c2` is not plotted: the relay sweep cannot identify it. The steering is fed
+back from the heading, so a shorter delay trades against a larger gravity term
+(at depower 0.275, `c2` falls by 0.65 per sample of shift, from +2.8 to 0 over
+the flat bottom of the residual, 2026-09-27), and its fit standard error, which
+assumes the delay known, does not show it.
 
 Read straight from `data/turn_rate_coeffs.yaml` rather than from
 [`V3_TURN_RATE_COEFFS`](@ref): the lookup dict carries only `c1`, `c2` and
@@ -65,19 +72,22 @@ end
     plot_c1_c2()
 
 For each `body_damping` in `data/turn_rate_coeffs.yaml`, sort its rows by
-depower `u_s` and plot `c1`, `c2` and `delay` against it in a stacked,
-three-panel figure with error bars from the `c1_std`, `c2_std` and `delay_std`
-columns.
+depower `u_d` and plot `c1`, `delay`, and the dead time `τ_d` and lag `T_k`
+the delay is split into (`fit_delay_lag`), against it in a stacked, four-panel
+figure with error bars from the `c1_std` and `delay_std` columns. The split
+has no bars: the table records no scatter for it. A row without the split
+plots it as `NaN`, i.e. not at all. One panel each, not the three times in one
+with a legend: dead time and lag cross, so a legend covers data in every corner.
 
-The three bars do not mean the same thing. `c1_std`/`c2_std` are the linear
+The two bars do not mean the same thing. `c1_std` is the linear
 fit's own standard errors, and are optimistic — the residuals of a fitted
 flight path are strongly autocorrelated, so the effective sample count is far
-below `n`, which is why they come out visibly tighter than the delay's.
+below `n`, which is why it comes out visibly tighter than the delay's.
 `delay_std` is a spread across blocks of one sweep, and the delay is quantised
 to the identification timestep, so its panel is a staircase with bars at least
 a sample tall.
 
-All three are drawn at `±K_SIGMA` times the recorded sigma. Scaling does not
+Both are drawn at `±K_SIGMA` times the recorded sigma. Scaling does not
 make the coefficient bars honest — their bias is the autocorrelation above, not
 the multiplier — so read them as a lower bound whatever `K_SIGMA` is.
 
@@ -103,13 +113,14 @@ function plot_c1_c2()
                     by = e -> Float64(e["depower"]))
         u_s = [Float64(e["depower"]) for e in rows]
         c1 = [Float64(e["c1"]) for e in rows]
-        c2 = [Float64(e["c2"]) for e in rows]
         delay = [Float64(e["delay"]) for e in rows]
+        dead_time = [Float64(get(e, "dead_time", NaN)) for e in rows]
+        kite_lag = [Float64(get(e, "kite_lag", NaN)) for e in rows]
 
         pad = X_MARGIN * (maximum(u_s) - minimum(u_s))
 
-        fig_name = "c1_c2_delay_" * join(round.(bd; digits = 1), "_")
-        plotx(u_s, c1, c2, delay;
+        fig_name = "c1_delay_" * join(round.(bd; digits = 1), "_")
+        plotx(u_s, c1, delay, dead_time, kite_lag;
               xlims = (minimum(u_s) - pad, maximum(u_s) + pad),
               # Round ticks at the sweep's own 0.05 grid: the padded range makes
               # Makie pick 0.27/0.30/0.33/... otherwise, which reads as if the
@@ -122,10 +133,9 @@ function plot_c1_c2()
               # relative steering as u_s and the relative depower as u_d, and
               # this axis is the depower.
               xlabel = L"\mathrm{relative\ depower}\ u_\mathrm{d}\ [-]",
-              ylabels = [L"c_1\ [\mathrm{1/m}]", L"c_2\ [-]",
-                         L"\mathrm{delay}\ [\mathrm{s}]"],
-              yerr = [_std_column(rows, "c1_std"), _std_column(rows, "c2_std"),
-                      _std_column(rows, "delay_std")],
+              ylabels = [L"c_1\ [\mathrm{1/m}]", L"\tau\ [\mathrm{s}]",
+                         L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
+              yerr = [_std_column(rows, "c1_std"), _std_column(rows, "delay_std"), nothing, nothing],
               scatter = true, disp = true, labelsize = LABEL_SIZE,
               fig = fig_name)
         mkpath(FIG_DIR)
