@@ -87,6 +87,7 @@ function analyse_scenario(dir; plots = false, quiet = true)
     return (; α_inner = minimum(r.α_inner for r in lin_rows), α_guided = worst.α_guided,
             dm_guided = worst.dm_guided, L = worst.L, va = worst.va, dp = worst.dp,
             not_rated = length(rows) - length(lin_rows), not_flown = length(latest(:uncovered)),
+            n_bins = length(latest(:edges)) - 1,
             τ = latest(:τ_log))
 end
 
@@ -108,19 +109,22 @@ ok = filter(r -> !haskey(r, :error), results)
 isempty(ok) && error("The stability analysis failed for every scenario in $scenarios_dir.")
 worst_scenario = argmin(r -> r.α_guided, ok)
 
+"Bins not rated / total bins, plus the bins the log never reached, if any"
+bins(r) = string(r.not_rated, "/", r.n_bins, r.not_flown > 0 ? " ($(r.not_flown) not flown)" : "")
+
 verdict(α) = α < 0.3 ? "fragile" : α < 0.5 ? "marginal" : "robust"
 println()
 printstyled(@sprintf("Worst disk margin per scenario, %s (live controller settings):\n",
                      basename(scenarios_dir)); bold = true)
-println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/flown")
+println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/total")
 for r in results
     if haskey(r, :error)
         println(@sprintf("  %-8s  %10.2f  failed: %s", r.name, r.wind, first(split(r.error, '\n'))))
         continue
     end
-    line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %d/%d",
+    line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %s",
                     r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                    r.dm_guided, r.τ, r.not_rated, r.not_flown)
+                    r.dm_guided, r.τ, bins(r))
     color = r.α_guided < 0.3 ? :red : r.α_guided < 0.5 ? :yellow : :normal
     printstyled(line, r === worst_scenario ? "   <- worst\n" : "\n"; color)
 end
@@ -132,7 +136,7 @@ open(report_path, "w") do io
     println(io)
     println(io, "Worst disk margin per scenario (live controller settings).")
     println(io)
-    println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/flown |")
+    println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/total |")
     println(io, "|---|---|---|---|---|---|---|---|---|---|---|")
     for r in results
         if haskey(r, :error)
@@ -141,9 +145,9 @@ open(report_path, "w") do io
             continue
         end
         mark = r === worst_scenario ? " **← worst**" : ""
-        println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %d/%d%s |",
+        println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %s%s |",
                              r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                             r.dm_guided, r.τ, r.not_rated, r.not_flown, mark))
+                             r.dm_guided, r.τ, bins(r), mark))
     end
     println(io)
     println(io, "α inner is the disk margin of the course PID closed only around the turn-rate ",
