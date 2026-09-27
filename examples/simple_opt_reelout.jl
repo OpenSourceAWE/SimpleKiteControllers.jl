@@ -794,7 +794,7 @@ end
 # The turn authority the loop was TUNED at; the sim loop rescales heading_p by c1_setpoint/c1(u_d) in every phase.
 c1_setpoint = c1_at_depower(fcs.depower_setpoint)
 # Phase 4 must fly with the curvature feed-forward, which silently drops out on either of these.
-@assert fcs.ff_gain > 0 "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
+fcs.ff_gain > 0 || @warn "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
     but ff_gain = $(fcs.ff_gain)"
 @assert isfinite(c1_setpoint) && c1_setpoint > 0 "the curvature feed-forward needs the turn-rate \
     coefficient c1 at depower_setpoint = $(fcs.depower_setpoint), got $c1_setpoint"

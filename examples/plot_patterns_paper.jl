@@ -9,7 +9,7 @@ the Maasvlakte and Cabauw scenarios at a given ground wind speed
 package's repo.
 
 Also generates the feedforward-comparison pair `cabauw_5.75_fb.pdf` (from
-`v05.75`) and `cabauw_5.75_nofb.pdf` (from `v05.75_2`), both drawn with a
+`v05.75`) and `cabauw_5.75_nofb.pdf` (from `v05.75_3`), both drawn with a
 fixed azimuth range of -28 to 27 deg and elevation range of 13 to 38 deg so
 the two subfigures share one axis scale.
 
@@ -63,11 +63,11 @@ const PAPER_SCENARIOS = [
      out_file = "maasvlakte_10.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
     (site = "cabauw", scenario = "v10", project = "system_reelout_cabauw.yaml",
      out_file = "cabauw_10.0_pattern.pdf", enabled = true, xlims = nothing, ylims = nothing),
-    # With feedforward control (v05.75) vs. without (v05.75_2), sharing one axis
+    # With feedforward control (v05.75) vs. without (v05.75_3), sharing one axis
     # scale so the two subfigures in the paper compare directly.
     (site = "cabauw", scenario = "v05.75", project = "system_reelout_cabauw.yaml",
      out_file = "cabauw_5.75_fb.pdf", enabled = true, xlims = (-28, 27), ylims = (13, 38)),
-    (site = "cabauw", scenario = "v05.75_2", project = "system_reelout_cabauw.yaml",
+    (site = "cabauw", scenario = "v05.75_3", project = "system_reelout_cabauw.yaml",
      out_file = "cabauw_5.75_nofb.pdf", enabled = true, xlims = (-28, 27), ylims = (13, 38)),
 ]
 
