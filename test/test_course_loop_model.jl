@@ -60,13 +60,18 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
     @testset "scaling: pattern_dead_time_lag" begin
         tc = (v_app = 13.3, dead_time = 0.141, kite_lag = 0.267)
         for v in (12.8, 22.4, 34.0, 40.0)
-            law = PATTERN_DELAY_REF * (PATTERN_V_REF / v)^PATTERN_DELAY_EXP
+            law = PATTERN_DELAY_REF * (PATTERN_V_REF / v)^PATTERN_DELAY_EXP   # all at or above PATTERN_V_FLOOR
             τ, T = pattern_dead_time_lag(tc, v, PATTERN_LAW_DEPOWER)
             @test τ + T ≈ law                                            # the law at the reference depower
             @test τ / T ≈ kite_dead_time(tc, v) / kite_lag(tc, v)        # the table's split kept
             τ2, T2 = pattern_dead_time_lag(tc, v, 0.36)
             @test (τ2 + T2) / (τ + T) ≈ exp(PATTERN_DEPOWER_EXP * 0.09)  # the measured depower factor
         end
+        # below PATTERN_V_FLOOR the sum holds its value there, the split still the row's
+        τf, Tf = pattern_dead_time_lag(tc, PATTERN_V_FLOOR, PATTERN_LAW_DEPOWER)
+        τ8, T8 = pattern_dead_time_lag(tc, 8.0, PATTERN_LAW_DEPOWER)
+        @test τ8 + T8 ≈ τf + Tf
+        @test τ8 / T8 ≈ kite_dead_time(tc, 8.0) / kite_lag(tc, 8.0)
         # the factor reproduces the depower runs within 5 %: ×1.17 / 1.39 / 1.78 at 0.30 / 0.33 / 0.36
         for (dp, g) in ((0.30, 1.17), (0.33, 1.39), (0.36, 1.78))
             @test exp(PATTERN_DEPOWER_EXP * (dp - PATTERN_LAW_DEPOWER)) ≈ g rtol=0.05

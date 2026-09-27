@@ -1220,6 +1220,7 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The pattern law at depower 0.30 / 0.33 / 0.36 (300 m, 7 m/s) and in a 3.5 m/s reel-out (`v_a` 10.6 m/s) | above 0.27 the model is 10 – 36 % too fast (the table's depower effect too weak; measured `g ≈ exp(6.1·(depower − 0.27))`); below 12.8 m/s it is 18 – 48 % too slow (conservative) | – |
 | The measured depower factor in `pattern_dead_time_lag` (`PATTERN_DEPOWER_EXP` 6.1), the depower sweep re-run | depower sweep α 0.55 – 0.66 (was 0.61 – 0.87) | – |
 | The Deliverables plot, `docs/course_loop_frf.png` (`examples/plot_frf_validation.jl`) | the pattern model follows the measured loop up to ~1 Hz; above it the real loop lags more but has 5 – 10 dB less gain | – |
+| The pattern law floored at 12.8 m/s (`PATTERN_V_FLOOR`); the reel-out analysis pairs `ω_g` with the `v_a` it is flown at | reel-out 3.5 m/s: minimum guided α 0.22 → 0.39; fig8 rows at 5 / 10 m/s: α 1.22 / 1.12 | – |
 
 ## Decisions
 

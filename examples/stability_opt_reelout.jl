@@ -61,9 +61,10 @@ selected project, `output/<log_file>_opt.arrow` (or the folder `LOG_DIR`, e.g.
 an archive): phases 3-5 while the kite is within `attractor_dist` of the path
 (where `atan(d/D) ≈ d/D` holds; the approach from far off is not linear),
 binned on tether length. Each bin is checked at its lowest, median and highest
-`v_a` and at its
-lowest and highest depower, both signs of the gravity pole, and the worst case
-is reported. A bin the log does not cover is an error: the whole range must be
+`v_a`, each with the highest `ω_g` its samples within `WG_VA_BAND` of that
+`v_a` fly (`ω_g ∝ v_k`, so the bin's highest `ω_g` is flown at its highest
+`v_a`, not its lowest), and at its lowest and highest depower, both signs of
+the gravity pole, and the worst case is reported. A bin the log does not cover is an error: the whole range must be
 flown before it can be checked.
 
 The curvature feed-forward (`u_ff`, `chi_ff`) acts outside the loop and does
@@ -108,6 +109,14 @@ include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 "Width of a tether-length bin [m]"
 const BIN_M = 10.0
+"""
+Half-width [m/s] of the `v_a` band around a checked `v_a` corner whose samples
+give that corner's `ω_g` (their highest). Pairing every corner with the bin's
+highest `ω_g` instead combined the slowest `v_a` with the guidance corner of
+the fastest part of the lap, which the kite never flies (2026-09-27: α 0.22
+against 0.51 at 154 m, Maasvlakte 3.5 m/s).
+"""
+const WG_VA_BAND = 1.0
 """
 Largest fraction of a bin's samples with the tape on its rate limit for the
 bin to count as linear. Above it, the kite flies a large-signal manoeuvre
@@ -242,7 +251,7 @@ end
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
 println(@sprintf("Phases 3-5 over tether length, %.0f – %.0f m in %d bins; worst case per bin over \
-                  v_a (min, median, max) and depower (min, max), at the bin's highest ω_g:", l_lo, l_hi, length(edges) - 1))
+                  v_a (min, median, max) and depower (min, max), each v_a at the highest ω_g flown near it:", l_lo, l_hi, length(edges) - 1))
 println("  L [m]          n   v_a [m/s]    depower        D [°]  ω_g [1/s]    lag [s]  K      ",
         "α inner          α guided         DM guided")
 rows = NamedTuple[]
@@ -258,12 +267,12 @@ for b in 1:length(edges) - 1
     local L_mid = median(log_L[idx])
     local vas = log_va[idx]
     local va_pts = unique([minimum(vas), median(vas), maximum(vas)])
-    local ωg = maximum(log_ωg[idx])
+    local ωg_at(va) = maximum(log_ωg[idx][abs.(vas .- va) .<= WG_VA_BAND])
     local D = attractor_distance(fcs, median(vas), median(log_L[idx]))
     local dp_pts = unique(extrema(log_dp[idx]))
     local el_c = median(log_elc[idx])
     local tape = fit_actuator_lag(sl, in_pattern[idx])
-    local evals = [(; va, dp, m = reelout_margins(L_mid, va, ωg, dp, el_c, tape.T))
+    local evals = [(; va, dp, ωg = ωg_at(va), m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, tape.T))
              for va in va_pts for dp in dp_pts]
     local wi = argmin(e -> e.m.inner.α, evals)
     local wg = argmin(e -> e.m.guided.α, evals)
@@ -275,7 +284,7 @@ for b in 1:length(edges) - 1
                      tape.rate_limited > MAX_RATE_LIMITED ?
                      @sprintf("  large signal: tape rate-limited %.0f %%", 100 * tape.rate_limited) : ""))
     push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
-                 dm_guided = wg.m.guided.delay_margin, ω_g = ωg, lag = tape.T,
+                 dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
                  rate_limited = tape.rate_limited, linear = tape.rate_limited <= MAX_RATE_LIMITED))
 end

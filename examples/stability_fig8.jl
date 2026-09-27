@@ -44,8 +44,8 @@ simulation at 200 and 300 m (docs/Plan_model_validation.md, V1 step 1):
 
 With them the model under-predicts the simulation's margins at every point
 measured (150 – 300 m, `v_a` 22 – 40 m/s): the delay margin by 0 – 42 %, the gain
-margin by 21 – 45 %. Below 12.8 m/s the pattern law is conservative (10.6 m/s
-in a weak-wind reel-out: 0.28 s measured against 0.34 s). What
+margin by 21 – 45 %. Below 12.8 m/s (`PATTERN_V_FLOOR`) the pattern law holds its
+value there, as weak-wind reel-outs measured (0.28 s at 10.1 – 10.6 m/s). What
 it still lacks is the dynamics of the fed-back course, which have no low-order
 model; `frd_margins` evaluates measured data instead. The pattern tables print
 this loop and, for comparison, the inner loop `C·P` alone. `pattern_frd_margins`

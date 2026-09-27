@@ -44,6 +44,13 @@ gives 0.43 s, the pattern 0.29 s.
 const PATTERN_DELAY_REF = 0.14
 const PATTERN_V_REF = 34.0
 const PATTERN_DELAY_EXP = 0.74
+"""
+Airspeed [m/s] below which the pattern law holds its value instead of growing:
+the lowest `v_a` it was identified at. Reel-out logs below it measured 0.279 s
+at 10.6 m/s and 0.285 s at 10.1 m/s, against 0.292 s at 12.8 m/s, where the
+unfloored law would give 0.33 – 0.35 s (docs/Plan_model_validation.md).
+"""
+const PATTERN_V_FLOOR = 12.8
 "Depower [-] the pattern law was measured at"
 const PATTERN_LAW_DEPOWER = 0.27
 """
@@ -64,12 +71,12 @@ factor, so their sum follows the pattern law ([`PATTERN_DELAY_REF`](@ref)) times
 the measured depower factor ([`PATTERN_DEPOWER_EXP`](@ref)); the row's
 dead-time/lag split is kept. Use it for the pattern loop only: the entry flies
 high, close to the relay sweeps' conditions, where the table itself applies.
-Below `v_a` ≈ 13 m/s the law is conservative (the response time stops growing
-at about 0.28 s).
+Below [`PATTERN_V_FLOOR`](@ref) the law holds its value there (the measured
+response time stops growing at about 0.28 s).
 """
 function pattern_dead_time_lag(tc, v_app, depower)
     τ, T = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
-    target = PATTERN_DELAY_REF * (PATTERN_V_REF / v_app)^PATTERN_DELAY_EXP *
+    target = PATTERN_DELAY_REF * (PATTERN_V_REF / max(v_app, PATTERN_V_FLOOR))^PATTERN_DELAY_EXP *
              exp(PATTERN_DEPOWER_EXP * (depower - PATTERN_LAW_DEPOWER))
     f = target / (τ + T)
     return f * τ, f * T

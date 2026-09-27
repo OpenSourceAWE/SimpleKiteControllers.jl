@@ -871,6 +871,33 @@ Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
 - The cross-track step tests above were compared against the table model; they
   were not re-evaluated.
 
+**Two fixes the same day,** after a Maasvlakte 3.5 m/s run (19:06, `v_a`
+8.4 – 16.3 m/s) gave α 0.22 at 154 m:
+
+1. **`ω_g` paired with the `v_a` it is flown at** (`WG_VA_BAND` = 1 m/s).
+   `ω_g ∝ v_k`, so a bin's highest `ω_g` (0.78 rad/s at 154 m) is flown at its
+   highest `v_a` (15.5 m/s); the old worst case paired it with the lowest
+   (8.4 m/s, where the kite flies ~0.42 rad/s).
+2. **The pattern law is floored at 12.8 m/s** (`PATTERN_V_FLOOR`). Below it
+   the law kept growing (0.46 s at 8.4 m/s, depower 0.294); the reel-out logs
+   measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s.
+
+| Maasvlakte 3.5 m/s, linear bins | Before the fixes | After |
+|---|---|---|
+| Kite dead time + lag at 10.1 m/s (log: 0.285 s) | 0.385 s | 0.322 s |
+| α guided, minimum | 0.22 (154 m, at 8.4 m/s) | 0.39 (154 m, at 15.5 m/s) |
+| α guided, median | 0.70 | 0.80 |
+| α inner, minimum | 0.52 | 0.52 |
+
+The remaining low bins, 154 / 174 / 255 m (α 0.39 / 0.43 / 0.43), are real
+for the model: the highest `ω_g` of the short tether with a fitted tape lag of
+0.25 s (154 / 174 m, 15 – 16 % rate-limited), and a tape lag of 0.60 s at
+255 m (18 % rate-limited, just under the large-signal cut). The first
+3.5 m/s run stopped at 366 m, its `sim_time` budget (120 s selected ×
+(6/3.5)^1.6 = 284 s) too short; re-flown with the project's default (150 s,
+budget 355 s) it reaches 380 m at 328 s, identical up to there, and the
+370 – 380 m bin gives α 0.70.
+
 ## Caveats
 
 - **The guidance model is validated only in its linear range** (see the
