@@ -1182,7 +1182,6 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | The Deliverables plot: V2's measured FRF over the model's Bode plot | the archived V2 runs | no runs |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -1190,8 +1189,10 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 
 ## Deliverables
 
-- A plot of V2's measured FRF over the model's Bode plot. The injection and
-  the FRF estimate themselves are done, in `examples/validate_margins.jl`
+- A plot of V2's measured FRF over the model's Bode plot: done,
+  `docs/course_loop_frf.png` / `.pdf`, drawn by `examples/plot_frf_validation.jl`
+  from `data/course_link_measured.csv` (150 / 200 / 300 m, 7 m/s). The
+  injection and the FRF estimate are in `examples/validate_margins.jl`
   (`Multisine`, `frf_injection`, `measured_loop`).
 
 ## Done
@@ -1218,6 +1219,7 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The pattern law adopted in the model (`pattern_dead_time_lag`), `kite_correction` refitted against it, the stability tables re-run | against every measured margin: delay margin 0 – 42 % low, gain margin 21 – 45 % low; pattern α ≥ 0.58 (150 m) … 0.71 (300 m) | – |
 | The pattern law at depower 0.30 / 0.33 / 0.36 (300 m, 7 m/s) and in a 3.5 m/s reel-out (`v_a` 10.6 m/s) | above 0.27 the model is 10 – 36 % too fast (the table's depower effect too weak; measured `g ≈ exp(6.1·(depower − 0.27))`); below 12.8 m/s it is 18 – 48 % too slow (conservative) | – |
 | The measured depower factor in `pattern_dead_time_lag` (`PATTERN_DEPOWER_EXP` 6.1), the depower sweep re-run | depower sweep α 0.55 – 0.66 (was 0.61 – 0.87) | – |
+| The Deliverables plot, `docs/course_loop_frf.png` (`examples/plot_frf_validation.jl`) | the pattern model follows the measured loop up to ~1 Hz; above it the real loop lags more but has 5 – 10 dB less gain | – |
 
 ## Open questions
 

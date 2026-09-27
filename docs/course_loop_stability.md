@@ -170,6 +170,15 @@ up to 0.02 in places, within about one of its standard errors.
 Details and all tables: `Plan_model_validation.md` (V1, V2). All runs 7 m/s
 wind, no turbulence, `steering_gain` 10.
 
+![Course loop, measured against the model](course_loop_frf.png)
+
+The loop measured by injection (dots) against the pattern model and the inner
+model `C·P` (`examples/plot_frf_validation.jl`). Up to the phase crossover
+(~1 Hz) the pattern model follows the measurement within a few dB and ~15°;
+above it the real loop lags far more (the fed-back course's own dynamics, a
+notch near 1.3 Hz at 300 m) but its gain is also 5 – 10 dB lower, so the
+measured margins are larger than the model's.
+
 - **V1, the loop pushed to instability**, at 300 m (the 200 m baseline was
   already rate-limited, so no linear onset could be seen): extra delay in the
   command until the loop rings, and a gain factor on the feedback part alone
