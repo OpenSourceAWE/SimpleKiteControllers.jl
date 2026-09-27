@@ -40,10 +40,12 @@ so that the feed-forward does not mask the feedback loop. Use pure course
 feedback (`w_course = 1`), which is what the model assumes.
 
 All hooks go between `calc_steering` and `step!` in the simulation loop of
-`simple_fig8.jl` (around line 384), and default to off:
+`simple_fig8.jl` (around line 384), and default to off. V1 needs the first three
+in `simple_opt_reelout.jl` too, see [V1](#v1-stability-limits-highest-priority).
 
-    STEER_GAIN_FACTOR = 1.0       # multiplies heading_p (V1)
+    STEER_GAIN_FACTOR = 1.0       # multiplies rel_steering (V1)
     EXTRA_STEER_DELAY = 0         # samples, FIFO on rel_steering (V1)
+    HOOK_SETTLE       = 15.0      # s after the start of phase 4 before a V1 hook acts
     STEER_INJECTION   = nothing   # t -> Δu, added to rel_steering and logged (V2)
 
 ### V1: stability limits (highest priority)
@@ -51,25 +53,114 @@ All hooks go between `calc_steering` and `step!` in the simulation loop of
 Test the margins at their source: push the simulated loop until it goes
 unstable, then compare with the model.
 
-1. **Gain margin.** In phase 4, step `STEER_GAIN_FACTOR` through 1.0, 1.25, 1.5, …
-   Refine by bisection once the oscillation grows. Record the smallest factor
-   `k_crit` at which the regulated error rings without decaying, and the
-   frequency of that ringing, `f_crit`.
-2. **Delay margin.** At `STEER_GAIN_FACTOR = 1`, raise `EXTRA_STEER_DELAY` one
-   sample at a time until the loop rings. That gives `τ_crit`.
-3. Compare with `margin(L)` and `delay_margin(L)` of the model, evaluated at the
-   mean `v_a` and depower of the window.
-4. Repeat at three operating points by changing the wind speed:
-   `v_a` ≈ 15 m/s (entry/transition, `simple_opt_reelout.jl` phase 3),
-   ≈ 23 m/s and ≈ 35 m/s.
+#### Operating points
 
-Watch for the rate limit: near the limit, the tape's rate limit caps the
-amplitude into a limit cycle instead of letting it diverge. Judge onset by the
-growth of a **small** oscillation (below about 5° of error), not by divergence.
+The operating point is set by the wind speed (`select_windspeed()`, at the 6 m
+reference height, no turbulence). The fig8 pattern gives `v_a` ≈ 5 × wind at
+constant length, so it cannot reach 15 m/s without flying at about 3 m/s wind,
+which has never been tried. The low point therefore uses the reel-out project
+in its phase 4, not its phase 3 as proposed first: phase 3 lasts about 7 s while
+`v_a` rises from 13 to 27 m/s, which is too short and too unsteady for a
+bisection.
 
-**Pass:** `k_crit` within ±20 % of the model's gain margin, `τ_crit` within
-±25 % of `delay_margin(L)`, `f_crit` within ±0.1 Hz of the model's
-phase-crossover frequency.
+| Point | Project, script | Wind | Expected `v_a`, phase 4 | Source of the expectation |
+|---|---|---|---|---|
+| A | `system_fig8_200m.yaml`, `simple_fig8.jl` | 7.0 m/s | 34 – 38 m/s | measured, log validation 2026-09-25 |
+| B | `system_fig8_200m.yaml`, `simple_fig8.jl` | 4.5 m/s | ≈ 23 m/s | scaled from A, not flown yet |
+| C | `system_reelout_maasvlakte.yaml`, `simple_opt_reelout.jl` | 4.0 m/s | ≈ 14 – 16 m/s early in phase 4 | measured 2026-08-20 on the then `system_reelout_150m.yaml` (same `settings_reelout_150m.yaml`) |
+
+B and C are estimates. The first (baseline) run at each point checks the mean
+`v_a` of the analysis window, and the wind is adjusted by the ratio before the
+sweeps start. Point C reels out, so `v_a` drifts. Its window is only the part of
+phase 4 where `v_a` stays within ±10 % of its mean.
+
+#### Settings
+
+For all points (restore them afterwards):
+
+| Setting | File | Value | Why |
+|---|---|---|---|
+| `ff_gain` | `fc_settings.yaml` (A, B), `fc_settings_reelout.yaml` (C) | 0 | the feed-forward would mask the feedback loop |
+| `fig8_pure_course` | both | `true` | pure course feedback from phase 3 on, as the model assumes |
+| turbulence | `select_turbulence()` | 0 | deterministic runs, no masking noise |
+| `sim_time` | `select_sim_time()` | A: 90 s (default), B: 120 s, C: 120 s | B enters slower; C only needs early phase 4, so it will not reach phase 5 and fails that success criterion, which is expected |
+
+Hooks: `STEER_GAIN_FACTOR`, `EXTRA_STEER_DELAY` and `HOOK_SETTLE` (see
+[Tests](#tests)), in `simple_fig8.jl` and, for point C, in `simple_opt_reelout.jl`
+next to its existing `STEER_DISTURBANCE` hook (around line 2224). The hooks act only from `t_phase4 + HOOK_SETTLE` on, so the entry and phase 3 fly
+unchanged and every run of a sweep enters the window in the same state. With
+`ff_gain = 0`, multiplying `rel_steering` is the same as multiplying `heading_p`,
+except at the `max_steering` clamp. Log the factor and the delay with the run.
+
+Analysis window: from `t_phase4 + HOOK_SETTLE` to the end of the run, about 40 s
+at A and B (3 – 2 laps). One step per run, no step changes within a run.
+
+#### Predictions
+
+Values from `course_loop_model.jl` at the nominal `v_a`, pattern depower and
+gain schedule of each project (git `5dfb536`, `margin(L)`, worst gravity sign).
+Compute them again at the mean `v_a` and depower of each baseline window before
+comparing.
+
+| Point | `v_a` | Depower | `K` floor | Gain margin | Phase crossover | Delay margin | Gain crossover | α |
+|---|---|---|---|---|---|---|---|---|
+| A | 35 m/s | 0.27 | 23 m/s | 4.08 | 1.03 Hz | 0.43 s (43 samples at 100 Hz) | 0.36 Hz | 0.84 |
+| B | 23 m/s | 0.27 | 23 m/s | 2.81 | 0.76 Hz | 0.365 s (37 samples) | 0.35 Hz | 0.66 |
+| C | 15 m/s | 0.274 | 10 m/s | 4.66 | 0.48 Hz | 0.91 s (82 samples at 90 Hz) | 0.16 Hz | 0.83 |
+
+C is the inner loop only (`heading_d` 0.126 s, no pattern floor). The
+reel-out project also flies the attractor guidance, which lowers the margins.
+For C, compare with the guided margins of `stability_opt_reelout.jl` on the
+baseline log (`LOG_DIR`), not with the inner-loop values of this table.
+
+#### Procedure
+
+At each point:
+
+1. **Baseline** (`STEER_GAIN_FACTOR = 1`, `EXTRA_STEER_DELAY = 0`). Record the
+   window's mean `v_a`, depower and the fraction of time on the tape's rate
+   limit. Adjust the wind if `v_a` misses the target by more than 10 %, and
+   recompute the predictions.
+2. **Gain margin.** Coarse grid at 0.6, 0.8, 1.0, 1.2 and 1.4 × the predicted gain
+   margin, e.g. at A: 2.4, 3.3, 4.1, 4.9, 5.7. Then bisect between the last stable
+   and the first unstable factor to within 5 % of the prediction (two or three more
+   runs). Result: `k_crit` and the ringing frequency `f_crit,k`.
+3. **Delay margin.** At `STEER_GAIN_FACTOR = 1`, the same grid in samples, e.g. at
+   A: 26, 34, 43, 52, 60. Bisect to within 2 samples. Result: `τ_crit` and its
+   ringing frequency `f_crit,τ`.
+
+The two tests ring at different frequencies: the gain test at the phase
+crossover (0.5 – 1 Hz), the delay test at the gain crossover (0.16 – 0.36 Hz).
+The second band overlaps the lap and its odd harmonics (at A 0.08, 0.23 and
+0.39 Hz), which are there in every run. So the onset is judged against the
+baseline run, not in absolute terms.
+
+Onset criterion, evaluated in `validate_margins.jl`:
+
+1. Band-pass the regulated error `err`: 0.4 – 2 Hz for the gain test, 0.1 – 1 Hz
+   for the delay test.
+2. Split the window into 5 s segments and fit the growth rate of the segments'
+   RMS, after subtracting the baseline's RMS in the same band.
+3. **Unstable:** positive growth rate while the band-passed RMS is still below
+   5°. **Stable:** decaying, or no excess over the baseline.
+4. Ringing frequency: the peak of the spectrum of `err` minus the baseline
+   spectrum.
+5. The applied steering rate: the fig8 log sat on the tape's 0.2 s⁻¹ rate limit
+   25 % of the time with the feed-forward on. If a run adds more than 10
+   percentage points to the baseline's fraction, mark it as **rate-limited**, not
+   unstable: the rate limit turns growth into a limit cycle and adds phase lag
+   of its own. Bisect only between runs that are not rate-limited.
+
+**Pass:** `k_crit` within ±20 % of the gain margin, `τ_crit` within ±25 % of
+`delay_margin(L)`, `f_crit,k` within ±0.1 Hz of the phase crossover and
+`f_crit,τ` within ±0.1 Hz of the gain crossover.
+
+Effort: 1 baseline + about 8 gain runs + about 8 delay runs per point, about 50
+runs in total.
+
+Open risks: the fig8 pattern has not been flown with `ff_gain = 0` and
+`fig8_pure_course = true` together, nor at 4.5 m/s. If the baseline at A or B
+fails, find and fix the cause before any sweep.
 
 ### V2: frequency response with injected excitation
 
@@ -165,8 +256,8 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
 | 1 | V5 | code only | short |
-| 2 | V1 at `v_a` ≈ 35 m/s | three hooks in `simple_fig8.jl` | ≈ 10 runs |
-| 3 | V1 at 15 and 23 m/s | same | ≈ 20 runs |
+| 2 | V1 at point A (`v_a` ≈ 35 m/s) | three hooks in `simple_fig8.jl` | ≈ 17 runs |
+| 3 | V1 at points B (23 m/s) and C (15 m/s) | same hooks, also in `simple_opt_reelout.jl` for C | ≈ 34 runs |
 | 4 | V3 | existing logs, a replay script | no new runs |
 | 5 | V2 | injection hook, FRF script | 3 long runs |
 | 6 | V4 | relay sweeps | 4 – 5 sweeps |
