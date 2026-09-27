@@ -503,6 +503,176 @@ over 0.1 – 2 Hz at once, instead of at two onset frequencies.
 **Not yet done:** the model change above, points B and C, and a note in
 `docs/course_loop_stability.md`.
 
+#### Step 1: the course link and the guidance in the model (2026-09-27)
+
+**Guidance, from first principles.** As in `stability_opt_reelout.jl`, the
+attractor guidance adds `1 + ω_g/s`, `ω_g = v_k/(L·D)`: at D, v_k 32.8 m/s,
+L 304 m, D 8°, so ω_g = 0.77 rad/s. It predicts the measured course → error
+link at 0.52 Hz (1.03 ∠−13° against 1.08 ∠−14°), less well at 1.13 Hz
+(1.01 ∠−6° against 1.04 ∠−13°).
+
+**Heading → course cannot be read from the baselines.** Cross-spectra of
+heading and course in pattern flight give a gain falling from 0.94 (0.1 Hz)
+to 0.53 (1 Hz) with a slightly POSITIVE phase, and a different curve with the
+feed-forward on: course and heading are both driven by the lap, and the wind
+drift between them varies along the pattern, so the correlation is geometric,
+not the small-signal link.
+
+**Heading → course by injection (part of V2 pulled forward).** New hook
+`STEER_INJECTION` in `simple_fig8.jl` (`τ -> Δu` from `t_phase4 + HOOK_SETTLE`
+on, not logged: recomputed from the log). `Multisine` (lines 0.1 – 1.0 Hz in
+0.1 Hz steps and 1.2 – 2.0 Hz in 0.2 Hz steps, 10 s period, Schroeder phases)
+and `frf_injection` (spectra averaged over whole periods, links as ratios) in
+`validate_margins.jl`. Point D, 180 s, 10 periods, `v_steering` 1.0 s⁻¹ (test
+only), flown fc settings, amplitudes 0.004 and 0.008 per line:
+
+| f [Hz] | 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1.0 | 1.2 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| course/heading | 0.98 | 0.99 | 0.93 | 0.96 | 0.96 | 0.89 | 0.81 | 0.75 | 0.63 | 0.66 | 0.60 |
+| phase | 1° | 6° | 1° | −3° | −1° | −3° | −2° | −5° | 2° | −2° | −39° |
+
+(mean of both amplitudes, which agree to ±5 % up to 1.2 Hz; spread over the
+periods ±1 – 2 %). Above 1.2 Hz the two amplitudes disagree (e.g. 0.76 and
+2.07 at 1.4 Hz) and the phase swings through −125 … −170°: a lightly damped
+kite mode near 1.35 Hz that the same data show in tape → heading (gain 0.2 –
+0.5 of the model at 1.4 Hz). The other links: command → tape matches the
+0.1 s lag at every line (0.86 ∠−28° against 0.85 ∠−32° at 1 Hz); tape →
+heading matches the kite model within 0.84 – 1.09 and ~10° of extra lag from
+0.5 to 1.0 Hz, 0.73 – 0.75 and −19 … −34° at 1.2 Hz.
+
+**Re-prediction of D, none of it fitted on V1's onset runs:**
+
+| | delay margin | gain crossover | gain margin | phase crossover |
+|---|---|---|---|---|
+| model, inner loop | 0.358 s | 0.57 Hz | 2.83 | 1.54 Hz |
+| + guidance | 0.284 s | 0.59 Hz | 2.63 | 1.46 Hz |
+| + guidance + measured course link | **0.316 s** | **0.535 Hz** | 2.91 | **1.115 Hz** |
+| measured (V1, no rate limit) | 0.315 s | 0.52 Hz | 4.44 | 1.13 Hz |
+
+The delay margin and both crossover frequencies now match. The gain margin
+is still 34 % low: at 1.1 – 1.2 Hz the kite link is 0.75 – 0.85 of the model
+(the 1.35 Hz mode), which would bring it to ~3.6 – 3.8.
+
+**Dense identification, 0.8 – 4 Hz.** A first try with lines every 0.05 Hz
+and a 20 s period was unusable: the lap at D takes 20.33 s, a figure-eight's
+heading carries mainly the ODD harmonics of the lap, and every other line
+fell on one of them. The lines now sit halfway between lap harmonics,
+f = (n + ½)·f_lap (period 2 × lap = 40.67 s, 6 periods per 360 s run): 21
+lines 0.81 – 1.80 Hz at amplitudes 0.004 and 0.008, and 23 lines 1.84 –
+4.0 Hz at 0.004, `v_steering` 1.0 s⁻¹ (test only). Results:
+
+- **Tape**: the 0.1 s lag holds at every line up to 4 Hz (0.39 ∠−60° at 4 Hz).
+- **Kite (tape → heading)**: 0.96 of the model at 0.81 Hz, 0.8 at 1.1 Hz,
+  0.6 – 0.7 above 1.4 Hz, ~10° extra lag throughout; a lag-lead
+  `(1 + s/ω_z)/(1 + s/ω_p)`, zero 1.08 Hz, pole 0.72 Hz, fits it (log-RMS
+  0.19).
+- **Heading → course**: dips to 0.35 at 1.2 – 1.3 Hz, the phase falls through
+  −90° near 1.35 Hz: a lightly damped non-minimum-phase zero pair. Above
+  ~2.2 Hz the heading response drowns and the ratio is meaningless.
+- **Command → course** (the plant as the controller sees it), as a correction
+  to the model's tape × kite: ~1 at 0.5 Hz, 0.4 at 1.1 Hz, 0.16 – 0.31 at
+  1.2 – 1.3 Hz, ~1.0 at 1.8 – 2.1 Hz, then rising roughly as f³ to 7 at 4 Hz
+  with −100 … −130°. The course responds far more at high frequency than a
+  turning flight path can: the kite point's velocity carries structural motion
+  that the tape excites, and the controller feeds it back as course.
+
+**The measured loop reproduces V1.** With the controller and the guidance
+term applied to the measured command → course (50 lines, 0.2 – 4 Hz, no
+fitting): gain crossover 0.495 Hz with 64.8° of phase margin, **delay margin
+0.363 s**; phase crossover 1.115 Hz, **gain margin 5.15**; |L| ≤ 0.35 from
+1.3 to 4 Hz, no second crossing. Against V1 at D without the rate limit
+(0.315 s at 0.52 Hz, 4.44 at 1.13 Hz): both margins +15 %, both crossovers
+within 0.025 Hz. Two independent experiments — V2's small-signal plant and
+V1's loop pushed to instability — agree.
+
+**Not a low-order transfer function.** Rational fits of the course link or
+of the command → course correction (a non-minimum-phase zero pair near
+1.3 Hz, a real zero near 2 Hz, poles above the data) do not hold: with the
+poles above 4 Hz, where there is no data, the model loop goes unstable
+(crossovers at 1.7 – 16 Hz) although the simulation is stable, and the fit
+error in the 0.5 – 1.3 Hz band is 50 – 75 % (log-RMS 0.5 – 0.76). What decides
+the margins is the measured band, not a pole-zero structure.
+
+**Consequences:**
+
+1. `course_loop_model.jl`'s tape model and guidance term are right; its kite
+   model is right within ~20 % (a lag-lead correction fits); what it lacks is
+   the fed-back course's own dynamics, which are operating-point specific
+   and not low-order.
+2. Margins at D are better computed from the measured frequency response
+   than from a fitted model; other operating points would need their own
+   injection runs (V4-like).
+3. A design lead: the course fed back to the PD carries structural content
+   above ~1.5 Hz (the correction rises to 7 at 4 Hz). A low-pass on the course
+   feedback, or blending back to heading above ~1 Hz, might buy margin.
+
+**In `course_loop_model.jl` now:** `guidance_tf(ω_g, Ts)` (the guidance
+term), `kite_correction(Ts)` (the lag-lead, zero 1.08 Hz, pole 0.72 Hz) and
+`frd_margins(f, L)` (delay/gain margin and crossovers of a loop given as
+measured points; unit-tested against `k·e^(−sτ)/s`). `validate_margins.jl`
+has `lap_period`, `mid_lines`, `guidance_rate`, `measured_loop`, `model_loops`
+and `tf_margins`. The measured command → course points are in
+`data/course_link_measured.csv` (300 m: 64 lines, 200 m: 17).
+
+#### Does the model hold at 200 and 150 m? (2026-09-27)
+
+Same procedure at point A (200 m) and a new point F (150 m), both 7 m/s,
+`v_steering` 1.0 s⁻¹ for the runs only: lines between lap harmonics from 0.2
+to 2.2 Hz, amplitude 0.004, 6 periods. The first try used the lap period of a
+120 s baseline, which is shorter than the steady one (200 m: 12.82 s against
+13.15 s; 150 m: 9.68 s against 9.97 s); 2.5 % off puts the lines on the lap
+harmonics by 0.45 Hz, and the data were unusable. `lap_period` now takes the
+second half of the laps of a long run.
+
+| | delay margin | gain crossover | gain margin | phase crossover |
+|---|---|---|---|---|
+| **300 m, measured** | **0.363 s** | 0.50 Hz | **5.0** | 1.12 Hz |
+| 300 m, model + guidance + kite correction | 0.295 s (−19 %) | 0.51 Hz | 2.91 (−42 %) | 1.28 Hz |
+| **200 m, measured** (17 lines with course spread < 35 %) | **0.300 s** | 0.49 Hz | **3.53** | 1.15 Hz |
+| 200 m, model + guidance + kite correction | 0.243 s (−19 %) | 0.53 Hz | 2.76 (−22 %) | 1.26 Hz |
+| 150 m, measured | – | – | – | – |
+| 150 m, model + guidance + kite correction | 0.203 s | 0.55 Hz | 2.72 | 1.25 Hz |
+
+- **200 m: the model holds, conservatively.** Delay margin 19 % low (inside
+  ±25 %), gain margin 22 % low (just outside ±20 %), gain crossover within
+  0.04 Hz, phase crossover 0.1 Hz high. Above 1.1 Hz single lines are
+  noisy (spread 30 – 160 %).
+- **300 m: same delay-margin error (−19 %), larger gain-margin error (−42 %).**
+  The model gives nearly the same gain margin at every length (2.7 – 2.9); the
+  simulation's grows with the tether (3.5 at 200 m, 5.0 at 300 m).
+- **150 m: not measurable this way.** The pattern at 150 m needs twice the
+  steering of 300 m; the command sits at the clamp 6 – 10 % of the time even
+  without injection, the loop is not linear enough, and the lines scatter by
+  50 – 100° in phase even below 1 Hz. A smaller pattern (`f8_a`, `f8_b`) or a
+  lower `el_center` would be needed to test the model there.
+
+**Reading:** with the guidance term and the kite correction the model is
+usable from 200 to 300 m and errs on the safe side: it under-predicts both
+margins. What it still lacks is the fed-back course's own dynamics, and their
+effect on the gain margin grows with the tether length.
+
+#### `stability_fig8.jl` with the validated model (2026-09-27)
+
+The pattern tables (over `v_a` and over depower) now use the loop validated
+above: tape lag `1/steering_gain` (0.1 s) instead of `ACTUATOR_LAG`, times
+`kite_correction` and `guidance_tf(ω_g)`, `ω_g = 0.96 · v_a/(L·D)` (`v_k/v_a`
+= 0.96 measured at 200 and 300 m) with the project's tether length. The entry
+stays the inner loop (off the path the guidance is not linear). The inner
+loop is printed below the pattern table for comparison.
+
+| v_a [m/s] | 5 | 10 | 15 | 20 | 27 | 35 | 45 |
+|---|---|---|---|---|---|---|---|
+| 300 m: α / delay margin | 0.76 / 1.56 s | 0.85 / 0.84 s | 0.76 / 0.53 s | 0.66 / 0.35 s | 0.64 / 0.28 s | 0.74 / 0.29 s | 0.80 / 0.29 s |
+| 200 m | 0.65 / 1.29 s | 0.77 / 0.72 s | 0.71 / 0.46 s | 0.61 / 0.30 s | 0.59 / 0.24 s | 0.68 / 0.24 s | 0.72 / 0.23 s |
+| 150 m | 0.54 / 1.04 s | 0.67 / 0.60 s | 0.65 / 0.39 s | 0.56 / 0.26 s | 0.54 / 0.20 s | 0.58 / 0.19 s | 0.60 / 0.18 s |
+| inner loop, any length | 0.98 / 2.18 s | 1.02 / 1.14 s | 0.87 / 0.70 s | 0.72 / 0.44 s | 0.68 / 0.33 s | 0.78 / 0.36 s | 0.86 / 0.37 s |
+
+At 35 m/s this reproduces the validation above (0.292 s at 300 m, 0.243 s at
+200 m). The guidance costs margin as the tether gets shorter (its corner
+`ω_g` grows as 1/L); the pattern stays at α ≥ 0.54 at every length and `v_a`,
+and the model is known to be conservative at 200 – 300 m. The 150 m row is
+extrapolated (not measured). The entry's minimum α is 0.50, at 5 m/s.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -596,11 +766,11 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | V5 | code only | short |
-| 2 | V1 at point A (`v_a` ≈ 35 m/s) | three hooks in `simple_fig8.jl` | ≈ 17 runs |
-| 3 | V1 at points B (23 m/s) and C (15 m/s) | same hooks, also in `simple_opt_reelout.jl` for C | ≈ 34 runs |
-| 4 | V3 | existing logs, a replay script | no new runs |
-| 5 | V2 | injection hook, FRF script | 3 long runs |
+| 1 | Update `docs/course_loop_stability.md`: its tables still come from the old inner-loop model with the 0.43 s tape lag | text | no new runs |
+| 2 | The fed-back course's own dynamics: a model that holds over 200 – 300 m (not low-order at one point, see V1 step 1) | more injection runs | 2 – 4 long runs |
+| 3 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
+| 4 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
+| 5 | V3 | existing logs, a replay script | no new runs |
 | 6 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
@@ -609,16 +779,26 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 
 ## Deliverables
 
-- `examples/validate_margins.jl`: runs V1 and prints a table of simulated vs.
-  predicted limits.
 - `examples/frf_injection.jl`: runs V2, estimates the FRF and plots it over the
   model's Bode plot.
 - `examples/replay_prediction.jl`: V3, the metrics per `v_a` bin.
-- `test/test_course_loop_model.jl`: V5.
 - A "Model validation" section in [course_loop_stability.md](course_loop_stability.md)
   with the results. That section should also fix its Model section, which
   still describes a single dead-time exponent of 1.24 (`kite_delay`) instead of
   the dead-time/lag split with 1.03 and 1.32.
+
+## Done
+
+| Item | Result | Commit |
+|---|---|---|
+| V5: `test/test_course_loop_model.jl` | all four checks pass | `fb9d584` |
+| V1 at point A (200 m, 7 m/s) | no linear onset: the baseline is already rate-limited | `a56f255` |
+| V1 at point D (300 m, 7 m/s), replacing A | delay margin PASS, gain margin FAIL; the model feeds back the heading, not the course | `a56f255` |
+| `examples/validate_margins.jl` | V1 sweeps, report and loop breakdown | `a56f255` |
+| `steering_gain` 10 in every settings YAML | tape lag 0.1 s | `58712be` |
+| V1 step 1: guidance and kite correction in `course_loop_model.jl`, `frd_margins` | model conservative at 200 – 300 m (delay margin −19 %, gain margin −22 … −42 %) | – |
+| V2 at 300 m (0.2 – 4 Hz) and 200 m (0.2 – 2.2 Hz), `STEER_INJECTION` | the measured loop reproduces V1's margins at 300 m within 15 % | – |
+| `stability_fig8.jl` uses the tape lag `1/steering_gain`, `guidance_tf` and `kite_correction` in the pattern | pattern α ≥ 0.64 (300 m), 0.59 (200 m), 0.54 (150 m) | – |
 
 ## Open questions
 
