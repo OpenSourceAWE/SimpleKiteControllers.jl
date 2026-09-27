@@ -104,3 +104,60 @@ function rate(name, αs)
     end
     return α_min
 end
+
+"""
+    guidance_tf(ω_g, Ts) -> TransferFunction
+
+The attractor guidance as seen by the course loop, `1 + ω_g/s` discretized
+with the pole at z = 1: the commanded course follows the cross-track error,
+which integrates the course, with the corner `ω_g = v_k/(L·D)` [rad/s] (`D`
+the attractor's arc distance [rad]). Multiply the inner loop `C·P` by it for
+pattern flight, as `stability_opt_reelout.jl` does. Validated at the 300 m
+fig8 point (docs/Plan_model_validation.md, V1 step 1): it predicts the
+measured course → regulated-error link at 0.5 Hz to within 5 % and 1°.
+"""
+guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
+
+"""
+    kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) -> StateSpace
+
+Lag-lead `(1 + s/ω_z)/(1 + s/ω_p)` that brings the turn-rate law's steering →
+heading response to what an injected multisine measures in the simulation:
+from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
+1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it.
+"""
+kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) =
+    c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
+
+"Zero and pole [Hz] of [`kite_correction`](@ref): fit at the 300 m fig8 point, 0.5 – 2.1 Hz, 2026-09-27"
+const KITE_CORR_ZERO = 1.08
+const KITE_CORR_POLE = 0.72
+
+"""
+    frd_margins(f, L) -> NamedTuple
+
+Margins of a loop given only as frequency-response points `L` [complex] at the
+frequencies `f` [Hz], e.g. a measured plant times the controller: the first
+gain crossover (`f_gc`, phase margin `pm` [deg], delay margin `dm` [s]) and
+the first phase crossover (`f_pc`, gain margin `gm`), found by interpolating
+log|L| and the unwrapped phase between the points. Needed where the plant
+has no good low-order model, like the fed-back course of pattern flight
+(docs/Plan_model_validation.md, V1 step 1). `NaN` where there is no crossing.
+"""
+function frd_margins(f, L)
+    idx = sortperm(f)
+    f, L = f[idx], L[idx]
+    lg = log.(abs.(L))
+    ph = angle.(L)
+    ph = first(ph) .+ cumsum(vcat(0.0, rem2pi.(diff(ph), RoundNearest)))
+    cross(y, level, i) = f[i] + (level - y[i]) / (y[i+1] - y[i]) * (f[i+1] - f[i])
+    igc = findfirst(i -> lg[i] >= 0 && lg[i+1] < 0, 1:(length(f) - 1))
+    ipc = findfirst(i -> ph[i] > -π && ph[i+1] <= -π, 1:(length(f) - 1))
+    f_gc = isnothing(igc) ? NaN : cross(lg, 0.0, igc)
+    pm = isnothing(igc) ? NaN :
+        rad2deg(ph[igc] + (f_gc - f[igc]) / (f[igc+1] - f[igc]) * (ph[igc+1] - ph[igc])) + 180
+    f_pc = isnothing(ipc) ? NaN : cross(ph, -π, ipc)
+    gm = isnothing(ipc) ? NaN :
+        1 / exp(lg[ipc] + (f_pc - f[ipc]) / (f[ipc+1] - f[ipc]) * (lg[ipc+1] - lg[ipc]))
+    return (; f_gc, pm, dm = deg2rad(pm) / (2π * f_gc), f_pc, gm)
+end

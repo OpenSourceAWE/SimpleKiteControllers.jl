@@ -77,4 +77,18 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
         L = Ld * D
         @test delay_margin(L) ≈ pi / (2k) - tau rtol=2e-2
     end
+
+    @testset "margins: frd_margins on sampled points" begin
+        # L = k·e^(-sτ)/s: |L| = 1 at f = k/2π, phase -90° - 360°·f·τ; -180° at f = 1/(4τ).
+        k, tau = 2.0, 0.1
+        f = collect(0.05:0.01:5.0)
+        L = [k * cis(-2π * fi * tau) / (im * 2π * fi) for fi in f]
+        m = frd_margins(f, L)
+        f_gc = k / 2π
+        @test m.f_gc ≈ f_gc rtol=1e-3
+        @test m.pm ≈ 90 - 360 * f_gc * tau rtol=1e-3
+        @test m.dm ≈ pi / (2k) - tau rtol=1e-2
+        @test m.f_pc ≈ 1 / (4tau) rtol=1e-3
+        @test m.gm ≈ 2π / (4tau) / k rtol=1e-3
+    end
 end
