@@ -838,6 +838,22 @@ Fixed on the way: `analyze` judged C's ±10 % `v_a` drift on single samples,
 which within a lap swing more than that (the window shrank to 0.2 s); it now
 uses 10 s means. `frf_injection` takes `t_end`.
 
+#### Point C closed by the reel-out's own validation (2026-09-27)
+
+Decided not to design a second injection experiment for the reel-out. Its
+guided loop (`stability_opt_reelout.jl`) was already validated in the
+simulation on 2026-09-26 by cross-track step tests during the reel-out, at
+1.9 – 3.5 m/s reel-out speed (`course_loop_stability_reelout.md`, "Cross-track
+step test"): damping ζ 0.50 – 0.62 measured against 0.44 – 0.55 modelled,
+ringing 0.19 – 0.22 Hz against 0.16 – 0.19 Hz. That validation holds while
+the steering stays off its clamp; with the steering on the clamp 21 – 23 % of
+the time the ringing was far less damped (ζ 0.12 – 0.16) than modelled. The
+failed injection at 4 m/s above met the same limit: at `v_a` ≈ 13 m/s the
+pattern steers near the clamp and swamps the injection.
+`stability_opt_reelout.jl` uses the current model (dead time and lag split,
+the tape lag fitted on the log); the two stale bullets in that document's
+Model section (0.43 s lag, exponent 1.24) are corrected.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -931,9 +947,8 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | Point C (reel-out) by injection: needs a stronger injection, lines down to 0.05 Hz and a steadier operating point; or leave it to `stability_opt_reelout.jl`'s own validation | design first | 2 – 3 long runs |
-| 2 | V3 | existing logs, a replay script | no new runs |
-| 3 | V4 | relay sweeps | 4 – 5 sweeps |
+| 1 | V3 | existing logs, a replay script | no new runs |
+| 2 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -962,7 +977,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The course correction over 200 – 300 m: measured table `data/course_correction_measured.csv`, `course_correction`, `frd_diskmargin`, `pattern_frd_margins` in `stability_fig8.jl` | each length's margins predicted from the other's within 20 %; pooled table within 1 – 19 % | – |
 | The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | `5a0253d` |
 | 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | `f143de9` |
-| Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | – |
+| Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | `13c28af` |
+| Point C (reel-out): closed by the reel-out's own validation, the cross-track step tests of `course_loop_stability_reelout.md` | guided-loop damping 0.50 – 0.62 measured against 0.44 – 0.55 modelled, off the steering clamp | – |
 
 ## Open questions
 

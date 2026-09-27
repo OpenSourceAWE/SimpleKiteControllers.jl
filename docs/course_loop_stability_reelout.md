@@ -33,10 +33,16 @@ worse and was not adopted.**
 
 ### Inner loop (as for fig8)
 
-- Actuator: first-order lag of 0.43 s (`ACTUATOR_LAG`), standing in for the
-  rate-limited steering tape.
-- Kite: the turn-rate law of `data/turn_rate_coeffs.yaml`. The kite's dead time
-  scales with the apparent wind speed (`kite_delay`, exponent 1.24).
+- Actuator: a first-order lag for the steering tape, fitted on the log per
+  tether-length bin (`fit_actuator_lag`); with `steering_gain` 10 it is close
+  to the small-signal `1/steering_gain` in phase 4 (see
+  [The tape's lag in the reel-out](#the-tapes-lag-in-the-reel-out)). The
+  first version used `ACTUATOR_LAG` = 0.43 s, the fig8's rate-limited
+  equivalent.
+- Kite: the turn-rate law of `data/turn_rate_coeffs.yaml`, with the kite's
+  dead time and first-order lag scaled over the apparent wind speed
+  (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The first
+  version had a single dead time (`kite_delay`, exponent 1.24).
 - Gravity: both signs of the gravity pole are checked. β is the pattern's
   centre elevation, read from the log (`var_04`).
 - Controller: the exact discrete PD of `CourseController`, at the project's
