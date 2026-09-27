@@ -161,3 +161,66 @@ function frd_margins(f, L)
         1 / exp(lg[ipc] + (f_pc - f[ipc]) / (f[ipc+1] - f[ipc]) * (lg[ipc+1] - lg[ipc]))
     return (; f_gc, pm, dm = deg2rad(pm) / (2π * f_gc), f_pc, gm)
 end
+
+"""
+    frd_diskmargin(L) -> Float64
+
+Balanced disk margin α (skew 0) of a loop given as frequency-response points
+`L`: `2 / max |(1 − L)/(1 + L)|`, i.e. `1/‖S − 1/2‖∞` over the points. Only
+as good as the points cover the frequencies where the maximum sits, the
+crossover region for the course loop.
+"""
+frd_diskmargin(L) = 2 / maximum(abs.((1 .- L) ./ (1 .+ L)))
+
+"Path of the measured course correction, see [`load_course_correction`](@ref)"
+const COURSE_CORRECTION_FILE = normpath(joinpath(@__DIR__, "..", "data", "course_correction_measured.csv"))
+
+"""
+    load_course_correction(path = COURSE_CORRECTION_FILE) -> Vector{NamedTuple}
+
+The measured course correction `M(f, v_a)` [-]: what the simulation's steering →
+fed-back course response is, divided by this model's tape lag × turn-rate law
+(without `kite_correction`, which it contains). Measured with injected
+multisines on the fig8 pattern at `v_a` 23.7, 34 (200 and 300 m, pooled) and
+40.1 m/s (docs/Plan_model_validation.md, V1). One table per airspeed, sorted by
+`v_a`, each with the frequencies [Hz], `log|M|` and the unwrapped phase [rad],
+for [`course_correction`](@ref).
+"""
+function load_course_correction(path = COURSE_CORRECTION_FILE)
+    rows = [parse.(Float64, split(l, ",")) for l in eachline(path)
+            if !startswith(l, "#") && !startswith(l, "v_a") && !isempty(strip(l))]
+    vs = sort(unique(getindex.(rows, 1)))
+    return map(vs) do v
+        r = filter(x -> x[1] == v, rows)
+        (; v_a = v, f = getindex.(r, 2), lg = log.(getindex.(r, 3)), ph = getindex.(r, 4))
+    end
+end
+
+"`M` of one table at `f` [Hz]: `log|M|` and phase interpolated linearly, end values held outside."
+function _course_correction(tab, f)
+    i = clamp(searchsortedlast(tab.f, f), 1, length(tab.f) - 1)
+    w = clamp((f - tab.f[i]) / (tab.f[i+1] - tab.f[i]), 0.0, 1.0)
+    return (1 - w) * tab.lg[i] + w * tab.lg[i+1], (1 - w) * tab.ph[i] + w * tab.ph[i+1]
+end
+
+"""
+    course_correction(tabs, f, v_a) -> ComplexF64
+
+`M` at `f` [Hz] and `v_a` [m/s] from the tables of `load_course_correction`:
+each table is scaled in frequency to `v_a` (its features sit at a fixed
+distance flown, so they move as `f ∝ v_a`) and `log|M|` and the phase are
+interpolated linearly in `v_a` between the two nearest airspeeds. Outside the
+measured airspeeds the nearest table is only scaled. At the measured airspeeds
+it reproduces the data; between them it predicted the 34 m/s margins from the
+23.7 and 40.1 m/s tables within 23 %, on the safe side. Keep `f` inside the
+measured band (0.2 – 4 Hz at 34 m/s, scaled with `v_a`).
+"""
+function course_correction(tabs, f, v_a)
+    vs = [t.v_a for t in tabs]
+    i = clamp(searchsortedlast(vs, v_a), 1, max(length(vs) - 1, 1))
+    j = min(i + 1, length(vs))
+    w = j == i ? 0.0 : clamp((v_a - vs[i]) / (vs[j] - vs[i]), 0.0, 1.0)
+    lg1, ph1 = _course_correction(tabs[i], f * vs[i] / v_a)
+    lg2, ph2 = _course_correction(tabs[j], f * vs[j] / v_a)
+    return exp((1 - w) * lg1 + w * lg2) * cis((1 - w) * ph1 + w * ph2)
+end

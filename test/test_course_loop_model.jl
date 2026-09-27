@@ -91,4 +91,27 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
         @test m.f_pc ≈ 1 / (4tau) rtol=1e-3
         @test m.gm ≈ 2π / (4tau) / k rtol=1e-3
     end
+
+    @testset "margins: frd_diskmargin, closed forms" begin
+        # α = 2 / max|(1 - L)/(1 + L)|: a pure integrator k/s has |.| = 1 everywhere,
+        # a constant 0.5 has 1/3.
+        f = 0.05:0.01:5.0
+        @test frd_diskmargin([2.0 / (im * 2π * fi) for fi in f]) ≈ 2.0
+        @test frd_diskmargin(fill(0.5 + 0im, 10)) ≈ 6.0
+    end
+
+    @testset "course_correction: the measured tables" begin
+        tabs = load_course_correction()
+        @test length(tabs) >= 2 && issorted([t.v_a for t in tabs])
+        for t in tabs
+            @test issorted(t.f) && length(t.f) > 20
+            @test 0.2 <= first(t.f) && last(t.f) <= 4.1
+            i = length(t.f) ÷ 2
+            # at a measured airspeed the table is reproduced
+            @test course_correction(tabs, t.f[i], t.v_a) ≈ exp(t.lg[i]) * cis(t.ph[i])
+        end
+        # a frequency scales with the airspeed: the feature at f, v moves to 2f at 2v
+        t = tabs[1]
+        @test course_correction([t], 0.5, t.v_a) ≈ course_correction([t], 1.0, 2t.v_a)
+    end
 end
