@@ -1111,7 +1111,11 @@ end
         # lap of the reel-out window, which is more than the default (7 on
         # 2026-08-18) — the exact count follows the window, so it is not pinned.
         @test tos.max_reopt >= TrajOptSettings().max_reopt
-        @test tos.path_blend_time == 4.0
+        # 6, not the struct's 4 (2026-09-26): at Cabauw 8 m/s a path installed during a
+        # lobe turn reshaped the reference under the kite; 6 s cut that run's RMS d
+        # from 1.69 to 1.12° for 0.4 % of mean power.
+        @test TrajOptSettings().path_blend_time == 4.0
+        @test tos.path_blend_time == 6.0
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
         @test tos.candidate_elevation_margin == 3.0
