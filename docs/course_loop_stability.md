@@ -67,10 +67,19 @@ old model.
     and the worse result is reported. In practice it matters only at very low `v_a`.
   - The plant is ZOH-discretized at `1/sample_freq`, and the dead time is an
     exact `round(τ_kite/Ts)`-sample shift register.
-- **Pattern (phase ≥ 3) only:** two more factors, from the validation.
+- **Pattern (phase ≥ 3) only:** three changes, from the validation.
+  - The kite's response time follows the **pattern law**,
+    `τ_kite + T_kite = 0.14 s · (34/v_a)^0.74` (`pattern_dead_time_lag`), the
+    table's dead time and lag scaled by one factor so their sum follows it
+    (at other depowers times the table's depower ratio). Re-identified on 12
+    pattern logs from 12.8 to 40.6 m/s (2026-09-27): flatter over `v_a` than
+    the relay sweeps, which fly at 73° and give the kite 50 % more delay at
+    13 m/s. Below 12.8 m/s it is extrapolated. The entry keeps the table:
+    it flies high, close to the sweeps' conditions.
   - `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
     identified law says (0.8 at 1.1 Hz, 0.6 – 0.7 above 1.4 Hz, ~10° more
-    lag); a lag-lead, zero 1.08 Hz, pole 0.72 Hz, identified at `v_a` ≈ 34 m/s.
+    lag); a lag-lead, zero 0.80 Hz, pole 0.58 Hz, fitted at `v_a` ≈ 34 m/s
+    against the plant with the pattern law.
   - `guidance_tf`: the attractor guidance, `1 + ω_g/s` with
     `ω_g = v_k/(L·D)`, `v_k = 0.96·v_a` (measured at 200 and 300 m), `L` the
     project's tether length and `D` the attractor's arc distance. The
@@ -214,22 +223,25 @@ the time and the loop is not linear enough to measure.
 
 `examples/stability_fig8.jl`, project `system_fig8_200m.yaml`, dt = 0.01 s,
 same controller settings as below, tape lag 0.1 s, guidance corner
-`ω_g` = 0.93 rad/s at 27 m/s.
+`ω_g` = 0.93 rad/s at 27 m/s, kite response time from the pattern law.
 
 Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
 
-| v_a | Kite dead time + lag | α | Critical frequency | Delay margin | Inner loop alone: α / delay margin |
+| v_a | Kite dead time + lag (pattern law) | α | Critical frequency | Delay margin | Inner loop alone (table): α / delay margin |
 |---|---|---|---|---|---|
-| 5 m/s | 0.375 + 0.975 s | 0.65 | 0.09 Hz | 1.29 s | 0.98 / 2.18 s |
-| 10 m/s | 0.183 + 0.390 s | 0.77 | 0.23 Hz | 0.72 s | 1.02 / 1.14 s |
-| 15 m/s | 0.121 + 0.229 s | 0.71 | 0.45 Hz | 0.46 s | 0.87 / 0.70 s |
-| 20 m/s | 0.090 + 0.156 s | 0.61 | 0.62 Hz | 0.30 s | 0.72 / 0.44 s |
-| 27 m/s | 0.066 + 0.105 s | 0.59 | 0.76 Hz | 0.24 s | 0.68 / 0.33 s |
-| 35 m/s | 0.050 + 0.075 s | 0.68 | 0.84 Hz | 0.24 s | 0.78 / 0.36 s |
-| 45 m/s | 0.039 + 0.054 s | 0.72 | 0.87 Hz | 0.23 s | 0.86 / 0.37 s |
+| 5 m/s | 0.161 + 0.418 s | 1.08 | 0.08 Hz | 1.87 s | 0.98 / 2.18 s |
+| 10 m/s | 0.111 + 0.236 s | 1.05 | 0.36 Hz | 0.89 s | 1.02 / 1.14 s |
+| 15 m/s | 0.089 + 0.168 s | 0.86 | 0.56 Hz | 0.53 s | 0.87 / 0.70 s |
+| 20 m/s | 0.076 + 0.132 s | 0.70 | 0.69 Hz | 0.34 s | 0.72 / 0.44 s |
+| 27 m/s | 0.064 + 0.102 s | 0.66 | 0.80 Hz | 0.26 s | 0.68 / 0.33 s |
+| 35 m/s | 0.055 + 0.082 s | 0.66 | 0.82 Hz | 0.24 s | 0.78 / 0.36 s |
+| 45 m/s | 0.048 + 0.066 s | 0.68 | 0.84 Hz | 0.22 s | 0.86 / 0.37 s |
 
-The same pattern at other tether lengths (the guidance corner scales as 1/L):
-minimum α 0.64 at 300 m, 0.59 at 200 m, 0.54 at 150 m (150 m extrapolated).
+The rows below 12.8 m/s extrapolate the pattern law. The same pattern at other
+tether lengths (the guidance corner scales as 1/L): minimum α 0.71 at 300 m,
+0.66 at 200 m, 0.58 at 150 m. Against every margin measured (150 – 300 m,
+`v_a` 22 – 40 m/s) this loop is low by 0 – 42 % in the delay margin and
+21 – 45 % in the gain margin (`Plan_model_validation.md`, V4).
 
 Entry (phases 1 – 2, `entry_gain` 0.25, inner loop), depower 0.37: α 0.50 at
 5 m/s (the gravity pole, see [Entry at low v_a](#entry-at-low-v_a)), 1.37 at
@@ -239,16 +251,17 @@ Full gain at `v_a = v_app_ref = 27 m/s`, over depower (pattern loop):
 
 | Depower | 0.250 | 0.275 | 0.300 | 0.325 | 0.350 | 0.375 | 0.400 |
 |---|---|---|---|---|---|---|---|
-| α | 0.57 | 0.60 | 0.66 | 0.70 | 0.78 | 0.84 | 0.83 |
-| Delay margin | 0.22 s | 0.25 s | 0.30 s | 0.35 s | 0.41 s | 0.46 s | 0.50 s |
+| α | 0.61 | 0.64 | 0.70 | 0.77 | 0.81 | 0.87 | 0.85 |
+| Delay margin | 0.23 s | 0.26 s | 0.31 s | 0.37 s | 0.42 s | 0.47 s | 0.52 s |
 
 Large errors (`step_response`, real tape with `steering_gain` 10), overshoot
 [deg]: none up to 45°; at 90° 6.9 – 14.6°, at 135° 6.7 – 26.5°, at 170°
 9.8 – 34.8° (13 – 35 m/s). Every case settles, no limit cycle.
 
 **All margins robust (α ≥ 0.5).** The guidance costs margin (the pattern's
-minimum α falls from 0.68 to 0.59 at 200 m), the faster tape gives some back;
-since the model is conservative at 200 – 300 m, the real loop has more.
+minimum α falls from 0.68 to 0.66 at 200 m), the faster tape and the pattern
+law give some back; since the model is conservative at every point measured,
+the real loop has more.
 
 ## Results with the 2026-09-25 model
 

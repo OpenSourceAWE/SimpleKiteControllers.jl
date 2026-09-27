@@ -998,6 +998,44 @@ by a third at 13 m/s. Adopting the pattern law (for the pattern loop, keeping
 the table's split ratio per depower) would remove that pessimism at low `v_a`;
 the depower dependence in pattern flight is not measured (all runs at 0.27).
 
+#### The pattern law in the model (2026-09-27)
+
+`course_loop_model.jl`: `pattern_dead_time_lag(tc, v_app; tc_ref)` scales the
+table's dead time and lag by one factor so their sum follows
+`PATTERN_DELAY_REF · (PATTERN_V_REF/v_a)^PATTERN_DELAY_EXP` = 0.14 s ·
+(34/v_a)^0.74; at a depower other than `PATTERN_LAW_DEPOWER` (0.27) times the
+table's ratio of that depower's sum to 0.27's, so the table's depower effect
+and each row's split are kept (unit-tested). `stability_fig8.jl` uses it for
+the pattern loop; the entry keeps the table (it flies high, near the relay
+sweeps' 73°), and `pattern_frd_margins` keeps the table plant its measured
+correction is relative to.
+
+`kite_correction` was fitted against the table's plant, where at 34 m/s part
+of its lag stood in for the ~0.012 s the table lacks; refitted against the
+pattern-law plant on the same V2 lines (0.5 – 2.1 Hz): zero 0.80 Hz, pole
+0.58 Hz (was 1.08 / 0.72), −8.5° at 1 Hz (was −11.4°), high-frequency gain
+0.72 (was 0.67), log-RMS 0.200 (the old one on the new plant 0.208).
+`validate_margins.jl`'s `model_loops(...).corrected` is the same pattern
+model.
+
+Against every margin measured (the "re-run V1 at one point" of the rule,
+done against all V1/V2 points instead, no new runs needed):
+
+| point | measured DM / GM | model DM / GM | error, pattern law (table) |
+|---|---|---|---|
+| 150 m, 33.6 m/s | 0.274 s / 3.51 | 0.204 s / 2.52 | −26 / −28 % (−28 / −30 %) |
+| 200 m, 22.4 m/s | 0.480 s / 3.35 | 0.280 s / 2.52 | −42 / −25 % (−48 / −33 %) |
+| 200 m, 34.7 m/s | 0.324 s / 4.11 | 0.241 s / 2.59 | −26 / −37 % (−25 / −33 %) |
+| 300 m, 23.7 m/s | 0.301 s / 4.56 | 0.302 s / 2.55 | ±0 / −44 % (−9 / −50 %) |
+| 300 m, 33.6 m/s | 0.363 s / 5.0 | 0.294 s / 2.74 | −19 / −45 % (−19 / −42 %) |
+| 300 m, 40.1 m/s | 0.344 s / 3.80 | 0.292 s / 2.99 | −15 / −21 % (−14 / −13 %) |
+
+Still conservative everywhere, a little less so at low `v_a`. The law's main
+effect is below 20 m/s, where no margin was measured: at 200 m and 15 m/s the
+pattern α rises from 0.71 to 0.86 and the delay margin from 0.46 to 0.53 s;
+the minimum pattern α is now 0.71 (300 m), 0.66 (200 m), 0.58 (150 m), at
+27 – 35 m/s. Below 12.8 m/s the law is extrapolated.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -1091,7 +1129,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | Decide whether the model adopts the pattern's response-time law, `0.14 s·(34/v_a)^0.74` (V4); if so, re-run the stability tables and V1 at one point | code, then 1 – 2 runs | – |
+| 1 | The pattern law at other depowers (all pattern runs flew 0.27) and below 12.8 m/s (extrapolated) | pattern runs at another `depower_setpoint`; weak-wind reel-out | 2 – 4 runs |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -1124,6 +1162,7 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | V3: `examples/replay_prediction.jl`, 12 held-out logs | turn-rate VAF 0.94 – 0.98 from 15 m/s up (pass), 0.15 at 10 – 15 m/s (fail); gain right from 20 m/s up | `cb8e2a5` |
 | The plant below 20 m/s, from the V3 logs | two effects, both making the model pessimistic: the clamp in the fig8 transitions; in the reel-out a faster kite than the table (0.28 s against 0.43 s) with 12 % less gain | `865b3fd` |
 | V4: the turn-rate law re-identified in pattern flight (12 logs, `v_a` 12.8 – 40.6 m/s) and one relay sweep at depower 0.40, 15 m/s | `c1` as in the table (±5 %); the response time follows `0.14 s·(34/v_a)^0.74`, flatter than the table's scaling; no tether-length effect | – |
+| The pattern law adopted in the model (`pattern_dead_time_lag`), `kite_correction` refitted against it, the stability tables re-run | against every measured margin: delay margin 0 – 42 % low, gain margin 21 – 45 % low; pattern α ≥ 0.58 (150 m) … 0.71 (300 m) | – |
 
 ## Open questions
 
