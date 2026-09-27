@@ -196,10 +196,11 @@ margins from the other's within 20 %, and `pattern_frd_margins` in
 table's features move as `f ∝ v_a`, its dip depth does not follow `v_a`
 smoothly; between the measured airspeeds it is interpolated (within ~23 %).
 The parametric model (guidance + kite correction) is conservative at every
-measured point — delay margin 9 – 28 % low, gain margin 2.5 – 2.9 against
-3.5 – 5.0, α 0.58 – 0.79 against 0.72 – 0.92, from 150 to 300 m (150 m with
-an enlarged pattern, see the plan) — so the tables below, which use it, are
-safe; their delay and gain margins are pessimistic. The measured-correction
+measured point — delay margin 9 – 48 % low (the most at `v_a` 22 m/s),
+gain margin 2.2 – 2.9 against 3.3 – 5.0, α 0.57 – 0.79 against 0.72 – 0.92,
+from 150 to 300 m and `v_a` 22 – 40 m/s (150 m with an enlarged pattern, see
+the plan) — so the tables below, which use it, are safe; their delay and gain
+margins are pessimistic. The measured-correction
 model gets the delay margin right at every length, but its gain margin is
 optimistic at shorter tethers (+19 % at 200 m, +33 % at 150 m).
 

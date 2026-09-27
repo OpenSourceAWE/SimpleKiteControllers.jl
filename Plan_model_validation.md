@@ -794,6 +794,50 @@ is indexed by `v_a` only; the 150 m points are kept in
 all three lengths** and stays the one to design with; the measured-correction
 margins are realistic for the delay margin, and for the gain margin at 300 m.
 
+#### Points B and C by injection (2026-09-27)
+
+Decided: B and C by V2 injection instead of V1 bisection (V2 reproduced V1
+within 15 % at D, with 1 – 2 runs instead of ~17 per point).
+
+**Point B** (`system_fig8_200m.yaml`, 4.5 m/s, `v_steering` 1.0 s⁻¹ for the
+runs only). Baseline: `v_a` 22.4 m/s, peak command 95 %, never at the clamp,
+lap 20.15 s, phase 4 from 68 s. Injection between the lap harmonics, 0.2 –
+2.2 Hz and every other line to 4 Hz, 8 periods; all 58 lines clean (1 – 6 %
+spread around the crossovers).
+
+| point B, `v_a` 22.4 m/s | delay margin | gain margin | phase crossover |
+|---|---|---|---|
+| measured | 0.480 s (0.40 Hz, PM 69°) | 3.35 | 0.71 Hz |
+| parametric model | 0.252 s (−48 %) | 2.25 (−33 %) | 0.94 Hz |
+| measured-correction model (extrapolated below 23.7 m/s) | 0.274 s (−43 %) | 4.43 (+32 %) | 0.78 Hz |
+
+The parametric model is conservative here too, by nearly half on the delay
+margin: the real loop has less gain near 0.4 Hz and loses phase faster (phase
+crossover 0.71 Hz). The correction table, extrapolated below its lowest
+airspeed, is optimistic on the gain margin again.
+
+**Point C** (`system_reelout_maasvlakte.yaml`, `simple_opt_reelout.jl`,
+4 m/s). The reel-out takes the injection as `STEER_DISTURBANCE` (absolute
+time), now wrapped by `DelayedInjection` in `run_v1` so it starts at
+`t_phase4 + HOOK_SETTLE` like `STEER_INJECTION`; the reel-out's gain scale
+`c1(depower_setpoint)/c1(depower)` is now in `course_controller_tf`. Phase 4
+ran 26 – 220 s, tether 152 → 375 m, `v_a` 11.5 – 13.7 m/s (10 s means), the
+command at the clamp 2 – 7 % of the time. Lines on a 0.1 Hz grid (the lap
+drifts, so they cannot sit between its harmonics), 0.2 – 2 Hz, amplitude
+0.004; analysed in three tether-length segments (189, 261, 338 m, 4 – 5
+periods each). **Not usable:** |L| 1.6 – 8 at every line with scattered phase,
+which a stable loop cannot have. The pattern's own steering, near the clamp at
+this low `v_a`, swamps the injection, and with drifting lap harmonics and only
+4 – 5 periods the average cannot remove it: the ratio then measures the
+controller's reverse path, not the plant. The model's gain crossover (~0.18 Hz)
+also lies below the lowest line. A usable C needs a stronger injection, lines
+down to 0.05 Hz and a steadier operating point than a reel-out gives; the
+reel-out loop has its own analysis in `course_loop_stability_reelout.md`.
+
+Fixed on the way: `analyze` judged C's ±10 % `v_a` drift on single samples,
+which within a lap swing more than that (the window shrank to 0.2 s); it now
+uses 10 s means. `frf_injection` takes `t_end`.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -887,7 +931,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
+| 1 | Point C (reel-out) by injection: needs a stronger injection, lines down to 0.05 Hz and a steadier operating point; or leave it to `stability_opt_reelout.jl`'s own validation | design first | 2 – 3 long runs |
 | 2 | V3 | existing logs, a replay script | no new runs |
 | 3 | V4 | relay sweeps | 4 – 5 sweeps |
 
@@ -917,7 +961,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | `docs/course_loop_stability.md` updated: current model, "Model validation" section, current results; the 2026-09-25 sections marked as the old model's | – | `6e9a956` |
 | The course correction over 200 – 300 m: measured table `data/course_correction_measured.csv`, `course_correction`, `frd_diskmargin`, `pattern_frd_margins` in `stability_fig8.jl` | each length's margins predicted from the other's within 20 %; pooled table within 1 – 19 % | – |
 | The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | `5a0253d` |
-| 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | – |
+| 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | `f143de9` |
+| Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | – |
 
 ## Open questions
 
