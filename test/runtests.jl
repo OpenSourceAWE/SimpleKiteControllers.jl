@@ -51,5 +51,7 @@ using Test
     include("test_course_controller.jl")
     include("test_optimization.jl")
     include("test_reelout_metrics.jl")
+    # V5 of docs/Plan_model_validation.md: course_loop_model.jl, no simulation.
+    include("test_course_loop_model.jl")
 end
 nothing
