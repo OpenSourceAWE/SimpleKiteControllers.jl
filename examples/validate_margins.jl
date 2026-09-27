@@ -103,6 +103,25 @@ const V1_POINTS = Dict(
     :F => V1Point("system_fig8_150m.yaml", "simple_fig8.jl", 7.0, 120.0, 35.0),
 )
 
+"""
+    DelayedInjection(m, settle)
+
+`t -> Δu` for `simple_opt_reelout.jl`'s `STEER_DISTURBANCE`, which is called
+with the absolute time: zero until `settle` [s] after phase 4 is first reached
+(the script's global `t_phase4`), then `m(τ)`, τ the time since then. The same
+start as `STEER_INJECTION` in `simple_fig8.jl`, so `frf_injection` works on
+either script's runs.
+"""
+struct DelayedInjection{F}
+    m::F
+    settle::Float64
+end
+function (d::DelayedInjection)(t)
+    tp = isdefined(Main, :t_phase4) ? Main.t_phase4 : NaN
+    tp isa Base.RefValue && (tp = tp[])
+    return (isnan(tp) || t < tp + d.settle) ? 0.0 : d.m(t - tp - d.settle)
+end
+
 "Matches the scripts' own default; passed explicitly so a sweep cannot drift from it."
 const HOOK_SETTLE_V1 = 15.0
 
@@ -221,7 +240,13 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     Core.eval(Main, :(STEER_GAIN_FEEDBACK_ONLY = $feedback_only))
     Core.eval(Main, :(EXTRA_STEER_DELAY = $extra_delay))
     Core.eval(Main, :(HOOK_SETTLE = $hook_settle))
-    Core.eval(Main, :(STEER_INJECTION = $injection))
+    if p.script == "simple_opt_reelout.jl"
+        # The reel-out script takes a test input as STEER_DISTURBANCE, called with the absolute time.
+        dist = isnothing(injection) ? nothing : DelayedInjection(injection, hook_settle)
+        Core.eval(Main, :(STEER_DISTURBANCE = $dist))
+    else
+        Core.eval(Main, :(STEER_INJECTION = $injection))
+    end
     @info @sprintf("V1 %s (%s): gain factor %.4g%s, extra delay %d samples%s, \
                     wind %.1f m/s, sim_time %.0f s.",
                    point, label, gain_factor, feedback_only ? " (feedback only)" : "",
@@ -472,9 +497,15 @@ function analyze(point, log_path; hook_settle = HOOK_SETTLE_V1, gain_factor = 1.
     # empirically (2026-09-27, point A's delay sweep) before this was scoped
     # to :C.
     if point == :C
+        # Judged on 10 s means: within a lap v_a swings by more than 10 % on its own.
         v_a_all = Float64.(sl.v_app[active])
+        tt = t[active]
         va0 = mean(v_a_all)
-        cut = findfirst(v -> abs(v - va0) / va0 > 0.10, v_a_all)
+        h = max(1, round(Int, 5 / (tt[2] - tt[1])))
+        cs = vcat(0.0, cumsum(v_a_all))
+        mean10 = [(cs[min(k + h, end - 1) + 1] - cs[max(k - h, 1)]) / (min(k + h, length(tt)) - max(k - h, 1) + 1)
+                  for k in eachindex(tt)]
+        cut = findfirst(v -> abs(v - va0) / va0 > 0.10, mean10)
         isnothing(cut) || (active = active[1:(cut - 1)])
     end
 
@@ -568,25 +599,26 @@ end
 (m::Multisine)(τ) = m.amp * sum(sin(2π * f * τ + φ) for (f, φ) in zip(m.freqs, m.phases))
 
 """
-    frf_injection(r, m::Multisine; skip = 1) -> Vector{NamedTuple}
+    frf_injection(r, m::Multisine; skip = 1, t_end = Inf) -> Vector{NamedTuple}
 
 Frequency responses of the links of the loop at every line of `m`, from a run
 `r` flown with `injection = m`: command → tape (`tape`), command → heading
 (`heading`), heading → course (`course`) and course → regulated error
 (`err`). Each whole period after the injection started (the first `skip`
 periods dropped as transient, only phase 4) is Fourier-transformed at the
-lines; the spectra are averaged over the periods, which keeps what is
+lines, up to `t_end` [s] (for a drifting operating point, like the reel-out's);
+the spectra are averaged over the periods, which keeps what is
 periodic with the injection and averages out the pattern's own content, and
 the links are ratios of the averages. `*_sd` is the standard deviation of the
 per-period ratio's magnitude, relative, over the periods.
 """
-function frf_injection(r, m::Multisine; skip = 1)
+function frf_injection(r, m::Multisine; skip = 1, t_end = Inf)
     sl = load_log(basename(r.log_path); path = dirname(r.log_path)).syslog
     t = Float64.(sl.time)
     phase = Int.(sl.sys_state)
     t0 = r.t_phase4 + r.hook_settle + skip * m.period
     last4 = findlast(k -> phase[k] == 4, eachindex(t))
-    np = floor(Int, (t[last4] - t0) / m.period)
+    np = floor(Int, (min(t[last4], t_end) - t0) / m.period)
     np >= 2 || error("frf_injection: fewer than 2 whole periods after the transient; lengthen sim_time.")
     u, s = Float64.(sl.set_steering), Float64.(sl.steering)
     ψ, χ = unwrap_angle(Float64.(sl.heading)), unwrap_angle(Float64.(sl.course))
@@ -661,12 +693,23 @@ function guidance_rate(r)
     return (; ω_g = v_k / (L * deg2rad(D)), v_k, L, D)
 end
 
-"Discrete course PD of `point` at `v_a` [m/s], with the pattern's gain floor, and its sample time."
-function course_controller_tf(point, v_a)
+"""
+    course_controller_tf(point, v_a; depower = nothing) -> (C, Ts)
+
+Discrete course PD of `point` at `v_a` [m/s], with the pattern's gain floor,
+and its sample time. For the reel-out script, `depower` [-] (the depower flown)
+adds its gain scale `c1(depower_setpoint)/c1(depower)`, which keeps the loop
+gain at `heading_p · c1(depower_setpoint)` whatever depower the optimizer flies.
+"""
+function course_controller_tf(point, v_a; depower = nothing)
     project = project_file(V1_POINTS[point].project)
     f = FC_Settings(fc_settings(project))
     Ts = 1 / Settings(project).sample_freq
     K = f.heading_p * f.v_app_ref / max(v_a, max(f.v_app_min, f.v_app_min_pattern))
+    if V1_POINTS[point].script == "simple_opt_reelout.jl" && !isnothing(depower)
+        K *= turn_rate_coeffs(f.body_damping, f.depower_setpoint).c1 /
+             turn_rate_coeffs(f.body_damping, depower).c1
+    end
     return course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts), Ts
 end
 
@@ -683,7 +726,7 @@ the result to `frd_margins`.
 function measured_loop(runs; band = (0.0, Inf))
     pts = Tuple{Float64, ComplexF64}[]
     for x in runs
-        C, Ts = course_controller_tf(x.r.point, x.r.v_a_mean)
+        C, Ts = course_controller_tf(x.r.point, x.r.v_a_mean; depower = x.r.depower)
         ω_g = guidance_rate(x.r).ω_g
         for q in x.frf
             band[1] <= q.f <= band[2] || continue
@@ -715,7 +758,7 @@ function model_loops(r)
     p = V1_POINTS[r.point]
     project = project_file(p.project)
     f = FC_Settings(fc_settings(project))
-    C, Ts = course_controller_tf(r.point, r.v_a_mean)
+    C, Ts = course_controller_tf(r.point, r.v_a_mean; depower = r.depower)
     tc = turn_rate_coeffs(f.body_damping, r.depower)
     P = turn_rate_plant(tc.c1, tc.c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
                         -cosd(f.el_center), Ts; lag = v1_lag(r.point),
