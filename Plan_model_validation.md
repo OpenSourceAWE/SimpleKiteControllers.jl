@@ -1190,7 +1190,7 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 ## Deliverables
 
 - A plot of V2's measured FRF over the model's Bode plot: done,
-  `docs/course_loop_frf.png` / `.pdf`, drawn by `examples/plot_frf_validation.jl`
+  `docs/course_loop_frf.png`, drawn by `examples/plot_frf_validation.jl`
   from `data/course_link_measured.csv` (150 / 200 / 300 m, 7 m/s). The
   injection and the FRF estimate are in `examples/validate_margins.jl`
   (`Multisine`, `frf_injection`, `measured_loop`).

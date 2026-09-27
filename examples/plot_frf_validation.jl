@@ -16,7 +16,7 @@ per tether length (150 / 200 / 300 m, 7 m/s of wind, depower 0.27).
   model before the validation.
 
 The guidance corner is `ω_g = 0.96 · v_a / (L · D)` for both, `D` from
-`attractor_distance`. Writes `docs/course_loop_frf.png` and `.pdf`.
+`attractor_distance`. Writes `docs/course_loop_frf.png`.
 
     include("examples/plot_frf_validation.jl")
 """
@@ -34,9 +34,6 @@ using LinearAlgebra: diagm
 using Statistics: mean
 using Printf
 using GLMakie
-# CairoMakie (a MakieControlPlots dependency) writes the files: it needs no OpenGL window,
-# so the script also runs headless and from a task off the main thread.
-using MakieControlPlots: CairoMakie
 
 include(joinpath(@__DIR__, "course_loop_model.jl"))
 
@@ -136,8 +133,7 @@ function plot_frf_validation(; file = joinpath(@__DIR__, "..", "docs", "course_l
     end
     Label(fig[0, :], "Course loop L = C·P·(1 + ω_g/s): measured by injection (simple_fig8.jl) against course_loop_model.jl, 7 m/s, depower 0.27";
           fontsize = 20)
-    GLMakie.save(file, fig; backend = CairoMakie)
-    GLMakie.save(replace(file, r"\.png$" => ".pdf"), fig; backend = CairoMakie)
+    GLMakie.save(file, fig)
     @info "plot_frf_validation: wrote $(normpath(file))"
     return fig
 end
