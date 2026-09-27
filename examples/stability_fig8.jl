@@ -15,10 +15,11 @@ then the turn-rate law of `data/turn_rate_coeffs.yaml`,
 
     ψ̇ = c1·v_a·u_k + c2/v_a·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
 
-The lag stands in for the KCU tape's rate limit (`v_steering`), which is
-nonlinear: `ACTUATOR_LAG` is its equivalent at the amplitudes flown in the
-pattern, where the tape is rate-limited a quarter of the time. It was
-identified on a `simple_fig8.jl` log.
+`T_act = 1/steering_gain` of the project's settings (`TAPE_LAG`, 0.1 s at
+`steering_gain` 10): the tape's small-signal lag, which injected multisines
+confirm up to 4 Hz. It leaves out the tape's rate limit (`v_steering`), which
+the pattern hits part of the time; `step_response` below checks large errors
+with it.
 
 The kite responds to the applied steering with a dead time `τ_kite` and a lag
 `T_kite` of its own, both scaling with the apparent wind speed, see
@@ -26,6 +27,20 @@ The kite responds to the applied steering with a dead time `τ_kite` and a lag
 `kite_lag` are identified by the relay sweeps of `build_turn_rate_table.jl` at
 the row's `v_app` (about 13 m/s), 0.141 + 0.267 s at depower 0.275. See
 `docs/course_loop_stability.md`.
+
+In the pattern (phase ≥ 3) two more factors, both validated against the
+simulation at 200 and 300 m (docs/Plan_model_validation.md, V1 step 1):
+
+- the attractor guidance, `guidance_tf(ω_g)` = `1 + ω_g/s`, `ω_g = v_k/(L·D)`,
+  with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;
+- `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
+  identified law says, a lag-lead identified at `v_a` ≈ 34 m/s.
+
+With them the model under-predicts the simulation's margins: the delay margin
+by 19 % at 200 and 300 m, the gain margin by 22 % (200 m) to 42 % (300 m). What
+it still lacks is the dynamics of the fed-back course, which have no low-order
+model; `frd_margins` evaluates measured data instead. The pattern tables print
+this loop and, for comparison, the inner loop `C·P` alone.
 
 The gravity term only adds a slow real pole at `±c2/v_a·cos(β)`; both signs are
 checked and the worse one is reported. The controller is the exact discrete
@@ -79,21 +94,33 @@ Ts = 1 / SET.sample_freq
 
 include(joinpath(@__DIR__, "course_loop_model.jl"))
 
+"The tape's small-signal lag [s], `1/steering_gain` of the project's settings"
+const TAPE_LAG = 1 / SET.steering_gain
+"Kite speed over apparent wind speed in the pattern, for the guidance corner: 0.96 at 200 and 300 m, 7 m/s"
+const V_K_OVER_V_A = 0.96
+
+"Corner [rad/s] of the attractor guidance at `v_app` [m/s] and the project's tether length"
+guidance_corner(v_app) = V_K_OVER_V_A * v_app /
+    (SET.l_tether * deg2rad(attractor_distance(fcs, v_app, SET.l_tether)))
+
 """
-    loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min) -> NamedTuple
+    loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false) -> NamedTuple
 
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `L = C·P` at one operating point, worst case over the sign of the gravity pole.
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
+`pattern = true` multiplies in the guidance and the kite correction.
 """
-function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min)
+function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false)
     tc = turn_rate_coeffs(fcs.body_damping, depower)
     K = K_phase * fcs.v_app_ref / max(v_app, v_min)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     cos_beta = cosd(fcs.el_center)
     τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
     results = map((-cos_beta, cos_beta)) do gravity
-        L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; kite_lag = T_kite)
+        L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
+                                kite_lag = T_kite)
+        pattern && (L = L * kite_correction(Ts) * guidance_tf(guidance_corner(v_app), Ts))
         dm = try
             diskmargin(L)
         catch
@@ -168,19 +195,26 @@ end
 @info @sprintf("Course-controller stability, project %s, body_damping = %s, dt = %.4f s, \
                 heading_p = %.3f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
-                actuator lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f.",
+                tape lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f; \
+                pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz.",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d,
                fcs.heading_d_n, fcs.heading_i, fcs.v_app_min, fcs.v_app_min_pattern,
-               ACTUATOR_LAG, KITE_DEAD_TIME_EXP, KITE_LAG_EXP)
+               TAPE_LAG, KITE_DEAD_TIME_EXP, KITE_LAG_EXP,
+               guidance_corner(fcs.v_app_ref), SET.l_tether, KITE_CORR_ZERO, KITE_CORR_POLE)
 
 v_apps = [5.0, 10.0, 15.0, 20.0, 27.0, 35.0, 45.0]
 "Floor of the gain schedule from phase 3 on, as `calc_steering` applies it"
 const V_MIN_PATTERN = max(fcs.v_app_min, fcs.v_app_min_pattern)
 
-println("Pattern (phase ≥ 3), depower = $(fcs.depower_setpoint), full gain, over v_app [m/s]:")
-pattern = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN) for v in v_apps]
+println("Pattern (phase ≥ 3), depower = $(fcs.depower_setpoint), full gain, over v_app [m/s], \
+         with guidance and kite correction:")
+pattern = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
+           for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, pattern)
 rate("Pattern", [r.α for r in pattern])
+println("  the same, inner loop C·P alone:")
+inner = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN) for v in v_apps]
+foreach((v, r) -> print_row("v_app", v, r), v_apps, inner)
 
 println("Entry (phases 1-2), depower = $(fcs.entry_depower), entry_gain = $(fcs.entry_gain), over v_app [m/s]:")
 entry = [loop_margins(fcs.entry_depower, fcs.entry_gain * fcs.heading_p, v) for v in v_apps]
@@ -189,8 +223,10 @@ rate("Entry", [r.α for r in entry])
 
 dp_lo, dp_hi = turn_rate_depower_range(fcs.body_damping)
 depowers = collect(range(dp_lo, dp_hi; length = 13))
-println("Full gain at v_app = v_app_ref = $(fcs.v_app_ref) m/s, over depower [-]:")
-sweep = [loop_margins(dp, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN) for dp in depowers]
+println("Full gain at v_app = v_app_ref = $(fcs.v_app_ref) m/s, over depower [-], \
+         with guidance and kite correction:")
+sweep = [loop_margins(dp, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN, pattern = true)
+         for dp in depowers]
 foreach((dp, r) -> print_row("depower", dp, r), depowers, sweep)
 rate("Depower sweep", [r.α for r in sweep])
 
@@ -213,11 +249,12 @@ else
 end
 
 # Nominal loop: the pattern at v_app_ref, for `diskmargin(L)` and the plots.
-L = loop_margins(fcs.depower_setpoint, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN).L
+L = loop_margins(fcs.depower_setpoint, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN,
+                 pattern = true).L
 
 if show_plots
     display(bode_plot(L; from = -2, to = log10(0.5 / Ts),
-                      title = "Course loop L = C·P, depower = $(fcs.depower_setpoint), v_app = $(fcs.v_app_ref) m/s"))
+                      title = "Course loop L = C·P·K·G, depower = $(fcs.depower_setpoint), v_app = $(fcs.v_app_ref) m/s"))
     MakieControlPlots.plot(depowers, [r.α for r in sweep], [r.delay_margin for r in sweep];
          xlabel = "relative depower [-]",
          ylabels = ["disk margin α [-]", "delay margin [s]"],
