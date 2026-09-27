@@ -50,7 +50,7 @@ kcu:
   v_depower:  0.075 # depower-tape rate limit      [1/s]
   v_steering: 0.2   # steering-tape rate limit     [1/s]
   kcu_mass: 8.4     # mass of the kite control unit [kg]
-  steering_gain: 6.0 # steering gain of the KCU [-]
+  steering_gain: 10.0 # steering gain of the KCU [-]
 
 tether:
   # Bosch et al. 2014 used k = AE/L = 4.52E3 N/m for the bridles of the V3
