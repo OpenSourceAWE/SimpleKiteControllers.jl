@@ -15,10 +15,11 @@ differ in the reel-out:
 - **The tape's lag.** `ACTUATOR_LAG` (0.43 s) is the tape's equivalent lag in
   the fig8 pattern, where it is rate-limited 20 % of the time. The reel-out
   steers less hard, and the lag is fitted on the log instead, per
-  tether-length bin on the same samples ([`fit_actuator_lag`](@ref)). In
-  phase 4 it is 0.33 s at 5 and 10 m/s, the small-signal `1/steering_gain`,
-  with the tape rate-limited 0 – 5 % of the time; phase 5 steers harder
-  (0.45 s at 5 m/s).
+  tether-length bin on the same samples ([`fit_actuator_lag`](@ref)). Since
+  the actuator model was sped up, the lag is much lower here: in phase 4 it
+  is about 0.20 s at 6 m/s wind, the small-signal `1/steering_gain`, with the
+  tape rate-limited ~4 % of the time; phase 5 steers harder (about 0.24 s,
+  also ~4 % rate-limited), rising to 0.31 s in the last, largest-signal bin.
 
 - **The kite's dead time and lag.** As in `stability_fig8.jl`, from the
   turn-rate table ([`kite_dead_time`](@ref), [`kite_lag`](@ref)): the relay
