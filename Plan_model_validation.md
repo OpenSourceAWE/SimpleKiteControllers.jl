@@ -673,6 +673,92 @@ At 35 m/s this reproduces the validation above (0.292 s at 300 m, 0.243 s at
 and the model is known to be conservative at 200 – 300 m. The 150 m row is
 extrapolated (not measured). The entry's minimum α is 0.50, at 5 m/s.
 
+#### The course correction over 200 – 300 m (2026-09-27)
+
+A 12-period injection at 200 m (lines between the harmonics of the steady
+13.15 s lap, 0.2 – 2.2 Hz and every other one to 4 Hz, amplitude 0.004,
+`v_steering` 1.0 s⁻¹ for the run only; the command touches the clamp at its
+peaks) gives the course correction `M(f)` = measured command → course over the
+model's tape × turn-rate law (without `kite_correction`, which `M` contains):
+
+- 0.5 – 1.1 Hz: the same as at 300 m within ~±20 % (0.8 – 0.9 at 0.5 Hz,
+  ~0.6 at 0.9 Hz, similar small lags);
+- 1.1 – 2 Hz: noisy at 200 m (spread 20 – 180 %), no contradiction;
+- 2 – 4 Hz: the same rise and phase at both lengths (~2 at 2.3 – 2.6 Hz,
+  ~4.3 at 3.2 – 3.7 Hz, 6 – 7 at 4 Hz, −110 … −150°).
+
+`M` does not depend on the tether length; the guidance, which does, scales
+as 1/L in the model. Tested by predicting each length's margins with the
+other length's `M` (as a table, with `frd_margins`):
+
+| | delay margin | gain margin | phase crossover |
+|---|---|---|---|
+| 200 m, measured (12-period run) | 0.324 s | 4.11 | 1.21 Hz |
+| 200 m, model with the 300 m `M` | 0.263 s (−19 %) | 4.90 (+19 %) | 1.11 Hz |
+| 300 m, measured | 0.363 s | 5.0 | 1.12 Hz |
+| 300 m, model with the 200 m `M` | 0.375 s (+3 %) | 4.19 (−16 %) | 1.21 Hz |
+| 200 m / 300 m, model with the pooled `M` | 0.326 / 0.375 s | 4.91 / 5.03 | 1.11 / 1.12 Hz |
+
+Both cross-predictions pass V1's tolerances. The disk margin α hardly
+depends on `M`: 0.66 / 0.75 with the pooled `M` against 0.68 / 0.73 with
+`kite_correction`, and 0.72 measured at 300 m — α is decided around the
+crossovers, where the parametric model is close. So `stability_fig8.jl`'s α
+tables hold; its delay and gain margins are conservative.
+
+In the code: the pooled `M` is `data/course_correction_measured.csv` (68
+lines, 0.2 – 4 Hz); `load_course_correction`, `course_correction` and
+`frd_diskmargin` are in `course_loop_model.jl` (unit-tested); and
+`stability_fig8.jl` prints `pattern_frd_margins` at 35 m/s: α 0.76 / DM 0.376 s
+/ GM 4.85 at 300 m, 0.66 / 0.326 s / 4.91 at 200 m, 0.55 / 0.272 s / 4.73 at
+150 m (extrapolated). The 200 m rows of `data/course_link_measured.csv` now
+come from the 12-period run. `M` was measured at `v_a` ≈ 34 m/s only.
+
+#### The course correction over the airspeed (2026-09-27)
+
+The correction had been measured at `v_a` ≈ 34 m/s only. At 300 m, 10 m/s
+wind is not flyable with the flown settings (the pattern exceeds `v_app_abort`
+= 45 m/s at 54 s), so the points are 5 m/s (`v_a` 23.7 m/s, lap 28.5 s; the
+kite dips below the ground in phase 3, phase 4 stays at 18 – 33° elevation)
+and 8.5 m/s (`v_a` 40.1 m/s, lap 16.9 s), each with lines between the lap
+harmonics, 8 periods, amplitude 0.004, `v_steering` 1.0 s⁻¹ for the runs only,
+command at 76 – 77 % of the clamp at most.
+
+| feature of `M` | `v_a` 23.7 m/s | 34 m/s | 40.1 m/s |
+|---|---|---|---|
+| dip minimum | 0.29 at 0.9 – 1.0 Hz | 0.19 – 0.25 at 1.2 – 1.3 Hz | 0.35 – 0.46, 1.2 – 1.8 Hz |
+| phase through −90° | ~1.05 Hz | ~1.35 Hz | ~1.6 Hz |
+| gain back to 2 | ~1.75 Hz | ~2.5 Hz | ~2.8 Hz |
+
+The features move as `f ∝ v_a` (a fixed distance flown, like the kite's dead
+time): the 34 m/s table scaled that way puts the phase crossover exactly at
+the measured 0.84 Hz (23.7 m/s) and 1.308 Hz (40.1 m/s). The dip DEPTH does
+not follow `v_a` smoothly (0.3, 0.2, 0.4 – 0.5; the dip is where the course
+response is smallest, so partly noise). Consequences:
+
+| | 23.7 m/s: DM / GM | 40.1 m/s: DM / GM |
+|---|---|---|
+| measured (V2 loop) | 0.301 s / 4.56 | 0.344 s / 3.80 |
+| 34 m/s table, unscaled | +17 % / −35 % | +10 % / +86 % |
+| 34 m/s table, scaled `f ∝ v_a` | +42 % / +27 % | −2 % / +50 % |
+| parametric model (guidance + kite correction) | −9 % / (2.8 – 2.9) | −14 % / (2.8 – 2.9) |
+
+One table scaled in frequency over-predicts the margins by up to 50 %: not
+usable. Interpolating between the tables of the neighbouring airspeeds
+(each scaled to `v_a`, `log|M|` and phase blended linearly) predicts the left-out
+34 m/s point at DM 0.280 s (−23 %) and GM 3.88 (−22 %), on the safe side. That
+is what `course_correction(tabs, f, v_a)` does now; the file holds the three
+tables (23.7, 34 pooled, 40.1 m/s). `stability_fig8.jl` prints the measured-
+correction margins at 25 / 34 / 40 m/s (300 m: DM 0.298 / 0.376 / 0.342 s, GM
+4.82 / 4.89 / 3.80, reproducing the measurements) next to the parametric loop
+(DM 0.283 / 0.293 / 0.295 s).
+
+**Reading:** over `v_a` 24 – 40 m/s and 200 – 300 m the parametric model
+(guidance + kite correction) is conservative at every measured point — delay
+margin 9 – 19 % low, gain margin 2.8 – 2.9 against 3.8 – 5.0 measured, α
+0.60 – 0.79 against 0.72 – 0.92 — and remains the one to design with. The
+measured correction gives the realistic margins at the measured airspeeds and
+interpolates between them to within ~23 %.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -766,11 +852,10 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | The fed-back course's own dynamics: a model that holds over 200 – 300 m (not low-order at one point, see V1 step 1) | more injection runs | 2 – 4 long runs |
-| 2 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
-| 3 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
-| 4 | V3 | existing logs, a replay script | no new runs |
-| 5 | V4 | relay sweeps | 4 – 5 sweeps |
+| 1 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
+| 2 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
+| 3 | V3 | existing logs, a replay script | no new runs |
+| 4 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -795,7 +880,9 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | V1 step 1: guidance and kite correction in `course_loop_model.jl`, `frd_margins` | model conservative at 200 – 300 m (delay margin −19 %, gain margin −22 … −42 %) | – |
 | V2 at 300 m (0.2 – 4 Hz) and 200 m (0.2 – 2.2 Hz), `STEER_INJECTION` | the measured loop reproduces V1's margins at 300 m within 15 % | – |
 | `stability_fig8.jl` uses the tape lag `1/steering_gain`, `guidance_tf` and `kite_correction` in the pattern | pattern α ≥ 0.64 (300 m), 0.59 (200 m), 0.54 (150 m) | `068bec1` |
-| `docs/course_loop_stability.md` updated: current model, "Model validation" section, current results; the 2026-09-25 sections marked as the old model's | – | – |
+| `docs/course_loop_stability.md` updated: current model, "Model validation" section, current results; the 2026-09-25 sections marked as the old model's | – | `6e9a956` |
+| The course correction over 200 – 300 m: measured table `data/course_correction_measured.csv`, `course_correction`, `frd_diskmargin`, `pattern_frd_margins` in `stability_fig8.jl` | each length's margins predicted from the other's within 20 %; pooled table within 1 – 19 % | – |
+| The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | – |
 
 ## Open questions
 

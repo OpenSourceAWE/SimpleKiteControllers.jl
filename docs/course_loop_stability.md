@@ -188,6 +188,18 @@ wind, no turbulence, `steering_gain` 10.
 | 200 m, measured | 0.300 s | 3.53 |
 | 200 m, model with guidance and kite correction | 0.243 s (−19 %) | 2.76 (−22 %) |
 
+With the course dynamics included as a measured table (`M(f, v_a)`,
+`data/course_correction_measured.csv`, measured at `v_a` 23.7, 34 and 40.1 m/s;
+the same at 200 and 300 m within ~20 %), the model predicts each length's
+margins from the other's within 20 %, and `pattern_frd_margins` in
+`stability_fig8.jl` reproduces the measured margins at 25, 34 and 40 m/s. The
+table's features move as `f ∝ v_a`, its dip depth does not follow `v_a`
+smoothly; between the measured airspeeds it is interpolated (within ~23 %).
+The parametric model (guidance + kite correction) is conservative at every
+measured point — delay margin 9 – 19 % low, gain margin 2.8 – 2.9 against
+3.8 – 5.0, α 0.60 – 0.79 against 0.72 – 0.92 — so the tables below, which use
+it, are safe; their delay and gain margins are pessimistic.
+
 The inner loop alone gets the 300 m delay margin right by coincidence: the
 missing guidance and the missing course dynamics cancel there. With both
 known parts added, the model errs on the safe side at 200 and 300 m. At
@@ -419,10 +431,11 @@ From the 2026-09-25 model; for the current numbers see
 
 ## Caveats
 
-- **The fed-back course's own dynamics are not modelled** (2026-09-27). They
-  are what makes the model conservative (see
-  [Model validation](#model-validation-2026-09-27)); they have no low-order
-  model, and `frd_margins` evaluates measured data instead.
+- **The fed-back course's own dynamics have no low-order model** (2026-09-27).
+  They are what makes the parametric model conservative (see
+  [Model validation](#model-validation-2026-09-27)); `pattern_frd_margins`
+  uses the measured table instead, which holds at 200 – 300 m and `v_a`
+  23.7 – 40.1 m/s; outside that it is extrapolated.
 - **The rate limit is nonlinear.** Small corrections pass the tape with the
   `1/steering_gain` lag, large ones lag more the larger they are; the model
   has only the small-signal lag. At 300 m the flown rate limit costs ~0.045 s
