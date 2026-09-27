@@ -908,6 +908,40 @@ in weak wind — the stability analyses rest on a turn-rate law the logs do not
 confirm, and it errs on the side of too much turn rate (for the loop: too
 much gain, so its margins there are, if anything, pessimistic).
 
+#### The plant below 20 m/s (2026-09-27)
+
+V3's 10 – 15 m/s bin, by log and phase:
+
+| log, phase | samples | VAF | slope | command at the clamp |
+|---|---|---|---|---|
+| fig8 B, D, D5, phase 3 (transition) | 600 – 1000 each | −0.66 … 0.55 | 0.41 – 0.64 | 74 – 82 % |
+| reel-out C, phase 3 | 1013 | 0.74 | 0.70 | 35 % |
+| reel-out C, phase 4 | 15 173 | 0.29 | 0.59 | 2 % |
+| reel-out C, phase 5 (380 m, held) | 1607 | 0.94 | 1.02 | 1 % |
+
+Two separate effects:
+
+1. **The fig8 transitions are large-signal.** The command sits on the clamp
+   74 – 82 % of the time, far outside the range the law was identified in
+   (|u| ≤ 0.175), where the turn rate is known to stay well below the law's.
+   Not a small-signal model error; a linear model does not apply there.
+2. **In the reel-out the kite is faster than the table.** Re-identified on the
+   log (`identify_turn_rate_law`, from the tape position), phase 4 at `v_a`
+   12.8 m/s, elevation 14 – 22°, tether 184 / 259 / 337 m: `c1` 0.90 / 0.87 /
+   0.86 of the table, delay 0.27 / 0.29 / 0.30 s against the table's dead time
+   + lag 0.43 s at the same `v_a` (phase 5, 380 m, 11 m/s: 0.78, 0.40 s against
+   0.55 s). Replayed from the tape position, phase 4 reaches VAF 0.83 – 0.84
+   with the identified delay and gain (0.73 with the table's). The table was
+   identified by relay sweeps at the same airspeed (13.3 m/s) but at 73°
+   elevation and 150 m; at 36 m/s in the pattern its scaling does match
+   (0.125 s against 0.12 s). **At low `v_a` the kite's response time depends
+   on the flight condition, not on `v_a` alone.**
+
+Both make the model's margins at low `v_a` pessimistic: too much turn rate
+(gain) in the transitions, too much delay and 12 % too much gain in the
+reel-out. V4's sweep at pattern elevation and tether length is the one that
+would settle the second; it should include `v_a` ≈ 13 m/s.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -1001,8 +1035,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | The plant at `v_a` < 20 m/s: V3 finds the model's turn rate 1.5 – 2.5× too large there (reel-out at 13 m/s, fig8 transitions) | analysis of the V3 logs, then relay sweeps at low `v_a` | V4-like sweeps |
-| 2 | V4 | relay sweeps | 4 – 5 sweeps |
+| 1 | V4, first the sweep at pattern elevation and tether length at low `v_a` (~13 m/s): the reel-out shows a faster kite (0.28 s against the table's 0.43 s) | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -1032,7 +1065,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | `f143de9` |
 | Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | `13c28af` |
 | Point C (reel-out): closed by the reel-out's own validation, the cross-track step tests of `course_loop_stability_reelout.md` | guided-loop damping 0.50 – 0.62 measured against 0.44 – 0.55 modelled, off the steering clamp | `398aa46` |
-| V3: `examples/replay_prediction.jl`, 12 held-out logs | turn-rate VAF 0.94 – 0.98 from 15 m/s up (pass), 0.15 at 10 – 15 m/s (fail); gain right from 20 m/s up | – |
+| V3: `examples/replay_prediction.jl`, 12 held-out logs | turn-rate VAF 0.94 – 0.98 from 15 m/s up (pass), 0.15 at 10 – 15 m/s (fail); gain right from 20 m/s up | `cb8e2a5` |
+| The plant below 20 m/s, from the V3 logs | two effects, both making the model pessimistic: the clamp in the fig8 transitions; in the reel-out a faster kite than the table (0.28 s against 0.43 s) with 12 % less gain | – |
 
 ## Open questions
 
