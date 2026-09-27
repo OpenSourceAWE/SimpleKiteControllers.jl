@@ -445,6 +445,11 @@ From the 2026-09-25 model; for the current numbers see
   has only the small-signal lag. At 300 m the flown rate limit costs ~0.045 s
   of delay margin. `step_response` covers large errors, but at constant `v_a`,
   with the linear turn-rate law and without gravity.
+- **Below `v_a` ≈ 20 m/s the turn-rate law is not confirmed** (V3, 2026-09-27):
+  replayed on held-out logs it predicts the turn rate with VAF 0.94 – 0.98 from
+  15 m/s up and the right gain from 20 m/s up, but at 10 – 15 m/s (the reel-out
+  in weak wind, the fig8 transitions) it gives 1.5 – 2.5× too much turn rate
+  (VAF 0.15). Margins there err on the pessimistic side.
 - `kite_correction` and `v_k/v_a` come from 200 and 300 m at `v_a` ≈ 34 m/s;
   elsewhere they are extrapolated. The dead-time exponents come from relay
   sweeps at depower 0.275, spanning 13 – 22.5 m/s; outside that they are

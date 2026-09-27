@@ -854,6 +854,60 @@ pattern steers near the clamp and swamps the injection.
 the tape lag fitted on the log); the two stale bullets in that document's
 Model section (0.43 s lag, exponent 1.24) are corrected.
 
+#### V3: prediction on held-out logs (2026-09-27)
+
+`examples/replay_prediction.jl`: the logged `set_steering` through the plant
+(tape lag 1/steering_gain → the kite's dead time and lag at the logged `v_a` →
+`ψ̇ = c1·v_a·u + c2/v_a·sin(ψ)·cos(β)` at the logged depower), the heading
+re-initialized from the log every `H`. Variants: `:model` (from the command),
+`:kite` (from the logged tape position, without the tape's rate limit),
+`:kite_corr` (`:kite` + `kite_correction`). 12 archived runs, all
+`steering_gain` 10, none used to identify the turn-rate table or to fit
+`kite_correction`: 150, 200, 300 m and the reel-out, 4 – 8.5 m/s wind,
+baselines and injection runs; 307 000 samples from phase 3 on.
+
+| `v_a` bin | samples | turn-rate VAF model / kite / kite_corr | gain (slope measured on model) | heading error after 1 / 2 / 3 s |
+|---|---|---|---|---|
+| 10 – 15 m/s | 22 963 | **0.15** / 0.17 / 0.14 | 0.41 – 0.64 | 0.79 / 0.70 / 0.64 |
+| 15 – 20 m/s | 7 016 | 0.94 / 0.95 / 0.94 | 0.64 – 0.84 | 0.28 / 0.34 / 0.39 |
+| 20 – 25 m/s | 122 789 | 0.94 / 0.94 / 0.92 | 0.95 – 0.96 | 0.26 / 0.26 / 0.26 |
+| 25 – 30 m/s | 4 753 | 0.98 / 0.98 / 0.98 | 0.96 – 1.16 | 0.16 / 0.18 / 0.18 |
+| 30 – 35 m/s | 76 758 | 0.97 / 0.97 / 0.96 | 0.98 – 1.02 | 0.15 / 0.16 / 0.16 |
+| 35 – 40 m/s | 39 961 | 0.97 / 0.97 / 0.96 | 0.97 – 1.08 | 0.14 / 0.14 / 0.13 |
+| 40 – 45 m/s | 22 313 | 0.97 / 0.97 / 0.96 | 0.94 – 1.01 | 0.19 / 0.21 / 0.24 |
+
+(heading error: RMS error after `H` over RMS logged change over `H`; the
+turn-rate VAF does not depend on `H`, the steering chain runs open-loop.)
+
+- **From 15 m/s up the turn rate is predicted well** (VAF 0.94 – 0.98, the
+  criterion is 0.90), and from 20 m/s up with the right gain (slope 0.95 –
+  1.03 in most logs). The tape's rate limit hardly matters (`:model` ≈
+  `:kite`).
+- **Below 20 m/s the model's turn rate is too large**, 1.2 – 1.6× at 15 – 20
+  m/s and 1.5 – 2.5× at 10 – 15 m/s. These samples are the fig8 transitions
+  (large turns, steering near the clamp, where the turn rate is known to be
+  0.6 – 0.75 of the law) and the reel-out at 13 m/s (VAF 0.73 in phase 4,
+  0.95 in phase 5). It is not only the large signals: on small-signal
+  samples alone (|u| ≤ 0.175 over the last second) the 10 – 15 m/s bin has
+  VAF −2.4. **Fail**, cause open.
+- **Residual check.** After a 2 s high-pass (to remove the lap), the residual
+  correlates with the command at −0.41 … −0.66 with the residual 0.05 –
+  0.24 s behind, far outside the 95 % band (±0.006 – 0.03): the model reacts
+  too strongly and too early at higher frequency — V2's finding.
+  `kite_correction` lowers it to −0.27 … −0.35 in three bins and flips its
+  sign in two; with a periodic command and residual the test has no clean
+  pass/fail (peaks at the edge of the lag window). **Fail**, as specified.
+- `kite_correction` leaves the VAF unchanged: the turn rate's variance sits
+  at the lap and its harmonics, below where it acts.
+
+**Pass criteria:** VAF ≥ 0.90 in every bin — fail (10 – 15 m/s); no residual
+correlation outside the band — fail; no trend with `v_a` — fail below
+20 m/s. **Reading:** the plant model is confirmed where the fig8 pattern flies
+(`v_a` ≥ 20 m/s); below 20 m/s — the entry and transition, and the reel-out
+in weak wind — the stability analyses rest on a turn-rate law the logs do not
+confirm, and it errs on the side of too much turn rate (for the loop: too
+much gain, so its margins there are, if anything, pessimistic).
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -947,7 +1001,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | V3 | existing logs, a replay script | no new runs |
+| 1 | The plant at `v_a` < 20 m/s: V3 finds the model's turn rate 1.5 – 2.5× too large there (reel-out at 13 m/s, fig8 transitions) | analysis of the V3 logs, then relay sweeps at low `v_a` | V4-like sweeps |
 | 2 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
@@ -959,7 +1013,6 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 - A plot of V2's measured FRF over the model's Bode plot. The injection and
   the FRF estimate themselves are done, in `examples/validate_margins.jl`
   (`Multisine`, `frf_injection`, `measured_loop`).
-- `examples/replay_prediction.jl`: V3, the metrics per `v_a` bin.
 
 ## Done
 
@@ -978,7 +1031,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | `5a0253d` |
 | 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | `f143de9` |
 | Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | `13c28af` |
-| Point C (reel-out): closed by the reel-out's own validation, the cross-track step tests of `course_loop_stability_reelout.md` | guided-loop damping 0.50 – 0.62 measured against 0.44 – 0.55 modelled, off the steering clamp | – |
+| Point C (reel-out): closed by the reel-out's own validation, the cross-track step tests of `course_loop_stability_reelout.md` | guided-loop damping 0.50 – 0.62 measured against 0.44 – 0.55 modelled, off the steering clamp | `398aa46` |
+| V3: `examples/replay_prediction.jl`, 12 held-out logs | turn-rate VAF 0.94 – 0.98 from 15 m/s up (pass), 0.15 at 10 – 15 m/s (fail); gain right from 20 m/s up | – |
 
 ## Open questions
 
