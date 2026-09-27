@@ -40,7 +40,10 @@ With them the model under-predicts the simulation's margins: the delay margin
 by 19 % at 200 and 300 m, the gain margin by 22 % (200 m) to 42 % (300 m). What
 it still lacks is the dynamics of the fed-back course, which have no low-order
 model; `frd_margins` evaluates measured data instead. The pattern tables print
-this loop and, for comparison, the inner loop `C·P` alone.
+this loop and, for comparison, the inner loop `C·P` alone. `pattern_frd_margins`
+evaluates the pattern loop with the measured course correction at the airspeed
+it was measured at; its disk margin agrees with the table's, its delay and gain
+margins are the realistic ones.
 
 The gravity term only adds a slow real pole at `±c2/v_a·cos(β)`; both signs are
 checked and the worse one is reported. The controller is the exact discrete
@@ -229,6 +232,42 @@ sweep = [loop_margins(dp, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN, p
          for dp in depowers]
 foreach((dp, r) -> print_row("depower", dp, r), depowers, sweep)
 rate("Depower sweep", [r.α for r in sweep])
+
+"""
+    pattern_frd_margins(v_app; fs = 0.25:0.005:3.9) -> NamedTuple
+
+Delay margin, gain margin and disk margin of the pattern loop with the
+MEASURED course correction (`load_course_correction`) in place of
+`kite_correction`: `C · tape · turn-rate law · M · guidance`, evaluated on a
+frequency grid (`frd_margins`, `frd_diskmargin`). `M` was measured at `v_a`
+23.7, 34 and 40.1 m/s (200 – 300 m) and is interpolated between them
+(`course_correction`); outside that range, and at other tether lengths, it is
+extrapolated. These margins are the realistic ones, but between the measured
+airspeeds they may be ~20 % off either way; the `pattern = true` loop of the
+tables is the conservative one. The gravity pole, far below `fs`, is left out.
+"""
+function pattern_frd_margins(v_app; fs = 0.25:0.005:3.9)
+    tabs = load_course_correction()
+    tc = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+    K = fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
+    C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
+    τ, T_kite, ω_g = kite_dead_time(tc, v_app), kite_lag(tc, v_app), guidance_corner(v_app)
+    L = map(fs) do f
+        ω = 2π * f
+        plant = tc.c1 * v_app * cis(-ω * τ) / ((1 + im * ω * TAPE_LAG) * (1 + im * ω * T_kite) * (im * ω))
+        evalfr(C, cis(ω * Ts))[1] * plant * course_correction(tabs, f, v_app) * (1 + ω_g / (im * ω))
+    end
+    return (; frd_margins(collect(fs), L)..., α = frd_diskmargin(L))
+end
+
+println("Pattern with the MEASURED course correction (realistic; measured at v_a 23.7 - 40.1 m/s, 200 - 300 m), \
+         against the conservative loop of the tables:")
+for v in (25.0, 34.0, 40.0)
+    local m = pattern_frd_margins(v)
+    local r = loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
+    @printf("  v_app %4.1f m/s: measured correction α = %.2f  DM = %.3f s  GM = %.2f at %.2f Hz | \
+             kite_correction α = %.2f  DM = %.3f s\n", v, m.α, m.dm, m.gm, m.f_pc, r.α, r.delay_margin)
+end
 
 step_v_apps = [13.0, 15.0, 20.0, 27.0, 35.0]
 step_errs = [5.0, 20.0, 45.0, 90.0, 135.0, 170.0]
