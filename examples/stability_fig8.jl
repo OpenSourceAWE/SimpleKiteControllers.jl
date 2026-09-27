@@ -34,10 +34,16 @@ simulation at 200 and 300 m (docs/Plan_model_validation.md, V1 step 1):
 - the attractor guidance, `guidance_tf(ω_g)` = `1 + ω_g/s`, `ω_g = v_k/(L·D)`,
   with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;
 - `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
-  identified law says, a lag-lead identified at `v_a` ≈ 34 m/s.
+  identified law says, a lag-lead identified at `v_a` ≈ 34 m/s;
+- the kite's response time from the pattern law, `τ + T ≈ 0.14 s ·
+  (34/v_a)^0.74` (`pattern_dead_time_lag`), re-identified on pattern logs
+  from 12.8 to 40.6 m/s: flatter over `v_a` than the relay sweeps' scaling,
+  which at 73° elevation gives the kite 50 % more delay at 13 m/s.
 
-With them the model under-predicts the simulation's margins: the delay margin
-by 19 % at 200 and 300 m, the gain margin by 22 % (200 m) to 42 % (300 m). What
+With them the model under-predicts the simulation's margins at every point
+measured (150 – 300 m, `v_a` 22 – 40 m/s): the delay margin by 0 – 42 %, the gain
+margin by 21 – 45 %. Below 12.8 m/s, the lowest `v_a` measured, the pattern law
+is extrapolated. What
 it still lacks is the dynamics of the fed-back course, which have no low-order
 model; `frd_margins` evaluates measured data instead. The pattern tables print
 this loop and, for comparison, the inner loop `C·P` alone. `pattern_frd_margins`
@@ -112,14 +118,19 @@ guidance_corner(v_app) = V_K_OVER_V_A * v_app /
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `L = C·P` at one operating point, worst case over the sign of the gravity pole.
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
-`pattern = true` multiplies in the guidance and the kite correction.
+`pattern = true` multiplies in the guidance and the kite correction, and takes
+the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
 """
 function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false)
     tc = turn_rate_coeffs(fcs.body_damping, depower)
     K = K_phase * fcs.v_app_ref / max(v_app, v_min)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     cos_beta = cosd(fcs.el_center)
-    τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
+    # In the pattern the kite's response time follows the pattern law (V4), elsewhere the table.
+    τ, T_kite = pattern ?
+        pattern_dead_time_lag(tc, v_app;
+                              tc_ref = turn_rate_coeffs(fcs.body_damping, PATTERN_LAW_DEPOWER)) :
+        (kite_dead_time(tc, v_app), kite_lag(tc, v_app))
     results = map((-cos_beta, cos_beta)) do gravity
         L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
                                 kite_lag = T_kite)
@@ -199,11 +210,13 @@ end
                 heading_p = %.3f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
                 tape lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f; \
-                pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz.",
+                pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz, \
+                response time %.2f s·(%.0f/v_app)^%.2f.",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d,
                fcs.heading_d_n, fcs.heading_i, fcs.v_app_min, fcs.v_app_min_pattern,
                TAPE_LAG, KITE_DEAD_TIME_EXP, KITE_LAG_EXP,
-               guidance_corner(fcs.v_app_ref), SET.l_tether, KITE_CORR_ZERO, KITE_CORR_POLE)
+               guidance_corner(fcs.v_app_ref), SET.l_tether, KITE_CORR_ZERO, KITE_CORR_POLE,
+               PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP)
 
 v_apps = [5.0, 10.0, 15.0, 20.0, 27.0, 35.0, 45.0]
 "Floor of the gain schedule from phase 3 on, as `calc_steering` applies it"
