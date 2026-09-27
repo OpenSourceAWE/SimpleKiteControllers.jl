@@ -759,6 +759,41 @@ margin 9 – 19 % low, gain margin 2.8 – 2.9 against 3.8 – 5.0 measured, α
 measured correction gives the realistic margins at the measured airspeeds and
 interpolates between them to within ~23 %.
 
+#### 150 m (2026-09-27)
+
+At 150 m the flown pattern (30° × 12°) keeps the command at the clamp 6 – 10 %
+of the time. The steering it needs goes as `1/(c1·L·ρ)`, so the pattern was
+enlarged by 1.4× for the test only (`f8_a` 42°, `f8_b` 17°, in the shared
+`data/fc_settings.yaml`, restored afterwards), `v_steering` 1.0 s⁻¹. Baseline:
+`v_a` 34.0 m/s, peak command 86 %, never at the clamp, all 8 success criteria,
+lap 14.17 s. Injection: lines between the lap harmonics, 0.2 – 2.2 Hz and
+every other one to 4 Hz, amplitude 0.004, 10 periods; peak command 96 %, never
+at the clamp; 17 of 41 lines with a course spread below 35 %, consistent from
+0.5 to 1.2 Hz.
+
+| 150 m, `v_a` 33.6 m/s | delay margin | gain margin |
+|---|---|---|
+| measured | 0.274 s (0.51 Hz, PM 50°) | 3.51 (1.02 Hz) |
+| model with the measured course correction | 0.272 s (−1 %) | 4.69 (+33 %) |
+| parametric model (guidance + kite correction) | 0.197 s (−28 %) | 2.46 (−30 %) |
+
+Over the three lengths, at `v_a` ≈ 34 m/s:
+
+| tether | measured DM / GM | measured-correction model | parametric model |
+|---|---|---|---|
+| 300 m | 0.363 s / 5.0 | +3 % / ±0 % | −19 % / −42 % |
+| 200 m | 0.324 s / 4.11 | +1 % / +19 % | −25 % / −33 % |
+| 150 m | 0.274 s / 3.51 | −1 % / +33 % | −28 % / −30 % |
+
+The measured correction gets the delay margin right at every length, but
+its gain margin grows optimistic as the tether gets shorter: the correction
+does depend on `L` near 1 Hz (its dip gets shallower), which 200 and 300 m
+alone did not show clearly. The table in `data/course_correction_measured.csv`
+is indexed by `v_a` only; the 150 m points are kept in
+`data/course_link_measured.csv`. **The parametric model is conservative at
+all three lengths** and stays the one to design with; the measured-correction
+margins are realistic for the delay margin, and for the gain margin at 300 m.
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -852,10 +887,9 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
-| 2 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
-| 3 | V3 | existing logs, a replay script | no new runs |
-| 4 | V4 | relay sweeps | 4 – 5 sweeps |
+| 1 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
+| 2 | V3 | existing logs, a replay script | no new runs |
+| 3 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -882,7 +916,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | `stability_fig8.jl` uses the tape lag `1/steering_gain`, `guidance_tf` and `kite_correction` in the pattern | pattern α ≥ 0.64 (300 m), 0.59 (200 m), 0.54 (150 m) | `068bec1` |
 | `docs/course_loop_stability.md` updated: current model, "Model validation" section, current results; the 2026-09-25 sections marked as the old model's | – | `6e9a956` |
 | The course correction over 200 – 300 m: measured table `data/course_correction_measured.csv`, `course_correction`, `frd_diskmargin`, `pattern_frd_margins` in `stability_fig8.jl` | each length's margins predicted from the other's within 20 %; pooled table within 1 – 19 % | – |
-| The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | – |
+| The course correction over `v_a` 24 – 40 m/s (300 m, 5 / 7 / 8.5 m/s wind), interpolated in `v_a` | features move as `f ∝ v_a`, the dip depth does not follow a law; the parametric model stays conservative everywhere | `5a0253d` |
+| 150 m with the pattern enlarged to `f8_a` 42°, `f8_b` 17° (off the clamp) | parametric model conservative (DM −28 %, GM −30 %); measured-correction model: DM −1 %, GM +33 % | – |
 
 ## Open questions
 

@@ -242,9 +242,10 @@ MEASURED course correction (`load_course_correction`) in place of
 frequency grid (`frd_margins`, `frd_diskmargin`). `M` was measured at `v_a`
 23.7, 34 and 40.1 m/s (200 – 300 m) and is interpolated between them
 (`course_correction`); outside that range, and at other tether lengths, it is
-extrapolated. These margins are the realistic ones, but between the measured
-airspeeds they may be ~20 % off either way; the `pattern = true` loop of the
-tables is the conservative one. The gravity pole, far below `fs`, is left out.
+extrapolated. Its delay margin matched the simulation at 150, 200 and 300 m
+(within 3 %); its gain margin is optimistic at shorter tethers (+19 % at
+200 m, +33 % at 150 m), and between the measured airspeeds both may be ~20 %
+off. The `pattern = true` loop of the tables is the conservative one. The gravity pole, far below `fs`, is left out.
 """
 function pattern_frd_margins(v_app; fs = 0.25:0.005:3.9)
     tabs = load_course_correction()
