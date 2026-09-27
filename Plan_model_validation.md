@@ -622,10 +622,15 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 
 ## Open questions
 
-- Is the feed-forward (`u_ff`, `chi_ff`) part of what should be validated, or does
-  the model stay feedback-only? With `ff_gain = 0` the tests are clean but do not
-  cover the flown configuration.
-- Does the heading/course blend (`w_course < 1`) need its own model? V1 with the
-  default blend, compared against `w_course = 1`, would show whether it matters.
-- With turbulence, V2 needs more periods. Is one turbulent V1 run at 23 m/s enough
-  to confirm that the margins hold there?
+- ~~Is the feed-forward (`u_ff`, `chi_ff`) part of what should be validated, or
+  does the model stay feedback-only?~~ **No, feedback-only** (decided
+  2026-09-27). The feed-forward lies outside the loop `L = C·P`, so it does not
+  change the margins; the feedback-only gain test at point D flies it
+  (`ff_gain` 1) and scales only `rel_steering − u_ff`.
+- ~~Does the heading/course blend (`w_course < 1`) need its own model?~~
+  **No** (decided 2026-09-27). The model is validated for pure course feedback
+  (`fig8_pure_course = true`, `w_course = 1`) only; its fed-back angle has to
+  become the course anyway (V1, point D).
+- ~~With turbulence, V2 needs more periods. Is one turbulent V1 run at 23 m/s
+  enough to confirm that the margins hold there?~~ **Deferred** (decided
+  2026-09-27): no turbulence for now; all validation runs fly without it.
