@@ -130,6 +130,11 @@ const V_MIN_PATTERN = max(fcs.v_app_min, fcs.v_app_min_pattern)
 const DP_LO, DP_HI = turn_rate_depower_range(fcs.body_damping)
 "The turn authority the loop was tuned at, as `simple_opt_reelout.jl` computes it"
 const C1_SETPOINT = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
+# The gravity coefficient of the plant cannot be identified (`C2_BOUNDS` in
+# course_loop_model.jl), so every margin is the worst case over `C2_BOUNDS`, and the
+# value at c2 = 0 is kept alongside. Set `C2_OVERRIDE` [-] before the include to
+# evaluate one fixed value instead.
+c2_override = @isdefined(C2_OVERRIDE) ? C2_OVERRIDE : nothing
 
 # ---- The flown operating points ------------------------------------------ #
 # LOG_DIR (e.g. an `output/archives/<stamp>` folder) replaces `output/`, read and cleared like SHOW_PLOTS.
@@ -218,7 +223,9 @@ pattern law's, [`pattern_dead_time_lag`](@ref)) at one operating point: tether l
 `v_app` [m/s], the guidance's corner `ω_g` [rad/s] (see [`guidance_rate`](@ref)),
 `depower` [-] (clamped to the turn-rate table's
 range, as the gain schedule is), the pattern's centre elevation `el_c` [deg]
-and the tape's lag `lag` [s]. Worst case over the sign of the gravity pole.
+and the tape's lag `lag` [s]. Worst case over the sign of the gravity pole and
+over `c2_values(c2_override)`; `guided_c2_0` is the guided loop's worst case over
+the sign at the first of those values (c2 = 0 by default).
 """
 function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
@@ -237,14 +244,16 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
         dlm = with_logger(() -> delay_margin(Lp), NullLogger())
         (; L = Lp, dm, α = isnothing(dm) ? 0.0 : dm.margin, delay_margin = dlm)
     end
-    results = map((-cosd(el_c), cosd(el_c))) do gravity
-        P = turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite)
-        Pp = turn_rate_plant(tc.c1, tc.c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
-        (; inner = margins(C * P), guided = margins(C * G * Pp))
-    end
-    inner = argmin(r -> r.α, first.(results))
-    guided = argmin(r -> r.α, last.(results))
-    return (; inner, guided, K, delay = τp)
+    c2s = c2_values(c2_override)
+    results = [begin
+                   P = turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite)
+                   Pp = turn_rate_plant(tc.c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
+                   (; c2, inner = margins(C * P), guided = margins(C * G * Pp))
+               end for c2 in c2s for gravity in (-cosd(el_c), cosd(el_c))]
+    inner = argmin(r -> r.α, [r.inner for r in results])
+    guided = argmin(r -> r.α, [r.guided for r in results])
+    guided_c2_0 = argmin(r -> r.α, [r.guided for r in results if r.c2 == first(c2s)])
+    return (; inner, guided, guided_c2_0, K, delay = τp)
 end
 
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
@@ -254,19 +263,20 @@ end
                 (unexplained %.0f %%), \
                 guided loop: kite correction %.2f/%.2f Hz, kite dead time + lag from the pattern law \
                 %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table, inner loop: %.3f + %.3f = %.3f s), \
-                against the log's pure delay %.3f s there (correlation %.3f).",
+                against the log's pure delay %.3f s there (correlation %.3f); worst case over c2 in %s.",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
                fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
                fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, tape_lag.T,
                100 * tape_lag.unexplained, KITE_CORR_ZERO, KITE_CORR_POLE,
-               τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr)
+               τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr,
+               c2_values(c2_override))
 
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
 println(@sprintf("Phases 3-5 over tether length, %.0f – %.0f m in %d bins; worst case per bin over \
                   v_a (min, median, max) and depower (min, max), each v_a at the highest ω_g flown near it:", l_lo, l_hi, length(edges) - 1))
 println("  L [m]          n   v_a [m/s]    depower        D [°]  ω_g [1/s]    bin lag  K      ",
-        "α inner          α guided         DM guided")
+        "α inner          α guided         DM guided  α guided, c2 = $(first(c2_values(c2_override)))")
 rows = NamedTuple[]
 uncovered = Tuple{Float64, Float64}[]
 for b in 1:length(edges) - 1
@@ -296,17 +306,18 @@ for b in 1:length(edges) - 1
              for va in va_pts for dp in dp_pts]
     local wi = argmin(e -> e.m.inner.α, evals)
     local wg = argmin(e -> e.m.guided.α, evals)
+    local α_c2_0 = minimum(e -> e.m.guided_c2_0.α, evals)
     f0(r) = isnothing(r.dm) ? NaN : r.dm.ω0 / 2π
     local note = tape.rate_limited > MAX_RATE_LIMITED ?
                  @sprintf("  large signal: tape rate-limited %.0f %%", 100 * tape.rate_limited) :
                  mixed_phases ?
                  @sprintf("  phase handover: bin spans phases %s, actuator-lag fit unexplained %.0f %%",
                           join(sort(phases), "+"), 100 * tape.unexplained) : ""
-    println(@sprintf("  %5.0f-%-5.0f %5d  %4.1f – %4.1f  %.3f – %.3f  %5.2f  %4.2f – %4.2f  %5.3f    %.3f  %5.3f at %4.2f Hz  %5.3f at %4.2f Hz  %5.3f s%s",
+    println(@sprintf("  %5.0f-%-5.0f %5d  %4.1f – %4.1f  %.3f – %.3f  %5.2f  %4.2f – %4.2f  %5.3f    %.3f  %5.3f at %4.2f Hz  %5.3f at %4.2f Hz  %5.3f s    %5.3f%s",
                      lo, hi, length(idx), extrema(vas)..., extrema(log_dp[idx])...,
                      D, extrema(log_ωg[idx])..., tape.T, wg.m.K, wi.m.inner.α, f0(wi.m.inner),
-                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, note))
-    push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
+                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, α_c2_0, note))
+    push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α, α_guided_c2_0 = α_c2_0,
                  dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape_lag.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
                  rate_limited = tape.rate_limited, mixed_phases = mixed_phases,

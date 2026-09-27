@@ -88,7 +88,7 @@ function phase4_step_responses(P4; phase = 4, win = 10.0, pre = 1.0)
 end
 
 """
-    model_step_average(steps, τ, el_c, lag) -> Vector of 2
+    model_step_average(steps, τ, el_c, lag) -> Vector of 4
 
 The model's step response from δ to d ([`model_T`](@ref)) at each step's own operating point,
 averaged over `steps` like the measurement, per sign of the gravity pole. Needs the globals of
@@ -102,7 +102,7 @@ function model_step_average(steps, τ, el_c, lag)
             vec(y)[min.(idx, length(y))]
         end
     end
-    return [vec(mean(reduce(hcat, [m[g] for m in per]); dims = 2)) for g in 1:2]
+    return [vec(mean(reduce(hcat, [m[g] for m in per]); dims = 2)) for g in eachindex(first(per))]
 end
 
 """
@@ -183,7 +183,7 @@ function fit_second_order_gain(τ, y)
     return (K = best[2], f_d = best[3], ζ = best[4], delay = best[5], rms = best[1])
 end
 
-"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per gravity sign."
+"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per c2 in `C2_BOUNDS` and gravity sign."
 function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
@@ -191,15 +191,15 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     ωg = guidance_rate(Lt, v_app, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
     τd = kite_dead_time(tc, v_app)
-    map((-cosd(el_c), cosd(el_c))) do gravity
-        P = turn_rate_plant(tc.c1, tc.c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
+    vec(map(Iterators.product((-cosd(el_c), cosd(el_c)), C2_BOUNDS)) do (gravity, c2)
+        P = turn_rate_plant(tc.c1, c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
         Lg = C * G * P
         T = minreal(feedback(Lg) * (1 - 1 / G); atol = 1e-8)
         ps = log.(complex(poles(T))) ./ Ts               # continuous equivalents
         osc = filter(p -> imag(p) > 1e-3 && abs(p) < 2π * 1.0, ps)
         dom = isempty(osc) ? nothing : argmax(real, osc)  # least damped below 1 Hz
-        (; gravity, T, ωg, K, τd,
+        (; gravity, c2, T, ωg, K, τd,
            f_d = isnothing(dom) ? NaN : imag(dom) / 2π,
            ζ = isnothing(dom) ? NaN : -real(dom) / abs(dom))
-    end
+    end)
 end

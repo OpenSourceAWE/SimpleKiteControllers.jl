@@ -14,7 +14,8 @@ each sample from the log:
     [optional] kite_correction, the lag-lead (1 + s/ω_z)/(1 + s/ω_p)
     turn rate: ψ̇ = c1(u_d)·v_a·u_k + c2(u_d)/v_a·sin(ψ)·cos(β)
 
-`c1`, `c2` at the logged depower `u_d`, `β` the logged elevation. The steering
+`c1` at the logged depower `u_d`, `β` the logged elevation; `c2` = 0, the lower
+end of `C2_BOUNDS`, because the table's gravity coefficient is not identified. The steering
 chain depends on the input alone and runs over the whole log; only the heading
 integrates, so it is re-initialized from the log every `H` seconds. Three
 variants separate the error sources:
@@ -150,7 +151,8 @@ function replay(log::V3Log; variant::Symbol = :model, min_phase = 3)
             u_k = ωp / ωz * x_kite + (1 - ωp / ωz) * x_corr
         end
         drive[k] = tc.c1 * v_a[k] * u_k
-        grav[k] = tc.c2 / v_a[k] * cos(β[k])
+        # c2 = 0, the lower end of C2_BOUNDS: the table's gravity coefficient is not identified.
+        grav[k] = first(C2_BOUNDS) / v_a[k] * cos(β[k])
     end
     rate_log = vcat(diff(ψ) ./ Ts, NaN)          # forward difference, aligned to t[k]
     rate_model = drive .+ grav .* sin.(ψ)

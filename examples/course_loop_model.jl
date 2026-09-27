@@ -107,6 +107,22 @@ function course_pid(K, Ti, Td, N, Ts)
 end
 
 """
+    C2_BOUNDS
+
+Range [-] of the turn-rate law's gravity coefficient `c2` that the margins are
+bounded over. The relay sweeps of `build_turn_rate_table.jl` cannot identify
+`c2`: their steering is fed back from the heading, so `c2` trades against the
+delay (at depower 0.275 it falls by 0.65 per sample of shift, from +2.8 to 0
+over the flat bottom of the residual, 2026-09-27), and the table's value is
+arbitrary. The lower end drops the gravity pole, as the controller does; the
+upper end is the largest value in the table (2.45, depower 0.40).
+"""
+const C2_BOUNDS = (0.0, 2.45)
+
+"`c2` values [-] to evaluate a margin at: `C2_BOUNDS`, or only `override` when one is given"
+c2_values(override = nothing) = isnothing(override) ? C2_BOUNDS : (Float64(override),)
+
+"""
     turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0) -> StateSpace
 
 `rel_steering` -> heading, ZOH-discretized: the actuator lag `lag` [s], then the

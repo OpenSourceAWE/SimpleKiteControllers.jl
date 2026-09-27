@@ -118,7 +118,8 @@ guidance_corner(v_app) = V_K_OVER_V_A * v_app /
     loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false) -> NamedTuple
 
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
-`L = C·P` at one operating point, worst case over the sign of the gravity pole.
+`L = C·P` at one operating point, worst case over the sign of the gravity pole and
+over `C2_BOUNDS` (the gravity coefficient is not identified).
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
 `pattern = true` multiplies in the guidance and the kite correction, and takes
 the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
@@ -132,8 +133,8 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
     τ, T_kite = pattern ?
         pattern_dead_time_lag(tc, v_app, depower) :
         (kite_dead_time(tc, v_app), kite_lag(tc, v_app))
-    results = map((-cos_beta, cos_beta)) do gravity
-        L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
+    results = map(Iterators.product(C2_BOUNDS, (-cos_beta, cos_beta))) do (c2, gravity)
+        L = C * turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
                                 kite_lag = T_kite)
         pattern && (L = L * kite_correction(Ts) * guidance_tf(guidance_corner(v_app), Ts))
         dm = try
@@ -144,7 +145,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
         α = isnothing(dm) ? 0.0 : dm.margin
         (; L, dm, α, delay_margin = delay_margin(L))
     end
-    worst = argmin(r -> r.α, results)
+    worst = argmin(r -> r.α, vec(results))
     return (; worst..., c1 = tc.c1, delay = τ, kite_lag = T_kite, K)
 end
 
