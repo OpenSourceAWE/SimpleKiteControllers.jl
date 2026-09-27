@@ -44,12 +44,15 @@ kite:
   alpha_zero: 8.8      # should be 5 [degrees]
 
 kcu:
-  # KCU actuator tape rate limits fed to the KCU model. Without finite values
-  # the actuator would freeze (defaults of 0). All other KCU fields fall back
-  # to the KiteUtils defaults.
+  # KCU actuator tape rate limits and steering gain fed to the KCU model.
+  # Without finite rate limits the actuator would freeze (defaults of 0). The
+  # steering gain sets the tape's small-signal time constant, 1/steering_gain
+  # (KiteUtils default 3.0, i.e. 0.33 s). All other KCU fields fall back to
+  # the KiteUtils defaults.
   v_depower:  0.075 # depower-tape rate limit      [1/s]
   v_steering: 0.2   # steering-tape rate limit     [1/s]
   kcu_mass: 8.4     # mass of the kite control unit [kg]
+  steering_gain: 10.0 # steering gain of the KCU [-]
 
 tether:
   # Bosch et al. 2014 used k = AE/L = 4.52E3 N/m for the bridles of the V3
