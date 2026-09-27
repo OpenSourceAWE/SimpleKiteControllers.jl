@@ -942,6 +942,62 @@ Both make the model's margins at low `v_a` pessimistic: too much turn rate
 reel-out. V4's sweep at pattern elevation and tether length is the one that
 would settle the second; it should include `v_a` ≈ 13 m/s.
 
+#### V4: the scaling laws in pattern flight (2026-09-27)
+
+A relay sweep at pattern elevation, as V4 planned it, does not work: the
+relay holds the heading within ±10° of straight up, which is steady only near
+the zenith (73°), where the kite hovers; at 26° it would climb, and a relay
+across the wind would carry it across the window. The pattern flights
+themselves cover the question at the conditions that matter: the turn-rate
+law re-identified (`identify_turn_rate_law`, from the tape position) on each
+V3 log's phase 4 from 15 s after its start, depower 0.27 (reel-out 0.283),
+elevation 15 – 26°:
+
+| `v_a` | tether | `c1` fitted / table | delay fitted | table dead time + lag |
+|---|---|---|---|---|
+| 12.8 m/s (reel-out) | 150 – 375 m | 0.88 | 0.292 s | 0.433 s |
+| 22.4 m/s | 200 m | 0.98 – 0.99 | 0.191 – 0.197 s | 0.214 s |
+| 23.7 – 23.9 m/s | 300 m | 1.00 – 1.02 | 0.181 – 0.182 s | 0.199 – 0.200 s |
+| 33.6 – 34.0 m/s | 150 m | 1.01 – 1.05 | 0.145 – 0.152 s | 0.130 – 0.132 s |
+| 34.3 – 34.7 m/s | 200 / 300 m | 0.99 – 1.03 | 0.134 – 0.147 s | 0.127 – 0.128 s |
+| 36.7 m/s | 200 m | 1.03 | 0.133 s | 0.118 s |
+| 40.1 – 40.6 m/s | 300 m | 0.97 – 1.05 | 0.122 – 0.127 s | 0.105 – 0.106 s |
+
+And one relay sweep for the depower question (`_run_turn_rate_sweep(0.40;
+v_wind = 15, elevation_floor = 40)`, not written to the table): `v_a` 20.5
+m/s, `c1` 0.133, split 0.195 s dead time + 0.150 s lag (pure delay 0.328 s);
+the table's 0.40 row scaled with 1.03 / 1.32 predicts 0.213 + 0.072 s — dead
+time −8 % (pass), lag +108 % and sum +21 % (fail). The split is poorly
+conditioned (the fit trades dead time for lag), the sum is not; between the
+two 0.40 sweeps the sum scales as `v_a^−0.70`.
+
+**Results:**
+
+- **`c1` holds** in pattern flight from 22 to 41 m/s (0.97 – 1.05 of the
+  table); 12 % low in the reel-out.
+- **No tether-length effect**: at ~34 m/s, 150 / 200 / 300 m give 0.145 –
+  0.152 / 0.147 / 0.134 s.
+- **The response time follows one law in pattern flight**, from the reel-out
+  at 12.8 m/s to the fig8 at 40.6 m/s:
+
+      τ_kite + T_kite ≈ 0.14 s · (34 / v_a)^0.74
+
+  (0.289 / 0.191 / 0.140 / 0.123 s at 12.8 / 22.4 / 34 / 40.3 m/s against
+  0.292 / 0.191 – 0.197 / 0.133 – 0.152 / 0.122 – 0.127 s measured). The
+  depower-0.40 relay pair scales about the same (0.70). Only the depower-0.275
+  relay pair behind the table's exponents is steeper (1.22 for the sum), and
+  it flew at 73° elevation, where at low `v_a` the kite responds more slowly.
+- **Pass criteria:** the new points are not within ±15 % of the table's
+  scaling (−33 % at 12.8 m/s, +16 – 20 % at 40 m/s). Per V4's rule the
+  exponents should be refitted — on the pattern data, the law above.
+
+**For the model:** at `v_a` ≥ ~30 m/s the table gives 10 – 20 % (0.01 –
+0.02 s) too little delay, which `kite_correction`'s lag near 1 Hz, fitted at
+34 m/s, roughly makes up for; below ~30 m/s it gives too much (pessimistic),
+by a third at 13 m/s. Adopting the pattern law (for the pattern loop, keeping
+the table's split ratio per depower) would remove that pessimism at low `v_a`;
+the depower dependence in pattern flight is not measured (all runs at 0.27).
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -1035,7 +1091,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | V4, first the sweep at pattern elevation and tether length at low `v_a` (~13 m/s): the reel-out shows a faster kite (0.28 s against the table's 0.43 s) | relay sweeps | 4 – 5 sweeps |
+| 1 | Decide whether the model adopts the pattern's response-time law, `0.14 s·(34/v_a)^0.74` (V4); if so, re-run the stability tables and V1 at one point | code, then 1 – 2 runs | – |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -1066,7 +1122,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | Point B (200 m, 4.5 m/s, `v_a` 22.4 m/s) by injection (V2 instead of V1) | DM 0.480 s, GM 3.35; parametric model conservative (−48 % / −33 %) | `13c28af` |
 | Point C (reel-out): closed by the reel-out's own validation, the cross-track step tests of `course_loop_stability_reelout.md` | guided-loop damping 0.50 – 0.62 measured against 0.44 – 0.55 modelled, off the steering clamp | `398aa46` |
 | V3: `examples/replay_prediction.jl`, 12 held-out logs | turn-rate VAF 0.94 – 0.98 from 15 m/s up (pass), 0.15 at 10 – 15 m/s (fail); gain right from 20 m/s up | `cb8e2a5` |
-| The plant below 20 m/s, from the V3 logs | two effects, both making the model pessimistic: the clamp in the fig8 transitions; in the reel-out a faster kite than the table (0.28 s against 0.43 s) with 12 % less gain | – |
+| The plant below 20 m/s, from the V3 logs | two effects, both making the model pessimistic: the clamp in the fig8 transitions; in the reel-out a faster kite than the table (0.28 s against 0.43 s) with 12 % less gain | `865b3fd` |
+| V4: the turn-rate law re-identified in pattern flight (12 logs, `v_a` 12.8 – 40.6 m/s) and one relay sweep at depower 0.40, 15 m/s | `c1` as in the table (±5 %); the response time follows `0.14 s·(34/v_a)^0.74`, flatter than the table's scaling; no tether-length effect | – |
 
 ## Open questions
 
