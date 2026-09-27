@@ -6047,3 +6047,33 @@ rate limit, and even with `heading_p` lowered to 0.2-0.3 the 6° runs stay at
 the 0.42 s dead time, ratio 2.5); `heading_d` 0.40 buys 0.005° for +10 % HF, so
 0.30 is kept. Set to 8° with the gains unchanged: RMS d 0.91° -> 0.87° (-5 %).
 `max d` stays at ~4.96° throughout. Only this condition was flown.
+
+## 2026-09-27 — `chi_dive` -135 -> -145: the 3.5 m/s entry dip is back after today's gain changes
+
+Maasvlakte 3.5 m/s failed `min elevation > 6.5° (whole run)` at 6.1°: the entry
+dip of 2026-08-30 again (phase 3, t = 25 s, `v_a` 8.3 m/s), where `v03.5` of
+2026-09-26 (`c96841d`) had passed at 7.9°. Screening, one revert at a time
+(entry only, `sim_time` 40 s):
+
+| reverted | entry minimum | azimuth at the start of phase 3 |
+| --- | --- | --- |
+| none | 6.07° | -85.4° |
+| `steering_gain` 10 -> 3 | 6.91° | -82.4° |
+| `heading_p` 0.17019 -> 0.1891 | 7.00° | -83.2° |
+| `attractor_dist` 8 -> 6 | 6.23° | -85.4° |
+
+The lower course gain and the faster tape each let the dive run ~3° further
+out, and the turn back to the path from there loses the height. The 08-30
+lever, the dive course, instead of undoing either: `chi_dive` -140° gave
+6.97°, **-145°** 7.76°. Full-length regression at Maasvlakte, all 10 criteria
+passed at every wind speed:
+
+| wind | `min_whole_run` | entry minimum | stop |
+| --- | --- | --- | --- |
+| 3.5 m/s | **7.8°** (was 6.1°) | 7.76° | length, 380 m |
+| 4 m/s | 8.4° | 10.89° | length, 380 m |
+| 5 m/s | 9.3° | 12.33° | length, 380 m |
+| 6 m/s | 8.4° | 12.45° | length, 380 m |
+
+`el_offset_final` was not the lever: it lifts the path only after the reel-out,
+and phase 5 already passed at 8.2°. Cabauw not re-flown.
