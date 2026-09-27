@@ -43,7 +43,7 @@ scenarios_dir = selected_scenarios_dir()
 isdir(scenarios_dir) || error("No scenarios: $scenarios_dir does not exist.")
 scenario_names = sort(filter(readdir(scenarios_dir)) do name
     dir = joinpath(scenarios_dir, name)
-    isdir(dir) && any(endswith(".arrow"), readdir(dir))
+    !occursin('_', name) && isdir(dir) && any(endswith(".arrow"), readdir(dir))
 end)
 isempty(scenario_names) && error("No scenario folder with a log in $scenarios_dir.")
 
