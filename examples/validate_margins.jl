@@ -98,6 +98,9 @@ const V1_POINTS = Dict(
     # 2/3 of A's and the tape rate about (2/3)². With steering_gain 10 its
     # baseline is rate-limited 7.7 % of the window, A's 28 % (2026-09-27).
     :D => V1Point("system_fig8_300m.yaml", "simple_fig8.jl", 7.0, 120.0, 34.2),
+    # The fig8 pattern at 150 m, same wind: with A (200 m) and D (300 m) the
+    # tether-length check of the model (docs/Plan_model_validation.md).
+    :F => V1Point("system_fig8_150m.yaml", "simple_fig8.jl", 7.0, 120.0, 35.0),
 )
 
 "Matches the scripts' own default; passed explicitly so a sweep cannot drift from it."
@@ -190,10 +193,12 @@ end
 """
     run_v1(point; gain_factor = 1.0, extra_delay = 0, feedback_only = false,
            label = "run", hook_settle = HOOK_SETTLE_V1, baseline = nothing,
-           test::Symbol = :gain) -> NamedTuple
+           test::Symbol = :gain, injection = nothing, sim_time = nothing) -> NamedTuple
 
 Select `point`'s project/wind/sim_time, no turbulence, `SHOW_PLOTS = false`,
 set the V1 hooks and `include` its script; archive the log and `analyze` it.
+`injection` (a function `τ -> Δu`, e.g. a `Multisine`) is added to the command
+as `STEER_INJECTION` (V2); `sim_time` [s] overrides the point's.
 Pass `baseline` (another `run_v1` result, with `gain_factor = 1`,
 `extra_delay = 0`) to also get the stable/unstable/rate-limited verdict — see
 `analyze`. `feedback_only = true` scales only the feedback part of the
@@ -203,10 +208,11 @@ command, `rel_steering - u_ff`, and leaves the feed-forward alone (the
 """
 function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only = false,
                  label = "run", hook_settle = HOOK_SETTLE_V1, baseline = nothing,
-                 test::Symbol = :gain)
+                 test::Symbol = :gain, injection = nothing, sim_time = nothing)
     p = V1_POINTS[point]
+    sim_time = something(sim_time, p.sim_time)
     set_selected_project(p.project)
-    set_selected_sim_time(p.sim_time)
+    set_selected_sim_time(sim_time)
     set_selected_windspeed(p.wind)
     V3Kite.set_default_turbulence(0.0; data_path = skc_data_path())
 
@@ -215,10 +221,12 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     Core.eval(Main, :(STEER_GAIN_FEEDBACK_ONLY = $feedback_only))
     Core.eval(Main, :(EXTRA_STEER_DELAY = $extra_delay))
     Core.eval(Main, :(HOOK_SETTLE = $hook_settle))
-    @info @sprintf("V1 %s (%s): gain factor %.4g%s, extra delay %d samples, \
+    Core.eval(Main, :(STEER_INJECTION = $injection))
+    @info @sprintf("V1 %s (%s): gain factor %.4g%s, extra delay %d samples%s, \
                     wind %.1f m/s, sim_time %.0f s.",
                    point, label, gain_factor, feedback_only ? " (feedback only)" : "",
-                   extra_delay, p.wind, p.sim_time)
+                   extra_delay, isnothing(injection) ? "" : ", injection",
+                   p.wind, sim_time)
     Base.include(Main, joinpath(@__DIR__, p.script))
 
     project = project_file(p.project)
@@ -531,6 +539,197 @@ function onset(run, baseline)
         (net_growth > 0 && maximum(abs.(e_run)) < 5.0) ? :unstable : :stable
     return (; f_lo, f_hi, net_growth, net_rms_deg, f_ring_hz = f_ring,
               f_ring_net_hz = f_ring_net, verdict)
+end
+
+# ==================== V2: INJECTED MULTISINE ==================== #
+
+"""
+    Multisine(; period = 10.0, freqs = [0.1:0.1:1.0; 1.2:0.2:2.0], amp = 0.004)
+
+A periodic test input `τ -> Δu` [-] for `run_v1(...; injection)`: sines at
+`freqs` [Hz], each a multiple of `1/period` so every line completes whole
+cycles in one period, each of amplitude `amp`, with Schroeder phases for a low
+crest factor. V2 of docs/Plan_model_validation.md.
+"""
+struct Multisine
+    period::Float64
+    freqs::Vector{Float64}
+    amp::Float64
+    phases::Vector{Float64}
+end
+
+function Multisine(; period = 10.0, freqs = [0.1:0.1:1.0; 1.2:0.2:2.0], amp = 0.004)
+    all(f -> abs(f * period - round(f * period)) < 1e-9, freqs) ||
+        error("Multisine: every line must be a multiple of 1/period = $(1 / period) Hz.")
+    n = length(freqs)
+    return Multisine(period, collect(Float64, freqs), amp, [-π * k * (k - 1) / n for k in 1:n])
+end
+
+(m::Multisine)(τ) = m.amp * sum(sin(2π * f * τ + φ) for (f, φ) in zip(m.freqs, m.phases))
+
+"""
+    frf_injection(r, m::Multisine; skip = 1) -> Vector{NamedTuple}
+
+Frequency responses of the links of the loop at every line of `m`, from a run
+`r` flown with `injection = m`: command → tape (`tape`), command → heading
+(`heading`), heading → course (`course`) and course → regulated error
+(`err`). Each whole period after the injection started (the first `skip`
+periods dropped as transient, only phase 4) is Fourier-transformed at the
+lines; the spectra are averaged over the periods, which keeps what is
+periodic with the injection and averages out the pattern's own content, and
+the links are ratios of the averages. `*_sd` is the standard deviation of the
+per-period ratio's magnitude, relative, over the periods.
+"""
+function frf_injection(r, m::Multisine; skip = 1)
+    sl = load_log(basename(r.log_path); path = dirname(r.log_path)).syslog
+    t = Float64.(sl.time)
+    phase = Int.(sl.sys_state)
+    t0 = r.t_phase4 + r.hook_settle + skip * m.period
+    last4 = findlast(k -> phase[k] == 4, eachindex(t))
+    np = floor(Int, (t[last4] - t0) / m.period)
+    np >= 2 || error("frf_injection: fewer than 2 whole periods after the transient; lengthen sim_time.")
+    u, s = Float64.(sl.set_steering), Float64.(sl.steering)
+    ψ, χ = unwrap_angle(Float64.(sl.heading)), unwrap_angle(Float64.(sl.course))
+    e = deg2rad.(Float64.(sl.var_06))
+    coeff(x, idx, f) = 2 / length(idx) * sum((x[idx] .- mean(x[idx])) .* cis.(-2π * f .* (t[idx] .- t[idx[1]])))
+    rows = map(m.freqs) do f
+        per = map(1:np) do k
+            idx = findall(τ -> t0 + (k - 1) * m.period <= τ < t0 + k * m.period, t)
+            (; U = coeff(u, idx, f), S = coeff(s, idx, f), Ψ = coeff(ψ, idx, f),
+               X = coeff(χ, idx, f), E = coeff(e, idx, f))
+        end
+        avg(key) = mean(getfield.(per, key))
+        rel_sd(num, den) = std([abs(getfield(p, num) / getfield(p, den)) for p in per]) /
+                           abs(avg(num) / avg(den))
+        (; f, n_periods = np, u_amp = abs(avg(:U)),
+           tape = avg(:S) / avg(:U), heading = avg(:Ψ) / avg(:U),
+           course = avg(:X) / avg(:Ψ), err = avg(:E) / avg(:X),
+           heading_sd = rel_sd(:Ψ, :U), course_sd = rel_sd(:X, :Ψ), err_sd = rel_sd(:E, :X))
+    end
+    return rows
+end
+
+"""
+    lap_period(r) -> Float64
+
+Steady lap time [s] of run `r`: the median of the second half of its laps,
+from `SysState`'s live lap count `fig_8`. The first laps after the entry are
+shorter (at 200 m 12.5 – 12.9 s against a steady 13.15 s), and a lap period
+2.5 % off already puts `mid_lines` onto the lap's harmonics by 0.45 Hz, so a
+short baseline is not enough: use a run of 150 s or more.
+"""
+function lap_period(r)
+    sl = load_log(basename(r.log_path); path = dirname(r.log_path)).syslog
+    t, n = Float64.(sl.time), Int.(sl.fig_8)
+    starts = [t[i] for i in 2:length(t) if n[i] > n[i-1] && n[i-1] >= 1]
+    length(starts) >= 5 || error("lap_period: fewer than five laps in $(r.log_path).")
+    d = diff(starts)
+    d = sort(d[(length(d) ÷ 2 + 1):end])
+    return d[(length(d) + 1) ÷ 2]
+end
+
+"""
+    mid_lines(T_lap, f_lo, f_hi; every = 1) -> (period, freqs)
+
+Injection lines halfway between the lap's harmonics, `(n + ½)/T_lap` [Hz],
+from `f_lo` to `f_hi`, every `every`-th one, and the matching `Multisine`
+period `2·T_lap`. A figure-eight's heading carries mainly the ODD harmonics of
+the lap, so lines on a plain grid can land on them and pick up the pattern
+instead of the injection (docs/Plan_model_validation.md, V1 step 1).
+"""
+function mid_lines(T_lap, f_lo, f_hi; every = 1)
+    P = 2T_lap
+    ns = ceil(Int, f_lo * P / 2 - 0.5):every:floor(Int, f_hi * P / 2 - 0.5)
+    return P, [(2n + 1) / P for n in ns]
+end
+
+"""
+    guidance_rate(r) -> NamedTuple
+
+The guidance corner `ω_g = v_k/(L·D)` [rad/s] of run `r` over its analysis
+window (`guidance_tf`), with the kite speed `v_k`, tether length `L` and
+attractor distance `D` [deg] it comes from.
+"""
+function guidance_rate(r)
+    sl = load_log(basename(r.log_path); path = dirname(r.log_path)).syslog
+    t = Float64.(sl.time)
+    w = findall(k -> r.window[1] <= t[k] <= r.window[2], eachindex(t))
+    v_k = mean(sqrt(sum(abs2, v)) for v in sl.vel_kite[w])
+    L = mean(Float64(x[1]) for x in sl.l_tether[w])
+    f = FC_Settings(fc_settings(project_file(V1_POINTS[r.point].project)))
+    D = attractor_distance(f, r.v_a_mean, L)
+    return (; ω_g = v_k / (L * deg2rad(D)), v_k, L, D)
+end
+
+"Discrete course PD of `point` at `v_a` [m/s], with the pattern's gain floor, and its sample time."
+function course_controller_tf(point, v_a)
+    project = project_file(V1_POINTS[point].project)
+    f = FC_Settings(fc_settings(project))
+    Ts = 1 / Settings(project).sample_freq
+    K = f.heading_p * f.v_app_ref / max(v_a, max(f.v_app_min, f.v_app_min_pattern))
+    return course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts), Ts
+end
+
+"""
+    measured_loop(runs; band = (0.0, Inf)) -> (f, L)
+
+The loop `C · (command → course) · (1 + ω_g/s)` on the measured plant: for
+each injection run in `runs` (results of `run_v1` + `frf_injection`, as
+NamedTuples with fields `r` and `frf`), the command → course response at its
+lines within `band` [Hz], times the course PD at the run's `v_a` and the
+guidance at its `ω_g`. Lines within 0.006 Hz of each other are averaged. Feed
+the result to `frd_margins`.
+"""
+function measured_loop(runs; band = (0.0, Inf))
+    pts = Tuple{Float64, ComplexF64}[]
+    for x in runs
+        C, Ts = course_controller_tf(x.r.point, x.r.v_a_mean)
+        ω_g = guidance_rate(x.r).ω_g
+        for q in x.frf
+            band[1] <= q.f <= band[2] || continue
+            Cz = evalfr(C, cis(2π * q.f * Ts))[1]
+            push!(pts, (q.f, Cz * q.heading * q.course * (1 + ω_g / (im * 2π * q.f))))
+        end
+    end
+    sort!(pts; by = first)
+    groups = Vector{Vector{Tuple{Float64, ComplexF64}}}()
+    for pt in pts
+        if !isempty(groups) && pt[1] - groups[end][1][1] < 0.006
+            push!(groups[end], pt)
+        else
+            push!(groups, [pt])
+        end
+    end
+    return [mean(first.(g)) for g in groups], [mean(last.(g)) for g in groups]
+end
+
+"""
+    model_loops(r) -> NamedTuple
+
+The model's loops at run `r`'s operating point (`v_a`, depower, the
+project's gains and sample rate, the worst gravity sign as in `predict`):
+`inner` (`C·P`), `guided` (× `guidance_tf` at the run's `ω_g`) and
+`corrected` (× `kite_correction` as well).
+"""
+function model_loops(r)
+    p = V1_POINTS[r.point]
+    project = project_file(p.project)
+    f = FC_Settings(fc_settings(project))
+    C, Ts = course_controller_tf(r.point, r.v_a_mean)
+    tc = turn_rate_coeffs(f.body_damping, r.depower)
+    P = turn_rate_plant(tc.c1, tc.c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
+                        -cosd(f.el_center), Ts; lag = v1_lag(r.point),
+                        kite_lag = kite_lag(tc, r.v_a_mean))
+    G = guidance_tf(guidance_rate(r).ω_g, Ts)
+    return (; inner = C * P, guided = C * P * G, corrected = C * P * G * kite_correction(Ts))
+end
+
+"Delay margin, crossovers and gain margin of a model loop, in the same fields as `frd_margins`."
+function tf_margins(L)
+    wgm, gm, wpm, pm = margin(L; allMargins = true)
+    f_gc = wpm[1][1] / 2π
+    return (; f_gc, pm = mod(pm[1][1], 360), dm = delay_margin(L), f_pc = wgm[1][1] / 2π,
+              gm = gm[1][1])
 end
 
 # ==================== SWEEPS (bisection) ==================== #

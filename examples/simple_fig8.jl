@@ -367,6 +367,13 @@ HOOK_SETTLE = 15.0
 steer_delay_buf = Float64[]
 ff_delay_buf = Float64[]
 t_phase4 = Ref(NaN)    # [s] time phase 4 was first reached this run; NaN before that
+# Test input for V2 (docs/Plan_model_validation.md): a function τ -> Δu added to
+# rel_steering, τ the time since the V1 hooks switched on (t_phase4 + HOOK_SETTLE),
+# read and cleared like SHOW_PLOTS. It is not logged: it is a function of time, so
+# the analysis recomputes it from the log's phase-4 start (validate_margins.jl).
+steer_injection = @isdefined(STEER_INJECTION) ? STEER_INJECTION : nothing
+STEER_INJECTION = nothing
+isnothing(steer_injection) || @info "Steering injection in force (test input)."
 
 toc("Start simulation loop...")
 
@@ -451,6 +458,8 @@ try
             local u_scaled = steer_gain_feedback_only ?
                 delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
                 delayed_u * steer_gain_factor
+            isnothing(steer_injection) ||
+                (u_scaled += steer_injection(t - t_phase4[] - hook_settle))
             # calc_steering already clamped its own output to ±max_steering;
             # re-clamp here too, or a gain factor > 1 commands the tape angles
             # it was never calibrated for instead of just saturating earlier,
