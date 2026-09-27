@@ -752,7 +752,8 @@ end
 The model's loops at run `r`'s operating point (`v_a`, depower, the
 project's gains and sample rate, the worst gravity sign as in `predict`):
 `inner` (`C·P`), `guided` (× `guidance_tf` at the run's `ω_g`) and
-`corrected` (× `kite_correction` as well).
+`corrected` (the pattern model: the pattern law's dead time and lag,
+`kite_correction` and the guidance).
 """
 function model_loops(r)
     p = V1_POINTS[r.point]
@@ -764,7 +765,11 @@ function model_loops(r)
                         -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))
     G = guidance_tf(guidance_rate(r).ω_g, Ts)
-    return (; inner = C * P, guided = C * P * G, corrected = C * P * G * kite_correction(Ts))
+    # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
+    τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean; tc_ref = turn_rate_coeffs(f.body_damping, PATTERN_LAW_DEPOWER))
+    Pp = turn_rate_plant(tc.c1, tc.c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),
+                         kite_lag = Tp)
+    return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))
 end
 
 "Delay margin, crossovers and gain margin of a model loop, in the same fields as `frd_margins`."

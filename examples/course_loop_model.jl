@@ -32,6 +32,41 @@ airspeed of the sweep they were identified at. Away from it they are extrapolate
 kite_dead_time(tc, v_app) = _scaled_row(tc, :dead_time, v_app, KITE_DEAD_TIME_EXP)
 kite_lag(tc, v_app) = _scaled_row(tc, :kite_lag, v_app, KITE_LAG_EXP)
 
+"""
+Response time of the kite in pattern flight, `τ_kite + T_kite` [s] at `v_a`
+[m/s]: `PATTERN_DELAY_REF · (PATTERN_V_REF / v_a)^PATTERN_DELAY_EXP`.
+Re-identified (`identify_turn_rate_law`) on 12 pattern logs at depower 0.27,
+elevation 15 – 26°, tether 150 – 380 m, `v_a` 12.8 – 40.6 m/s
+(docs/Plan_model_validation.md, V4). The relay sweeps behind the table fly at
+73°, where at low `v_a` the kite responds more slowly: at 12.8 m/s the table
+gives 0.43 s, the pattern 0.29 s.
+"""
+const PATTERN_DELAY_REF = 0.14
+const PATTERN_V_REF = 34.0
+const PATTERN_DELAY_EXP = 0.74
+"Depower [-] the pattern law was measured at; its table row is `pattern_dead_time_lag`'s `tc_ref`"
+const PATTERN_LAW_DEPOWER = 0.27
+
+"""
+    pattern_dead_time_lag(tc, v_app; tc_ref = tc) -> (τ, T)
+
+The kite's dead time and lag [s] in pattern flight: the table's
+([`kite_dead_time`](@ref), [`kite_lag`](@ref)) scaled by one factor, so their
+sum follows the pattern law ([`PATTERN_DELAY_REF`](@ref)). The law was
+measured at depower 0.27; `tc_ref` is that depower's table row, and at another
+depower (`tc`) the law is multiplied by the table's ratio of the two rows'
+sums at `v_app`, so the table's depower effect and its dead-time/lag split are
+kept. Use it for the pattern loop only: the entry flies high, close to the
+relay sweeps' conditions, where the table itself applies.
+"""
+function pattern_dead_time_lag(tc, v_app; tc_ref = tc)
+    τ, T = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
+    sum_ref = kite_dead_time(tc_ref, v_app) + kite_lag(tc_ref, v_app)
+    target = PATTERN_DELAY_REF * (PATTERN_V_REF / v_app)^PATTERN_DELAY_EXP * (τ + T) / sum_ref
+    f = target / (τ + T)
+    return f * τ, f * T
+end
+
 function _scaled_row(tc, key, v_app, expo)
     x = getfield(tc, key)
     (isnan(tc.v_app) || isnan(x)) && error("course_loop_model: the turn-rate table row has no v_app or " *
@@ -124,14 +159,22 @@ guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
 Lag-lead `(1 + s/ω_z)/(1 + s/ω_p)` that brings the turn-rate law's steering →
 heading response to what an injected multisine measures in the simulation:
 from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
-1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it.
+1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it,
+together with the pattern law's dead time and lag (`pattern_dead_time_lag`),
+against which it is fitted.
 """
 kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) =
     c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
 
-"Zero and pole [Hz] of [`kite_correction`](@ref): fit at the 300 m fig8 point, 0.5 – 2.1 Hz, 2026-09-27"
-const KITE_CORR_ZERO = 1.08
-const KITE_CORR_POLE = 0.72
+"""
+Zero and pole [Hz] of [`kite_correction`](@ref): fit at the 300 m fig8 point,
+0.5 – 2.1 Hz, 2026-09-27, against the plant with the pattern law's dead time
+and lag (`pattern_dead_time_lag`), which it goes with. Against the table's
+dead time and lag it was 1.08 / 0.72 Hz: part of its lag then stood in for the
+delay the table lacks at 34 m/s.
+"""
+const KITE_CORR_ZERO = 0.80
+const KITE_CORR_POLE = 0.58
 
 """
     frd_margins(f, L) -> NamedTuple

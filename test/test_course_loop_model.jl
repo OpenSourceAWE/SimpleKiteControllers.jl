@@ -57,6 +57,20 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
         @test vec(res.y)[i] ≈ 1 - exp(-1) rtol=1e-6   # 63% after one lag
     end
 
+    @testset "scaling: pattern_dead_time_lag" begin
+        tc = (v_app = 13.3, dead_time = 0.141, kite_lag = 0.267)
+        tc2 = (v_app = 12.8, dead_time = 0.344, kite_lag = 0.133)
+        for v in (12.8, 22.4, 34.0, 40.0)
+            law = PATTERN_DELAY_REF * (PATTERN_V_REF / v)^PATTERN_DELAY_EXP
+            τ, T = pattern_dead_time_lag(tc, v)
+            @test τ + T ≈ law                                            # the law at the reference depower
+            @test τ / T ≈ kite_dead_time(tc, v) / kite_lag(tc, v)        # the table's split kept
+            τ2, T2 = pattern_dead_time_lag(tc2, v; tc_ref = tc)
+            @test (τ2 + T2) / (τ + T) ≈ (kite_dead_time(tc2, v) + kite_lag(tc2, v)) /
+                                        (kite_dead_time(tc, v) + kite_lag(tc, v))   # the table's depower effect kept
+        end
+    end
+
     @testset "scaling: kite_dead_time / kite_lag" begin
         tc = (v_app = 22.5, dead_time = 0.217, kite_lag = 0.12)
         @test kite_dead_time(tc, tc.v_app) == tc.dead_time
