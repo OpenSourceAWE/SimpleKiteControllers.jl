@@ -1221,17 +1221,17 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The measured depower factor in `pattern_dead_time_lag` (`PATTERN_DEPOWER_EXP` 6.1), the depower sweep re-run | depower sweep α 0.55 – 0.66 (was 0.61 – 0.87) | – |
 | The Deliverables plot, `docs/course_loop_frf.png` (`examples/plot_frf_validation.jl`) | the pattern model follows the measured loop up to ~1 Hz; above it the real loop lags more but has 5 – 10 dB less gain | – |
 
-## Open questions
+## Decisions
 
-- ~~Is the feed-forward (`u_ff`, `chi_ff`) part of what should be validated, or
-  does the model stay feedback-only?~~ **No, feedback-only** (decided
+- Is the feed-forward (`u_ff`, `chi_ff`) part of what should be validated, or
+  does the model stay feedback-only? **No, feedback-only** (decided
   2026-09-27). The feed-forward lies outside the loop `L = C·P`, so it does not
   change the margins; the feedback-only gain test at point D flies it
   (`ff_gain` 1) and scales only `rel_steering − u_ff`.
-- ~~Does the heading/course blend (`w_course < 1`) need its own model?~~
+- Does the heading/course blend (`w_course < 1`) need its own model?
   **No** (decided 2026-09-27). The model is validated for pure course feedback
   (`fig8_pure_course = true`, `w_course = 1`) only; its fed-back angle has to
   become the course anyway (V1, point D).
-- ~~With turbulence, V2 needs more periods. Is one turbulent V1 run at 23 m/s
-  enough to confirm that the margins hold there?~~ **Deferred** (decided
+- With turbulence, V2 needs more periods. Is one turbulent V1 run at 23 m/s
+  enough to confirm that the margins hold there? **Deferred** (decided
   2026-09-27): no turbulence for now; all validation runs fly without it.
