@@ -15,6 +15,21 @@ causes overshoot on large turns but no limit cycle
 model, with the turn-rate table's delay as pure dead time, predicted α = 0.06;
 that result is kept below for reference.
 
+**Update 2026-09-27: the model changed and has been validated.** The KCU
+steering gain is now 10 in every settings file (tape lag 0.1 s instead of
+0.33 s); the kite's dead time and lag are split (exponents 1.03 and 1.32); and
+the pattern loop now includes the attractor guidance and a kite correction.
+Validated against `simple_fig8.jl` by pushing the loop to instability (V1) and
+by injected multisines (V2), see [Model validation](#model-validation-2026-09-27)
+and `Plan_model_validation.md`: the model under-predicts the simulation's
+margins, the delay margin by 19 %, the gain margin by 22 – 42 %. Current
+numbers: [Results](#results-current-model-2026-09-27). [Log validation](#log-validation-2026-09-25),
+[Kite dead time over v_a](#kite-dead-time-over-v_a), the
+[old results](#results-with-the-2026-09-25-model)
+with their subsections, [Observations](#observations) and
+[Delay vs. lag](#delay-vs-lag) are the 2026-09-25 record, computed with the
+old model.
+
 ## Model
 
 - **Controller:** the exact discrete transfer function of the `DiscretePID` in
@@ -26,27 +41,42 @@ that result is kept below for reference.
     `entry_gain` below phase 3; from phase 3 on `v_a` is also floored at
     `v_app_min_pattern`.
 - **Actuator:** a first-order lag from the commanded (`set_steering`) to the
-  applied steering (`steering`), `T_act = ACTUATOR_LAG = 0.43 s`. It stands in
-  for the KCU tape, which KitePodModels steps as
-  `u̇ = clamp(steering_gain·(u_cmd − u), ±v_steering)` with `steering_gain = 3`
-  and `v_steering = 0.2 s⁻¹`: a 0.33 s lag for small commands, rate-limited
-  for larger ones. 0.43 s is its equivalent at the amplitudes of the pattern;
-  see [Log validation](#log-validation-2026-09-25).
+  applied steering (`steering`), `T_act = 1/steering_gain` of the project's
+  settings (`TAPE_LAG` in `stability_fig8.jl`): 0.1 s at `steering_gain = 10`.
+  KitePodModels steps the tape as
+  `u̇ = clamp(steering_gain·(u_cmd − u), ±v_steering)`, `v_steering = 0.2 s⁻¹`:
+  the lag holds for small commands (injected multisines confirm it up to
+  4 Hz), larger ones are rate-limited. Until 2026-09-27 the gain was 3 and the
+  model used `ACTUATOR_LAG = 0.43 s`, the rate-limited equivalent at the
+  pattern's amplitudes, see [Log validation](#log-validation-2026-09-25).
 - **Kite:** the identified turn-rate law linearized about heading `ψ0`:
 
       ψ̇ = c1·v_a·u_s(t - τ_kite) + c2/v_a·cos(ψ0)·cos(β)·δψ
 
   - `c1` and `c2` come from `turn_rate_coeffs(fcs.body_damping, depower)`
     (`data/turn_rate_coeffs.yaml`).
-  - The dead time scales with the apparent wind speed,
-    `τ_kite = delay · (v_app_sweep / v_a)^1.24` (`kite_delay`), where `delay`
-    and `v_app_sweep` are the table's `delay` and `v_app` for the depower: the
-    row's dead time and the mean `v_a` of the relay sweep it was identified at.
-    See [Kite dead time over v_a](#kite-dead-time-over-v_a).
+  - The kite answers the applied steering with a dead time and a first-order
+    lag, both scaling with the apparent wind speed:
+    `τ_kite = dead_time · (v_app_sweep / v_a)^1.03` (`kite_dead_time`) and
+    `T_kite = kite_lag · (v_app_sweep / v_a)^1.32` (`kite_lag`), where
+    `dead_time`, `kite_lag` and `v_app_sweep` are the table's values for the
+    depower, identified by relay sweeps at the row's mean `v_a`. Until
+    2026-09-26 the model had a single dead time with exponent 1.24
+    (`kite_delay`), see [Kite dead time over v_a](#kite-dead-time-over-v_a).
   - The gravity term is a slow real pole. Both signs are checked (β = `el_center`)
     and the worse result is reported. In practice it matters only at very low `v_a`.
   - The plant is ZOH-discretized at `1/sample_freq`, and the dead time is an
     exact `round(τ_kite/Ts)`-sample shift register.
+- **Pattern (phase ≥ 3) only:** two more factors, from the validation.
+  - `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
+    identified law says (0.8 at 1.1 Hz, 0.6 – 0.7 above 1.4 Hz, ~10° more
+    lag); a lag-lead, zero 1.08 Hz, pole 0.72 Hz, identified at `v_a` ≈ 34 m/s.
+  - `guidance_tf`: the attractor guidance, `1 + ω_g/s` with
+    `ω_g = v_k/(L·D)`, `v_k = 0.96·v_a` (measured at 200 and 300 m), `L` the
+    project's tether length and `D` the attractor's arc distance. The
+    commanded course follows the cross-track error, which integrates the
+    course. The entry stays the inner loop: off the path the guidance is not
+    linear.
 - **Margins:**
   - `RobustAndOptimalControl.diskmargin` gives the balanced disk margin α with its
     gain and phase ranges.
@@ -104,7 +134,8 @@ re-run with the wind as a parameter), and the fig8 log, all fitted with
   transition), 0.14 s at 30 m/s, 0.10 – 0.13 s at 35 – 37 m/s.
 - The kite's response is itself partly a lag (the LS column), which a pure
   dead time overstates; the model keeps the pure dead time, the conservative
-  choice.
+  choice. (Superseded 2026-09-26: the model now splits the two, dead time
+  `∝ v_a^-1.03` and lag `∝ v_a^-1.32`, fitted with `fit_delay_lag`.)
 
 **The table now records `v_app`.** `build_turn_rate_table.jl` writes each
 sweep's mean `v_a` to its row, and `turn_rate_coeffs` returns it (`NaN` for a
@@ -121,7 +152,93 @@ depower (+57 %) is a real depower effect, not a hidden `v_a` effect. `c1` and
 `delay` reproduce the 2026-09-22 rows (`c1` to 1e-4, relative); `c2` moved by
 up to 0.02 in places, within about one of its standard errors.
 
-## Results (project `system_fig8_200m.yaml`, dt = 0.01 s)
+## Model validation (2026-09-27)
+
+Details and all tables: `Plan_model_validation.md` (V1, V2). All runs 7 m/s
+wind, no turbulence, `steering_gain` 10.
+
+- **V1, the loop pushed to instability**, at 300 m (the 200 m baseline was
+  already rate-limited, so no linear onset could be seen): extra delay in the
+  command until the loop rings, and a gain factor on the feedback part alone
+  (feed-forward on). With the tape's rate limit removed for the test: delay
+  margin 0.315 s at 0.52 Hz, gain margin 4.44 at 1.13 Hz. With the flown rate
+  limit the delay margin is 0.27 s: the rate limit costs ~0.045 s there.
+- **V2, injected multisines** (`STEER_INJECTION`), lines placed halfway
+  between the lap's harmonics (a figure-eight's heading carries mainly its odd
+  harmonics, which otherwise swamp the injection), 0.2 – 4 Hz at 300 m, 0.2 –
+  2.2 Hz at 200 m. The links of the loop, measured against the model:
+  - tape: the 0.1 s lag holds to 4 Hz;
+  - kite (tape → heading): within ~20 %, less gain from ~0.9 Hz up →
+    `kite_correction`;
+  - course → regulated error: the guidance term, to 5 % and 1° at 0.5 Hz;
+  - heading → the fed-back course: NOT in the model, and not low-order. It
+    dips to ~0.35 at 1.2 – 1.3 Hz with a non-minimum-phase phase drop; above
+    2 Hz the course follows the command far more strongly than a turning
+    flight path could (structural motion of the kite point, fed back as
+    course).
+- **The measured loop reproduces V1**: controller × measured command → course
+  × guidance gives delay margin 0.363 s and gain margin 5.0 at 300 m, within
+  15 % of V1 and its crossovers within 0.025 Hz.
+
+| | delay margin | gain margin |
+|---|---|---|
+| 300 m, measured | 0.363 s | 5.0 |
+| 300 m, model (inner loop only) | 0.357 s | 2.83 |
+| 300 m, model with guidance and kite correction | 0.295 s (−19 %) | 2.91 (−42 %) |
+| 200 m, measured | 0.300 s | 3.53 |
+| 200 m, model with guidance and kite correction | 0.243 s (−19 %) | 2.76 (−22 %) |
+
+The inner loop alone gets the 300 m delay margin right by coincidence: the
+missing guidance and the missing course dynamics cancel there. With both
+known parts added, the model errs on the safe side at 200 and 300 m. At
+150 m the method fails: the pattern keeps the command at the clamp 6 – 10 % of
+the time and the loop is not linear enough to measure.
+
+## Results (current model, 2026-09-27)
+
+`examples/stability_fig8.jl`, project `system_fig8_200m.yaml`, dt = 0.01 s,
+same controller settings as below, tape lag 0.1 s, guidance corner
+`ω_g` = 0.93 rad/s at 27 m/s.
+
+Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
+
+| v_a | Kite dead time + lag | α | Critical frequency | Delay margin | Inner loop alone: α / delay margin |
+|---|---|---|---|---|---|
+| 5 m/s | 0.375 + 0.975 s | 0.65 | 0.09 Hz | 1.29 s | 0.98 / 2.18 s |
+| 10 m/s | 0.183 + 0.390 s | 0.77 | 0.23 Hz | 0.72 s | 1.02 / 1.14 s |
+| 15 m/s | 0.121 + 0.229 s | 0.71 | 0.45 Hz | 0.46 s | 0.87 / 0.70 s |
+| 20 m/s | 0.090 + 0.156 s | 0.61 | 0.62 Hz | 0.30 s | 0.72 / 0.44 s |
+| 27 m/s | 0.066 + 0.105 s | 0.59 | 0.76 Hz | 0.24 s | 0.68 / 0.33 s |
+| 35 m/s | 0.050 + 0.075 s | 0.68 | 0.84 Hz | 0.24 s | 0.78 / 0.36 s |
+| 45 m/s | 0.039 + 0.054 s | 0.72 | 0.87 Hz | 0.23 s | 0.86 / 0.37 s |
+
+The same pattern at other tether lengths (the guidance corner scales as 1/L):
+minimum α 0.64 at 300 m, 0.59 at 200 m, 0.54 at 150 m (150 m extrapolated).
+
+Entry (phases 1 – 2, `entry_gain` 0.25, inner loop), depower 0.37: α 0.50 at
+5 m/s (the gravity pole, see [Entry at low v_a](#entry-at-low-v_a)), 1.37 at
+10 m/s, 1.55 – 1.72 from 15 m/s up.
+
+Full gain at `v_a = v_app_ref = 27 m/s`, over depower (pattern loop):
+
+| Depower | 0.250 | 0.275 | 0.300 | 0.325 | 0.350 | 0.375 | 0.400 |
+|---|---|---|---|---|---|---|---|
+| α | 0.57 | 0.60 | 0.66 | 0.70 | 0.78 | 0.84 | 0.83 |
+| Delay margin | 0.22 s | 0.25 s | 0.30 s | 0.35 s | 0.41 s | 0.46 s | 0.50 s |
+
+Large errors (`step_response`, real tape with `steering_gain` 10), overshoot
+[deg]: none up to 45°; at 90° 6.9 – 14.6°, at 135° 6.7 – 26.5°, at 170°
+9.8 – 34.8° (13 – 35 m/s). Every case settles, no limit cycle.
+
+**All margins robust (α ≥ 0.5).** The guidance costs margin (the pattern's
+minimum α falls from 0.68 to 0.59 at 200 m), the faster tape gives some back;
+since the model is conservative at 200 – 300 m, the real loop has more.
+
+## Results with the 2026-09-25 model
+
+Kept as the record behind `v_app_min_pattern`; computed with the old model
+(tape lag 0.43 s, dead time `kite_delay` with exponent 1.24, inner loop only),
+project `system_fig8_200m.yaml`, dt = 0.01 s.
 
 Settings: `heading_p = 0.35`, `heading_d = 0.30 s`, `heading_d_n = 2`, no
 integral, `depower_setpoint = 0.27`, `entry_depower = 0.37`, `entry_gain = 0.25`,
@@ -281,6 +398,9 @@ at constant `v_a`. Overshoot [deg] with the pattern gain (floor 23 m/s):
 
 ## Observations
 
+From the 2026-09-25 model; for the current numbers see
+[Results](#results-current-model-2026-09-27).
+
 1. **The margin depends on `v_a`.** The schedule `K ∝ 1/v_a` cancels the
    `v_a` in the plant gain, but the kite's dead time grows as `v_a` falls. With
    the old schedule, full gain was fragile below about 20 m/s and unstable
@@ -299,15 +419,19 @@ at constant `v_a`. Overshoot [deg] with the pattern gain (floor 23 m/s):
 
 ## Caveats
 
-- **The rate limit is nonlinear.** Small corrections pass the tape with a
-  0.33 s lag, large ones lag more the larger they are. `ACTUATOR_LAG` is the
-  equivalent at the amplitudes of the pattern. `step_response` covers large
-  errors, but at constant `v_a`, with the linear turn-rate law and without
-  gravity.
-- The actuator lag comes from one run at depower 0.27 and 34 – 38 m/s. The
-  dead-time exponent comes from three points at depower 0.275, spanning
-  13 – 36 m/s; below 13 m/s it is extrapolated, and it is assumed to hold at
-  every depower.
+- **The fed-back course's own dynamics are not modelled** (2026-09-27). They
+  are what makes the model conservative (see
+  [Model validation](#model-validation-2026-09-27)); they have no low-order
+  model, and `frd_margins` evaluates measured data instead.
+- **The rate limit is nonlinear.** Small corrections pass the tape with the
+  `1/steering_gain` lag, large ones lag more the larger they are; the model
+  has only the small-signal lag. At 300 m the flown rate limit costs ~0.045 s
+  of delay margin. `step_response` covers large errors, but at constant `v_a`,
+  with the linear turn-rate law and without gravity.
+- `kite_correction` and `v_k/v_a` come from 200 and 300 m at `v_a` ≈ 34 m/s;
+  elsewhere they are extrapolated. The dead-time exponents come from relay
+  sweeps at depower 0.275, spanning 13 – 22.5 m/s; outside that they are
+  extrapolated, and they are assumed to hold at every depower.
 - The transition fix was checked in one wind speed (7 m/s) on the 200 m
   project. `simple_opt_fig8.jl` reads the same `fc_settings.yaml` when a fig8
   project is selected, and so flies with it too, unchecked.
@@ -317,14 +441,16 @@ at constant `v_a`. Overshoot [deg] with the pattern gain (floor 23 m/s):
 - The fits are closed-loop, over 35 s with few distinct frequencies. The
   time-domain fits are solid; a frequency-by-frequency comparison above 0.3 Hz
   was too noisy to use.
-- The heading/course blend (`v_kite_heading`/`v_kite_course`) is not modelled.
-  The loop treats the feedback angle as the turn-rate law's ψ. In the window
-  the course was fed back, and its fit differs little from the heading's.
-- The model contains neither the feed-forward (`u_ff`, `chi_ff`) nor the
-  guidance (the attractor outer loop). Neither changes the inner-loop margins,
-  but the outer loop adds its own dynamics.
+- The heading/course blend (`v_kite_heading`/`v_kite_course`) is not modelled
+  and will not be (decided 2026-09-27): the model is for pure course feedback,
+  which the pattern flies at `v_k` above `v_kite_course`.
+- The feed-forward (`u_ff`, `chi_ff`) is not modelled: it lies outside the
+  loop and does not change the margins.
 
 ## Delay vs. lag
+
+Written for the 2026-09-25 model (tape lag 0.43 s at `steering_gain` 3); the
+reasoning holds, the numbers are the old ones.
 
 A **delay** (dead time) shifts the signal later in time without changing its
 shape. A **lag** (first-order low-pass) smears it out: the output starts
@@ -373,6 +499,10 @@ everything into one number, much like reading a step response by eye as
 to a step or chirp in `rel_steering`.
 
 ## Next steps
+
+The model's validation continues in `Plan_model_validation.md` (the fed-back
+course's dynamics, 150 m, the other V-tests). The items below are the
+2026-09-25 list.
 
 1. **Low-wind transition.** At 5 m/s wind the fig8 run fails (laps, min
    elevation), with or without the changes here: phase 3 lasts 20 s or more

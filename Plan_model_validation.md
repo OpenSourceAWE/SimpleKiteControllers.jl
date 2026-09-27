@@ -766,12 +766,11 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | Update `docs/course_loop_stability.md`: its tables still come from the old inner-loop model with the 0.43 s tape lag | text | no new runs |
-| 2 | The fed-back course's own dynamics: a model that holds over 200 – 300 m (not low-order at one point, see V1 step 1) | more injection runs | 2 – 4 long runs |
-| 3 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
-| 4 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
-| 5 | V3 | existing logs, a replay script | no new runs |
-| 6 | V4 | relay sweeps | 4 – 5 sweeps |
+| 1 | The fed-back course's own dynamics: a model that holds over 200 – 300 m (not low-order at one point, see V1 step 1) | more injection runs | 2 – 4 long runs |
+| 2 | 150 m: a pattern that stays off the steering clamp, then the same check | settings | 2 long runs |
+| 3 | V1 at points B (23 m/s) and C (15 m/s) | hooks in both scripts (done) | ≈ 34 runs |
+| 4 | V3 | existing logs, a replay script | no new runs |
+| 5 | V4 | relay sweeps | 4 – 5 sweeps |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -779,13 +778,10 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 
 ## Deliverables
 
-- `examples/frf_injection.jl`: runs V2, estimates the FRF and plots it over the
-  model's Bode plot.
+- A plot of V2's measured FRF over the model's Bode plot. The injection and
+  the FRF estimate themselves are done, in `examples/validate_margins.jl`
+  (`Multisine`, `frf_injection`, `measured_loop`).
 - `examples/replay_prediction.jl`: V3, the metrics per `v_a` bin.
-- A "Model validation" section in [course_loop_stability.md](course_loop_stability.md)
-  with the results. That section should also fix its Model section, which
-  still describes a single dead-time exponent of 1.24 (`kite_delay`) instead of
-  the dead-time/lag split with 1.03 and 1.32.
 
 ## Done
 
@@ -798,7 +794,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | `steering_gain` 10 in every settings YAML | tape lag 0.1 s | `58712be` |
 | V1 step 1: guidance and kite correction in `course_loop_model.jl`, `frd_margins` | model conservative at 200 – 300 m (delay margin −19 %, gain margin −22 … −42 %) | – |
 | V2 at 300 m (0.2 – 4 Hz) and 200 m (0.2 – 2.2 Hz), `STEER_INJECTION` | the measured loop reproduces V1's margins at 300 m within 15 % | – |
-| `stability_fig8.jl` uses the tape lag `1/steering_gain`, `guidance_tf` and `kite_correction` in the pattern | pattern α ≥ 0.64 (300 m), 0.59 (200 m), 0.54 (150 m) | – |
+| `stability_fig8.jl` uses the tape lag `1/steering_gain`, `guidance_tf` and `kite_correction` in the pattern | pattern α ≥ 0.64 (300 m), 0.59 (200 m), 0.54 (150 m) | `068bec1` |
+| `docs/course_loop_stability.md` updated: current model, "Model validation" section, current results; the 2026-09-25 sections marked as the old model's | – | – |
 
 ## Open questions
 
