@@ -25,6 +25,10 @@ worse and was not adopted.**
 - The inner course loop is robust at every tether length (α ≈ 1.0).
 - The loop with the attractor guidance closed around it is fragile: α 0.14 – 0.50
   over 150 – 380 m. The margin is lowest from 150 to 270 m.
+  Since 2026-09-27 the guided loop uses the validated pattern model (pattern
+  law, `kite_correction`); on the Maasvlakte 4 m/s run it gives α 0.35 – 0.95
+  instead of 0.23 – 0.83, see
+  [The validated model in the reel-out](#the-validated-model-in-the-reel-out-2026-09-27).
 - The run the numbers come from passed all 10 success criteria, so the
   predicted margin is either pessimistic or its effect is hidden in the lap's
   own motion. Validating it is the next step.
@@ -831,6 +835,41 @@ reference run.
    time. The startup path would have had 2.95 there.
 
 The follow-ups are in [Next steps](#next-steps).
+
+## The validated model in the reel-out (2026-09-27)
+
+`stability_opt_reelout.jl` now evaluates the guided loop with the pattern model
+validated for the fig8 (`Plan_model_validation.md`), as `stability_fig8.jl`
+does: the kite's dead time + lag from the pattern law
+(`pattern_dead_time_lag`, with the measured depower factor), times
+`kite_correction`, with the guidance as `guidance_tf`. The inner loop `C·P`
+keeps the turn-rate table's dead time and lag, for comparison. The pattern law
+was re-identified on pattern logs that include this reel-out (12.8 m/s: 0.292 s
+measured, 0.289 s law, 0.43 s table).
+
+Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
+23 bins of 10 m, 4 of them large-signal (not rated):
+
+| | Table (before) | Pattern model (now) |
+|---|---|---|
+| Kite dead time + lag at 12.2 m/s, settled phase 4 | 0.458 s | 0.321 s (log: 0.278 s) |
+| α guided, minimum (linear bins) | 0.23 (154 m) | 0.35 (154 m) |
+| α guided, median | 0.62 | 0.71 |
+| Delay margin, guided | 0.18 – 0.75 s | 0.27 – 0.82 s |
+| α inner, minimum | 0.63 | 0.63 (unchanged) |
+
+- **Less pessimistic, still below 0.5 in some bins.** The low bins
+  (154 / 174 / 194 / 215 / 285 / 335 m, α 0.35 – 0.45) are the ones that span
+  `v_a` 11 – 17 m/s, where the worst case combines the bin's highest `ω_g`
+  with every `v_a` corner (see [Caveats](#caveats)); the other linear bins
+  give 0.57 – 0.95.
+- **Still conservative in the delay:** the pattern law gives 15 % more than
+  the log at 12.2 m/s (0.321 s against 0.278 s); below ~13 m/s the kite's
+  response time stops growing (`Plan_model_validation.md`).
+- `kite_correction` was measured at `v_a` ≈ 34 m/s; at the reel-out's
+  11 – 17 m/s it is extrapolated.
+- The cross-track step tests above were compared against the table model; they
+  were not re-evaluated.
 
 ## Caveats
 

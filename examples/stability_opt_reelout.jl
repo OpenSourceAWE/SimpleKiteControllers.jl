@@ -21,16 +21,20 @@ differ in the reel-out:
   tape rate-limited ~4 % of the time; phase 5 steers harder (about 0.24 s,
   also ~4 % rate-limited), rising to 0.31 s in the last, largest-signal bin.
 
-- **The kite's dead time and lag.** As in `stability_fig8.jl`, from the
-  turn-rate table ([`kite_dead_time`](@ref), [`kite_lag`](@ref)): the relay
-  sweeps split the kite's response into a dead time and a first-order lag,
-  scaled over `v_a`. The log cannot split them: closed-loop steering has no
-  steps, and its own split read 0 s + 0.27 s. It checks their sum instead:
-  the pure delay identified on settled phase 4 (`identify_turn_rate_law`)
-  against the table's dead time + lag at the same `v_a` and depower, 0.232 s
-  against 0.089 + 0.158 s at 19.9 m/s (6 m/s of wind, 2026-09-26). Before
-  V3Kite v1.4.1 that delay was a cross-correlation, which ignored the gravity
-  term and read 0.067 s, too short.
+- **The kite's dead time and lag.** As in `stability_fig8.jl`: the loop with
+  the guidance is the validated pattern model (docs/Plan_model_validation.md),
+  with the kite's response time from the pattern law
+  ([`pattern_dead_time_lag`](@ref), re-identified on pattern logs including
+  this reel-out, 0.29 s at 12.8 m/s against the table's 0.43 s) and
+  [`kite_correction`](@ref); the inner loop `C·P` alone keeps the turn-rate
+  table's ([`kite_dead_time`](@ref), [`kite_lag`](@ref)), for comparison. The
+  log cannot split dead time from lag: closed-loop steering has no steps, and
+  its own split read 0 s + 0.27 s. It checks their sum instead: the pure delay
+  identified on settled phase 4 (`identify_turn_rate_law`) against the pattern
+  law's and the table's at the same `v_a` and depower. Before V3Kite v1.4.1
+  that delay was a cross-correlation, which ignored the gravity term and read
+  0.067 s, too short. `kite_correction` was measured at `v_a` ≈ 34 m/s; at the
+  reel-out's 11 – 20 m/s it is extrapolated.
 
 - **The gain schedule.** `simple_opt_reelout.jl` rescales the gain by
   `gain_scale = c1(depower_setpoint)/c1(depower)` in every phase, so the loop
@@ -176,6 +180,7 @@ let p4 = findall(==(4), sl.sys_state)
     global τ_log, τ_corr, v_log = id.delay_sec, id.delay_corr, median(Float64.(sl.v_app[i1:i2]))
     local tc = turn_rate_coeffs(fcs.body_damping, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
     global τ_table, T_table = kite_dead_time(tc, v_log), kite_lag(tc, v_log)
+    global τ_pat, T_pat = pattern_dead_time_lag(tc, v_log, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
 end
 
 "Corner frequency [rad/s] of the guidance at tether length `L` [m], `v_app` and `v_kite` [m/s]"
@@ -187,8 +192,9 @@ log_ωg = guidance_rate.(log_L, log_va, log_vk)
 """
     reelout_margins(L, v_app, ω_g, depower, el_c, lag) -> NamedTuple
 
-Disk and delay margins of the inner loop `C·P` and of the loop with the
-guidance `C·(1 + ω_g/s)·P` at one operating point: tether length `L` [m],
+Disk and delay margins of the inner loop `C·P` (the turn-rate table's dead
+time and lag) and of the pattern loop `C·(1 + ω_g/s)·P·kite_correction` (the
+pattern law's, [`pattern_dead_time_lag`](@ref)) at one operating point: tether length `L` [m],
 `v_app` [m/s], the guidance's corner `ω_g` [rad/s] (see [`guidance_rate`](@ref)),
 `depower` [-] (clamped to the turn-rate table's
 range, as the gain schedule is), the pattern's centre elevation `el_c` [deg]
@@ -198,8 +204,9 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
-    G = 1 + ω_g * Ts / (tf("z", Ts) - 1)
+    G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
     τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
+    τp, Tp = pattern_dead_time_lag(tc, v_app, clamp(depower, DP_LO, DP_HI))
     function margins(Lp)
         dm = try
             diskmargin(Lp)
@@ -212,23 +219,25 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
     end
     results = map((-cosd(el_c), cosd(el_c))) do gravity
         P = turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite)
-        (; inner = margins(C * P), guided = margins(C * G * P))
+        Pp = turn_rate_plant(tc.c1, tc.c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
+        (; inner = margins(C * P), guided = margins(C * G * Pp))
     end
     inner = argmin(r -> r.α, first.(results))
     guided = argmin(r -> r.α, last.(results))
-    return (; inner, guided, K, delay = τ)
+    return (; inner, guided, K, delay = τp)
 end
 
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
                 heading_p = %.4f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 depower_setpoint = %.3f (c1 = %.4f), v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
-                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag fitted per bin on the log, kite dead time \
-                + lag from the turn-rate table: %.3f + %.3f = %.3f s at %.1f m/s, against the log's pure delay \
-                %.3f s there (correlation %.3f).",
+                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag fitted per bin on the log, \
+                guided loop: kite correction %.2f/%.2f Hz, kite dead time + lag from the pattern law \
+                %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table, inner loop: %.3f + %.3f = %.3f s), \
+                against the log's pure delay %.3f s there (correlation %.3f).",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
                fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
-               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, τ_table, T_table,
-               τ_table + T_table, v_log, τ_log, τ_corr)
+               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, KITE_CORR_ZERO, KITE_CORR_POLE,
+               τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr)
 
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
