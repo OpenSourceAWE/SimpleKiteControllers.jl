@@ -37,12 +37,13 @@ worse and was not adopted.**
 
 ### Inner loop (as for fig8)
 
-- Actuator: a first-order lag for the steering tape, fitted on the log per
-  tether-length bin (`fit_actuator_lag`); with `steering_gain` 10 it is close
-  to the small-signal `1/steering_gain` in phase 4 (see
-  [The tape's lag in the reel-out](#the-tapes-lag-in-the-reel-out)). The
-  first version used `ACTUATOR_LAG` = 0.43 s, the fig8's rate-limited
-  equivalent.
+- Actuator: a first-order lag for the steering tape, fitted once on the log
+  over every on-path sample off the rate limit (`fit_actuator_lag`); with
+  `steering_gain` 10 it is close to the small-signal `1/steering_gain` (see
+  [The tape's lag in the reel-out](#the-tapes-lag-in-the-reel-out) and
+  [One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)). Until
+  2026-09-27 it was fitted per tether-length bin; the first version used
+  `ACTUATOR_LAG` = 0.43 s, the fig8's rate-limited equivalent.
 - Kite: the turn-rate law of `data/turn_rate_coeffs.yaml`, with the kite's
   dead time and first-order lag scaled over the apparent wind speed
   (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The first
@@ -237,7 +238,9 @@ the baseline runs gives, in phase 4:
 - **Cabauw 7 m/s:** the fit is poor (20 % unexplained) and needs a closer
   look.
 
-`stability_opt_reelout.jl` now fits `T` on the log per tether-length bin,
+`stability_opt_reelout.jl` then fitted `T` on the log per tether-length bin
+(since 2026-09-27 once per log, see
+[One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)),
 from the same on-path samples it analyses (`fit_actuator_lag`), prints it as
 a column and uses it in the plant. `LOG_DIR` points the script at an archived
 run. Worst guided α over the length, with `ACTUATOR_LAG` → with the fitted
@@ -897,6 +900,54 @@ for the model: the highest `ω_g` of the short tether with a fitted tape lag of
 (6/3.5)^1.6 = 284 s) too short; re-flown with the project's default (150 s,
 budget 355 s) it reaches 380 m at 328 s, identical up to there, and the
 370 – 380 m bin gives α 0.70.
+
+## One tape lag per log (2026-09-27, evening)
+
+`stability_global.jl` rated the archived Cabauw 10 m/s scenario α guided
+0.000, DM 0.000 s, at 355 m. The loop was not the cause: that bin fitted a
+tape lag of **2.25 s**, against 0.09 – 0.18 s in every other bin, and a
+2.25 s tape makes both loops unstable (`delay_margin` returns 0 for an
+unstable closed loop, and `diskmargin` throws, which `margins` reports as 0).
+
+- **The per-bin fit fails on quiet bins.** The 355 m bin covers 2.8 s with
+  almost no steering (std of `set_steering` 0.014, of `u − y` 0.0037); the fit
+  leaves 99.8 % of `ẏ` unexplained. Neither filter catches it: no rate
+  limiting, one phase.
+- **The fitted lag grows with the unexplained variance** (same log): below
+  10 % unexplained 0.087 – 0.095 s, 47 % 0.151 s, 68 % 0.179 s, 99.8 %
+  2.247 s. `T = 1/a` with `a = Σ ẏ·e / Σ e²`: noise dilutes `a` and inflates
+  `T`, so the weakly excited bins read the lag high.
+- **Fix:** the lag is the tape's, not the operating point's. It is now fitted
+  once per log, on every on-path sample off the rate limit (`tape_lag`), and
+  used in every bin. The per-bin fit still drives the rate-limit and
+  phase-handover filters and is printed as "bin lag", for diagnosis. On the
+  Cabauw 10 m/s log: 0.115 s (28 % unexplained); the 355 m bin goes from
+  α 0.000 to 0.778, the worst bin is 175 m at 0.392.
+
+Worst α guided per scenario, live settings (`stability_global.jl`, archived
+scenarios):
+
+| Scenario | Cabauw, per bin | Cabauw, per log | Maasvlakte, per bin | Maasvlakte, per log |
+|---|--:|--:|--:|--:|
+| 3 / 3.5 m/s | 0.409 | 0.449 | 0.328 | 0.466 |
+| 4 m/s | 0.570 | 0.531 | 0.419 | 0.483 |
+| 5 m/s | 0.539 | 0.516 | 0.521 | 0.487 |
+| 6 m/s | 0.559 | 0.523 | 0.540 | 0.514 |
+| 7 m/s | 0.462 | 0.490 | 0.523 | 0.512 |
+| 8 m/s | 0.465 | 0.427 | 0.548 | 0.515 |
+| 9 m/s | 0.388 | 0.411 | 0.505 | 0.492 |
+| 10 m/s | **0.000** | 0.392 | 0.476 | 0.464 |
+| 11 m/s | – | – | 0.429 | 0.427 |
+
+- **Both ways.** Bins with an inflated fit gain (Maasvlakte 3.5 m/s: its old
+  worst case at 264 m was one); bins with a clean fit of ~0.09 s lose a
+  little, since the pooled lag is higher. Maasvlakte 5 and 9 m/s drop just
+  below 0.5.
+- **The spread is now smooth:** 0.39 – 0.53 at both sites, falling with the
+  wind as the depower and `v_a` rise, instead of following which bins
+  happened to be quiet.
+- **Still conservative:** the pooled fit leaves 28 % unexplained and reads
+  above the clean bins' 0.09 s.
 
 ## Caveats
 

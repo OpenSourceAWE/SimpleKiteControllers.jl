@@ -14,8 +14,9 @@ differ in the reel-out:
 
 - **The tape's lag.** `ACTUATOR_LAG` (0.43 s) is the tape's equivalent lag in
   the fig8 pattern, where it is rate-limited 20 % of the time. The reel-out
-  steers less hard, and the lag is fitted on the log instead, per
-  tether-length bin on the same samples ([`fit_actuator_lag`](@ref)). Since
+  steers less hard, and the lag is fitted on the log instead, once on every
+  on-path sample off the rate limit ([`fit_actuator_lag`](@ref)); the column
+  "bin lag" is each bin's own fit, for diagnosis only. Since
   the actuator model was sped up, the lag is much lower here: in phase 4 it
   is about 0.20 s at 6 m/s wind, the small-signal `1/steering_gain`, with the
   tape rate-limited ~4 % of the time; phase 5 steers harder (about 0.24 s,
@@ -177,6 +178,16 @@ function fit_actuator_lag(sl, idx)
             unexplained = sum(abs2, dy .- a .* e) / sum(abs2, dy))
 end
 
+# The lag is the tape's, not the operating point's: one fit on every on-path sample off the rate
+# limit. A quiet bin's own fit explains little of ẏ and reads the lag high (2026-09-27, Cabauw
+# 10 m/s at 355 m: 2.25 s at 99.8 % unexplained, against 0.09 s in the clean bins).
+off_limit = filter(in_pattern) do k
+    k < length(sl.time) || return false
+    rate = (Float64(sl.steering[k + 1]) - Float64(sl.steering[k])) / (sl.time[k + 1] - sl.time[k])
+    abs(rate) <= 0.975 * SET.v_steering
+end
+tape_lag = fit_actuator_lag(sl, off_limit)
+
 # Cross-check of the table's dead time + lag: the pure delay identified on settled phase 4 (from 10 s
 # after it starts), against the table's sum at the median v_a and depower there. Closed-loop steering
 # has no steps, so the log gives the sum only; its own split read 0 s + 0.27 s on 2026-09-26.
@@ -239,20 +250,22 @@ end
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
                 heading_p = %.4f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 depower_setpoint = %.3f (c1 = %.4f), v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
-                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag fitted per bin on the log, \
+                attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag %.3f s fitted on the whole log \
+                (unexplained %.0f %%), \
                 guided loop: kite correction %.2f/%.2f Hz, kite dead time + lag from the pattern law \
                 %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table, inner loop: %.3f + %.3f = %.3f s), \
                 against the log's pure delay %.3f s there (correlation %.3f).",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
                fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
-               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, KITE_CORR_ZERO, KITE_CORR_POLE,
+               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, tape_lag.T,
+               100 * tape_lag.unexplained, KITE_CORR_ZERO, KITE_CORR_POLE,
                τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr)
 
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
 println(@sprintf("Phases 3-5 over tether length, %.0f – %.0f m in %d bins; worst case per bin over \
                   v_a (min, median, max) and depower (min, max), each v_a at the highest ω_g flown near it:", l_lo, l_hi, length(edges) - 1))
-println("  L [m]          n   v_a [m/s]    depower        D [°]  ω_g [1/s]    lag [s]  K      ",
+println("  L [m]          n   v_a [m/s]    depower        D [°]  ω_g [1/s]    bin lag  K      ",
         "α inner          α guided         DM guided")
 rows = NamedTuple[]
 uncovered = Tuple{Float64, Float64}[]
@@ -279,7 +292,7 @@ for b in 1:length(edges) - 1
     # the fitted T is not a model of the tape, so such a bin is excluded like a rate-limited one.
     local phases = unique(sl.sys_state[in_pattern[idx]])
     local mixed_phases = length(phases) > 1
-    local evals = [(; va, dp, ωg = ωg_at(va), m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, tape.T))
+    local evals = [(; va, dp, ωg = ωg_at(va), m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, tape_lag.T))
              for va in va_pts for dp in dp_pts]
     local wi = argmin(e -> e.m.inner.α, evals)
     local wg = argmin(e -> e.m.guided.α, evals)
@@ -294,7 +307,7 @@ for b in 1:length(edges) - 1
                      D, extrema(log_ωg[idx])..., tape.T, wg.m.K, wi.m.inner.α, f0(wi.m.inner),
                      wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, note))
     push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
-                 dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape.T,
+                 dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape_lag.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
                  rate_limited = tape.rate_limited, mixed_phases = mixed_phases,
                  linear = tape.rate_limited <= MAX_RATE_LIMITED && !mixed_phases))
