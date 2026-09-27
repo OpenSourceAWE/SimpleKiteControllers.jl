@@ -272,35 +272,52 @@ for b in 1:length(edges) - 1
     local dp_pts = unique(extrema(log_dp[idx]))
     local el_c = median(log_elc[idx])
     local tape = fit_actuator_lag(sl, in_pattern[idx])
+    # A bin spanning more than one phase (e.g. the phase 4 -> 5 handover, where depower ramps
+    # from depower_setpoint to depower_final within the same tether-length bin) is not one
+    # operating point: fit_actuator_lag's single first-order lag can fit it very poorly (seen:
+    # 55 % unexplained variance, T = 0.85 s against 0.09 - 0.28 s in every phase-pure bin) and
+    # the fitted T is not a model of the tape, so such a bin is excluded like a rate-limited one.
+    local phases = unique(sl.sys_state[in_pattern[idx]])
+    local mixed_phases = length(phases) > 1
     local evals = [(; va, dp, ωg = ωg_at(va), m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, tape.T))
              for va in va_pts for dp in dp_pts]
     local wi = argmin(e -> e.m.inner.α, evals)
     local wg = argmin(e -> e.m.guided.α, evals)
     f0(r) = isnothing(r.dm) ? NaN : r.dm.ω0 / 2π
+    local note = tape.rate_limited > MAX_RATE_LIMITED ?
+                 @sprintf("  large signal: tape rate-limited %.0f %%", 100 * tape.rate_limited) :
+                 mixed_phases ?
+                 @sprintf("  phase handover: bin spans phases %s, actuator-lag fit unexplained %.0f %%",
+                          join(sort(phases), "+"), 100 * tape.unexplained) : ""
     println(@sprintf("  %5.0f-%-5.0f %5d  %4.1f – %4.1f  %.3f – %.3f  %5.2f  %4.2f – %4.2f  %5.3f    %.3f  %5.3f at %4.2f Hz  %5.3f at %4.2f Hz  %5.3f s%s",
                      lo, hi, length(idx), extrema(vas)..., extrema(log_dp[idx])...,
                      D, extrema(log_ωg[idx])..., tape.T, wg.m.K, wi.m.inner.α, f0(wi.m.inner),
-                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin,
-                     tape.rate_limited > MAX_RATE_LIMITED ?
-                     @sprintf("  large signal: tape rate-limited %.0f %%", 100 * tape.rate_limited) : ""))
+                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, note))
     push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
                  dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
-                 rate_limited = tape.rate_limited, linear = tape.rate_limited <= MAX_RATE_LIMITED))
+                 rate_limited = tape.rate_limited, mixed_phases = mixed_phases,
+                 linear = tape.rate_limited <= MAX_RATE_LIMITED && !mixed_phases))
 end
 any(dp -> !(DP_LO <= dp <= DP_HI), log_dp) &&
     @warn @sprintf("The log flies depower %.3f – %.3f, outside the turn-rate table's %.3f – %.3f; \
                     clamped to it, as the gain schedule is.", extrema(log_dp)..., DP_LO, DP_HI)
 isempty(rows) && error("No tether-length bin is covered by $log_name.arrow.")
 
-# Rated on the linear bins only; a large-signal bin is a transient, see MAX_RATE_LIMITED.
+# Rated on the linear bins only; a large-signal bin (rate-limited) or a bin spanning a phase
+# handover is a transient, not one operating point, see MAX_RATE_LIMITED.
 lin_rows = filter(r -> r.linear, rows)
 isempty(lin_rows) && error("No tether-length bin of $log_name.arrow flies the tape in its linear range.")
-large = filter(r -> !r.linear, rows)
+large = filter(r -> !r.linear && r.rate_limited > MAX_RATE_LIMITED, rows)
 isempty(large) || @warn @sprintf("Not rated: %d bin(s) at L = %s m fly the tape on its rate limit more than \
                                   %.0f %% of the time (a large-signal transient, not a linear loop).",
                                  length(large), join((@sprintf("%.0f", r.L) for r in large), ", "),
                                  100 * MAX_RATE_LIMITED)
+handover = filter(r -> !r.linear && r.mixed_phases, rows)
+isempty(handover) || @warn @sprintf("Not rated: %d bin(s) at L = %s m span a phase handover (e.g. phase 4 -> 5, \
+                                     where depower ramps within the bin); the actuator-lag fit is not one \
+                                     operating point, not a linear loop.",
+                                    length(handover), join((@sprintf("%.0f", r.L) for r in handover), ", "))
 rate("Inner loop", [r.α_inner for r in lin_rows])
 α_min = rate("Loop with guidance", [r.α_guided for r in lin_rows])
 if isempty(uncovered)
