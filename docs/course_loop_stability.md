@@ -71,10 +71,14 @@ old model.
   - The kite's response time follows the **pattern law**,
     `τ_kite + T_kite = 0.14 s · (34/v_a)^0.74` (`pattern_dead_time_lag`), the
     table's dead time and lag scaled by one factor so their sum follows it
-    (at other depowers times the table's depower ratio). Re-identified on 12
+    (at other depowers times the measured factor
+    `exp(6.1·(depower − 0.27))`, `PATTERN_DEPOWER_EXP`). Re-identified on 12
     pattern logs from 12.8 to 40.6 m/s (2026-09-27): flatter over `v_a` than
     the relay sweeps, which fly at 73° and give the kite 50 % more delay at
-    13 m/s. Below 12.8 m/s it is extrapolated. The entry keeps the table:
+    13 m/s. The depower factor comes from pattern runs at 0.30 / 0.33 / 0.36
+    (×1.17 / 1.39 / 1.78); the table's rows grow only ×1.05 – 1.15 over that
+    range. Below 12.8 m/s the law is conservative (a 3.5 m/s reel-out at
+    10.6 m/s: 0.28 s measured against 0.34 s). The entry keeps the table:
     it flies high, close to the sweeps' conditions.
   - `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
     identified law says (0.8 at 1.1 Hz, 0.6 – 0.7 above 1.4 Hz, ~10° more
@@ -237,7 +241,8 @@ Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
 | 35 m/s | 0.055 + 0.082 s | 0.66 | 0.82 Hz | 0.24 s | 0.78 / 0.36 s |
 | 45 m/s | 0.048 + 0.066 s | 0.68 | 0.84 Hz | 0.22 s | 0.86 / 0.37 s |
 
-The rows below 12.8 m/s extrapolate the pattern law. The same pattern at other
+The rows below 12.8 m/s extrapolate the pattern law, which is conservative
+there (the measured response time stops growing at about 0.28 s). The same pattern at other
 tether lengths (the guidance corner scales as 1/L): minimum α 0.71 at 300 m,
 0.66 at 200 m, 0.58 at 150 m. Against every margin measured (150 – 300 m,
 `v_a` 22 – 40 m/s) this loop is low by 0 – 42 % in the delay margin and
@@ -251,8 +256,13 @@ Full gain at `v_a = v_app_ref = 27 m/s`, over depower (pattern loop):
 
 | Depower | 0.250 | 0.275 | 0.300 | 0.325 | 0.350 | 0.375 | 0.400 |
 |---|---|---|---|---|---|---|---|
-| α | 0.61 | 0.64 | 0.70 | 0.77 | 0.81 | 0.87 | 0.85 |
-| Delay margin | 0.23 s | 0.26 s | 0.31 s | 0.37 s | 0.42 s | 0.47 s | 0.52 s |
+| α | 0.66 | 0.64 | 0.65 | 0.65 | 0.63 | 0.61 | 0.55 |
+| Delay margin | 0.24 s | 0.26 s | 0.29 s | 0.32 s | 0.34 s | 0.36 s | 0.35 s |
+
+With the measured depower factor the kite's extra delay at high depower eats
+the margin its lower `c1` gives: α stays at 0.63 – 0.66 up to 0.35 and falls
+to 0.55 at 0.40 (with the table's depower ratio it rose to 0.85, too
+optimistic). Above 0.36 the factor is extrapolated.
 
 Large errors (`step_response`, real tape with `steering_gain` 10), overshoot
 [deg]: none up to 45°; at 90° 6.9 – 14.6°, at 135° 6.7 – 26.5°, at 170°

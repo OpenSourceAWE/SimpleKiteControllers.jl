@@ -1036,6 +1036,59 @@ pattern α rises from 0.71 to 0.86 and the delay margin from 0.46 to 0.53 s;
 the minimum pattern α is now 0.71 (300 m), 0.66 (200 m), 0.58 (150 m), at
 27 – 35 m/s. Below 12.8 m/s the law is extrapolated.
 
+#### The pattern law at other depowers and below 12.8 m/s (2026-09-27)
+
+Point D (300 m, 7 m/s, rate limit 0.2, no turbulence) flown at
+`depower_setpoint` 0.30 / 0.33 / 0.36 (test only, restored to 0.27), and the
+reel-out (Maasvlakte) at 3.5 m/s of wind; re-identified as in V4
+(`identify_turn_rate_law` from the tape position, phase 4 from 15 s after its
+start). Model = `pattern_dead_time_lag` (the law times the table's depower
+ratio); `g` = measured / the 0.27 law at the same `v_a`.
+
+| run | depower | `v_a` | `c1` / table | delay fitted | model | error of the model | `g` | corr |
+|---|---|---|---|---|---|---|---|---|
+| D, g10 baseline | 0.27 | 34.3 m/s | 1.03 | 0.134 s | 0.139 s | +4 % | 0.96 | 0.994 |
+| D, `dp030` | 0.30 | 29.3 m/s | 0.99 | 0.183 s | 0.165 s | −10 % | 1.17 | 0.984 |
+| D, `dp033` | 0.33 | 25.4 m/s | 0.95 | 0.242 s | 0.191 s | −21 % | 1.39 | 0.965 |
+| D, `dp036` | 0.36 | 22.2 m/s | 0.91 | 0.342 s | 0.220 s | −36 % | 1.78 | 0.925 |
+| reel-out C, phase 5 (380 m) | 0.35 | 11.1 m/s | 0.78 | 0.399 s | 0.349 s | −13 % | 1.24 | – |
+| reel-out 3.5 m/s, 159 / 214 / 277 / 338 m | 0.286 – 0.294 | 10.3 – 10.8 m/s | 0.84 – 0.88 | 0.235 – 0.295 s | 0.334 – 0.348 s | +18 … +48 % | 0.69 – 0.90 | 0.73 – 0.88 |
+| reel-out 3.5 m/s, whole phase 4 | 0.29 | 10.6 m/s | 0.85 | 0.279 s | 0.340 s | +22 % | 0.84 | 0.79 |
+
+Controls: at 0.27 the pattern runs at 22 – 24 m/s (points B and D5, V4 table)
+fit the law (0.18 – 0.20 s), so the rise at 0.33 / 0.36 is the depower, not
+the lower `v_a` it flies at.
+
+**Results:**
+
+- **The depower effect is much stronger than the table's.** In pattern flight
+  the response time grows by `g ≈ exp(6.1·(depower − 0.27))` (least squares on
+  the three fig8 runs: 1.20 / 1.44 / 1.73 against 1.17 / 1.39 / 1.78), the
+  table only by 1.05 / 1.10 / 1.15. The model is 10 – 36 % too fast above
+  0.27 — **not conservative**: its delay margins there are too large. `c1`
+  falls a little too (−9 % at 0.36). At 0.36 the command reaches the clamp
+  (the identification's correlation drops to 0.93), so that point is partly
+  large-signal; 0.30 and 0.33 stay off the clamp.
+- **Below 12.8 m/s the law is conservative.** The reel-out at 3.5 m/s of wind
+  (`v_a` 10.6 ± 1.9 m/s, depower 0.29; 3 m/s has no optimizer solution) gives
+  0.24 – 0.30 s against the model's 0.34 s; the response time stops growing
+  below ~13 m/s (12.8 m/s: 0.292 s). `c1` 0.84 – 0.88 of the table, as at 4 m/s.
+  The fits are poorer (corr 0.73 – 0.88; the command reaches the clamp in the
+  turns). The reel-out's phase 5 at depower 0.35 (−13 %) lies below the fig8
+  depower curve (`g` 1.24 against 1.63), so in the reel-out the depower effect
+  is weaker, or offset by the low-`v_a` saturation.
+
+**In the model:** `pattern_dead_time_lag(tc, v_app, depower)` now multiplies
+the law by the measured `exp(PATTERN_DEPOWER_EXP·(depower − 0.27))`,
+`PATTERN_DEPOWER_EXP` = 6.1, in place of the table's depower ratio (the row
+keeps only the dead-time/lag split; unit-tested). Nothing changes at 0.27, so
+the margins against V1/V2 stay as above. `stability_fig8.jl`'s depower sweep at
+27 m/s, 200 m: α 0.66 / 0.64 / 0.65 / 0.65 / 0.63 / 0.61 / 0.55 at 0.25 …
+0.40 (was 0.61 … 0.87, rising), delay margin 0.24 – 0.36 s (was 0.23 – 0.52 s);
+the minimum α of the sweep is now at the highest depower, extrapolated beyond
+0.36. Below 12.8 m/s nothing changes. A 3 m/s reel-out has no optimizer
+solution (tried twice).
+
 ### V2: frequency response with injected excitation
 
 Measure the plant with the loop closed, but with an excitation the controller
@@ -1129,7 +1182,7 @@ it and needs `ControlSystemsBase` in `test/Project.toml`.
 
 | Step | Test | Needs | Wall time (estimate) |
 |---|---|---|---|
-| 1 | The pattern law at other depowers (all pattern runs flew 0.27) and below 12.8 m/s (extrapolated) | pattern runs at another `depower_setpoint`; weak-wind reel-out | 2 – 4 runs |
+| 1 | The Deliverables plot: V2's measured FRF over the model's Bode plot | the archived V2 runs | no runs |
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows
@@ -1163,6 +1216,8 @@ at which frequency the model is wrong, and V3/V4 show which parameter causes it.
 | The plant below 20 m/s, from the V3 logs | two effects, both making the model pessimistic: the clamp in the fig8 transitions; in the reel-out a faster kite than the table (0.28 s against 0.43 s) with 12 % less gain | `865b3fd` |
 | V4: the turn-rate law re-identified in pattern flight (12 logs, `v_a` 12.8 – 40.6 m/s) and one relay sweep at depower 0.40, 15 m/s | `c1` as in the table (±5 %); the response time follows `0.14 s·(34/v_a)^0.74`, flatter than the table's scaling; no tether-length effect | – |
 | The pattern law adopted in the model (`pattern_dead_time_lag`), `kite_correction` refitted against it, the stability tables re-run | against every measured margin: delay margin 0 – 42 % low, gain margin 21 – 45 % low; pattern α ≥ 0.58 (150 m) … 0.71 (300 m) | – |
+| The pattern law at depower 0.30 / 0.33 / 0.36 (300 m, 7 m/s) and in a 3.5 m/s reel-out (`v_a` 10.6 m/s) | above 0.27 the model is 10 – 36 % too fast (the table's depower effect too weak; measured `g ≈ exp(6.1·(depower − 0.27))`); below 12.8 m/s it is 18 – 48 % too slow (conservative) | – |
+| The measured depower factor in `pattern_dead_time_lag` (`PATTERN_DEPOWER_EXP` 6.1), the depower sweep re-run | depower sweep α 0.55 – 0.66 (was 0.61 – 0.87) | – |
 
 ## Open questions
 

@@ -766,7 +766,7 @@ function model_loops(r)
                         kite_lag = kite_lag(tc, r.v_a_mean))
     G = guidance_tf(guidance_rate(r).ω_g, Ts)
     # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
-    τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean; tc_ref = turn_rate_coeffs(f.body_damping, PATTERN_LAW_DEPOWER))
+    τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
     Pp = turn_rate_plant(tc.c1, tc.c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                          kite_lag = Tp)
     return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))

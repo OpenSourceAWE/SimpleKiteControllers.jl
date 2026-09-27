@@ -38,12 +38,14 @@ simulation at 200 and 300 m (docs/Plan_model_validation.md, V1 step 1):
 - the kite's response time from the pattern law, `τ + T ≈ 0.14 s ·
   (34/v_a)^0.74` (`pattern_dead_time_lag`), re-identified on pattern logs
   from 12.8 to 40.6 m/s: flatter over `v_a` than the relay sweeps' scaling,
-  which at 73° elevation gives the kite 50 % more delay at 13 m/s.
+  which at 73° elevation gives the kite 50 % more delay at 13 m/s; at other
+  depowers times the measured `exp(6.1·(depower − 0.27))` (runs at 0.30 –
+  0.36; the table's rows grow far less).
 
 With them the model under-predicts the simulation's margins at every point
 measured (150 – 300 m, `v_a` 22 – 40 m/s): the delay margin by 0 – 42 %, the gain
-margin by 21 – 45 %. Below 12.8 m/s, the lowest `v_a` measured, the pattern law
-is extrapolated. What
+margin by 21 – 45 %. Below 12.8 m/s the pattern law is conservative (10.6 m/s
+in a weak-wind reel-out: 0.28 s measured against 0.34 s). What
 it still lacks is the dynamics of the fed-back course, which have no low-order
 model; `frd_margins` evaluates measured data instead. The pattern tables print
 this loop and, for comparison, the inner loop `C·P` alone. `pattern_frd_margins`
@@ -128,8 +130,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
     cos_beta = cosd(fcs.el_center)
     # In the pattern the kite's response time follows the pattern law (V4), elsewhere the table.
     τ, T_kite = pattern ?
-        pattern_dead_time_lag(tc, v_app;
-                              tc_ref = turn_rate_coeffs(fcs.body_damping, PATTERN_LAW_DEPOWER)) :
+        pattern_dead_time_lag(tc, v_app, depower) :
         (kite_dead_time(tc, v_app), kite_lag(tc, v_app))
     results = map((-cos_beta, cos_beta)) do gravity
         L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,

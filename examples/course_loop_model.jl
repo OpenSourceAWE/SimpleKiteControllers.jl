@@ -44,25 +44,33 @@ gives 0.43 s, the pattern 0.29 s.
 const PATTERN_DELAY_REF = 0.14
 const PATTERN_V_REF = 34.0
 const PATTERN_DELAY_EXP = 0.74
-"Depower [-] the pattern law was measured at; its table row is `pattern_dead_time_lag`'s `tc_ref`"
+"Depower [-] the pattern law was measured at"
 const PATTERN_LAW_DEPOWER = 0.27
+"""
+Growth of the pattern response time with depower, `exp(PATTERN_DEPOWER_EXP ·
+(depower − PATTERN_LAW_DEPOWER))`: point D (300 m, 7 m/s) flown at depower
+0.30 / 0.33 / 0.36 gave ×1.17 / 1.39 / 1.78 over the 0.27 law
+(docs/Plan_model_validation.md). The table's rows grow only ×1.05 – 1.15 over
+the same range, so their ratio is not used.
+"""
+const PATTERN_DEPOWER_EXP = 6.1
 
 """
-    pattern_dead_time_lag(tc, v_app; tc_ref = tc) -> (τ, T)
+    pattern_dead_time_lag(tc, v_app, depower) -> (τ, T)
 
 The kite's dead time and lag [s] in pattern flight: the table's
-([`kite_dead_time`](@ref), [`kite_lag`](@ref)) scaled by one factor, so their
-sum follows the pattern law ([`PATTERN_DELAY_REF`](@ref)). The law was
-measured at depower 0.27; `tc_ref` is that depower's table row, and at another
-depower (`tc`) the law is multiplied by the table's ratio of the two rows'
-sums at `v_app`, so the table's depower effect and its dead-time/lag split are
-kept. Use it for the pattern loop only: the entry flies high, close to the
-relay sweeps' conditions, where the table itself applies.
+([`kite_dead_time`](@ref), [`kite_lag`](@ref)) for the row `tc` scaled by one
+factor, so their sum follows the pattern law ([`PATTERN_DELAY_REF`](@ref)) times
+the measured depower factor ([`PATTERN_DEPOWER_EXP`](@ref)); the row's
+dead-time/lag split is kept. Use it for the pattern loop only: the entry flies
+high, close to the relay sweeps' conditions, where the table itself applies.
+Below `v_a` ≈ 13 m/s the law is conservative (the response time stops growing
+at about 0.28 s).
 """
-function pattern_dead_time_lag(tc, v_app; tc_ref = tc)
+function pattern_dead_time_lag(tc, v_app, depower)
     τ, T = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
-    sum_ref = kite_dead_time(tc_ref, v_app) + kite_lag(tc_ref, v_app)
-    target = PATTERN_DELAY_REF * (PATTERN_V_REF / v_app)^PATTERN_DELAY_EXP * (τ + T) / sum_ref
+    target = PATTERN_DELAY_REF * (PATTERN_V_REF / v_app)^PATTERN_DELAY_EXP *
+             exp(PATTERN_DEPOWER_EXP * (depower - PATTERN_LAW_DEPOWER))
     f = target / (τ + T)
     return f * τ, f * T
 end
