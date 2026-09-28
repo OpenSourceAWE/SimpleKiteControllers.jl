@@ -987,7 +987,10 @@ sets the distance, the floor only binds at slow, short-tether points
 
 Every scenario gains (α guided 0.305 – 0.424, DM 0.215 – 0.304 s); α inner is
 unchanged within ±0.01. `fc_settings_reelout.yaml` now has
-`attractor_lead_time` 0.96 s and `heading_d` 0.136 s.
+`attractor_lead_time` 0.96 s and `heading_d` 0.136 s. The method is
+`examples/retune_guided.jl`; it reproduces the margins above exactly for the old
+and the new settings. It starts from the live settings; from the new ones, its
+next step is `heading_d` 0.141 s (worst α guided 0.311).
 
 **Not yet flown.** "C" (see [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
 raised the modelled margin too and made tracking worse; this step is much
@@ -1113,3 +1116,11 @@ The script is also in the example menu (`menu.jl`). It needs a finished
 `simple_opt_reelout.jl` run for the selected project (cabauw or maasvlakte).
 Set `SHOW_PLOTS = false` before the include to skip the Bode plot of the worst
 guided loop and the plot of the margins over tether length.
+
+To retune the loop on the archived scenarios in small steps (see
+[Retune for α guided ≥ 0.3](#retune-for-α-guided--03-2026-09-28)):
+
+    include("examples/retune_guided.jl")
+    data = collect_scenarios()
+    trail = retune(data; target = 0.3)
+    table(data, trail[end].settings)

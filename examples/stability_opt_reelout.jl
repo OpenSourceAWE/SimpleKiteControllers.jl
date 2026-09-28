@@ -97,7 +97,11 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
 
-PROJECT = selected_reelout_project() # system_reelout_*.yaml; a fig8 selection falls back to the default
+# system_reelout_*.yaml; a fig8 selection falls back to the default. `PROJECT_OVERRIDE` replaces the
+# menu's selection, read and cleared like SHOW_PLOTS (used by `retune_guided.jl`).
+PROJECT = (@isdefined(PROJECT_OVERRIDE) && !isnothing(PROJECT_OVERRIDE)) ? PROJECT_OVERRIDE :
+          selected_reelout_project()
+PROJECT_OVERRIDE = nothing
 @assert PROJECT in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml") "stability_opt_reelout.jl \
     supports only system_reelout_cabauw.yaml and system_reelout_maasvlakte.yaml, got $PROJECT"
 project = project_file(PROJECT)
@@ -206,14 +210,14 @@ let p4 = findall(==(4), sl.sys_state)
     global τ_pat, T_pat = pattern_dead_time_lag(tc, v_log, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
 end
 
-"Corner frequency [rad/s] of the guidance at tether length `L` [m], `v_app` and `v_kite` [m/s]"
-guidance_rate(L, v_app, v_kite) = v_kite / (L * deg2rad(attractor_distance(fcs, v_app, L)))
+"Corner frequency [rad/s] of the guidance at tether length `L` [m], `v_app` and `v_kite` [m/s], for the settings `f`"
+guidance_rate(L, v_app, v_kite; f = fcs) = v_kite / (L * deg2rad(attractor_distance(f, v_app, L)))
 
 # Per sample: v_k/v_a changes along the lap, and a bin holds less than one lap.
 log_ωg = guidance_rate.(log_L, log_va, log_vk)
 
 """
-    reelout_margins(L, v_app, ω_g, depower, el_c, lag) -> NamedTuple
+    reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true) -> NamedTuple
 
 Disk and delay margins of the inner loop `C·P` (the turn-rate table's dead
 time and lag) and of the pattern loop `C·(1 + ω_g/s)·P·kite_correction` (the
@@ -222,12 +226,13 @@ pattern law's, [`pattern_dead_time_lag`](@ref)) at one operating point: tether l
 `depower` [-] (clamped to the turn-rate table's
 range, as the gain schedule is), the pattern's centre elevation `el_c` [deg]
 and the tape's lag `lag` [s]. Worst case over the sign of the gravity pole, whose
-size is `C3_EVAL·cos(el_c)` ([`C3`](@ref)).
+size is `C3_EVAL·cos(el_c)` ([`C3`](@ref)). The controller comes from the
+settings `f`; `inner = false` skips the inner loop (its field is then `nothing`).
 """
-function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
-    tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
-    K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
-    C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
+function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true)
+    tc = turn_rate_coeffs(f.body_damping, clamp(depower, DP_LO, DP_HI))
+    K = C1_SETPOINT / tc.c1 * f.heading_p * f.v_app_ref / max(v_app, V_MIN_PATTERN)
+    C = course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts)
     G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
     τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
     τp, Tp = pattern_dead_time_lag(tc, v_app, clamp(depower, DP_LO, DP_HI))
@@ -243,13 +248,37 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag)
     end
     c2 = c2_at(v_app; c3 = C3_EVAL)
     results = [begin
-                   P = turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite)
                    Pp = turn_rate_plant(tc.c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
-                   (; inner = margins(C * P), guided = margins(C * G * Pp))
+                   P = inner ? turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite) : nothing
+                   (; inner = inner ? margins(C * P) : nothing, guided = margins(C * G * Pp))
                end for gravity in (-cosd(el_c), cosd(el_c))]
-    inner = argmin(r -> r.α, [r.inner for r in results])
+    worst_inner = inner ? argmin(r -> r.α, [r.inner for r in results]) : nothing
     guided = argmin(r -> r.α, [r.guided for r in results])
-    return (; inner, guided, K, delay = τp)
+    return (; inner = worst_inner, guided, K, delay = τp)
+end
+
+"""
+    bin_margins(s, lag; f = fcs, inner = true) -> NamedTuple
+
+Worst case of one tether-length bin with the log samples `s = (; L, va, vk, dp, elc)`
+(vectors) and the tape's lag `lag` [s], for the settings `f`: checked at the bin's
+lowest, median and highest `v_a`, each with the highest `ω_g` its samples within
+`WG_VA_BAND` of that `v_a` fly, and at its lowest and highest depower. Returns the
+bin's median length `L`, all corners `evals`, and the worst corner of the inner loop
+`wi` (`nothing` if `inner = false`) and of the guided loop `wg`.
+"""
+function bin_margins(s, lag; f = fcs, inner = true)
+    L_mid = median(s.L)
+    ωg = guidance_rate.(s.L, s.va, s.vk; f)
+    ωg_at(va) = maximum(ωg[abs.(s.va .- va) .<= WG_VA_BAND])
+    el_c = median(s.elc)
+    evals = [(; va, dp, ωg = ωg_at(va),
+              m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, lag; f, inner))
+             for va in unique([minimum(s.va), median(s.va), maximum(s.va)])
+             for dp in unique(extrema(s.dp))]
+    wi = inner ? argmin(e -> e.m.inner.α, evals) : nothing
+    wg = argmin(e -> e.m.guided.α, evals)
+    return (; L = L_mid, evals, wi, wg)
 end
 
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
@@ -283,13 +312,9 @@ for b in 1:length(edges) - 1
         println(@sprintf("  %5.0f-%-5.0f    0   not flown in the log", lo, hi))
         continue
     end
-    local L_mid = median(log_L[idx])
+    local samples = (; L = log_L[idx], va = log_va[idx], vk = log_vk[idx], dp = log_dp[idx], elc = log_elc[idx])
     local vas = log_va[idx]
-    local va_pts = unique([minimum(vas), median(vas), maximum(vas)])
-    local ωg_at(va) = maximum(log_ωg[idx][abs.(vas .- va) .<= WG_VA_BAND])
     local D = attractor_distance(fcs, median(vas), median(log_L[idx]))
-    local dp_pts = unique(extrema(log_dp[idx]))
-    local el_c = median(log_elc[idx])
     local tape = fit_actuator_lag(sl, in_pattern[idx])
     # A bin spanning more than one phase (e.g. the phase 4 -> 5 handover, where depower ramps
     # from depower_setpoint to depower_final within the same tether-length bin) is not one
@@ -298,10 +323,8 @@ for b in 1:length(edges) - 1
     # the fitted T is not a model of the tape, so such a bin is excluded like a rate-limited one.
     local phases = unique(sl.sys_state[in_pattern[idx]])
     local mixed_phases = length(phases) > 1
-    local evals = [(; va, dp, ωg = ωg_at(va), m = reelout_margins(L_mid, va, ωg_at(va), dp, el_c, tape_lag.T))
-             for va in va_pts for dp in dp_pts]
-    local wi = argmin(e -> e.m.inner.α, evals)
-    local wg = argmin(e -> e.m.guided.α, evals)
+    local bm = bin_margins(samples, tape_lag.T)
+    local L_mid, wi, wg = bm.L, bm.wi, bm.wg
     f0(r) = isnothing(r.dm) ? NaN : r.dm.ω0 / 2π
     local note = tape.rate_limited > MAX_RATE_LIMITED ?
                  @sprintf("  large signal: tape rate-limited %.0f %%", 100 * tape.rate_limited) :
@@ -315,7 +338,7 @@ for b in 1:length(edges) - 1
     push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
                  dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape_lag.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
-                 rate_limited = tape.rate_limited, mixed_phases = mixed_phases,
+                 rate_limited = tape.rate_limited, mixed_phases = mixed_phases, samples,
                  linear = tape.rate_limited <= MAX_RATE_LIMITED && !mixed_phases))
 end
 any(dp -> !(DP_LO <= dp <= DP_HI), log_dp) &&
