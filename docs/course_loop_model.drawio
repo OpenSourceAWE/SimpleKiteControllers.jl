@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.7.8 Chrome/128.0.6613.36 Electron/32.0.1 Safari/537.36" version="24.7.8">
   <diagram id="course-loop-model" name="Linear course-loop model">
-    <mxGraphModel dx="969" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="820" math="0" shadow="0">
+    <mxGraphModel dx="646" dy="507" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="820" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -16,25 +16,25 @@
         <mxCell id="sum1_minus" value="−" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="148" y="222" width="20" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="guid" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Guidance&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1 + ω&lt;sub style=&quot;font-size: 16px;&quot;&gt;g&lt;/sub&gt;/s&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;ω&lt;sub style=&quot;font-size: 16px;&quot;&gt;g&lt;/sub&gt; = v&lt;sub style=&quot;font-size: 16px;&quot;&gt;k&lt;/sub&gt;/(L·D)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;fontSize=16;" parent="1" vertex="1">
+        <mxCell id="guid" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Guidance&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1 + ω&lt;sub style=&quot;font-size: 16px;&quot;&gt;g&lt;/sub&gt;·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;s&lt;/sub&gt;/(z−1)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;ω&lt;sub style=&quot;font-size: 16px;&quot;&gt;g&lt;/sub&gt; = v&lt;sub style=&quot;font-size: 16px;&quot;&gt;k&lt;/sub&gt;/(L·Δ)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="240" y="155" width="140" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="pid" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Course PD&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;C(z) = K + b&lt;sub style=&quot;font-size: 16px;&quot;&gt;d&lt;/sub&gt;(z−1)/(z−a&lt;sub style=&quot;font-size: 16px;&quot;&gt;d&lt;/sub&gt;)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;[+ K·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;s&lt;/sub&gt;/(T&lt;sub style=&quot;font-size: 16px;&quot;&gt;i&lt;/sub&gt;(z−1))]&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;" parent="1" vertex="1">
+        <mxCell id="pid" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Course PD&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;C(z) = K + b&lt;sub style=&quot;font-size: 16px;&quot;&gt;d&lt;/sub&gt;(z−1)/(z−a&lt;sub style=&quot;font-size: 16px;&quot;&gt;d&lt;/sub&gt;)" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="480" y="145" width="250" height="110" as="geometry" />
         </mxCell>
         <mxCell id="zoh" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;ZOH&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;T&lt;sub style=&quot;font-size: 16px;&quot;&gt;s&lt;/sub&gt;&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="800" y="170" width="70" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="act" value="&lt;b&gt;Kite Control Unit&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1/(1 + s·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;act&lt;/sub&gt;)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;T&lt;sub style=&quot;font-size: 16px;&quot;&gt;act&lt;/sub&gt; = 1/steering_gain&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=16;" parent="1" vertex="1">
+        <mxCell id="act" value="&lt;b&gt;Kite Control Unit&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1/(1 + s·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;act&lt;/sub&gt;)&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;T&lt;sub style=&quot;font-size: 16px;&quot;&gt;act&lt;/sub&gt; ≈ 0.1 s&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="950" y="160" width="180" height="80" as="geometry" />
         </mxCell>
         <mxCell id="tr_box" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;Turn-rate law, linearized about ψ&lt;sub&gt;0&lt;/sub&gt;&lt;/font&gt;" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#bbbbbb;fontSize=11;verticalAlign=top;align=left;spacingLeft=8;fontStyle=2;" parent="1" vertex="1">
           <mxGeometry x="440" y="350" width="340" height="235" as="geometry" />
         </mxCell>
-        <mxCell id="dead" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Kite dead time&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;z&lt;sup style=&quot;font-size: 16px;&quot;&gt;−n&lt;/sup&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;n = round(τ&lt;sub style=&quot;font-size: 16px;&quot;&gt;kite&lt;/sub&gt;/T&lt;sub style=&quot;font-size: 16px;&quot;&gt;s&lt;/sub&gt;)&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" parent="1" vertex="1">
+        <mxCell id="dead" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Kite dead time&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;e&lt;sup style=&quot;font-size: 16px;&quot;&gt;−s·τ&lt;sub&gt;d&lt;/sub&gt;&lt;/sup&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="960" y="380" width="160" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="klag" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Kite lag&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1/(1 + s·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;kite&lt;/sub&gt;)" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" parent="1" vertex="1">
+        <mxCell id="klag" value="&lt;b style=&quot;font-size: 16px;&quot;&gt;Kite lag&lt;/b&gt;&lt;br style=&quot;font-size: 16px;&quot;&gt;1/(1 + s·T&lt;sub style=&quot;font-size: 16px;&quot;&gt;k&lt;/sub&gt;)" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" parent="1" vertex="1">
           <mxGeometry x="800" y="385" width="130" height="70" as="geometry" />
         </mxCell>
         <mxCell id="c1" value="c&lt;sub style=&quot;font-size: 16px;&quot;&gt;1&lt;/sub&gt;·v&lt;sub style=&quot;font-size: 16px;&quot;&gt;a&lt;/sub&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=16;" parent="1" vertex="1">
@@ -46,13 +46,13 @@
         <mxCell id="integ" value="1/s" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=17;" parent="1" vertex="1">
           <mxGeometry x="480" y="395" width="60" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="elVAl80gF8ytoo_wmP1s-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="grav" target="sum2">
+        <mxCell id="elVAl80gF8ytoo_wmP1s-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="grav" target="sum2" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="grav" value="c&lt;sub style=&quot;font-size: 15px;&quot;&gt;2&lt;/sub&gt;·cos ψ&lt;sub style=&quot;font-size: 15px;&quot;&gt;0&lt;/sub&gt;·cos β / v&lt;sub style=&quot;font-size: 15px;&quot;&gt;a&lt;/sub&gt;&lt;br style=&quot;font-size: 15px;&quot;&gt;&lt;font style=&quot;font-size: 15px;&quot;&gt;gravity pole&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=15;" parent="1" vertex="1">
           <mxGeometry x="477" y="507" width="153" height="65" as="geometry" />
         </mxCell>
-        <mxCell id="elVAl80gF8ytoo_wmP1s-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.021;entryY=0.431;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="node_psi" target="grav">
+        <mxCell id="elVAl80gF8ytoo_wmP1s-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.021;entryY=0.431;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="node_psi" target="grav" edge="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="460" y="535" />
@@ -77,10 +77,10 @@
         <mxCell id="e_s1_g" value="" style="endArrow=block;html=1;rounded=0;" parent="1" source="sum1" target="guid" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_g_c" value="e" style="endArrow=block;html=1;rounded=0;fontSize=13;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="guid" target="pid" edge="1">
+        <mxCell id="e_g_c" value="e" style="endArrow=block;html=1;rounded=0;fontSize=17;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="guid" target="pid" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_c_z" value="u" style="endArrow=block;html=1;rounded=0;fontSize=13;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="pid" target="zoh" edge="1">
+        <mxCell id="e_c_z" value="u" style="endArrow=block;html=1;rounded=0;fontSize=17;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="pid" target="zoh" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_z_a" value="" style="endArrow=block;html=1;rounded=0;" parent="1" source="zoh" target="act" edge="1">
@@ -104,7 +104,7 @@
         <mxCell id="e_i_n" value="" style="endArrow=none;html=1;rounded=0;exitX=0;exitY=0.5;" parent="1" source="integ" target="node_psi" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_n_corr" value="ψ" style="endArrow=block;html=1;rounded=0;entryX=1;entryY=0.5;fontSize=16;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="node_psi" target="corr" edge="1">
+        <mxCell id="e_n_corr" value="ψ" style="endArrow=block;html=1;rounded=0;entryX=1;entryY=0.5;fontSize=17;labelBackgroundColor=#ffffff;fontStyle=2;" parent="1" source="node_psi" target="corr" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_corr_n" value="" style="endArrow=none;html=1;rounded=0;exitX=0;exitY=0.5;" parent="1" source="corr" target="node_chi" edge="1">
