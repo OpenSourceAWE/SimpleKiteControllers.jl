@@ -951,6 +951,50 @@ scenarios):
 - **Still conservative:** the pooled fit leaves 28 % unexplained and reads
   above the clean bins' 0.09 s.
 
+## Retune for α guided ≥ 0.3 (2026-09-28)
+
+With the gravity term `C3` = 0.23 1/s, five archived scenarios rated α guided
+below 0.3 (Cabauw 3, 8, 9, 10 m/s, Maasvlakte 11 m/s; worst 0.257 at Cabauw
+10 m/s, 175 m). Retuned on the linear model in small steps: the operating
+corners of every linear bin of the 22 archived scenarios (`stability_global.jl`'s
+selection, both sites) were collected once, and the loop re-evaluated for trial
+settings, exactly as `reelout_margins` does (reproduces the overview tables).
+Each step raised one setting by a small increment, whichever lifted the worst
+scenario most, until all were at 0.3 or above.
+
+Sensitivity of the worst α guided (0.2566) to one step:
+
+| Step | − | + |
+|---|--:|--:|
+| `heading_p` ±2 % | 0.2535 | 0.2595 |
+| `heading_d` ±0.005 s | 0.2497 | 0.2634 |
+| `attractor_dist` ±0.25° | 0.2566 | 0.2566 |
+| `attractor_lead_time` ±0.02 s | 0.2465 | 0.2664 |
+
+`attractor_dist` does not act at the worst points: at high `v_a` the lead time
+sets the distance, the floor only binds at slow, short-tether points
+(Cabauw 3 m/s). Path: lead 0.88 → 0.96 s in four steps, then `heading_d`
+0.126 → 0.136 s in two; worst α guided 0.2566 → 0.3051.
+
+| Scenario | α guided before → after | DM guided [s] before → after |
+|---|--:|--:|
+| Cabauw 3 m/s | 0.293 → **0.305** (worst) | 0.227 → 0.236 |
+| Cabauw 8 m/s | 0.290 → 0.340 | 0.200 → 0.240 |
+| Cabauw 9 m/s | 0.270 → 0.320 | 0.185 → 0.225 |
+| Cabauw 10 m/s | 0.257 → 0.308 | 0.175 → 0.215 |
+| Maasvlakte 3.5 m/s | 0.309 → 0.321 | 0.250 → 0.258 |
+| Maasvlakte 11 m/s | 0.297 → 0.347 | 0.207 → 0.247 |
+
+Every scenario gains (α guided 0.305 – 0.424, DM 0.215 – 0.304 s); α inner is
+unchanged within ±0.01. `fc_settings_reelout.yaml` now has
+`attractor_lead_time` 0.96 s and `heading_d` 0.136 s.
+
+**Not yet flown.** "C" (see [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
+raised the modelled margin too and made tracking worse; this step is much
+smaller (lead +9 %, `heading_d` +8 %, against lead ×1.8 and `heading_d` ×2.4).
+To check before adopting: regression runs at Cabauw 3, 5, 10 m/s and Maasvlakte
+7, 11 m/s, comparing RMS d, minimum elevation and power with the archived runs.
+
 ## Caveats
 
 - **The guidance model is validated only in its linear range** (see the
