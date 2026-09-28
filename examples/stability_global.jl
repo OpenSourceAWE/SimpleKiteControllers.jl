@@ -85,7 +85,6 @@ function analyse_scenario(dir; plots = false, quiet = true)
     latest(name) = Base.invokelatest(getglobal, Main, name)
     lin_rows, rows, worst = latest(:lin_rows), latest(:rows), latest(:worst)
     return (; α_inner = minimum(r.α_inner for r in lin_rows), α_guided = worst.α_guided,
-            α_guided_c2_0 = minimum(r.α_guided_c2_0 for r in lin_rows),
             dm_guided = worst.dm_guided, L = worst.L, va = worst.va, dp = worst.dp,
             not_rated = length(rows) - length(lin_rows), not_flown = length(latest(:uncovered)),
             n_bins = length(latest(:edges)) - 1,
@@ -117,15 +116,15 @@ verdict(α) = α < 0.3 ? "fragile" : α < 0.5 ? "marginal" : "robust"
 println()
 printstyled(@sprintf("Worst disk margin per scenario, %s (live controller settings):\n",
                      basename(scenarios_dir)); bold = true)
-println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/total  α guided, c2 = 0")
+println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/total")
 for r in results
     if haskey(r, :error)
         println(@sprintf("  %-8s  %10.2f  failed: %s", r.name, r.wind, first(split(r.error, '\n'))))
         continue
     end
-    line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %-20s  %.3f",
+    line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %s",
                     r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                    r.dm_guided, r.τ, bins(r), r.α_guided_c2_0)
+                    r.dm_guided, r.τ, bins(r))
     color = r.α_guided < 0.3 ? :red : r.α_guided < 0.5 ? :yellow : :normal
     printstyled(line, r === worst_scenario ? "   <- worst\n" : "\n"; color)
 end
@@ -137,28 +136,27 @@ open(report_path, "w") do io
     println(io)
     println(io, "Worst disk margin per scenario (live controller settings).")
     println(io)
-    println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/total | α guided, c2 = 0 |")
-    println(io, "|---|---|---|---|---|---|---|---|---|---|---|---|")
+    println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/total |")
+    println(io, "|---|---|---|---|---|---|---|---|---|---|---|")
     for r in results
         if haskey(r, :error)
-            println(io, @sprintf("| %s | %.2f | failed: %s | | | | | | | | |",
+            println(io, @sprintf("| %s | %.2f | failed: %s | | | | | | | |",
                                  r.name, r.wind, first(split(r.error, '\n'))))
             continue
         end
         mark = r === worst_scenario ? " **← worst**" : ""
-        println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %s | %.3f%s |",
+        println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %s%s |",
                              r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                             r.dm_guided, r.τ, bins(r), r.α_guided_c2_0, mark))
+                             r.dm_guided, r.τ, bins(r), mark))
     end
     println(io)
     println(io, "α inner is the disk margin of the course PID closed only around the turn-rate ",
                  "plant (no guidance law); α guided is the disk margin of the actual flown loop, ",
                  "PID → guidance law → pattern-law kite dynamics, and is the value that is rated; ",
                  "DM guided is that same guided loop's delay margin, the extra pure delay it could ",
-                 "absorb before going unstable. The gravity coefficient c2 of the turn-rate law cannot ",
-                 "be identified, so α inner, α guided and DM guided are the worst case over c2 in ",
-                 "C2_BOUNDS = $(C2_BOUNDS) (course_loop_model.jl); α guided, c2 = 0 is the guided ",
-                 "margin without the gravity pole, the upper end of the range.")
+                 "absorb before going unstable. The gravity term of the turn-rate law is ",
+                 "c3·sin(ψ)·cos(β) with c3 = $(C3) 1/s (course_loop_model.jl), identified on the ",
+                 "flown figures of eight; all margins are the worst case over the sign of its pole.")
 end
 @info "Wrote $report_path"
 

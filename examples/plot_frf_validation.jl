@@ -75,8 +75,8 @@ function frf_point(p)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     ω_g = FRF_VK_OVER_VA * v_a / (L_t * deg2rad(attractor_distance(fcs, v_a, L_t)))
     tc = turn_rate_coeffs(fcs.body_damping, FRF_DEPOWER)
-    # c2 = 0 (the lower end of C2_BOUNDS): the table's gravity coefficient is not identified.
-    c2 = first(C2_BOUNDS)
+    # The identified gravity term C3 (course_loop_model.jl).
+    c2 = c2_at(v_a)
     gravity = -cosd(fcs.el_center)
     lag = 1 / set.steering_gain
     P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, v_a), v_a, gravity, Ts; lag,

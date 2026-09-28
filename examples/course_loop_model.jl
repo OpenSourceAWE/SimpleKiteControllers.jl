@@ -107,20 +107,26 @@ function course_pid(K, Ti, Td, N, Ts)
 end
 
 """
-    C2_BOUNDS
+    C3
 
-Range [-] of the turn-rate law's gravity coefficient `c2` that the margins are
-bounded over. The relay sweeps of `build_turn_rate_table.jl` cannot identify
-`c2`: their steering is fed back from the heading, so `c2` trades against the
-delay (at depower 0.275 it falls by 0.65 per sample of shift, from +2.8 to 0
-over the flat bottom of the residual, 2026-09-27), and the table's value is
-arbitrary. The lower end drops the gravity pole, as the controller does; the
-upper end is the largest value in the table (2.45, depower 0.40).
+Gravity coefficient [1/s] of the turn-rate law in the form
+
+    ψ̇ = c1·v_a·u_s + c3·sin(ψ)·cos(β)
+
+which fits the flown figures of eight better than the table's `c2/v_a` form: over
+25 archived reel-out runs (SimulationResults, 3 – 11 m/s, `v_a` 8 – 45 m/s) the
+table-form `c2` grows about in proportion to `v_a`, while `c3` stays flat. Fitted
+on the samples the stability analysis rates (phases 3-5, cross-track error below
+`attractor_dist`), with `c1` and the delay taken from the turn-rate table: pooled
+0.230 over 91 000 samples, per run 0.18 – 0.30, phase 4 0.227, phase 5 0.247
+(2026-09-28). The relay sweeps of `build_turn_rate_table.jl` cannot identify it:
+their steering is fed back from the heading, so the gravity term trades against
+the delay, and the table's `c2` is arbitrary.
 """
-const C2_BOUNDS = (0.0, 2.45)
+const C3 = 0.23
 
-"`c2` values [-] to evaluate a margin at: `C2_BOUNDS`, or only `override` when one is given"
-c2_values(override = nothing) = isnothing(override) ? C2_BOUNDS : (Float64(override),)
+"`c2` [-] of the table's form `c2/v_a·sin(ψ)·cos(β)` that equals `c3·sin(ψ)·cos(β)` at `v_app` [m/s]"
+c2_at(v_app; c3 = C3) = c3 * v_app
 
 """
     turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0) -> StateSpace

@@ -13,7 +13,7 @@ lag from the commanded to the applied steering,
 
 then the turn-rate law of `data/turn_rate_coeffs.yaml`,
 
-    ψ̇ = c1·v_a·u_k + c2/v_a·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
+    ψ̇ = c1·v_a·u_k + C3·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
 
 `T_act = 1/steering_gain` of the project's settings (`TAPE_LAG`, 0.1 s at
 `steering_gain` 10): the tape's small-signal lag, which injected multisines
@@ -53,7 +53,7 @@ evaluates the pattern loop with the measured course correction at the airspeed
 it was measured at; its disk margin agrees with the table's, its delay and gain
 margins are the realistic ones.
 
-The gravity term only adds a slow real pole at `±c2/v_a·cos(β)`; both signs are
+The gravity term only adds a slow real pole at `±C3·cos(β)`; both signs are
 checked and the worse one is reported. The controller is the exact discrete
 transfer function of `DiscretePIDs.DiscretePID` (backward-Euler filtered
 derivative, forward-Euler integral), with the gain schedule
@@ -118,8 +118,8 @@ guidance_corner(v_app) = V_K_OVER_V_A * v_app /
     loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false) -> NamedTuple
 
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
-`L = C·P` at one operating point, worst case over the sign of the gravity pole and
-over `C2_BOUNDS` (the gravity coefficient is not identified).
+`L = C·P` at one operating point, worst case over the sign of the gravity pole
+`±C3·cos(β)` ([`C3`](@ref)).
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
 `pattern = true` multiplies in the guidance and the kite correction, and takes
 the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
@@ -133,8 +133,8 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
     τ, T_kite = pattern ?
         pattern_dead_time_lag(tc, v_app, depower) :
         (kite_dead_time(tc, v_app), kite_lag(tc, v_app))
-    results = map(Iterators.product(C2_BOUNDS, (-cos_beta, cos_beta))) do (c2, gravity)
-        L = C * turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
+    results = map((-cos_beta, cos_beta)) do gravity
+        L = C * turn_rate_plant(tc.c1, c2_at(v_app), τ, v_app, gravity, Ts; lag = TAPE_LAG,
                                 kite_lag = T_kite)
         pattern && (L = L * kite_correction(Ts) * guidance_tf(guidance_corner(v_app), Ts))
         dm = try

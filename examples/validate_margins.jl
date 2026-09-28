@@ -170,8 +170,9 @@ function predict(point::Symbol; v_a = V1_POINTS[point].v_a_nominal, depower = no
     C = course_pid(K, fcs_p.heading_i, fcs_p.heading_d, fcs_p.heading_d_n, Ts)
     cos_beta = cosd(fcs_p.el_center)
     τ, T_kite = kite_dead_time(tc, v_a), kite_lag(tc, v_a)
-    # Worst case over C2_BOUNDS too: the gravity coefficient is not identified.
-    branches = vec(map(Iterators.product(C2_BOUNDS, (-cos_beta, cos_beta))) do (c2, g)
+    # Gravity term C3·sin(ψ)·cos(β), see course_loop_model.jl.
+    c2 = c2_at(v_a)
+    branches = vec(map((-cos_beta, cos_beta)) do g
         L = C * turn_rate_plant(tc.c1, c2, τ, v_a, g, Ts; lag, kite_lag = T_kite)
         (; g, c2, L, α = diskmargin(L).margin, open_loop_stable = isstable(L))
     end)
@@ -762,9 +763,9 @@ function model_loops(r)
     f = FC_Settings(fc_settings(project))
     C, Ts = course_controller_tf(r.point, r.v_a_mean; depower = r.depower)
     tc = turn_rate_coeffs(f.body_damping, r.depower)
-    # One model to set against the measurement: without the gravity pole (c2 = 0, the lower
-    # end of C2_BOUNDS), as the controller has it; the table's c2 is not identified.
-    c2 = first(C2_BOUNDS)
+    # One model to set against the measurement: the stable sign of the gravity pole, with the
+    # identified gravity term C3 (course_loop_model.jl).
+    c2 = c2_at(r.v_a_mean)
     P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
                         -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))

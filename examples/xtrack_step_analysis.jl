@@ -183,7 +183,7 @@ function fit_second_order_gain(τ, y)
     return (K = best[2], f_d = best[3], ζ = best[4], delay = best[5], rms = best[1])
 end
 
-"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per c2 in `C2_BOUNDS` and gravity sign."
+"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per sign of the gravity pole (`C3`)."
 function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
@@ -191,7 +191,8 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     ωg = guidance_rate(Lt, v_app, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
     τd = kite_dead_time(tc, v_app)
-    vec(map(Iterators.product((-cosd(el_c), cosd(el_c)), C2_BOUNDS)) do (gravity, c2)
+    c2 = c2_at(v_app)
+    vec(map((-cosd(el_c), cosd(el_c))) do gravity
         P = turn_rate_plant(tc.c1, c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
         Lg = C * G * P
         T = minreal(feedback(Lg) * (1 - 1 / G); atol = 1e-8)

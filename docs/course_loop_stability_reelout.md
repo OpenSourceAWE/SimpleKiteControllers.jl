@@ -48,8 +48,10 @@ worse and was not adopted.**
   dead time and first-order lag scaled over the apparent wind speed
   (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The first
   version had a single dead time (`kite_delay`, exponent 1.24).
-- Gravity: both signs of the gravity pole are checked. β is the pattern's
-  centre elevation, read from the log (`var_04`).
+- Gravity: both signs of the gravity pole `±C3·cos(β)` are checked, with the
+  gravity term `C3·sin(ψ)·cos(β)`, `C3` = 0.23 1/s identified on the flown figures
+  of eight (2026-09-28, `course_loop_model.jl`). β is the pattern's centre
+  elevation, read from the log (`var_04`).
 - Controller: the exact discrete PD of `CourseController`, at the project's
   `1/sample_freq`.
 
