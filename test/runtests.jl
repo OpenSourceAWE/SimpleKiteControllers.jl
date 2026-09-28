@@ -1,6 +1,11 @@
 # Copyright (c) 2025, 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
+using Pkg
+if dirname(Pkg.project().path) != @__DIR__
+    Pkg.activate(@__DIR__)
+end
+
 using SimpleKiteControllers
 using Test
 
