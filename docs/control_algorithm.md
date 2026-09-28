@@ -183,9 +183,7 @@ The full phase/winch gating, including which timer starts what, is in
 ## Stability and robustness
 
 **No loop in this stack is backed by a margin analysis.** Nothing is linearized about a trim
-point and no gain or phase margin is computed anywhere; the `linearize` of
-[`parking_controller.jl`](../src/parking_controller.jl#L48) is an NDI *inversion* of the plant,
-not a stability analysis. Stability is an empirical claim, resting on the structural properties
+point and no gain or phase margin is computed anywhere. Stability is an empirical claim, resting on the structural properties
 below plus regression runs against the full nonlinear model.
 
 ### What keeps the loops stable by construction

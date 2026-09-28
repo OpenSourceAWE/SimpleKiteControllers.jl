@@ -9,11 +9,8 @@ using StaticArrays: SVector
 using Statistics: mean, std
 using Printf: @printf, @sprintf
 
-export ParkingController, ParkingControllerSettings
-export linearize, calc_steering, navigate
-
 # Figure-of-eight inner-loop (course) controller
-export CourseController, CourseControllerSettings, set_phase!
+export CourseController, CourseControllerSettings, calc_steering, set_phase!
 
 # Figure-of-eight guidance
 export FigureEightSettings, FigureEightController
@@ -70,7 +67,6 @@ directory during a run, while these settings belong to the controller.
 """
 skc_data_path() = joinpath(dirname(@__DIR__), "data")
 
-include("parking_controller.jl")
 # Before figure_eight_controller.jl: its feasibility helpers default c1 to V3_TURN_RATE_C1.
 include("turn_rate_table.jl")
 include("winch_kv_table.jl")

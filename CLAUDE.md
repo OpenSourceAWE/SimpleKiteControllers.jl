@@ -191,9 +191,6 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 `figure_eight_controller.jl`, since the guidance's feasibility helpers default `c1` to
 `V3_TURN_RATE_C1` defined there.
 
-- `parking_controller.jl` — `ParkingControllerSettings`/`ParkingController`, the NDI
-  block (`linearize`), great-circle `navigate`, and the cascaded turn-rate/heading
-  `calc_steering`.
 - `figure_eight_controller.jl` — `FigureEightSettings`/`FigureEightController`. Builds a
   discretized lemniscate in (azimuth, elevation) degrees, finds the closest point Q and
   returns an attractor point a fixed arc ahead (`calc_attractor`), then the great-circle

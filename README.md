@@ -8,7 +8,6 @@
 This package provides:
 - a path following figure of eight controller
 - a reel-out controller that produces power by reeling out and flying figures of eight
-- a parking controller, that keeps the nose of the kite pointing into the wind and thus keeps it in a steady state airborne as long as there is sufficient wind
 - a client for the [AWETrim](https://github.com/awegroup/AWETrim) reelout flight-path optimizer
 
 Planned:
@@ -32,12 +31,6 @@ Planned:
 - `fig8_metrics` / `print_fig8_metrics`, headless quality metrics for a flown run
 - `FC_Settings`, every tuning parameter of a figure-of-eight run, loaded from
   `data/fc_settings.yaml`
-- the types `ParkingController` and `ParkingControllerSettings` and the functions
-  `linearize`, `calc_steering`, `navigate` — the NDI/turn-rate building blocks for a
-  parking controller; unit-tested, but not yet driven end-to-end in an example (see TODO).
-  `examples/simple_auto_parking.jl` demonstrates the parking behaviour itself — nose held
-  into the wind at a constant tether length — with a simpler gain-scheduled heading PID
-  instead, on top of V3Kite.jl
 
 ## Examples
 
