@@ -992,11 +992,35 @@ unchanged within ±0.01. `fc_settings_reelout.yaml` now has
 and the new settings. It starts from the live settings; from the new ones, its
 next step is `heading_d` 0.141 s (worst α guided 0.311).
 
-**Not yet flown.** "C" (see [Attempted fix](#attempted-fix-2026-09-25-not-adopted))
-raised the modelled margin too and made tracking worse; this step is much
-smaller (lead +9 %, `heading_d` +8 %, against lead ×1.8 and `heading_d` ×2.4).
-To check before adopting: regression runs at Cabauw 3, 5, 10 m/s and Maasvlakte
-7, 11 m/s, comparing RMS d, minimum elevation and power with the archived runs.
+"C" (see [Attempted fix](#attempted-fix-2026-09-25-not-adopted)) raised the
+modelled margin too and made tracking worse; this step is much smaller: the
+lead +9 % and `heading_d` +8 %, against lead ×1.8 and `heading_d` ×2.4.
+
+**Flown A/B (2026-09-28, commit `195ddcf`).** Each case twice on the same code,
+no turbulence: "old" with `FCS_OVERRIDES` lead 0.88 s, `heading_d` 0.126 s,
+"new" with the live file. All 10 runs pass all 10 criteria.
+
+| Case | RMS d [°] old → new | Mean d [°] | Min el., settled [°] | Power [W] |
+|---|--:|--:|--:|--:|
+| Cabauw 3 m/s | 1.21 → 1.21 | 1.09 → 1.09 | 14.6 → 14.6 | 2002 → 2002 |
+| Cabauw 5 m/s | 1.34 → 1.34 | 1.03 → 1.04 | 14.8 → 14.7 | 13 873 → 13 870 |
+| Cabauw 10 m/s | 1.71 → 1.74 | 1.36 → 1.44 | 10.4 → 10.9 | 23 583 → 23 326 |
+| Maasvlakte 7 m/s | 1.13 → 1.15 | 0.89 → 0.91 | 8.9 → 9.0 | 11 933 → 11 928 |
+| Maasvlakte 11 m/s | 1.53 → 1.56 | 1.17 → 1.20 | 13.3 → 13.3 | 18 766 → 18 785 |
+
+- **Tracking costs a little at high wind:** RMS d +0 – 2 %, the mean up to +6 %
+  (Cabauw 10 m/s), in the direction "C" went (+53 %) but an order smaller.
+- **Nothing changes at 3 – 5 m/s:** there the kite is slow, the 8° floor sets
+  the attractor distance and the lead does not act; only `heading_d` moved.
+- **Minimum elevation and power hold,** except −1.1 % power at Cabauw 10 m/s.
+- The runs do not measure the disk margin; they show what the retune costs, not
+  that the loop is more robust in flight.
+
+The settings stay live. Archives in `output/archives/`: old `2026-09-28_215150`, `_215459`,
+`_215728`, `_220032`, `_220322`; new `_215322`, `_215609`, `_215847`, `_220210`,
+`_220405`, in the table's order. **The old archives hold the live
+`fc_settings_reelout.yaml` (0.96 s, 0.136 s):** the run summary does not record
+`FCS_OVERRIDES`; the pairs differ, which shows the overrides were in force.
 
 ## Caveats
 
