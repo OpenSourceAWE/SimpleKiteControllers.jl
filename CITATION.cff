@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "SimpleKiteControllers.jl"
+abstract: "Controllers for kites used in airborne wind energy systems. Provides a path-following figure-of-eight controller with gain-scheduled course control, a reel-out controller that produces power by reeling out while flying figures of eight, a parking controller, a curvature feasibility check for flight paths, and a client for the AWETrim reel-out flight-path optimizer."
+authors:
+  - family-names: Fechner
+    given-names: Uwe
+    email: u.fechner-1@tudelft.nl
+    affiliation: "Delft University of Technology"
+    orcid: "https://orcid.org/0009-0008-2532-9458"
+repository-code: "https://github.com/OpenSourceAWE/SimpleKiteControllers.jl"
+url: "https://opensourceawe.github.io/SimulationResults/"
+license: MIT
+version: "0.5.0"
+date-released: "2026-09-28"
+keywords:
+  - kite
+  - flight path control
+  - figure of eight
+  - airborne wind energy
+  - Julia
