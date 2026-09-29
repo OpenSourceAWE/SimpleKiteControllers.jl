@@ -1022,6 +1022,69 @@ The settings stay live. Archives in `output/archives/`: old `2026-09-28_215150`,
 `fc_settings_reelout.yaml` (0.96 s, 0.136 s):** the run summary does not record
 `FCS_OVERRIDES`; the pairs differ, which shows the overrides were in force.
 
+## Retune for α guided 0.305 – 0.314 with the least RMS d (2026-09-29)
+
+On the scenarios rerun on 28 Sep, the settings above rate a worst α guided of
+0.288 (Cabauw 10 m/s, 175 m). Target: bring it into 0.305 – 0.314 and keep
+the RMS cross-track error as small as possible. The method is the one above
+(`retune_guided.jl`, 22 scenarios, `c3` = 0.23 1/s).
+
+One step from the live settings, worst α guided 0.288:
+
+| Step | − | + |
+|---|--:|--:|
+| `heading_p` ±2 % | 0.285 | 0.291 |
+| `heading_d` ±0.005 s | 0.282 | 0.295 |
+| `attractor_dist` ±0.25° | 0.288 | 0.288 |
+| `attractor_lead_time` ±0.02 s | 0.279 | 0.297 |
+
+The lead time was what cost tracking in the last A/B. So the candidates raise
+`heading_p`, which should tighten tracking, together with `heading_d`:
+
+| Candidate | `heading_p` | `heading_d` [s] | α guided worst | DM guided worst [s] |
+|---|--:|--:|--:|--:|
+| live | 0.17019 | 0.136 | 0.288 | 0.202 |
+| A: `heading_d` only | 0.17019 | 0.151 | 0.308 | 0.215 |
+| B | +4 % | 0.146 | 0.308 | 0.208 |
+| C | +6 % | 0.146 | 0.311 | 0.207 |
+| **D** | **+8 %, 0.183805** | **0.141** | **0.306** | **0.202** |
+| E: lead 1.00 s | 0.17019 | 0.136 | 0.306 | 0.217 |
+
+In all of them the worst case stays Cabauw 10 m/s.
+
+**Flown A/B (2026-09-29).** B, C and D against live, the five cases of the
+last A/B, no turbulence, candidates via `FCS_OVERRIDES`. All 20 runs pass all
+10 criteria. The live runs reproduce the live column of 28 Sep.
+
+| Case | RMS d [°] live / B / C / D | Min el., settled [°] live / B / C / D | Power [W] live / D |
+|---|--:|--:|--:|
+| Cabauw 3 m/s | 1.215 / 1.149 / 1.116 / **1.084** | 14.6 / 14.7 / 14.8 / 14.9 | 2002 / 2005 |
+| Cabauw 5 m/s | 1.344 / 1.265 / 1.229 / **1.185** | 14.7 / 14.9 / 15.0 / 15.2 | 13 870 / 13 878 |
+| Cabauw 10 m/s | 1.743 / 1.655 / 1.418 / **1.366** | 10.9 / 12.5 / 12.9 / 12.4 | 23 326 / 23 125 |
+| Maasvlakte 7 m/s | 1.149 / **0.974** / 1.059 / 1.025 | 9.0 / 9.4 / 9.2 / 9.2 | 11 928 / 11 904 |
+| Maasvlakte 11 m/s | 1.556 / 1.311 / 1.253 / **1.217** | 13.3 / 10.0 / 12.1 / 9.8 | 18 785 / 19 234 |
+| **Mean** | 1.401 / 1.271 / 1.215 / **1.175** | | |
+
+- **Every candidate tracks better than live**, and D best: RMS d −16 % on
+  average (−11 to −22 %), best in four of five cases, second at Maasvlakte
+  7 m/s. The gain tightens the loop; the margin comes from `heading_d`.
+- **Minimum elevation holds except at Maasvlakte 11 m/s,** where B and D dip to
+  about 10° (13.3° live), still passing the criteria; C holds 12.1°. At
+  Cabauw 10 m/s every candidate is 1.5 – 2° higher than live.
+- **Power is unchanged,** −0.9 to +2.4 %.
+- **Cost:** α inner falls a little, worst 0.635 → 0.601 (Maasvlakte 3.5 m/s),
+  still above 0.5. Every scenario's α guided rises (0.306 – 0.454 against
+  0.288 – 0.427). The delay margins are unchanged (0.202 – 0.305 s).
+
+D is now live: `heading_p` 0.17019 → 0.183805 (+8 %), `heading_d` 0.136 →
+0.141 s. Archives in `output/archives/2026-09-29_*`, per case in the order live,
+B, C, D: Cabauw 3 m/s `055156`, `055346`, `055511`, `055635`; Cabauw 5 m/s
+`055726`, `055833`, `055947`, `060115`; Cabauw 10 m/s `060155`, `060329`,
+`060459`, `060607`; Maasvlakte 7 m/s `060706`, `060836`, `061003`, `061120`;
+Maasvlakte 11 m/s `061203`, `061325`, `061440`, `061606`. As before, their
+settings file is the live one of the time; the summary does not record
+`FCS_OVERRIDES`.
+
 ## Caveats
 
 - **The guidance model is validated only in its linear range** (see the

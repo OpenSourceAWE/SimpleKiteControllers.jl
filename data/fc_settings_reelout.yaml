@@ -65,9 +65,9 @@ fc_settings:
   el_offset_wing_mode: "azimuth"  # azimuth (deg) | azimuth_frac (of the path's own A)
 
   # --- heading/course PID ---------------------------------------------------
-  heading_p:          0.17019  # Gain at v_app_ref; only their product is physical   [-]
+  heading_p:          0.183805 # Gain at v_app_ref; only their product is physical; +8 % for guided α 0.306 and lower RMS d (2026-09-29) [-]
   heading_i:          false    # Integral time [s], or false for no integral action
-  heading_d:          0.136    # Derivative time; raised with the lead time for the guided disk margin (2026-09-28) [s]
+  heading_d:          0.141    # Derivative time; raised for the guided disk margin (2026-09-28, 2026-09-29) [s]
   heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
   ff_gain:            0.7      # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off [-]
   ff_lead_time:       0.35     # Read the path's course rate this far ahead of Q; ~the dead time [s]
