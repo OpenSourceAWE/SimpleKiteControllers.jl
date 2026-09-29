@@ -63,7 +63,7 @@ TR_V_WIND = V_WIND
 # [m/s] reel-out speed of the flights from T_START on, up to REELOUT_L_MAX; 0 holds the length.
 v_reelout = @isdefined(TR_V_REELOUT) ? Float64(TR_V_REELOUT) : 0.0
 TR_V_REELOUT = 0.0
-# Plots, and the comparison of the current law with the inertia law (~1 – 2 min); both on by
+# Plots, and the comparison of the current law with the extended law (~1 – 2 min); both on by
 # default, read and cleared like SHOW_PLOTS. `plot_turn_rate_vs_depower.jl` switches both off.
 show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
 SHOW_PLOTS = true
@@ -94,7 +94,7 @@ model_rate(fit, dl, d = round(Int, dl.dead_time / DT + 0.5)) =
     rad2deg.(dl.c1 .* fit.v_app .* shift_delay(lag_filter(fit.us, dl.lag, DT), d) .+
              dl.c2 ./ fit.v_app .* sin.(fit.psi) .* cos.(fit.beta))
 
-# ==================== INERTIA LAW ======================== #
+# ==================== EXTENDED LAW ======================= #
 
 """
     law_data(f, source) -> NamedTuple
@@ -117,9 +117,10 @@ function law_data(f, source)
 end
 
 """
-    inertia_law_fit(data, dt; es=0:0.05:3, lag_max=0.5, t_max=0.5) -> NamedTuple
+    extended_law_fit(data, dt; es=0:0.05:3, lag_max=0.5, t_max=0.5) -> NamedTuple
 
-Fit the turn-rate law with the kite's inertia term, in V3Kite's sign convention
+Fit the extended turn-rate law, the current one plus the mass term `k4·m·v_τ` in the
+denominator, in V3Kite's sign convention
 and with `k2 = 1` (`PlanIdentifyTurnRateLaw.md`),
 
     rate = (c1·v_a²·u_s + c2·sin(angle)·cos(β)) / (v_a + e·v_τ),
@@ -133,7 +134,7 @@ samples of every flight dropped, as in `joint_delay_lag_fit`.
 Returns `(; best, current)`, each `(; e, c1, c2, dead_time, lag, d, rms)`: the best
 fit over all `e`, and the best with `e = 0`.
 """
-function inertia_law_fit(data, dt; es = 0:0.05:3, lag_max = 0.5, t_max = 0.5)
+function extended_law_fit(data, dt; es = 0:0.05:3, lag_max = 0.5, t_max = 0.5)
     dmax = round(Int, t_max / dt)
     trim(x) = x[dmax + 1:end]
     cat(field) = reduce(vcat, [trim(getfield(x, field)) for x in data])
@@ -155,11 +156,11 @@ function inertia_law_fit(data, dt; es = 0:0.05:3, lag_max = 0.5, t_max = 0.5)
             end
         end
     end
-    best.e >= last(es) - step(es) / 2 && @warn "inertia_law_fit: e hit the end of its grid, $(last(es))."
+    best.e >= last(es) - step(es) / 2 && @warn "extended_law_fit: e hit the end of its grid, $(last(es))."
     return (; best, current)
 end
 
-"The turn rate [rad/s] of the law `p` (from `inertia_law_fit`) on one flight's `data`"
+"The turn rate [rad/s] of the law `p` (from `extended_law_fit`) on one flight's `data`"
 law_rate(x, p) = let us = shift_delay(lag_filter(x.us, p.lag, DT), p.d)
     (p.c1 .* x.v_app .^ 2 .* us .+ p.c2 .* sin.(x.ang) .* cos.(x.beta)) ./ (x.v_app .+ p.e .* x.v_tau)
 end
@@ -248,10 +249,10 @@ isnothing(row) ||
             row["c1"], row["c2"], get(row, "dead_time", NaN), get(row, "kite_lag", NaN), "", "",
             row["v_app"])
 
-# Current law (e = 0) against the law with the inertia term, on the heading and on the course,
+# Current law (e = 0) against the law with the mass term, on the heading and on the course,
 # each with its own delay and lag; VAF per v_a bin on all flights, the first t_max skipped.
 va_bins = [10, 15, 20, 25, 30, 40, 60]   # [m/s]
-laws = fit_laws ? Dict(source => inertia_law_fit([law_data(f, source) for f in joint_flights], DT)
+laws = fit_laws ? Dict(source => extended_law_fit([law_data(f, source) for f in joint_flights], DT)
                        for source in (:heading, :course)) : nothing
 for source in (fit_laws ? (:heading, :course) : ())
     data = [law_data(f, source) for f in joint_flights]
@@ -259,14 +260,14 @@ for source in (fit_laws ? (:heading, :course) : ())
     println()
     @printf("%s rate: current law c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
             source, L.current.c1, L.current.c2, L.current.dead_time, L.current.lag, rad2deg(L.current.rms))
-    @printf("%s rate: inertia law e = %.2f, c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
+    @printf("%s rate: extended law e = %.2f, c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
             source, L.best.e, L.best.c1, L.best.c2, L.best.dead_time, L.best.lag, rad2deg(L.best.rms))
     skip = round(Int, 0.5 / DT)
     meas = reduce(vcat, [x.rate[skip + 1:end] for x in data])
     va = reduce(vcat, [x.v_app[skip + 1:end] for x in data])
     pred(p) = reduce(vcat, [law_rate(x, p)[skip + 1:end] for x in data])
     cur, new = pred(L.current), pred(L.best)
-    @printf("  v_a bin [m/s]   samples   VAF current   VAF inertia\n")
+    @printf("  v_a bin [m/s]   samples   VAF current   VAF extended\n")
     for k in 1:length(va_bins) - 1
         i = findall(v -> va_bins[k] <= v < va_bins[k + 1], va)
         length(i) < 100 && continue

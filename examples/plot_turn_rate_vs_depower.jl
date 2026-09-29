@@ -7,7 +7,7 @@ The turn-rate law identified in the LOW crosswind pattern at every depower of
 `c2`, the dead time and the kite's lag.
 
 For each depower this runs `plot_turn_rate_identification.jl` without its plots
-and without the inertia-law comparison: one flight per amplitude of its
+and without the extended-law comparison: one flight per amplitude of its
 `flight_settings`, at the table's wind and constant tether length, and the joint
 fit of the steady ones (`joint_delay_lag_fit`). Two things are saved after every
 depower, so a crash later on costs only the rest:

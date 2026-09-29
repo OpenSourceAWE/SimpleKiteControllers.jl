@@ -13,7 +13,9 @@ below $v_\mathrm{a} = 20\,$m/s (V3 of `oldplans/Plan_model_validation.md`). Abov
 about 15 – 20 m/s it is good: turn-rate VAF 0.94 – 0.98, and `c1` confirmed within
 ±5 % in pattern flight (V4).
 
-A more accurate law keeps the kite's inertia term:
+A more accurate law adds a term with the kite's mass $m$ to the denominator,
+$k_4 m v_\tau$ ($v_\tau$ the kite speed perpendicular to the tether). Below, this
+is called the **mass term**, and the law with it the **extended law**:
 
 $$
 \dot{\chi}_\mathrm{turn} \approx
@@ -23,7 +25,9 @@ $$
 
 For $k_4 m v_\tau \ll k_2 v_\mathrm{a}$ it reduces to the current law, with
 $c_1 = k_1/k_2$ and $c_2 = k_3 m g / k_2$ (up to the sign convention of
-$u_\mathrm{s}$). So the assumption being dropped is that the inertia term is
+$u_\mathrm{s}$); in V3Kite's sign convention and with $k_2 = 1$ the extended law is
+$\dot\psi = (c_1 v_\mathrm{a}^2 u_\mathrm{s} + c_2 \sin\psi \cos\beta)/(v_\mathrm{a} + e\, v_\tau)$,
+$e = k_4 m / k_2$, and $e = 0$ is the current law. So the assumption being dropped is that the mass term is
 negligible against the aerodynamic damping. That term weighs more at low
 $v_\mathrm{a}$, which is where the current law fails, and it lowers the predicted
 turn rate there, in the direction V3 measured.
@@ -33,7 +37,7 @@ turn rate there, in the direction V3 measured.
 Fit the CURRENT law on sweep data flown at a lower elevation, where the kite flies
 faster crosswind and $v_\tau/v_\mathrm{a}$ is larger. Do not apply the new formula
 yet. The result shows whether $c_1$, $c_2$, the dead time and the lag change with
-the elevation. If they do, the inertia term is a candidate cause.
+the elevation. If they do, the mass term is a candidate cause.
 
 ### What limits the elevation today
 
@@ -178,11 +182,11 @@ Turn-rate VAF on each flight's window:
   there. Its effect on the VAF is small (last column), but it is the term the
   stability model's gravity pole comes from.
 - $v_\tau/v_\mathrm{a}$ now spans ≈ 0 – 1.3, median ≈ 0.9: the variation the new
-  law's inertia term needs (Identification, "Identifiability of $e$"). But the
+  law's mass term needs (Identification, "Identifiability of $e$"). But the
   steady flights are at $v_\mathrm{a}$ ≥ 14 m/s, mostly above 20 m/s, where the
   current law already fits with VAF ≥ 0.98. V3's failure was below 20 m/s.
 
-### Low $v_\mathrm{a}$ and the inertia law (2026-09-29, depower 0.275)
+### Low $v_\mathrm{a}$ and the extended law (2026-09-29, depower 0.275)
 
 **Low $v_\mathrm{a}$ by lower wind.** `TR_V_WIND = 6.5` (m/s, against the table's
 9.51): 0.10 and 0.125 fly the full 200 s at $v_\mathrm{a}$ 12.7 – 36 m/s, with 38 and
@@ -190,9 +194,9 @@ Turn-rate VAF on each flight's window:
 single fit is meaningless (negative $c_1$, dead time at the search limit). At
 5.0 m/s 0.10 drifts to 84° of azimuth and sinks after 69 s.
 
-**The inertia law against the current one.** Fitted on the five steady flights at
+**The extended law against the current one.** Fitted on the five steady flights at
 depower 0.275 (0.075, 0.10, 0.125 at 9.51 m/s; 0.10, 0.125 at 6.5 m/s), each law
-with its own dead time and lag, by `inertia_law_fit` in
+with its own dead time and lag, by `extended_law_fit` in
 `plot_turn_rate_identification.jl`:
 
 $$
@@ -205,11 +209,11 @@ $e = k_4 m / k_2$, $e = 0$ the current law, searched over 0 – 3.
 |---|---|---|---|---|---|---|---|
 | heading | current = best | 0 | 0.267 | 3.18 | 0.042 | 0.100 | 4.83 |
 | course | current | 0 | 0.274 | 1.27 | 0.000 | 0.167 | 12.79 |
-| course | inertia | 3.0 (grid end) | 1.027 | −3.45 | 0.042 | 0.100 | 11.01 |
+| course | extended | 3.0 (grid end) | 1.027 | −3.45 | 0.042 | 0.100 | 11.01 |
 
 VAF per $v_\mathrm{a}$ bin:
 
-| $v_\mathrm{a}$ [m/s] | samples | heading, current | course, current | course, inertia |
+| $v_\mathrm{a}$ [m/s] | samples | heading, current | course, current | course, extended |
 |---|---|---|---|---|
 | 10 – 15 | 2 349 | 0.983 | 0.961 | 0.873 |
 | 15 – 20 | 3 631 | 0.997 | 0.958 | 0.982 |
@@ -218,7 +222,7 @@ VAF per $v_\mathrm{a}$ bin:
 | 30 – 40 | 18 486 | 0.995 | 0.954 | 0.972 |
 | 40 – 60 | 15 810 | 0.986 | 0.913 | 0.925 |
 
-- **Heading: the inertia term is not supported.** The best $e$ is 0, and the
+- **Heading: the mass term is not supported.** The best $e$ is 0, and the
   current law explains the heading rate with VAF 0.983 – 0.999 in every bin,
   10 – 15 m/s included. The success criterion (VAF ≥ 0.90 in every bin) is met
   by the current law.
@@ -227,7 +231,7 @@ VAF per $v_\mathrm{a}$ bin:
   V3's low-$v_\mathrm{a}$ samples were the fig8 transitions (steering near the
   clamp) and the reel-out (radial speed, a faster kite than the table), which is
   where `865b3fd` placed the cause.
-- **Course:** the current law fits it worse than the heading. The inertia law
+- **Course:** the current law fits it worse than the heading. The extended law
   improves it above 15 m/s, but runs to the end of the $e$ grid with a negative
   $c_2$, and is worse at 10 – 15 m/s: not a physical fit. The course rate is not
   a better quantity to model the steering response on.
@@ -257,7 +261,7 @@ Heading-rate VAF of the current law per $v_\mathrm{a}$ bin:
   the turn rate (least-squares slope of the measured on the predicted 0.31); at
   10 – 15 m/s the slope is 0.88. At constant length there was no such error down
   to 10 m/s (previous section), so it comes with the reel-out.
-- **The inertia term does not explain it.** Refitted on $v_\mathrm{a}$ < 15 m/s only,
+- **The mass term does not explain it.** Refitted on $v_\mathrm{a}$ < 15 m/s only,
   its best $e$ is still 0. It lowers the turn rate where $v_\tau/v_\mathrm{a}$ is
   large, but the worst samples have the SMALLER ratio: median 0.41 below 10 m/s,
   0.82 at 10 – 15 m/s.
@@ -276,13 +280,13 @@ Heading-rate VAF of the current law per $v_\mathrm{a}$ bin:
 
 ### Conclusion so far
 
-The inertia law with $v_\tau$ is not supported by any of the flights: at constant
+The extended law with $v_\tau$ is not supported by any of the flights: at constant
 length and reeling out, at $v_\mathrm{a}$ 6 – 51 m/s, its best $e$ is 0 or 0.05. The
 current heading law with a delay shortened for high $v_\mathrm{a}$ (the pattern law)
 explains the heading rate with VAF ≥ 0.95 from $v_\mathrm{a}$ = 10 m/s up. The one
 consistent difference from the table is $c_2$, 1.6 – 2.6 × the 73° rows, which the
 low-elevation flights identify far better. The low-$v_\mathrm{a}$ gain drop while
-reeling out is real and not what the inertia term describes; below 10 m/s it
+reeling out is real and not what the mass term describes; below 10 m/s it
 concerns only the lowest wind speed flown (Maasvlakte 3.5 m/s).
 
 Open, if it is worth pursuing:
@@ -326,73 +330,89 @@ plots the joint fit of the steady flights over the depower next to the 73° rows
   uses a constant 0.23 1/s from `identify_c3.jl`. Which form holds is the next
   thing to check.
 
-## Decisions to make first
+## Decisions (settled 2026-09-29)
 
-### Course or heading
+### Course or heading: the heading
 
-The new law is for the COURSE rate $\dot\chi$. The script and
-`turn_rate_coeffs.yaml` fit the HEADING rate $\dot\psi$.
+Both were fitted on the same low-pattern flights (see "Low $v_\mathrm{a}$ and the
+extended law"). The current law explains the HEADING rate with VAF 0.983 – 0.999 in
+every $v_\mathrm{a}$ bin; the COURSE rate fits worse with the current law (0.91 –
+0.97), and the extended law on it runs to the end of its $e$ grid with a negative
+$c_2$, not a physical fit. The heading stays the fitted quantity, as in
+`turn_rate_coeffs.yaml`.
 
-- In the relay sweep the kite nearly hovers at 73° elevation. There the course,
-  the direction of $v_\mathrm{k}$, is poorly defined and noisy.
-- If $\dot\chi$ is fitted, the pattern-flight logs are the data source (see Data).
-- If $\dot\psi$ is fitted, the use of the formula for the heading needs a
-  justification: the course/heading difference is what V1 found the model got
-  wrong.
+### Conventions, as implemented
 
-### Conventions
+- $v_\tau = \sqrt{v_\mathrm{k}^2 - v_\mathrm{ro}^2}$, the kite speed perpendicular to
+  the tether (`law_data` in `plot_turn_rate_identification.jl`).
+- The law in V3Kite's sign convention, with $k_2 = 1$:
+  $\dot\psi = (c_1 v_\mathrm{a}^2 u_\mathrm{s} + c_2 \sin\psi \cos\beta)/(v_\mathrm{a} + e\, v_\tau)$,
+  so $c_1 = k_1/k_2$, $c_2 = k_3 m g/k_2$, $e = k_4 m/k_2$, and $e = 0$ is the current
+  law with the table's meaning of $c_1$ and $c_2$.
+- The gravity term keeps V3Kite's sign and angle (the heading). Whether its
+  coefficient is $c_2/v_\mathrm{a}$ with a constant $c_2$ (as the low flights
+  suggest) or a constant $c_3$ (as Eq. (9) of the paper uses) is still open, see
+  "Open".
 
-- $v_\tau$: tangential kite speed, perpendicular to the tether,
-  $\sqrt{v_\mathrm{k}^2 - v_\mathrm{ro}^2}$.
-- Sign of $u_\mathrm{s}$: the formula has a leading minus, while V3Kite's law has
-  $+c_1 v_\mathrm{a} u_\mathrm{s}$. Match the formula to V3Kite's steering sign.
-- Zero of $\chi$: it decides the sign of the gravity term. Check it against
-  $c_3 = 0.23\,$1/s of Eq. (9) of the paper.
+## Identification, as done
 
-## Identification
+- **Fit.** For a fixed $e$ the law is linear in $c_1$, $c_2$. $e$ (0 – 3), the dead
+  time (whole samples) and the first-order lag are searched on grids, each
+  flight's steering filtered and shifted on its own (`extended_law_fit`). No
+  nonlinear fit or errors-in-variables start value was needed.
+- **Identifiability of $e$.** The low flights span $v_\tau/v_\mathrm{a}$ ≈ 0 – 1.3,
+  so $e$ is identifiable; it comes out 0 (0.05 at most).
+- **Delay and lag.** Fitted with every law (`joint_delay_lag_fit`, now in
+  `delay_lag_fit.jl`).
+- **Error bars.** Standard errors from 20 s blocks, each refitted on its own
+  (`block_standard_errors` in `plot_turn_rate_vs_depower.jl`); the linear fit's
+  own standard errors are far too small with autocorrelated residuals.
 
-- **Scale.** The $k_i$ are fixed only up to a common factor. Set $k_2 = 1$ and
-  fit three parameters: $a = k_1/k_2$, $b = k_3 m g/k_2$, $e = k_4 m/k_2$.
-- **Start value by linear least squares.** Multiplied by the denominator, the law
-  is linear in $(a, b, e)$:
-  $\dot\chi\, v_\mathrm{a} = -a v_\mathrm{a}^2 u_\mathrm{s} + b \sin\chi\cos\beta - e\, v_\tau \dot\chi$.
-  The measured $\dot\chi$ appears on the right-hand side, so this estimate is
-  biased (errors in variables). Use it only as the start of a nonlinear fit of
-  the original form.
-- **Identifiability of $e$.** It separates from the rest only if $v_\tau/v_\mathrm{a}$
-  varies enough in the data. Check its spread before fitting.
-- **Delay and lag.** Keep the dead time $\tau$ and the kite lag $T$: fit them
-  together with the new law, as `fit_delay_lag` does now with $c_1$, $c_2$.
-  Otherwise the phase lag goes into the new coefficients.
+## Data, as used
 
-## Data
+- **Relay flights in a low crosswind pattern**, not the scenario logs: fixed
+  amplitudes 0.075, 0.10, 0.125, reversing in azimuth and holding ~30° of
+  elevation (`_run_turn_rate_sweep`, `plot_turn_rate_identification.jl`). At
+  9.51 m/s and 6.5 m/s of wind, at constant length and reeling out at 1 m/s, and
+  at every depower of the table at 9.51 m/s (`plot_turn_rate_vs_depower.jl`).
+  Their results are archived in `data/turn_rate_low_flights.tar.gz`.
+- **The 22 scenario logs** only for the operating range: which $v_\mathrm{a}$ the
+  reel-out actually flies.
+- **Not done:** validation on held-out logs as in V3. The fits were compared on the
+  flights they were fitted on, bin by bin.
 
-- The relay sweeps of `build_turn_rate_table.jl`: one elevation, one tether
-  length, $v_\mathrm{a} \approx 11$ – 16 m/s.
-- The archived pattern-flight scenarios (22 runs, both sites): $v_\mathrm{a}$ 12.8 –
-  40.6 m/s, large variation of $v_\tau$, and the flight the law is used for.
-- Fit on part of them and validate on held-out logs, as V3 did
-  (`examples/replay_prediction.jl`).
+## Success criterion: met by the current law
 
-## Success criterion
-
-Turn-rate VAF ≥ 0.90 in every $v_\mathrm{a}$ bin, including 10 – 20 m/s, where the
-current law fails, with no loss against the current law above 20 m/s.
+Turn-rate VAF ≥ 0.90 in every $v_\mathrm{a}$ bin, including 10 – 20 m/s. The
+current law meets it from $v_\mathrm{a}$ = 10 m/s up, at constant length and
+reeling out; the extended law adds nothing. Below 10 m/s while reeling out the
+current law fails (VAF −6.95), which of the scenarios only Maasvlakte 3.5 m/s
+reaches.
 
 ## Steps
 
-1. Extend `examples/plot_turn_rate_identification.jl`: fit the new law next to
-   the current one, plot both against the measured rate, and print the error of
-   each per $v_\mathrm{a}$ bin.
-2. Fit on the pattern-flight logs, and check the spread of $v_\tau/v_\mathrm{a}$ first.
-3. Validate on held-out logs against the success criterion.
+1. ~~Extend `plot_turn_rate_identification.jl`: both laws, both angles, VAF per
+   $v_\mathrm{a}$ bin.~~ Done.
+2. ~~Fly and fit in the low pattern, checking the spread of
+   $v_\tau/v_\mathrm{a}$.~~ Done, with the relay flights instead of the scenario
+   logs.
+3. Validate on held-out logs. Not done; only needed if a new law or new
+   coefficients are to be adopted.
 
-## Out of scope for now
+## Open
 
-If the new law is adopted, everything that uses $c_1$ has to follow:
+1. **$c_2$ and the gravity term.** The low flights give $c_2$ ≈ 3.7 at every
+   depower, 1.6 – 2.6 × the table's 73° rows. Decide whether it replaces the
+   table's, and check the form of the term ($c_2/v_\mathrm{a}$ or a constant $c_3$)
+   and its effect on the gravity pole in the stability analysis (Table 6 of the
+   paper).
+2. **$c_1$ below depower 0.325.** 6 – 14 % above the table in the low pattern.
+
+## Out of scope
+
+The extended law is not adopted: none of the flights supports it. Adopting new
+coefficients would touch everything that uses $c_1$ and $c_2$:
 `turn_rate_coeffs.yaml`, the controller's gain schedule, the curvature
 feedforward $u_\mathrm{ff} = \dot\psi_\mathrm{path}/(c_1 v_\mathrm{a})$, the
-stability model in `course_loop_model.jl`, and the turn-rate law of the paper
-(Eq. (9) and the equations it builds on).
-This plan is only the identification study; adopting the law is a separate
-decision.
+stability model in `course_loop_model.jl`, and the turn-rate law of the paper.
+That is a separate decision.
