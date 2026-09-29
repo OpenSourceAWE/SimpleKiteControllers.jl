@@ -156,6 +156,20 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+# The turn-rate table the PROJECT names (its `turn_rate_coeffs`), not the one `__init__` loaded
+# through system_fig8_200m.yaml. Two consumers: the CONTROLLER (gain schedule, curvature
+# feed-forward) reads `ctrl_tr_table`; the PATH side (turn-radius requests to the planner, the
+# startup gates, the feasibility checks) reads the session's table. Both are the project's unless
+# `TR_PATH_PROJECT` (read and cleared like SHOW_PLOTS) names another system project, whose table
+# then sizes the path: an A/B of the controller's table with the planned path held fixed.
+# Session-wide: a later script that does not reload keeps the path side's table.
+path_tr_project = @isdefined(TR_PATH_PROJECT) ? TR_PATH_PROJECT : nothing
+TR_PATH_PROJECT = nothing
+ctrl_tr_table = SimpleKiteControllers._load_turn_rate_table(project)
+reload_turn_rate_table!(isnothing(path_tr_project) ? project : project_file(path_tr_project))
+isnothing(path_tr_project) ||
+    @info "Turn-rate tables: controller $(turn_rate_coeffs_file(project)), path side \
+           $(turn_rate_coeffs_file(project_file(path_tr_project))) (TR_PATH_PROJECT)."
 # The optimizer's own settings: server, initial guess, solver knobs, margin.
 tos = TrajOptSettings(traj_opt_settings_file(project))
 
@@ -791,15 +805,25 @@ c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
         NaN
     end
 end
+# The controller's turn-rate gain at a depower, from `ctrl_tr_table`; NaN off it, memoized like c1_at_depower.
+const c1_ctrl_memo = Dict{Float64, Float64}()
+c1_ctrl_at(depower) = get!(c1_ctrl_memo, Float64(depower)) do
+    try
+        turn_rate_coeffs(fcs.body_damping, depower; table = ctrl_tr_table).c1
+    catch exc
+        exc isa ArgumentError || rethrow()
+        NaN
+    end
+end
 # The turn authority the loop was TUNED at; the sim loop rescales heading_p by c1_setpoint/c1(u_d) in every phase.
-c1_setpoint = c1_at_depower(fcs.depower_setpoint)
+c1_setpoint = c1_ctrl_at(fcs.depower_setpoint)
 # Phase 4 must fly with the curvature feed-forward, which silently drops out on either of these.
 fcs.ff_gain > 0 || @warn "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
     but ff_gain = $(fcs.ff_gain)"
 @assert isfinite(c1_setpoint) && c1_setpoint > 0 "the curvature feed-forward needs the turn-rate \
     coefficient c1 at depower_setpoint = $(fcs.depower_setpoint), got $c1_setpoint"
 c1_depower_max = try
-    last(turn_rate_depower_range(fcs.body_damping))
+    last(turn_rate_depower_range(fcs.body_damping; table = ctrl_tr_table))
 catch exc
     exc isa ArgumentError || rethrow()
     NaN
@@ -809,7 +833,7 @@ pattern_depower(reply) =
     tos.fly_opt_depower && !isnothing(reply.depower) ?
         awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
 # The turn-rate law the retry reads a path against; `reelout_feasibility.jl` looks it up again later.
-c1_startup = c1_setpoint
+c1_startup = c1_at_depower(fcs.depower_setpoint)
 # Resample but never upsample; the lobe lift is rationed to fit the curvature gate.
 startup_wing_frac = 1.0
 install_optimized_path!(reply) = begin
@@ -1424,7 +1448,7 @@ try
             local dp_prev = round(isfinite(c1_depower_max) ?
                                   min(rel_depower_prev, c1_depower_max) : rel_depower_prev;
                                   digits = 3)
-            local c1_now = c1_at_depower(dp_prev)
+            local c1_now = c1_ctrl_at(dp_prev)
             isfinite(c1_now) && c1_now > 0 && (gain_scale = c1_setpoint / c1_now)
         end
         # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.

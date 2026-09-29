@@ -556,6 +556,19 @@ end
         fcs_ro = FC_Settings("fc_settings_reelout.yaml")
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_setpoint).c1 isa Real
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_final).c1 isa Real
+        # The reel-out projects fly the low-elevation table (2026-09-29): the same depowers
+        # resolve there too, entry included. Restores the default table afterwards.
+        for pr in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml")
+            @test turn_rate_coeffs_file(project_file(pr)) == "turn_rate_coeffs_low.yaml"
+        end
+        try
+            reload_turn_rate_table!(project_file("system_reelout_maasvlakte.yaml"))
+            for dp in (fcs_ro.depower_setpoint, fcs_ro.depower_final, fcs_ro.entry_depower)
+                @test turn_rate_coeffs(fcs_ro.body_damping, dp).c1 isa Real
+            end
+        finally
+            reload_turn_rate_table!()
+        end
         # Phase 5 falls back to an install it can fly (2026-09-26); off unless set.
         @test fcs_ro.final_margin_min == 1.5
         @test fcs.final_margin_min == 0.0

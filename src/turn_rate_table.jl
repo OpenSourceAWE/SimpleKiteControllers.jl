@@ -130,7 +130,7 @@ _row_dead_time(e) = get(e, :dead_time, NaN)
 _row_kite_lag(e) = get(e, :kite_lag, NaN)
 
 """
-    turn_rate_coeffs(body_damping, depower; interpolate=true) -> (; c1, c2, delay, v_app, dead_time, kite_lag, interpolated)
+    turn_rate_coeffs(body_damping, depower; interpolate=true, table) -> (; c1, c2, delay, v_app, dead_time, kite_lag, interpolated)
 
 Look up the V3 turn-rate-law coefficients for a given `body_damping` and
 `depower_setpoint`, from `data/turn_rate_coeffs.yaml`
@@ -164,16 +164,21 @@ lag of the kite, identified on the same sweep at the same `v_app`
 (`add_delay_lag_split!` in `examples/build_turn_rate_table.jl`); interpolated
 linearly like `delay`, `NaN` for a row without them.
 
+`table` defaults to the session's table (loaded by [`reload_turn_rate_table!`](@ref));
+pass another `TurnRateTable` (`_load_turn_rate_table(project)`) to look up a second
+table without replacing the session's, e.g. one for the controller and one for the
+path planning in `examples/simple_opt_reelout.jl`.
+
 **Both arguments matter.** Depowering 0.25 → 0.55 costs a factor 2.95 of
 steering authority *and* raises the steering dead time from 0.03 s to 0.55 s.
 Body damping is never interpolated across: it is a 3-vector with a violently
 nonlinear effect on `c1`, so a `body_damping` with no identified rows throws
 rather than guessing from a nearby one.
 """
-function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
+function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true,
+                          table::TurnRateTable = _TURN_RATE_TABLE[])
     bd = collect(Float64.(body_damping))
     dp = Float64(depower)
-    table = _TURN_RATE_TABLE[]
 
     group = filter(e -> e.body_damping == bd, table.entries)
     if isempty(group)
@@ -232,7 +237,7 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true)
 end
 
 """
-    turn_rate_depower_range(body_damping) -> (lo, hi)
+    turn_rate_depower_range(body_damping; table) -> (lo, hi)
 
 The depower interval [`turn_rate_coeffs`](@ref) can serve for `body_damping`
 without throwing: the lowest and highest USABLE row (non-passing rows do not
@@ -241,12 +246,13 @@ depower can leave the table — the phase-5 force limiter integrates up to
 `depower_final_max`, above the identified grid — so it can saturate its lookup
 at the edge instead of losing the coefficient altogether. Throws the same
 `ArgumentError` as `turn_rate_coeffs` for a damping with fewer than two usable
-rows, since nothing can be interpolated there either.
+rows, since nothing can be interpolated there either. `table` as in
+[`turn_rate_coeffs`](@ref).
 """
-function turn_rate_depower_range(body_damping)
+function turn_rate_depower_range(body_damping; table::TurnRateTable = _TURN_RATE_TABLE[])
     bd = collect(Float64.(body_damping))
     usable = filter(e -> e.body_damping == bd && _is_usable_turn_rate_entry(e),
-                    _TURN_RATE_TABLE[].entries)
+                    table.entries)
     length(usable) >= 2 || throw(ArgumentError(
         "Not enough usable turn-rate entries for body_damping = $bd " *
         "(need >= 2, have $(length(usable))). " *

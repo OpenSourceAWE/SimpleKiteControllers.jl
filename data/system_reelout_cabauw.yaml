@@ -28,7 +28,7 @@ system:
     fc_settings: "fc_settings_reelout.yaml"
     traj_opt_settings: "traj_opt.yaml"
     winch_kv_table: "winch_kv_table.yaml"
-    turn_rate_coeffs: "turn_rate_coeffs.yaml"
+    turn_rate_coeffs: "turn_rate_coeffs_low.yaml"
     kite_settings: "kite_settings_psm_kernel.yaml"
     structural_geometry: "struc_geometry.yaml"
     aero_geometry: "cfd_aero_geometry.yaml"
