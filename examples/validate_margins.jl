@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-V1 of docs/Plan_model_validation.md: push the simulated course loop until it
+V1 of oldplans/Plan_model_validation.md: push the simulated course loop until it
 rings, and compare the critical gain factor `k_crit` / extra delay `τ_crit`,
 and their ringing frequencies, against `course_loop_model.jl`'s gain margin,
 phase crossover, delay margin and gain crossover.
 
 Needs the STEER_GAIN_FACTOR / EXTRA_STEER_DELAY / HOOK_SETTLE hooks in
 `simple_fig8.jl` and `simple_opt_reelout.jl` (added for V1, see either
-script's own comments next to them, or docs/Plan_model_validation.md#tests).
+script's own comments next to them, or oldplans/Plan_model_validation.md#tests).
 
 # Before the first run of a point
 
@@ -28,7 +28,7 @@ not refuse, if the settings do not match the run.
 # Usage
 
 Point D (300 m, 7 m/s) is the one with a baseline that is not rate-limited; A
-(200 m) could not bracket a linear onset (docs/Plan_model_validation.md, V1).
+(200 m) could not bracket a linear onset (oldplans/Plan_model_validation.md, V1).
 
     include("examples/validate_margins.jl")
     predict(:D)                         # the model's numbers, for reference
@@ -47,7 +47,7 @@ splits an oscillating run's loop into tape, kite and course/error links at its
 frequency.
 
 `base`'s window checks the mean `v_a` against the point's nominal value
-(`docs/Plan_model_validation.md#operating-points`); adjust the wind with
+(`oldplans/Plan_model_validation.md#operating-points`); adjust the wind with
 `select_windspeed()` and re-run `run_v1` if it is off by more than 10 %.
 
 Each `run_v1` call archives the run's log under
@@ -79,7 +79,7 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 # ==================== OPERATING POINTS ==================== #
-# docs/Plan_model_validation.md#operating-points
+# oldplans/Plan_model_validation.md#operating-points
 
 "One operating point of V1: which project/script flies it, at what wind."
 struct V1Point
@@ -99,7 +99,7 @@ const V1_POINTS = Dict(
     # baseline is rate-limited 7.7 % of the window, A's 28 % (2026-09-27).
     :D => V1Point("system_fig8_300m.yaml", "simple_fig8.jl", 7.0, 120.0, 34.2),
     # The fig8 pattern at 150 m, same wind: with A (200 m) and D (300 m) the
-    # tether-length check of the model (docs/Plan_model_validation.md).
+    # tether-length check of the model (oldplans/Plan_model_validation.md).
     :F => V1Point("system_fig8_150m.yaml", "simple_fig8.jl", 7.0, 120.0, 35.0),
 )
 
@@ -144,7 +144,7 @@ v1_lag(point) = 1 / Settings(project_file(V1_POINTS[point].project)).steering_ga
             lag = v1_lag(point)) -> NamedTuple
 
 The model's gain margin, phase crossover, delay margin and gain crossover at
-`point`'s `v_a` [m/s] (docs/Plan_model_validation.md#predictions), from
+`point`'s `v_a` [m/s] (oldplans/Plan_model_validation.md#predictions), from
 `course_loop_model.jl` at the project's own `FC_Settings` and sample rate —
 the worst of the two gravity-pole signs, as `stability_fig8.jl`'s
 `loop_margins` does. `depower` defaults to the project's `depower_setpoint`,
@@ -268,7 +268,7 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     ff_ok = fcs_p.ff_gain == 0 || feedback_only || (gain_factor == 1.0)
     (ff_ok && fcs_p.fig8_pure_course) ||
         @warn @sprintf("V1 %s: ff_gain = %.2g, fig8_pure_course = %s — this run does \
-                        not match V1's settings, see docs/Plan_model_validation.md#settings.",
+                        not match V1's settings, see oldplans/Plan_model_validation.md#settings.",
                        point, fcs_p.ff_gain, fcs_p.fig8_pure_course)
 
     src_output = normpath(joinpath(@__DIR__, "..", "output"))
@@ -359,7 +359,7 @@ Frequency [Hz] and size [deg] of the largest excess of `run`'s regulated-error
 spectrum over `baseline`'s. Near a stability boundary the closed loop has a
 lightly damped mode that the pattern keeps exciting, so this peak marks the
 critical frequency even when the lap forcing hides it in the time domain
-(point D, docs/Plan_model_validation.md). In a saturated limit cycle it falls
+(point D, oldplans/Plan_model_validation.md). In a saturated limit cycle it falls
 below the linear critical frequency.
 """
 function excess_peak(run, baseline; fs = 0.15:0.01:1.2)
@@ -394,7 +394,7 @@ end
 Frequency [Hz] and amplitude [-] of the largest excess of `r`'s steering
 command spectrum over `baseline`'s, within `band`. The onset signature at
 point D: a mode that grows in the command until the command reaches the clamp
-(docs/Plan_model_validation.md, "point D without the rate limit"). The gain
+(oldplans/Plan_model_validation.md, "point D without the rate limit"). The gain
 test's mode is near 1.1 Hz, the delay test's near 0.5 Hz: use `band = (0.3, 1.5)`
 for the delay test.
 """
@@ -440,7 +440,7 @@ and phase difference [deg] of each link, measured over modelled —
   (it takes the heading as the fed-back angle), so they are shown as measured.
 
 At point D their product reproduced the loop gain from the margins at both
-onset frequencies (docs/Plan_model_validation.md).
+onset frequencies (oldplans/Plan_model_validation.md).
 """
 function loop_breakdown(r, f)
     c = window_signals(r)
@@ -464,7 +464,7 @@ end
 Read `log_path.arrow` (`KiteUtils.load_log`) and, from `t_phase4 + hook_settle`
 to the end of the run — restricted to samples still in phase 4, and, for point
 `:C` only, cut short at the first excursion of `v_a` more than 10 % from its
-own mean over that stretch (docs/Plan_model_validation.md#operating-points) —
+own mean over that stretch (oldplans/Plan_model_validation.md#operating-points) —
 report the window's mean/std `v_a`, mean depower, the tape's rate-limited
 fraction (as `SimpleKiteControllers.print_fig8_metrics` does), and, if
 `baseline` is given (another `analyze` result with `gain_factor = 1`,
@@ -487,7 +487,7 @@ function analyze(point, log_path; hook_settle = HOOK_SETTLE_V1, gain_factor = 1.
         error("analyze: the run ended before t_phase4 + hook_settle ($(t_phase4 + hook_settle) s); \
                lengthen sim_time for $point.")
 
-    # Point C only (docs/Plan_model_validation.md#operating-points): the
+    # Point C only (oldplans/Plan_model_validation.md#operating-points): the
     # reel-out project's v_a DRIFTS as the tether pays out, so its window is
     # cut at the first excursion of v_a outside ±10 % of the window's own
     # mean, rather than dropping interior samples, so the remaining stretch
@@ -541,7 +541,7 @@ end
 Judge `run` (an `analyze` result) against `baseline` (also `analyze`, with
 `gain_factor = 1`, `extra_delay = 0`): band-pass the regulated error in
 `run.test`'s band (0.4 – 2 Hz for `:gain`, 0.1 – 1 Hz for `:delay` —
-docs/Plan_model_validation.md#procedure), fit the slope of its segment RMS
+oldplans/Plan_model_validation.md#procedure), fit the slope of its segment RMS
 over time, net of the baseline's, and the ringing frequency net of the
 baseline's own zero-crossing frequency in the same band.
 
@@ -582,7 +582,7 @@ end
 A periodic test input `τ -> Δu` [-] for `run_v1(...; injection)`: sines at
 `freqs` [Hz], each a multiple of `1/period` so every line completes whole
 cycles in one period, each of amplitude `amp`, with Schroeder phases for a low
-crest factor. V2 of docs/Plan_model_validation.md.
+crest factor. V2 of oldplans/Plan_model_validation.md.
 """
 struct Multisine
     period::Float64
@@ -669,7 +669,7 @@ Injection lines halfway between the lap's harmonics, `(n + ½)/T_lap` [Hz],
 from `f_lo` to `f_hi`, every `every`-th one, and the matching `Multisine`
 period `2·T_lap`. A figure-eight's heading carries mainly the ODD harmonics of
 the lap, so lines on a plain grid can land on them and pick up the pattern
-instead of the injection (docs/Plan_model_validation.md, V1 step 1).
+instead of the injection (oldplans/Plan_model_validation.md, V1 step 1).
 """
 function mid_lines(T_lap, f_lo, f_hi; every = 1)
     P = 2T_lap
@@ -810,7 +810,7 @@ The command at the clamp and the tape rate-limited over half the window. The
 `:rate_limited` verdict alone ("+10 points over the baseline") is not enough:
 in the feedback-only gain test the rate-limited fraction rises smoothly with
 the gain and crosses that line long before any oscillation (point D,
-docs/Plan_model_validation.md).
+oldplans/Plan_model_validation.md).
 """
 limit_cycle(r) = r.peak_cmd_frac >= 0.99 && r.rate_limit_frac > 0.5
 
@@ -938,7 +938,7 @@ Print V1's pass/fail table: `k_crit` and `τ_crit` as the middle of each sweep's
 run below the onset (the lightly damped mode the pattern excites there),
 against the model's gain margin, phase crossover, delay margin and gain
 crossover — and whether each is within tolerance (±20 % / ±25 % / ±0.1 Hz /
-±0.1 Hz, docs/Plan_model_validation.md#procedure), to `io`. Either vector may
+±0.1 Hz, oldplans/Plan_model_validation.md#procedure), to `io`. Either vector may
 be empty.
 """
 function report(point::Symbol, baseline, gain_runs, delay_runs; io::IO = stdout)

@@ -3,17 +3,16 @@
 2026-09-27. A plan to check the linear course-loop model of
 `examples/course_loop_model.jl` against `simple_fig8.jl` and
 `simple_opt_reelout.jl` simulations. The model is used by `stability_fig8.jl` and
-`stability_opt_reelout.jl`, see [course_loop_stability.md](course_loop_stability.md).
-**Status: V5 done and green (`test/test_course_loop_model.jl`). V1's hooks and
-`examples/validate_margins.jl` are in place; every settings YAML uses
-`steering_gain` 10. Point A (200 m) could not bracket a linear onset (baseline
-already rate-limited); point D (300 m) replaced it. At D without the tape's
-rate limit: delay margin 0.315 s against the model's 0.357 s (PASS), gain
-margin 4.44 against 2.83 (FAIL). A frequency breakdown at the two onsets shows
-why: tape and kite models are close, but the model closes the loop on the
-heading, while the controller acts on course − commanded course, which follows
-the heading only half as strongly at 1.1 Hz. Next: add that link to the model.
-See V1's Results sections.**
+`stability_opt_reelout.jl`, see [course_loop_stability.md](../docs/course_loop_stability.md).
+**Status: completed 2026-09-27.** V1 – V5 and the deliverable are done; see
+[Done](#done) for each result and its commit. The one gap V1 found at point D,
+that the model fed back the heading instead of the course, is closed by the
+guidance and kite correction in `course_loop_model.jl` (V1 step 1). The model
+now uses the pattern law with its measured depower factor, floored at
+12.8 m/s. It is conservative against every measured margin: the delay margin
+is 0 – 42 % low and the gain margin 21 – 45 % low. Still open: a validation
+run with turbulence, deferred (see [Decisions](#decisions)). Everything so
+far was flown without it.
 
 ## What the model claims
 
@@ -889,7 +888,9 @@ turn-rate VAF does not depend on `H`, the steering chain runs open-loop.)
   0.6 – 0.75 of the law) and the reel-out at 13 m/s (VAF 0.73 in phase 4,
   0.95 in phase 5). It is not only the large signals: on small-signal
   samples alone (|u| ≤ 0.175 over the last second) the 10 – 15 m/s bin has
-  VAF −2.4. **Fail**, cause open.
+  VAF −2.4. **Fail**; the cause was found afterwards (`865b3fd`, see
+  [Done](#done)): the clamp in the fig8 transitions, and in the reel-out a
+  faster kite than the table with less gain. Both make the model pessimistic.
 - **Residual check.** After a 2 s high-pass (to remove the lap), the residual
   correlates with the command at −0.41 … −0.66 with the residual 0.05 –
   0.24 s behind, far outside the 95 % band (±0.006 – 0.03): the model reacts
@@ -1145,7 +1146,7 @@ error with `v_a`. A trend would mean the exponents are wrong.
 
 ### V4: operating-point coverage of the scaling laws
 
-The caveats in [course_loop_stability.md](course_loop_stability.md#caveats) name
+The caveats in [course_loop_stability.md](../docs/course_loop_stability.md#caveats) name
 the extrapolations. Close them with relay sweeps of `build_turn_rate_table.jl`
 (re-run with the wind as a parameter) and `fit_delay_lag`:
 
@@ -1178,10 +1179,7 @@ These need no simulation and belong in `test/`:
 `course_loop_model.jl` lives in `examples/`, so the test file would `include`
 it and needs `ControlSystemsBase` in `test/Project.toml`.
 
-## Order and effort
-
-| Step | Test | Needs | Wall time (estimate) |
-|---|---|---|---|
+## Order
 
 V1 comes first because it tests what the analysis is used for. If V1 passes at
 all three points, V2 – V4 mainly narrow the uncertainty. If it fails, V2 shows

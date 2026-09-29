@@ -23,7 +23,7 @@ differ in the reel-out:
   also ~4 % rate-limited), rising to 0.31 s in the last, largest-signal bin.
 
 - **The kite's dead time and lag.** As in `stability_fig8.jl`: the loop with
-  the guidance is the validated pattern model (docs/Plan_model_validation.md),
+  the guidance is the validated pattern model (oldplans/Plan_model_validation.md),
   with the kite's response time from the pattern law
   ([`pattern_dead_time_lag`](@ref), re-identified on pattern logs including
   this reel-out, 0.29 s at 12.8 m/s against the table's 0.43 s) and

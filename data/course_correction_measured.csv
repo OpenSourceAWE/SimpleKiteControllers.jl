@@ -1,6 +1,6 @@
 # Course correction M(f, v_a) = (rel_steering -> course, measured) / (tape lag 1/steering_gain x turn-rate law
 # with the kite's dead time and lag, course_loop_model.jl), measured with injected multisines on the fig8
-# pattern (V2 of Plan_model_validation.md, 2026-09-27): v_a 23.7 m/s (300 m, 5 m/s wind), 34 m/s (200 and
+# pattern (V2 of oldplans/Plan_model_validation.md, 2026-09-27): v_a 23.7 m/s (300 m, 5 m/s wind), 34 m/s (200 and
 # 300 m, 7 m/s, pooled), 40.1 m/s (300 m, 8.5 m/s); depower 0.27, steering_gain 10, no rate limit.
 # It contains the kite correction and the dynamics of the fed-back course. Its features move in frequency
 # with v_a (course_correction scales each table by v_a and interpolates between airspeeds); its dip depth

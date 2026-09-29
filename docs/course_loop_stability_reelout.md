@@ -844,7 +844,7 @@ The follow-ups are in [Next steps](#next-steps).
 ## The validated model in the reel-out (2026-09-27)
 
 `stability_opt_reelout.jl` now evaluates the guided loop with the pattern model
-validated for the fig8 (`Plan_model_validation.md`), as `stability_fig8.jl`
+validated for the fig8 (`oldplans/Plan_model_validation.md`), as `stability_fig8.jl`
 does: the kite's dead time + lag from the pattern law
 (`pattern_dead_time_lag`, with the measured depower factor), times
 `kite_correction`, with the guidance as `guidance_tf`. The inner loop `C·P`
@@ -870,7 +870,7 @@ Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
   give 0.57 – 0.95.
 - **Still conservative in the delay:** the pattern law gives 15 % more than
   the log at 12.2 m/s (0.321 s against 0.278 s); below ~13 m/s the kite's
-  response time stops growing (`Plan_model_validation.md`).
+  response time stops growing (`oldplans/Plan_model_validation.md`).
 - `kite_correction` was measured at `v_a` ≈ 34 m/s; at the reel-out's
   11 – 17 m/s it is extrapolated.
 - The cross-track step tests above were compared against the table model; they

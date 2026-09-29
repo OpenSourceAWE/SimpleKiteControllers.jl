@@ -337,7 +337,7 @@ if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
            flying WITHOUT steering feed-forward."
 end
 
-# V1 model-validation test inputs (docs/Plan_model_validation.md, V1): read and
+# V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1): read and
 # cleared like SHOW_PLOTS. STEER_GAIN_FACTOR multiplies rel_steering, and
 # EXTRA_STEER_DELAY adds a FIFO delay to it, in samples. Both act only from
 # HOOK_SETTLE seconds after phase 4 is first reached, so the entry and phase 3
@@ -367,7 +367,7 @@ HOOK_SETTLE = 15.0
 steer_delay_buf = Float64[]
 ff_delay_buf = Float64[]
 t_phase4 = Ref(NaN)    # [s] time phase 4 was first reached this run; NaN before that
-# Test input for V2 (docs/Plan_model_validation.md): a function τ -> Δu added to
+# Test input for V2 (oldplans/Plan_model_validation.md): a function τ -> Δu added to
 # rel_steering, τ the time since the V1 hooks switched on (t_phase4 + HOOK_SETTLE),
 # read and cleared like SHOW_PLOTS. It is not logged: it is a function of time, so
 # the analysis recomputes it from the log's phase-4 start (validate_margins.jl).

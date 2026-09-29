@@ -29,7 +29,7 @@ the row's `v_app` (about 13 m/s), 0.141 + 0.267 s at depower 0.275. See
 `docs/course_loop_stability.md`.
 
 In the pattern (phase ≥ 3) two more factors, both validated against the
-simulation at 200 and 300 m (docs/Plan_model_validation.md, V1 step 1):
+simulation at 200 and 300 m (oldplans/Plan_model_validation.md, V1 step 1):
 
 - the attractor guidance, `guidance_tf(ω_g)` = `1 + ω_g/s`, `ω_g = v_k/(L·D)`,
   with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;

@@ -21,7 +21,7 @@ steering gain is now 10 in every settings file (tape lag 0.1 s instead of
 the pattern loop now includes the attractor guidance and a kite correction.
 Validated against `simple_fig8.jl` by pushing the loop to instability (V1) and
 by injected multisines (V2), see [Model validation](#model-validation-2026-09-27)
-and `Plan_model_validation.md`: the model under-predicts the simulation's
+and `oldplans/Plan_model_validation.md`: the model under-predicts the simulation's
 margins, the delay margin by 19 %, the gain margin by 22 – 42 %. Current
 numbers: [Results](#results-current-model-2026-09-27). [Log validation](#log-validation-2026-09-25),
 [Kite dead time over v_a](#kite-dead-time-over-v_a), the
@@ -168,7 +168,7 @@ up to 0.02 in places, within about one of its standard errors.
 
 ## Model validation (2026-09-27)
 
-Details and all tables: `Plan_model_validation.md` (V1, V2). All runs 7 m/s
+Details and all tables: `oldplans/Plan_model_validation.md` (V1, V2). All runs 7 m/s
 wind, no turbulence, `steering_gain` 10.
 
 ![Course loop, measured against the model](course_loop_frf.png)
@@ -256,7 +256,7 @@ The rows below 12.8 m/s hold the pattern law's value at 12.8 m/s
 tether lengths (the guidance corner scales as 1/L): minimum α 0.71 at 300 m,
 0.66 at 200 m, 0.58 at 150 m. Against every margin measured (150 – 300 m,
 `v_a` 22 – 40 m/s) this loop is low by 0 – 42 % in the delay margin and
-21 – 45 % in the gain margin (`Plan_model_validation.md`, V4).
+21 – 45 % in the gain margin (`oldplans/Plan_model_validation.md`, V4).
 
 Entry (phases 1 – 2, `entry_gain` 0.25, inner loop), depower 0.37: α 0.50 at
 5 m/s (the gravity pole, see [Entry at low v_a](#entry-at-low-v_a)), 1.37 at
@@ -558,9 +558,9 @@ to a step or chirp in `rel_steering`.
 
 ## Next steps
 
-The model's validation continues in `Plan_model_validation.md` (the fed-back
-course's dynamics, 150 m, the other V-tests). The items below are the
-2026-09-25 list.
+The model's validation is complete, see `oldplans/Plan_model_validation.md`;
+only a run with turbulence is deferred. The items below are the 2026-09-25
+list.
 
 1. **Low-wind transition.** At 5 m/s wind the fig8 run fails (laps, min
    elevation), with or without the changes here: phase 3 lasts 20 s or more

@@ -203,7 +203,7 @@ HOLD_COMPLIANCE = nothing
 isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $hold_compliance"
 hold_f_lp = NaN         # [N] low-passed force of the compliant hold
 hold_l0 = NaN           # [m] length the compliant hold began at
-# V1 model-validation test inputs (docs/Plan_model_validation.md, V1, point C):
+# V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1, point C):
 # read and cleared like SHOW_PLOTS. STEER_GAIN_FACTOR multiplies rel_steering, and
 # EXTRA_STEER_DELAY adds a FIFO delay to it, in samples. Both act only from
 # HOOK_SETTLE seconds after phase 4 is first reached, so entry, phase 3 and the

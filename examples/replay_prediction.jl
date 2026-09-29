@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-V3 of docs/Plan_model_validation.md: k-step-ahead prediction of the course-loop
+V3 of oldplans/Plan_model_validation.md: k-step-ahead prediction of the course-loop
 plant on held-out logs.
 
 The logged steering command `set_steering` is passed through the plant of

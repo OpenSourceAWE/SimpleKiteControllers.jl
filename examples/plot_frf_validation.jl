@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-The V2 deliverable of docs/Plan_model_validation.md: the course loop's
+The V2 deliverable of oldplans/Plan_model_validation.md: the course loop's
 frequency response measured by injection in `simple_fig8.jl`, over the Bode
 plot of `course_loop_model.jl`'s loop at the same operating point, one column
 per tether length (150 / 200 / 300 m, 7 m/s of wind, depower 0.27).

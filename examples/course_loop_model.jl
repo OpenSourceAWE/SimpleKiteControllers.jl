@@ -37,7 +37,7 @@ Response time of the kite in pattern flight, `τ_kite + T_kite` [s] at `v_a`
 [m/s]: `PATTERN_DELAY_REF · (PATTERN_V_REF / v_a)^PATTERN_DELAY_EXP`.
 Re-identified (`identify_turn_rate_law`) on 12 pattern logs at depower 0.27,
 elevation 15 – 26°, tether 150 – 380 m, `v_a` 12.8 – 40.6 m/s
-(docs/Plan_model_validation.md, V4). The relay sweeps behind the table fly at
+(oldplans/Plan_model_validation.md, V4). The relay sweeps behind the table fly at
 73°, where at low `v_a` the kite responds more slowly: at 12.8 m/s the table
 gives 0.43 s, the pattern 0.29 s.
 """
@@ -48,7 +48,7 @@ const PATTERN_DELAY_EXP = 0.74
 Airspeed [m/s] below which the pattern law holds its value instead of growing:
 the lowest `v_a` it was identified at. Reel-out logs below it measured 0.279 s
 at 10.6 m/s and 0.285 s at 10.1 m/s, against 0.292 s at 12.8 m/s, where the
-unfloored law would give 0.33 – 0.35 s (docs/Plan_model_validation.md).
+unfloored law would give 0.33 – 0.35 s (oldplans/Plan_model_validation.md).
 """
 const PATTERN_V_FLOOR = 12.8
 "Depower [-] the pattern law was measured at"
@@ -57,7 +57,7 @@ const PATTERN_LAW_DEPOWER = 0.27
 Growth of the pattern response time with depower, `exp(PATTERN_DEPOWER_EXP ·
 (depower − PATTERN_LAW_DEPOWER))`: point D (300 m, 7 m/s) flown at depower
 0.30 / 0.33 / 0.36 gave ×1.17 / 1.39 / 1.78 over the 0.27 law
-(docs/Plan_model_validation.md). The table's rows grow only ×1.05 – 1.15 over
+(oldplans/Plan_model_validation.md). The table's rows grow only ×1.05 – 1.15 over
 the same range, so their ratio is not used.
 """
 const PATTERN_DEPOWER_EXP = 6.1
@@ -185,7 +185,7 @@ with the pole at z = 1: the commanded course follows the cross-track error,
 which integrates the course, with the corner `ω_g = v_k/(L·D)` [rad/s] (`D`
 the attractor's arc distance [rad]). Multiply the inner loop `C·P` by it for
 pattern flight, as `stability_opt_reelout.jl` does. Validated at the 300 m
-fig8 point (docs/Plan_model_validation.md, V1 step 1): it predicts the
+fig8 point (oldplans/Plan_model_validation.md, V1 step 1): it predicts the
 measured course → regulated-error link at 0.5 Hz to within 5 % and 1°.
 """
 guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
@@ -222,7 +222,7 @@ gain crossover (`f_gc`, phase margin `pm` [deg], delay margin `dm` [s]) and
 the first phase crossover (`f_pc`, gain margin `gm`), found by interpolating
 log|L| and the unwrapped phase between the points. Needed where the plant
 has no good low-order model, like the fed-back course of pattern flight
-(docs/Plan_model_validation.md, V1 step 1). `NaN` where there is no crossing.
+(oldplans/Plan_model_validation.md, V1 step 1). `NaN` where there is no crossing.
 """
 function frd_margins(f, L)
     idx = sortperm(f)
@@ -262,7 +262,7 @@ The measured course correction `M(f, v_a)` [-]: what the simulation's steering �
 fed-back course response is, divided by this model's tape lag × turn-rate law
 (without `kite_correction`, which it contains). Measured with injected
 multisines on the fig8 pattern at `v_a` 23.7, 34 (200 and 300 m, pooled) and
-40.1 m/s (docs/Plan_model_validation.md, V1). One table per airspeed, sorted by
+40.1 m/s (oldplans/Plan_model_validation.md, V1). One table per airspeed, sorted by
 `v_a`, each with the frequencies [Hz], `log|M|` and the unwrapped phase [rad],
 for [`course_correction`](@ref).
 """

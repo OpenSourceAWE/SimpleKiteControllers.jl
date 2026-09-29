@@ -1,5 +1,5 @@
 # Command -> course, rel_steering -> course [rad per unit steering], measured by injected
-# multisines in simple_fig8.jl (V2 of Plan_model_validation.md, 2026-09-27), steering_gain 10,
+# multisines in simple_fig8.jl (V2 of oldplans/Plan_model_validation.md, 2026-09-27), steering_gain 10,
 # v_steering 1.0 1/s (no rate limit), 7 m/s wind, flown fc_settings. Lines between the lap's harmonics;
 # course_sd = relative spread of course/heading over the injection periods. Point A (12-period run): lines with
 # course_sd < 0.35 only. Use with frd_margins (examples/course_loop_model.jl).

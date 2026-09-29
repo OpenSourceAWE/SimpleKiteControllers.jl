@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-V5 of docs/Plan_model_validation.md: code consistency of
+V5 of oldplans/Plan_model_validation.md: code consistency of
 `examples/course_loop_model.jl`, no simulation. The model lives in `examples/`,
 not `src/`, so it is `include`d here rather than loaded as part of the package
 — hence `ControlSystemsBase` and `DiscretePIDs` in `test/Project.toml`, both
