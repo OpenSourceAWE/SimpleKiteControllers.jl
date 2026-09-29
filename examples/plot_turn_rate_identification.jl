@@ -46,8 +46,10 @@ using MakieControlPlots
 using LaTeXStrings
 using LinearAlgebra: norm
 using Statistics: median, var
+using DelimitedFiles: writedlm
 
-# `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay` and `lag_filter`.
+# `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay`, `lag_filter` and
+# `joint_delay_lag_fit`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
 
 # ==================== USER PARAMETERS ==================== #
@@ -84,42 +86,8 @@ max_elevation = 55.0     # [°] a flight's fit window starts at its first sample
 
 # ==================== JOINT FIT ========================== #
 
-"""
-    joint_delay_lag_fit(fits, dt; lag_max=1.0, t_max=0.8) -> NamedTuple
-
-One dead time, first-order lag, `c1` and `c2` for all `fits` (each an
-`identify_turn_rate_law` result, sampled at `dt`): `fit_delay_lag` over several
-flights. For every lag `T` in `0:dt:lag_max` and dead time of `d` samples in
-`0:t_max/dt`, each flight's steering is lag-filtered and shifted on its own, the
-first `t_max/dt` samples of every flight are dropped (so every candidate is
-scored on the same samples, none of them padded by the shift), and `fit_c1_c2`
-is fitted on all flights stacked. The pair with the smallest residual wins.
-
-Returns `(; dead_time, lag, d, c1, c2, rms_lag, rms_delay, n)`: the dead time [s]
-as `delay_sec` counts it (whole samples less half a sample), the lag [s], the
-shift in samples, the coefficients, the residual RMS [rad/s] of this fit and of
-the best pure delay (`T = 0`), and the number of samples.
-"""
-function joint_delay_lag_fit(fits, dt; lag_max = 1.0, t_max = 0.8)
-    dmax = round(Int, t_max / dt)
-    trim(x) = x[dmax + 1:end]
-    stack(field) = reduce(vcat, [trim(collect(Float64.(getfield(f, field)))) for f in fits])
-    rate, v_app, psi, beta = stack(:rate), stack(:v_app), stack(:psi), stack(:beta)
-    best = nothing
-    rms_delay = Inf
-    for T in 0:dt:lag_max
-        ufs = [lag_filter(f.us, T, dt) for f in fits]
-        for d in 0:dmax
-            us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])
-            c = fit_c1_c2(v_app, psi, beta, rate, us)
-            T == 0 && (rms_delay = min(rms_delay, c.rms))
-            (isnothing(best) || c.rms < best.rms) && (best = (; T, d, c1 = c.c1, c2 = c.c2, rms = c.rms))
-        end
-    end
-    best.T >= lag_max - dt / 2 && @warn "joint_delay_lag_fit: the lag hit lag_max = $lag_max s."
-    return (; dead_time = max(best.d - 0.5, 0.0) * dt, lag = best.T, best.d, best.c1, best.c2,
-            rms_lag = best.rms, rms_delay, n = length(rate))
-end
+# `joint_delay_lag_fit` is in `delay_lag_fit.jl`, so `plot_turn_rate_vs_depower.jl` can refit
+# saved fit windows without flying.
 
 "The model's turn rate [°/s] of `fit`'s window for the delay-lag fit `dl`"
 model_rate(fit, dl, d = round(Int, dl.dead_time / DT + 0.5)) =
@@ -242,6 +210,24 @@ joint_flights = let steady = filter(f -> f.outcome == :time_limit, flights)
     isempty(steady) ? flights : steady
 end
 joint = joint_delay_lag_fit([f.fit for f in joint_flights], DT)
+
+# The fit windows of the steady flights, one row per sample, for refitting without flying
+# (`plot_turn_rate_vs_depower.jl`, `TR_FROM_RAW`). Only when the caller sets `TR_WINDOWS_DIR`,
+# which is not cleared: it is set once for a whole series of includes.
+if @isdefined(TR_WINDOWS_DIR) && !isnothing(TR_WINDOWS_DIR)
+    mkpath(TR_WINDOWS_DIR)
+    let file = joinpath(TR_WINDOWS_DIR, @sprintf("depower_%.3f.csv", depower))
+        open(file, "w") do io
+            writedlm(io, permutedims(["flight", "amplitude", "time", "us", "rate", "v_app", "psi", "beta"]), ',')
+            for (i, f) in enumerate(joint_flights)
+                n = length(f.fit.time)
+                writedlm(io, hcat(fill(i, n), fill(f.a, n), f.fit.time, f.fit.us, f.fit.rate,
+                                  f.fit.v_app, f.fit.psi, f.fit.beta), ',')
+            end
+        end
+        @info "Saved the fit windows to $file."
+    end
+end
 
 # ======================== REPORT ========================= #
 

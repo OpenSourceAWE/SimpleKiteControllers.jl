@@ -134,3 +134,40 @@ function fit_c1_c3(v_app::AbstractVector, psi::AbstractVector, beta::AbstractVec
     return (c1 = c1, c2 = c3 * sum(v_app) / n, se1 = sqrt(sigma2 / sum(abs2, x)), se2 = 0.0,
             rms = sqrt(sum(abs2, resid) / n), cond = 1.0, n = n)
 end
+
+"""
+    joint_delay_lag_fit(fits, dt; lag_max=1.0, t_max=0.8) -> NamedTuple
+
+One dead time, first-order lag, `c1` and `c2` for all `fits` (each an
+`identify_turn_rate_law` result, sampled at `dt`): `fit_delay_lag` over several
+flights. For every lag `T` in `0:dt:lag_max` and dead time of `d` samples in
+`0:t_max/dt`, each flight's steering is lag-filtered and shifted on its own, the
+first `t_max/dt` samples of every flight are dropped (so every candidate is
+scored on the same samples, none of them padded by the shift), and `fit_c1_c2`
+is fitted on all flights stacked. The pair with the smallest residual wins.
+
+Returns `(; dead_time, lag, d, c1, c2, rms_lag, rms_delay, n)`: the dead time [s]
+as `delay_sec` counts it (whole samples less half a sample), the lag [s], the
+shift in samples, the coefficients, the residual RMS [rad/s] of this fit and of
+the best pure delay (`T = 0`), and the number of samples.
+"""
+function joint_delay_lag_fit(fits, dt; lag_max = 1.0, t_max = 0.8)
+    dmax = round(Int, t_max / dt)
+    trim(x) = x[dmax + 1:end]
+    stack(field) = reduce(vcat, [trim(collect(Float64.(getfield(f, field)))) for f in fits])
+    rate, v_app, psi, beta = stack(:rate), stack(:v_app), stack(:psi), stack(:beta)
+    best = nothing
+    rms_delay = Inf
+    for T in 0:dt:lag_max
+        ufs = [lag_filter(f.us, T, dt) for f in fits]
+        for d in 0:dmax
+            us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])
+            c = fit_c1_c2(v_app, psi, beta, rate, us)
+            T == 0 && (rms_delay = min(rms_delay, c.rms))
+            (isnothing(best) || c.rms < best.rms) && (best = (; T, d, c1 = c.c1, c2 = c.c2, rms = c.rms))
+        end
+    end
+    best.T >= lag_max - dt / 2 && @warn "joint_delay_lag_fit: the lag hit lag_max = $lag_max s."
+    return (; dead_time = max(best.d - 0.5, 0.0) * dt, lag = best.T, best.d, best.c1, best.c2,
+            rms_lag = best.rms, rms_delay, n = length(rate))
+end
