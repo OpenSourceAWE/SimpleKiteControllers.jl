@@ -2,25 +2,33 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Fly ONE relay sweep of `build_turn_rate_table.jl` at a single depower and plot
-the log: turn rate, apparent wind speed, kite speed and elevation over time.
-The turn-rate panel also shows the identified model: the pure delay of
-`identify_turn_rate_law` split into a dead time τ and a first-order kite lag T by
-`fit_delay_lag`, as the table's `dead_time` and `kite_lag` are.
+Identify the turn-rate law at a LOW elevation, from several relay flights at one
+depower, and plot each flight: turn rate, apparent wind speed, kite speed and
+elevation over time.
 
-The sweep is `_run_turn_rate_sweep` with the cell's own `u_s_max` and elevation
-floor from `data/turn_rate_coeffs.yaml` when the table has a row for this
-depower (the default cap and floor otherwise), so the plot shows the run the
-table's row was identified on. Nothing is written to the table; the fit is
-printed with `format_turn_rate_report`, followed by τ, T and how much the lag
-lowers the residual against the pure delay.
+The first step of `PlanIdentifyTurnRateLaw.md`. The table's sweeps start at 73°
+and relay about heading 0 (straight up), so the kite hovers near the zenith at
+`v_a` ≈ 11 – 16 m/s. Here every flight relays about a crosswind heading (`±90°`),
+reverses at `±az_reverse` of azimuth and tilts the band to hold `el_hold`, see
+`_run_turn_rate_sweep`: the kite flies a lazy-eight-like pattern low in the wind
+window, at `v_a` ≈ 20 – 50 m/s (depower 0.275, 2026-09-29).
 
-The turn rate is `calc_turn_rate(sl; source = :heading)`, the backward difference
-of the heading that `identify_turn_rate_law` fits, aligned to `time[2:end]`; the
-other panels use the same samples. The relay excitation, and the fit window,
-start at `T_START`.
+One flight per entry of `flight_settings`, each at a fixed amplitude for
+`SWEEP_SIM_TIME`. Each is fitted on its own (`identify_turn_rate_law`, then
+`fit_delay_lag`), and all together (`joint_delay_lag_fit`): one dead time, lag,
+`c1` and `c2` for every flight, the steering of each flight filtered and shifted
+separately so no shift crosses from one flight into the next. The fit window of
+a flight starts at the first sample below `max_elevation` after `T_START` and
+runs to its end, contiguous, as the backward-difference turn rate and the delay
+search need. The law fitted is still the current one; the result is compared
+with the table's 73° row at the same depower. Nothing is written to the table.
 
-About two minutes for the sweep. `DEPOWER` is read and cleared like `SHOW_PLOTS`:
+The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
+:heading)`, and the joint model, which starts where the flight's fit window does.
+The elevation panel carries `max_elevation`.
+
+About two to three minutes per flight. `DEPOWER` is read and cleared like
+`SHOW_PLOTS`:
 
     DEPOWER = 0.3; include("plot_turn_rate_identification.jl")   # default 0.275
 """
@@ -33,78 +41,172 @@ end
 using MakieControlPlots
 using LaTeXStrings
 using LinearAlgebra: norm
+using Statistics: median
 
-# `_run_turn_rate_sweep`, the fixed sweep conditions and `_elevation_floor`.
+# `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay` and `lag_filter`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
+
+# ==================== USER PARAMETERS ==================== #
 
 depower = @isdefined(DEPOWER) ? Float64(DEPOWER) : 0.275
 DEPOWER = 0.275
+# One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
+# `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
+# `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
+# turns too weakly and drifts to the edge of the wind window even reversing at ±10°; 0.15
+# turns ~90 °/s against a tape that needs ~1 s to swing, so the relay overshoots its band
+# past heading 180° and loops into the ground.
+flight_settings = [(a = 0.075, az_reverse = 20.0, el_hold_tilt = 45.0),
+                   (a = 0.100, az_reverse = 30.0, el_hold_tilt = 45.0),
+                   (a = 0.125, az_reverse = 30.0, el_hold_tilt = 25.0)]
+start_elevation = 30.0   # [°] elevation the flights start at; the table's sweeps start at 73°
+heading_center = 90.0    # [°] centre of the relay's heading band, crosswind; 0 climbs back to ~70°
+el_hold = 30.0           # [°] elevation the band's tilt holds the kite near
+elevation_floor = 10.0   # [°] a flight stops below this
+max_elevation = 55.0     # [°] a flight's fit window starts at its first sample below this
 
-# The table's row for this cell, if any: its amplitude cap and elevation floor.
+# ==================== JOINT FIT ========================== #
+
+"""
+    joint_delay_lag_fit(fits, dt; lag_max=1.0, t_max=0.8) -> NamedTuple
+
+One dead time, first-order lag, `c1` and `c2` for all `fits` (each an
+`identify_turn_rate_law` result, sampled at `dt`): `fit_delay_lag` over several
+flights. For every lag `T` in `0:dt:lag_max` and dead time of `d` samples in
+`0:t_max/dt`, each flight's steering is lag-filtered and shifted on its own, the
+first `t_max/dt` samples of every flight are dropped (so every candidate is
+scored on the same samples, none of them padded by the shift), and `fit_c1_c2`
+is fitted on all flights stacked. The pair with the smallest residual wins.
+
+Returns `(; dead_time, lag, d, c1, c2, rms_lag, rms_delay, n)`: the dead time [s]
+as `delay_sec` counts it (whole samples less half a sample), the lag [s], the
+shift in samples, the coefficients, the residual RMS [rad/s] of this fit and of
+the best pure delay (`T = 0`), and the number of samples.
+"""
+function joint_delay_lag_fit(fits, dt; lag_max = 1.0, t_max = 0.8)
+    dmax = round(Int, t_max / dt)
+    trim(x) = x[dmax + 1:end]
+    stack(field) = reduce(vcat, [trim(collect(Float64.(getfield(f, field)))) for f in fits])
+    rate, v_app, psi, beta = stack(:rate), stack(:v_app), stack(:psi), stack(:beta)
+    best = nothing
+    rms_delay = Inf
+    for T in 0:dt:lag_max
+        ufs = [lag_filter(f.us, T, dt) for f in fits]
+        for d in 0:dmax
+            us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])
+            c = fit_c1_c2(v_app, psi, beta, rate, us)
+            T == 0 && (rms_delay = min(rms_delay, c.rms))
+            (isnothing(best) || c.rms < best.rms) && (best = (; T, d, c1 = c.c1, c2 = c.c2, rms = c.rms))
+        end
+    end
+    best.T >= lag_max - dt / 2 && @warn "joint_delay_lag_fit: the lag hit lag_max = $lag_max s."
+    return (; dead_time = max(best.d - 0.5, 0.0) * dt, lag = best.T, best.d, best.c1, best.c2,
+            rms_lag = best.rms, rms_delay, n = length(rate))
+end
+
+"The model's turn rate [°/s] of `fit`'s window for the delay-lag fit `dl`"
+model_rate(fit, dl, d = round(Int, dl.dead_time / DT + 0.5)) =
+    rad2deg.(dl.c1 .* fit.v_app .* shift_delay(lag_filter(fit.us, dl.lag, DT), d) .+
+             dl.c2 ./ fit.v_app .* sin.(fit.psi) .* cos.(fit.beta))
+
+# ======================== FLIGHTS ======================== #
+
+# The table's row for this cell, if any: the 73° result to compare with.
 row = let entries = YAML.load_file(joinpath(skc_data_path(), OUT_FILE))["entries"]
     k = findfirst(e -> _entry_key(e) == (BODY_START_DAMPING, depower), entries)
     isnothing(k) ? nothing : entries[k]
 end
-isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: flying the default cap and floor."
-max_steering_cap = isnothing(row) ? MAX_STEERING_CAP : Float64(row["u_s_max"])
-elevation_floor = isnothing(row) ? _elevation_floor(depower) :
-                  Float64(get(row, "elevation_floor", _elevation_floor(depower)))
+isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: nothing to compare with."
 
-r = _run_turn_rate_sweep(depower; max_steering_cap, elevation_floor)
-@info "Sweep outcome: $(r.outcome), steering amplitude reached $(r.u_s_max)."
-isnothing(r.fit) && error("The identification failed; nothing to plot.")
-println(format_turn_rate_report(r.fit))
-# The pure delay of the report, split into the dead time τ and the kite's first-order lag T,
-# as `add_delay_lag_split!` does for the table's `dead_time` and `kite_lag`.
-split = _split_delay(r.fit)
-@printf("Dead time τ = %.3f s, kite lag T = %.3f s (pure delay %.3f s); c1 = %.4f 1/m, \
-         c2 = %.3f; residual %.3f °/s against %.3f °/s with the pure delay (%.0f %% better).\n",
-        split.dead_time, split.lag, r.fit.delay_sec, split.c1, split.c2,
-        rad2deg(split.rms_lag), rad2deg(split.rms_delay),
-        100 * (1 - split.rms_lag / split.rms_delay))
+flights = NamedTuple[]
+for (; a, az_reverse, el_hold_tilt) in flight_settings
+    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor,
+                             elevation = start_elevation, heading_center,
+                             start_steering = a, steering_step = 0.0, az_reverse, el_hold,
+                             el_hold_tilt)
+    # The logger is preallocated for SWEEP_SIM_TIME; a flight that ends early leaves the rest
+    # of the rows at zero (time 0 included), which folds the time axis back onto itself.
+    sl = r.sl[1:findlast(>(0), r.sl.time)]
+    el = rad2deg.(sl.elevation)
+    k_below = findfirst(i -> sl.time[i] >= T_START && el[i] < max_elevation, eachindex(sl.time))
+    if isnothing(k_below)
+        @warn @sprintf("Amplitude %.3f: never below max_elevation = %.1f° after T_START; skipped.",
+                       a, max_elevation)
+        continue
+    end
+    t_fit = sl.time[k_below]
+    in_window = sl.time .>= t_fit
+    frac_above = count(in_window .& (el .> max_elevation)) / count(in_window)
+    frac_above > 0 &&
+        @warn @sprintf("Amplitude %.3f: %.0f %% of the fit window above max_elevation = %.1f°.",
+                       a, 100 * frac_above, max_elevation)
+    fit = merge(identify_turn_rate_law(sl; dt = DT, t_start = t_fit, min_steering = MIN_STEERING_FIT),
+                (; c3 = nothing))
+    vk = norm.(sl.vel_kite)
+    v_tau = sqrt.(max.(vk .^ 2 .- Float64.(first.(sl.v_reelout)) .^ 2, 0.0))
+    push!(flights, (; a, outcome = r.outcome, sl, el, vk, t_fit, fit, dl = _split_delay(fit),
+                    v_ratio = v_tau[in_window] ./ Float64.(sl.v_app[in_window])))
+    @info @sprintf("Amplitude %.3f: %s after %.0f s, fit window from %.1f s.", a, r.outcome,
+                   last(sl.time), t_fit)
+end
+isempty(flights) && error("No flight reached max_elevation; nothing to fit.")
+joint = joint_delay_lag_fit([f.fit for f in flights], DT)
 
-# The model's turn rate over the fit window, with the fitted τ and T: the steering is
-# lag-filtered and shifted by the dead time as `fit_delay_lag` does, whole samples only.
-us_model = shift_delay(lag_filter(r.fit.us, split.lag, DT),
-                       round(Int, split.dead_time / DT + 0.5))
-rate_model = rad2deg.(split.c1 .* r.fit.v_app .* us_model .+
-                      split.c2 ./ r.fit.v_app .* sin.(r.fit.psi) .* cos.(r.fit.beta))
+# ======================== REPORT ========================= #
 
-# The logger is preallocated for SWEEP_SIM_TIME; a sweep that ends early leaves the rest
-# of the rows at zero (time 0 included), which folds the time axis back onto itself.
-sl = r.sl[1:findlast(>(0), r.sl.time)]
-# calc_turn_rate is aligned to time[2:end], so every other signal starts at index 2 too.
-rng = 2:length(sl.time)
-turn_rate = rad2deg.(calc_turn_rate(sl; source = :heading, dt = DT))
-# The model on the same samples, NaN before the fit window.
-turn_rate_model = fill(NaN, length(rng))
-window = findall(>=(T_START), sl.time[rng])
-length(window) == length(rate_model) || error("The fit window does not match the log.")
-turn_rate_model[window] .= rate_model
+println()
+@printf("%-22s %7s %9s %8s %8s %8s %9s  %s\n", "", "c1 [1/m]", "c2 [-]", "dead [s]", "lag [s]",
+        "rms[°/s]", "samples", "v_a [m/s], v_τ/v_a (median), elevation [°]")
+for f in flights
+    iw = f.sl.time .>= f.t_fit
+    @printf("amplitude %.3f          %7.4f %9.3f %8.3f %8.3f %8.3f %9d  %.1f – %.1f, %.2f – %.2f (%.2f), %.1f – %.1f\n",
+            f.a, f.dl.c1, f.dl.c2, f.dl.dead_time, f.dl.lag, rad2deg(f.dl.rms_lag), length(f.fit.time),
+            extrema(f.fit.v_app)..., extrema(f.v_ratio)..., median(f.v_ratio), extrema(f.el[iw])...)
+end
+@printf("joint, %d flights        %7.4f %9.3f %8.3f %8.3f %8.3f %9d  (pure delay: rms %.3f °/s)\n",
+        length(flights), joint.c1, joint.c2, joint.dead_time, joint.lag, rad2deg(joint.rms_lag),
+        joint.n, rad2deg(joint.rms_delay))
+isnothing(row) ||
+    @printf("table row, 73°         %7.4f %9.3f %8.3f %8.3f %8s %9s  v_a %.1f m/s (c1, c2 of the pure-delay fit)\n",
+            row["c1"], row["c2"], get(row, "dead_time", NaN), get(row, "kite_lag", NaN), "", "",
+            row["v_app"])
 
-p = plotx(
-    sl.time[rng],
-    (turn_rate, turn_rate_model),
-    Float64.(sl.v_app[rng]),
-    norm.(sl.vel_kite[rng]),
-    rad2deg.(sl.elevation[rng]);
-    xlabel = L"\mathrm{time}~[\mathrm{s}]",
-    ysize = 18,
-    ylabels = [
-        L"\dot{\psi}~[°/\mathrm{s}]",
-        L"v_{\mathrm{a}}~[\mathrm{m/s}]",
-        L"v_{\mathrm{k}}~[\mathrm{m/s}]",
-        L"\mathrm{elevation}~[°]",
-    ],
-    labels = [
-        [L"\dot{\psi}", @sprintf("model, τ = %.3f s, T = %.3f s", split.dead_time, split.lag)],
-        nothing,
-        nothing,
-        nothing,
-    ],
-    fig = @sprintf("Turn-rate identification, depower %.3f", depower),
-)
-display(p)
-sleep(0.1)  # Allow Makie to render the plot before continuing
+# ========================= PLOTS ========================= #
+
+for f in flights
+    sl = f.sl
+    # calc_turn_rate is aligned to time[2:end], so every other signal starts at index 2 too.
+    rng = 2:length(sl.time)
+    turn_rate = rad2deg.(calc_turn_rate(sl; source = :heading, dt = DT))
+    # The joint model on the same samples, NaN before the fit window.
+    turn_rate_model = fill(NaN, length(rng))
+    window = findall(>=(f.t_fit), sl.time[rng])
+    length(window) == length(f.fit.time) || error("The fit window does not match the log.")
+    turn_rate_model[window] .= model_rate(f.fit, joint, joint.d)
+    p = plotx(
+        sl.time[rng],
+        (turn_rate, turn_rate_model),
+        Float64.(sl.v_app[rng]),
+        f.vk[rng],
+        (f.el[rng], fill(max_elevation, length(rng)));
+        xlabel = L"\mathrm{time}~[\mathrm{s}]",
+        ysize = 18,
+        ylabels = [
+            L"\dot{\psi}~[°/\mathrm{s}]",
+            L"v_{\mathrm{a}}~[\mathrm{m/s}]",
+            L"v_{\mathrm{k}}~[\mathrm{m/s}]",
+            L"\mathrm{elevation}~[°]",
+        ],
+        labels = [
+            [L"\dot{\psi}", @sprintf("joint model, τ = %.3f s, T = %.3f s", joint.dead_time, joint.lag)],
+            nothing,
+            nothing,
+            ["elevation", "max_elevation"],
+        ],
+        fig = @sprintf("Turn-rate identification, depower %.3f, amplitude %.3f", depower, f.a),
+    )
+    display(p)
+    sleep(0.1)  # Allow Makie to render the plot before continuing
+end
 
 nothing

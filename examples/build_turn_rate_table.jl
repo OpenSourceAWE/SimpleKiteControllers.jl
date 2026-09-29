@@ -226,7 +226,11 @@ end
 """
     _run_turn_rate_sweep(depower; max_steering_cap=MAX_STEERING_CAP,
                          elevation_floor=MIN_ELEVATION, v_wind=V_WIND,
-                         c3=nothing) -> NamedTuple
+                         c3=nothing, elevation=ELEVATION,
+                         heading_center=0.0, start_steering=START_STEERING,
+                         steering_step=STEERING_STEP, az_reverse=nothing,
+                         el_hold=nothing, el_hold_gain=3.0,
+                         el_hold_tilt=45.0) -> NamedTuple
 
 One steering-amplitude sweep at the fixed conditions above, for `depower`.
 `v_wind` [m/s] other than `V_WIND` flies the sweep at another airspeed, for the
@@ -243,6 +247,23 @@ is the caller's), then a relay controller flips the steering between `-u_s` and
 `+u_s` whenever the heading leaves the `±HEADING_OFFSET` band, stepping `u_s` up
 by `STEERING_STEP` after `CYCLES_PER_LEVEL` upward crossings.
 
+`elevation` [°] is the start elevation and `heading_center` [°] the centre of the
+relay's heading band (0 = flying straight up). Both default to the table's sweep;
+other values fly a sweep lower or crosswind (`plot_turn_rate_identification.jl`),
+which is not a table row either. `start_steering` and `steering_step` set the
+amplitude ladder; `steering_step = 0` with a `max_steering_cap` above
+`start_steering` flies one amplitude until the time limit or the floor.
+
+Crosswind, a fixed band centre flies the kite out of the wind window. With
+`az_reverse` [°] set, the centre is `±heading_center` and flips sign when the
+azimuth passes `±az_reverse` in the direction of travel (heading > 0 moves the
+azimuth up); the turn between the two always goes through heading 0, upwards.
+With `el_hold` [°] set, the centre's magnitude is tilted by `el_hold_gain` [°/°]
+per degree above (down) or below (up) `el_hold`, clamped to `heading_center ±
+el_hold_tilt`, which holds the kite near that elevation. A fast turn (a large
+amplitude) overshoots the band, so it needs a smaller `el_hold_tilt`, or the
+heading passes 180° (straight down) and the kite loops into the ground.
+
 Returns `(; outcome, u_s_max, min_elevation, fit, sl)`. `outcome` is `:sweep_done`
 (reached `max_steering_cap`), `:time_limit`, `:low_elevation`, or `:error` (the
 solver diverged — the fit still runs on whatever was logged). `fit` is the
@@ -252,19 +273,26 @@ sweep's log, for plotting (`plot_turn_rate_identification.jl`).
 """
 function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP,
                               elevation_floor::Real = MIN_ELEVATION, v_wind::Real = V_WIND,
-                              c3::Union{Nothing, Real} = nothing)
+                              c3::Union{Nothing, Real} = nothing,
+                              elevation::Real = ELEVATION, heading_center::Real = 0.0,
+                              start_steering::Real = START_STEERING,
+                              steering_step::Real = STEERING_STEP,
+                              az_reverse::Union{Nothing, Real} = nothing,
+                              el_hold::Union{Nothing, Real} = nothing, el_hold_gain::Real = 3.0,
+                              el_hold_tilt::Real = 45.0)
     @info @sprintf("build_turn_rate_table: depower = %.3f, max_steering_cap = %.3f, \
                     elevation floor %.1f°, wind %.2f m/s", depower, max_steering_cap,
                    elevation_floor, v_wind)
     s = init(v_wind, TETHER_LENGTH; body_start_damping = BODY_START_DAMPING,
-        body_sim_damping = BODY_SIM_DAMPING, elevation = ELEVATION,
+        body_sim_damping = BODY_SIM_DAMPING, elevation,
         depower_setpoint = depower, sim_time = SWEEP_SIM_TIME, dt = DT,
         system_yaml = SWEEP_PROJECT, aero_mode = SWEEP_AERO_MODE, remake_model = false)
 
     l0 = s.sys_state.l_tether[1]
     wpc = WinchPosController(WCSettings(true; dt = s.dt); dt = s.dt)
 
-    steering = START_STEERING
+    steering = start_steering
+    side = 1.0              # sign of the band centre, flipped by `az_reverse`
     rel_steering = 0.0
     heading = 0.0
     cycles = 0
@@ -279,7 +307,21 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
             end
             last_heading = heading
             if t > T_START + s.dt
-                heading = wrap_to_pi(s.sys_state.heading)
+                if !isnothing(az_reverse)
+                    az = rad2deg(s.sys_state.azimuth)
+                    side > 0 && az > az_reverse && (side = -1.0)
+                    side < 0 && az < -az_reverse && (side = 1.0)
+                end
+                center = heading_center
+                if !isnothing(el_hold)
+                    center = clamp(center + el_hold_gain * (rad2deg(s.sys_state.elevation) - el_hold),
+                                   heading_center - el_hold_tilt, heading_center + el_hold_tilt)
+                end
+                # Relative to the band's centre, so the relay logic is the same for any centre.
+                # NOT wrapped: heading and centre both lie in (-180°, 180°], so the plain
+                # difference never turns the kite through ±180° (straight down), and passes
+                # through 0 (straight up) whenever a reversal flips the centre's sign.
+                heading = wrap_to_pi(s.sys_state.heading) - deg2rad(side * center)
                 if rad2deg(heading) < -HEADING_OFFSET
                     rel_steering = steering
                 elseif rad2deg(heading) > HEADING_OFFSET
@@ -293,7 +335,7 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
                                 break
                             end
                             cycles = 0
-                            steering = min(steering + STEERING_STEP, max_steering_cap)
+                            steering = min(steering + steering_step, max_steering_cap)
                             @info @sprintf("  t = %6.2f s: steering amplitude -> %.3f",
                                            t, steering)
                         end
