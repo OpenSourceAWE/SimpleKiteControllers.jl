@@ -11,9 +11,10 @@ lag from the commanded to the applied steering,
 
     T_act·u̇_s = u_cmd - u_s
 
-then the turn-rate law of `data/turn_rate_coeffs.yaml`,
+then the turn-rate law with `c1` and `c2` of the low crosswind pattern
+([`plant_coeffs`](@ref); the gain schedule keeps `data/turn_rate_coeffs.yaml`),
 
-    ψ̇ = c1·v_a·u_k + C3·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
+    ψ̇ = c1·v_a·u_k + c2/v_a·cos(ψ0)·cos(β)·δψ,   T_kite·u̇_k = u_s(t - τ_kite) - u_k
 
 `T_act = 1/steering_gain` of the project's settings (`TAPE_LAG`, 0.1 s at
 `steering_gain` 10): the tape's small-signal lag, which injected multisines
@@ -53,7 +54,7 @@ evaluates the pattern loop with the measured course correction at the airspeed
 it was measured at; its disk margin agrees with the table's, its delay and gain
 margins are the realistic ones.
 
-The gravity term only adds a slow real pole at `±C3·cos(β)`; both signs are
+The gravity term only adds a slow real pole at `±c2/v_a·cos(β)`; both signs are
 checked and the worse one is reported. The controller is the exact discrete
 transfer function of `DiscretePIDs.DiscretePID` (backward-Euler filtered
 derivative, forward-Euler integral), with the gain schedule
@@ -119,13 +120,14 @@ guidance_corner(v_app) = V_K_OVER_V_A * v_app /
 
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `L = C·P` at one operating point, worst case over the sign of the gravity pole
-`±C3·cos(β)` ([`C3`](@ref)).
+`±c2/v_a·cos(β)` ([`plant_coeffs`](@ref)).
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
 `pattern = true` multiplies in the guidance and the kite correction, and takes
 the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
 """
 function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false)
     tc = turn_rate_coeffs(fcs.body_damping, depower)
+    pc = plant_coeffs(depower)   # the plant's c1 and c2; the delays below stay the table's scaling
     K = K_phase * fcs.v_app_ref / max(v_app, v_min)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
     cos_beta = cosd(fcs.el_center)
@@ -134,7 +136,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
         pattern_dead_time_lag(tc, v_app, depower) :
         (kite_dead_time(tc, v_app), kite_lag(tc, v_app))
     results = map((-cos_beta, cos_beta)) do gravity
-        L = C * turn_rate_plant(tc.c1, c2_at(v_app), τ, v_app, gravity, Ts; lag = TAPE_LAG,
+        L = C * turn_rate_plant(pc.c1, pc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
                                 kite_lag = T_kite)
         pattern && (L = L * kite_correction(Ts) * guidance_tf(guidance_corner(v_app), Ts))
         dm = try

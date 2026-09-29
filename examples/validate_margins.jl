@@ -170,10 +170,11 @@ function predict(point::Symbol; v_a = V1_POINTS[point].v_a_nominal, depower = no
     C = course_pid(K, fcs_p.heading_i, fcs_p.heading_d, fcs_p.heading_d_n, Ts)
     cos_beta = cosd(fcs_p.el_center)
     τ, T_kite = kite_dead_time(tc, v_a), kite_lag(tc, v_a)
-    # Gravity term C3·sin(ψ)·cos(β), see course_loop_model.jl.
-    c2 = c2_at(v_a)
+    # The plant's c1 and gravity term c2/v_a·sin(ψ)·cos(β) of the low pattern (course_loop_model.jl).
+    pc = plant_coeffs(dp)
+    c2 = pc.c2
     branches = vec(map((-cos_beta, cos_beta)) do g
-        L = C * turn_rate_plant(tc.c1, c2, τ, v_a, g, Ts; lag, kite_lag = T_kite)
+        L = C * turn_rate_plant(pc.c1, c2, τ, v_a, g, Ts; lag, kite_lag = T_kite)
         (; g, c2, L, α = diskmargin(L).margin, open_loop_stable = isstable(L))
     end)
     alpha = minimum(b -> b.α, branches)   # disk margin is well-defined either way
@@ -764,15 +765,16 @@ function model_loops(r)
     C, Ts = course_controller_tf(r.point, r.v_a_mean; depower = r.depower)
     tc = turn_rate_coeffs(f.body_damping, r.depower)
     # One model to set against the measurement: the stable sign of the gravity pole, with the
-    # identified gravity term C3 (course_loop_model.jl).
-    c2 = c2_at(r.v_a_mean)
-    P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
+    # plant's c1 and c2 of the low pattern (plant_coeffs, course_loop_model.jl).
+    pc = plant_coeffs(r.depower)
+    c2 = pc.c2
+    P = turn_rate_plant(pc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
                         -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))
     G = guidance_tf(guidance_rate(r).ω_g, Ts)
     # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
     τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
-    Pp = turn_rate_plant(tc.c1, c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),
+    Pp = turn_rate_plant(pc.c1, c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                          kite_lag = Tp)
     return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))
 end

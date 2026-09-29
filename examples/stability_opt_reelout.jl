@@ -8,8 +8,11 @@ project's `l_tether` to `reelout_l_max`.
 
 The plant and the controller are those of `stability_fig8.jl`
 (shared in `course_loop_model.jl`): the steering tape as a first-order lag, the
-turn-rate law of `data/turn_rate_coeffs.yaml` with the kite's dead time and
-lag scaled over `v_a`, and the exact discrete PD of `CourseController`. Four things
+turn-rate law with the kite's dead time and lag scaled over `v_a`, and the exact
+discrete PD of `CourseController`. The plant's `c1` and gravity term
+`c2/v_a·sin(ψ)·cos(β)` are those of the low crosswind pattern
+([`plant_coeffs`](@ref), since 2026-09-29; before, the table's `c1` and a constant
+`C3`); the gain schedule keeps `data/turn_rate_coeffs.yaml`, as flown. Four things
 differ in the reel-out:
 
 - **The tape's lag.** `ACTUATOR_LAG` (0.43 s) is the tape's equivalent lag in
@@ -27,8 +30,8 @@ differ in the reel-out:
   with the kite's response time from the pattern law
   ([`pattern_dead_time_lag`](@ref), re-identified on pattern logs including
   this reel-out, 0.29 s at 12.8 m/s against the table's 0.43 s) and
-  [`kite_correction`](@ref); the inner loop `C·P` alone keeps the turn-rate
-  table's ([`kite_dead_time`](@ref), [`kite_lag`](@ref)), for comparison. The
+  [`kite_correction`](@ref); since 2026-09-29 the inner loop `C·P·kite_correction`
+  uses the same plant (before, the turn-rate table's dead time and lag). The
   log cannot split dead time from lag: closed-loop steering has no steps, and
   its own split read 0 s + 0.27 s. It checks their sum instead: the pure delay
   identified on settled phase 4 (`identify_turn_rate_law`) against the pattern
@@ -134,9 +137,10 @@ const V_MIN_PATTERN = max(fcs.v_app_min, fcs.v_app_min_pattern)
 const DP_LO, DP_HI = turn_rate_depower_range(fcs.body_damping)
 "The turn authority the loop was tuned at, as `simple_opt_reelout.jl` computes it"
 const C1_SETPOINT = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
-# The gravity term of the plant is `C3·sin(ψ)·cos(β)` (course_loop_model.jl), identified on
-# the flown figures of eight. Set `C3_OVERRIDE` [1/s] before the include to evaluate another value.
-const C3_EVAL = @isdefined(C3_OVERRIDE) ? Float64(C3_OVERRIDE) : C3
+# The plant's turn-rate law is `c1(u_d)·v_a·u_s + c2(u_d)/v_a·sin(ψ)·cos(β)`, identified in the low
+# crosswind pattern (`plant_coeffs`, course_loop_model.jl); the controller keeps the table's c1, as
+# flown. Set `GRAVITY_SCALE` before the include to scale the gravity term, 0 to leave it out.
+const GRAVITY_EVAL = @isdefined(GRAVITY_SCALE) ? Float64(GRAVITY_SCALE) : 1.0
 
 # ---- The flown operating points ------------------------------------------ #
 # LOG_DIR (e.g. an `output/archives/<stamp>` folder) replaces `output/`, read and cleared like SHOW_PLOTS.
@@ -219,14 +223,16 @@ log_ωg = guidance_rate.(log_L, log_va, log_vk)
 """
     reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true) -> NamedTuple
 
-Disk and delay margins of the inner loop `C·P` (the turn-rate table's dead
-time and lag) and of the pattern loop `C·(1 + ω_g/s)·P·kite_correction` (the
-pattern law's, [`pattern_dead_time_lag`](@ref)) at one operating point: tether length `L` [m],
+Disk and delay margins of the inner loop `C·P·kite_correction` and of the pattern
+loop `C·(1 + ω_g/s)·P·kite_correction` at one operating point, both with the same
+plant `P`: the kite's dead time and lag of the pattern law
+([`pattern_dead_time_lag`](@ref)); until 2026-09-29 the inner loop took the turn-rate
+table's and no `kite_correction`: tether length `L` [m],
 `v_app` [m/s], the guidance's corner `ω_g` [rad/s] (see [`guidance_rate`](@ref)),
 `depower` [-] (clamped to the turn-rate table's
 range, as the gain schedule is), the pattern's centre elevation `el_c` [deg]
 and the tape's lag `lag` [s]. Worst case over the sign of the gravity pole, whose
-size is `C3_EVAL·cos(el_c)` ([`C3`](@ref)). The controller comes from the
+size is `c2(u_d)/v_a·cos(el_c)` ([`plant_coeffs`](@ref)) times `GRAVITY_EVAL`. The controller comes from the
 settings `f`; `inner = false` skips the inner loop (its field is then `nothing`).
 """
 function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true)
@@ -234,7 +240,6 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = tr
     K = C1_SETPOINT / tc.c1 * f.heading_p * f.v_app_ref / max(v_app, V_MIN_PATTERN)
     C = course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts)
     G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
-    τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
     τp, Tp = pattern_dead_time_lag(tc, v_app, clamp(depower, DP_LO, DP_HI))
     function margins(Lp)
         dm = try
@@ -246,11 +251,13 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = tr
         dlm = with_logger(() -> delay_margin(Lp), NullLogger())
         (; L = Lp, dm, α = isnothing(dm) ? 0.0 : dm.margin, delay_margin = dlm)
     end
-    c2 = c2_at(v_app; c3 = C3_EVAL)
+    # The plant's c1 and c2 from the low pattern; K above keeps the table's c1, as flown.
+    pc = plant_coeffs(depower)
+    c2 = GRAVITY_EVAL * pc.c2
     results = [begin
-                   Pp = turn_rate_plant(tc.c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
-                   P = inner ? turn_rate_plant(tc.c1, c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite) : nothing
-                   (; inner = inner ? margins(C * P) : nothing, guided = margins(C * G * Pp))
+                   Pp = turn_rate_plant(pc.c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
+                   # The same plant for both; the inner loop without the guidance.
+                   (; inner = inner ? margins(C * kite_correction(Ts) * Pp) : nothing, guided = margins(C * G * Pp))
                end for gravity in (-cosd(el_c), cosd(el_c))]
     worst_inner = inner ? argmin(r -> r.α, [r.inner for r in results]) : nothing
     guided = argmin(r -> r.α, [r.guided for r in results])
@@ -287,14 +294,15 @@ end
                 attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag %.3f s fitted on the whole log \
                 (unexplained %.0f %%), \
                 guided loop: kite correction %.2f/%.2f Hz, kite dead time + lag from the pattern law \
-                %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table, inner loop: %.3f + %.3f = %.3f s), \
-                against the log's pure delay %.3f s there (correlation %.3f); gravity term c3 = %.3f 1/s.",
+                %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table: %.3f + %.3f = %.3f s), \
+                against the log's pure delay %.3f s there (correlation %.3f); plant c1, c2 from the low pattern, \
+                c2 = %.2f at depower_setpoint (gravity scale %.1f).",
                PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
                fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
                fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, tape_lag.T,
                100 * tape_lag.unexplained, KITE_CORR_ZERO, KITE_CORR_POLE,
                τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr,
-               C3_EVAL)
+               plant_coeffs(fcs.depower_setpoint).c2, GRAVITY_EVAL)
 
 l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))

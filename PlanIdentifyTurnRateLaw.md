@@ -479,11 +479,18 @@ reaches.
 
 ## Open
 
-1. **Switch the stability analysis to B** (see "The low-flight coefficients in the
-   stability analysis"): `course_loop_model.jl` and `stability_opt_reelout.jl` with
-   $c_1(u_\mathrm{d})$ and $c_2(u_\mathrm{d})/v_\mathrm{a}$ of the low flights, then the
-   paper: Eq. (9), the $c_3$ identification and Fig. 5, Table 6 and its paragraph.
-   Before that: why `identify_c3.jl` gives 0.23 1/s where the low flights give ≈ 0.10.
+1. **Switch the stability analysis to B.** Done in the code on 2026-09-29:
+   `PLANT_COEFFS` and `plant_coeffs(depower)` in `course_loop_model.jl` give the
+   plant's $c_1$ and $c_2$ (depower 0.25 – 0.375, held at the ends), used by
+   `stability_opt_reelout.jl` (hence `stability_global.jl`, `retune_guided.jl`),
+   `stability_fig8.jl`, `validate_margins.jl`, `plot_frf_validation.jl` and
+   `xtrack_step_analysis.jl`; the gain schedule keeps the turn-rate table.
+   `C3_OVERRIDE` became `GRAVITY_SCALE` (a factor on the gravity term, 0 = none).
+   `C3` and `c2_at` stay for the comparisons. The stability overviews of both sites
+   are regenerated with it. Still to do: the paper (Eq. (9), the $c_3$
+   identification and Fig. 5, Table 6 and its paragraph), `docs/course_loop_stability*.md`,
+   and why `identify_c3.jl` gives 0.23 1/s where the low flights give ≈ 0.10
+   (likely its table delays, too long in pattern flight; not verified).
 2. **$c_1$ below depower 0.325.** 6 – 14 % above the table in the low pattern.
 
 ## Out of scope

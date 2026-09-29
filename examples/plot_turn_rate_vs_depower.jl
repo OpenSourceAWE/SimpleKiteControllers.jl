@@ -201,11 +201,19 @@ elseif !from_csv
 end
 
 data, header = readdlm(csv_file, ','; header = true)
-col(name) = Float64.(data[:, findfirst(==(name), vec(header))])
+# A depower at which no flight stayed up has no steady fit and no error bars
+# (at 0.40, 2026-09-29): its row is a fit of crashing flights, so it is not plotted.
+keep = Float64.(data[:, findfirst(==("n_steady"), vec(header))]) .> 0
+col(name) = Float64.(data[:, findfirst(==(name), vec(header))])[keep]
 dp = col("depower")
 
+# Where the PDF lands: LearningControl's figures/, as in `plot_c1_c2.jl`.
+fig_dir = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
+fig_name = "turn_rate_low_pattern"
+
 pad = 0.04 * (maximum(dp) - minimum(dp))
-# `disp = true`: plotx shows the figure itself, as in `plot_c1_c2.jl`.
+# `disp = true`: plotx shows the figure itself, as in `plot_c1_c2.jl`. No title:
+# the caption in the paper states the ±k_sigma standard errors.
 plotx(dp, col("c1"), col("c2"), col("dead_time"), col("lag");
       xlims = (minimum(dp) - pad, maximum(dp) + pad),
       xticks = 0.25:0.05:0.40,
@@ -214,7 +222,9 @@ plotx(dp, col("c1"), col("c2"), col("dead_time"), col("lag");
                  L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
       yerr = [k_sigma .* col("c1_se"), k_sigma .* col("c2_se"),
               k_sigma .* col("dead_time_se"), k_sigma .* col("lag_se")],
-      scatter = true, disp = true, labelsize = 18,
-      fig = "Turn-rate law of the low pattern over depower, ±$(k_sigma) standard errors")
+      scatter = true, disp = true, labelsize = 22,
+      fig = fig_name)
+mkpath(fig_dir)
+savefig(joinpath(fig_dir, fig_name * ".pdf"))
 
 nothing

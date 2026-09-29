@@ -270,7 +270,12 @@ heading passes 180° (straight down) and the kite loops into the ground.
 fed forward to the length loop, until `REELOUT_L_MAX`; 0 (the table's) holds the
 length.
 
-Returns `(; outcome, u_s_max, min_elevation, fit, sl)`. `outcome` is `:sweep_done`
+Returns `(; outcome, u_s_max, min_elevation, fit, sl, band_time, band_center)`.
+`band_center` [°] is the signed centre `side * center` of the relay's heading band
+at each step from the one the relay starts on, after the reversal and the
+elevation hold; `band_time` [s] is the time of that step. Not in `sl`: the
+log has no channel for it, and the band's edges are `band_center ± HEADING_OFFSET`.
+`outcome` is `:sweep_done`
 (reached `max_steering_cap`), `:time_limit`, `:low_elevation`, or `:error` (the
 solver diverged — the fit still runs on whatever was logged). `fit` is the
 `identify_turn_rate_law` result, with `c3` given re-fitted by `_identify` with the
@@ -305,6 +310,8 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
     cycles = 0
     min_elevation = Inf
     outcome = :time_limit
+    band_time = Float64[]
+    band_center = Float64[]
 
     try
         for _ in 1:s.steps
@@ -329,6 +336,8 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
                 # difference never turns the kite through ±180° (straight down), and passes
                 # through 0 (straight up) whenever a reversal flips the centre's sign.
                 heading = wrap_to_pi(s.sys_state.heading) - deg2rad(side * center)
+                push!(band_time, t)
+                push!(band_center, side * center)
                 if rad2deg(heading) < -HEADING_OFFSET
                     rel_steering = steering
                 elseif rad2deg(heading) > HEADING_OFFSET
@@ -379,7 +388,7 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
         nothing
     end
 
-    return (; outcome, u_s_max = steering, min_elevation, fit, sl)
+    return (; outcome, u_s_max = steering, min_elevation, fit, sl, band_time, band_center)
 end
 
 """

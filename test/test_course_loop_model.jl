@@ -36,6 +36,19 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
         end
     end
 
+    @testset "plant: plant_coeffs of the low pattern" begin
+        # Exact at the identified depowers, linear between them, held at the ends.
+        for (dp, c1, c2) in PLANT_COEFFS
+            @test plant_coeffs(dp).c1 ≈ c1
+            @test plant_coeffs(dp).c2 ≈ c2
+        end
+        (d1, a1, b1), (d2, a2, b2) = PLANT_COEFFS[1], PLANT_COEFFS[2]
+        @test plant_coeffs((d1 + d2) / 2).c1 ≈ (a1 + a2) / 2
+        @test plant_coeffs((d1 + d2) / 2).c2 ≈ (b1 + b2) / 2
+        @test plant_coeffs(0.1) == plant_coeffs(first(PLANT_COEFFS)[1])
+        @test plant_coeffs(0.5) == plant_coeffs(last(PLANT_COEFFS)[1])
+    end
+
     @testset "plant: DC gain, shift-register states, actuator step" begin
         c1, c2, v_app, Ts = 0.25, 0.06, 27.0, 0.01
         P = turn_rate_plant(c1, c2, 0.0, v_app, 0.0, Ts; lag = 0.0, kite_lag = 0.0)
@@ -63,19 +76,29 @@ include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
             law = PATTERN_DELAY_REF * (PATTERN_V_REF / v)^PATTERN_DELAY_EXP   # all at or above PATTERN_V_FLOOR
             τ, T = pattern_dead_time_lag(tc, v, PATTERN_LAW_DEPOWER)
             @test τ + T ≈ law                                            # the law at the reference depower
-            @test τ / T ≈ kite_dead_time(tc, v) / kite_lag(tc, v)        # the table's split kept
+            @test τ / (τ + T) ≈ dead_time_fraction(PATTERN_LAW_DEPOWER)  # the low flights' split
             τ2, T2 = pattern_dead_time_lag(tc, v, 0.36)
             @test (τ2 + T2) / (τ + T) ≈ exp(PATTERN_DEPOWER_EXP * 0.09)  # the measured depower factor
         end
-        # below PATTERN_V_FLOOR the sum holds its value there, the split still the row's
+        # below PATTERN_V_FLOOR the sum holds its value there, the split still the low flights'
         τf, Tf = pattern_dead_time_lag(tc, PATTERN_V_FLOOR, PATTERN_LAW_DEPOWER)
         τ8, T8 = pattern_dead_time_lag(tc, 8.0, PATTERN_LAW_DEPOWER)
         @test τ8 + T8 ≈ τf + Tf
-        @test τ8 / T8 ≈ kite_dead_time(tc, 8.0) / kite_lag(tc, 8.0)
+        @test τ8 / T8 ≈ τf / Tf
         # the factor reproduces the depower runs within 5 %: ×1.17 / 1.39 / 1.78 at 0.30 / 0.33 / 0.36
         for (dp, g) in ((0.30, 1.17), (0.33, 1.39), (0.36, 1.78))
             @test exp(PATTERN_DEPOWER_EXP * (dp - PATTERN_LAW_DEPOWER)) ≈ g rtol=0.05
         end
+    end
+
+    @testset "split: dead_time_fraction of the low pattern" begin
+        # Exact at the identified depowers, held at the ends.
+        for (dp, τ, T) in PLANT_SPLIT
+            @test dead_time_fraction(dp) ≈ τ / (τ + T)
+        end
+        @test dead_time_fraction(0.1) == dead_time_fraction(first(PLANT_SPLIT)[1])
+        @test dead_time_fraction(0.5) == dead_time_fraction(last(PLANT_SPLIT)[1])
+        @test first.(PLANT_SPLIT) == first.(PLANT_COEFFS)   # the same fits
     end
 
     @testset "scaling: kite_dead_time / kite_lag" begin

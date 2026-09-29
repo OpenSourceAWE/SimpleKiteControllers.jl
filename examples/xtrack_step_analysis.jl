@@ -183,7 +183,7 @@ function fit_second_order_gain(τ, y)
     return (K = best[2], f_d = best[3], ζ = best[4], delay = best[5], rms = best[1])
 end
 
-"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per sign of the gravity pole (`C3`)."
+"Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per sign of the gravity pole (`plant_coeffs`)."
 function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
@@ -191,9 +191,10 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     ωg = guidance_rate(Lt, v_app, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
     τd = kite_dead_time(tc, v_app)
-    c2 = c2_at(v_app)
+    pc = plant_coeffs(clamp(depower, DP_LO, DP_HI))   # the plant's c1 and c2; K keeps the table's c1
+    c2 = pc.c2
     vec(map((-cosd(el_c), cosd(el_c))) do gravity
-        P = turn_rate_plant(tc.c1, c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
+        P = turn_rate_plant(pc.c1, c2, τd, v_app, gravity, Ts; lag, kite_lag = kite_lag(tc, v_app))
         Lg = C * G * P
         T = minreal(feedback(Lg) * (1 - 1 / G); atol = 1e-8)
         ps = log.(complex(poles(T))) ./ Ts               # continuous equivalents

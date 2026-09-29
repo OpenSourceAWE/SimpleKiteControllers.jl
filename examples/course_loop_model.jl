@@ -65,21 +65,21 @@ const PATTERN_DEPOWER_EXP = 6.1
 """
     pattern_dead_time_lag(tc, v_app, depower) -> (τ, T)
 
-The kite's dead time and lag [s] in pattern flight: the table's
-([`kite_dead_time`](@ref), [`kite_lag`](@ref)) for the row `tc` scaled by one
-factor, so their sum follows the pattern law ([`PATTERN_DELAY_REF`](@ref)) times
-the measured depower factor ([`PATTERN_DEPOWER_EXP`](@ref)); the row's
-dead-time/lag split is kept. Use it for the pattern loop only: the entry flies
-high, close to the relay sweeps' conditions, where the table itself applies.
-Below [`PATTERN_V_FLOOR`](@ref) the law holds its value there (the measured
-response time stops growing at about 0.28 s).
+The kite's dead time and lag [s] in pattern flight: their sum follows the pattern
+law ([`PATTERN_DELAY_REF`](@ref)) times the measured depower factor
+([`PATTERN_DEPOWER_EXP`](@ref)), split in the ratio of the low crosswind flights at
+`depower` ([`dead_time_fraction`](@ref)). Until 2026-09-29 the split was that of the
+table row `tc` (the relay sweeps at 73°); `tc` is no longer used and kept for the
+callers. Use it for the pattern loop only: the entry flies high, close to the relay
+sweeps' conditions, where the table itself applies. Below [`PATTERN_V_FLOOR`](@ref)
+the law holds its value there (the measured response time stops growing at about
+0.28 s).
 """
 function pattern_dead_time_lag(tc, v_app, depower)
-    τ, T = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
     target = PATTERN_DELAY_REF * (PATTERN_V_REF / max(v_app, PATTERN_V_FLOOR))^PATTERN_DELAY_EXP *
              exp(PATTERN_DEPOWER_EXP * (depower - PATTERN_LAW_DEPOWER))
-    f = target / (τ + T)
-    return f * τ, f * T
+    φ = dead_time_fraction(depower)
+    return φ * target, (1 - φ) * target
 end
 
 function _scaled_row(tc, key, v_app, expo)
@@ -109,6 +109,12 @@ end
 """
     C3
 
+SUPERSEDED on 2026-09-29 by [`PLANT_COEFFS`](@ref) (`c2/v_a`, ≈ 0.10 1/s in the operating
+range); kept for comparisons (`gravity_term_form.jl`, `stability_new_coeffs.jl`). Its
+fit took `c1` and the delay from the turn-rate table, whose delays (73° sweeps, `v_a`
+≈ 13 m/s) are too long in pattern flight, and the gravity term trades against the
+delay; a likely, unverified reason why it is twice the low flights' value.
+
 Gravity coefficient [1/s] of the turn-rate law in the form
 
     ψ̇ = c1·v_a·u_s + c3·sin(ψ)·cos(β)
@@ -127,6 +133,77 @@ const C3 = 0.23
 
 "`c2` [-] of the table's form `c2/v_a·sin(ψ)·cos(β)` that equals `c3·sin(ψ)·cos(β)` at `v_app` [m/s]"
 c2_at(v_app; c3 = C3) = c3 * v_app
+
+"""
+    PLANT_COEFFS
+
+The turn-rate law of the PLANT in the stability analysis,
+
+    ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β),
+
+over depower: `(depower, c1 [1/m], c2 [-])`, identified in the low crosswind pattern
+(`PlanIdentifyTurnRateLaw.md`, 2026-09-29; `examples/plot_turn_rate_vs_depower.jl`,
+the data in `data/turn_rate_low_flights.tar.gz`): relay flights at fixed steering
+amplitudes, reversing in azimuth, elevation held near 30°, 150 m at constant length,
+9.51 m/s of wind, `v_a` ≈ 13 – 55 m/s. Standard errors from 20 s blocks: `c1` ±0.0003
+– 0.0035, `c2` ±0.07 – 0.14. Depower 0.40 is left out, none of its flights stayed up.
+
+Replaces the table's `c1` and [`C3`](@ref) in the plant from 2026-09-29: at 73°
+the gravity term is barely observable, and the low flights put it at ≈ 0.10 1/s in
+the operating range instead of 0.23. The `c2/v_a` form follows from the force
+balance; the flights are consistent with it but do not rule out a constant `c3`
+(`examples/gravity_term_form.jl`). The model stays below every measured margin with
+it. The controller's gain schedule does NOT use this: it keeps the turn-rate table,
+as flown.
+"""
+const PLANT_COEFFS = [(0.250, 0.30624, 3.1495), (0.275, 0.26500, 3.6836),
+                      (0.300, 0.23255, 3.6867), (0.325, 0.19491, 3.6967),
+                      (0.350, 0.16602, 3.7070), (0.375, 0.14439, 3.8585)]
+
+"""
+    PLANT_SPLIT
+
+Dead time and lag [s] of the kite over depower, `(depower, dead_time, lag)`, from the
+same joint fits of the low crosswind flights as [`PLANT_COEFFS`](@ref) (whole samples
+of `DT` = 1/60 s for the dead time, steps of 2`DT` for the lag). Only their ratio is
+used ([`dead_time_fraction`](@ref)): one pair is fitted per depower over `v_a` ≈ 12 –
+55 m/s, while the response time falls with `v_a`, so the sum comes from the pattern
+law. Standard errors from 20 s blocks: dead time ±0.006 – 0.022 s, lag ±0.006 – 0.017 s.
+"""
+const PLANT_SPLIT = [(0.250, 0.00833, 0.10000), (0.275, 0.04167, 0.08333),
+                     (0.300, 0.07500, 0.06667), (0.325, 0.07500, 0.08333),
+                     (0.350, 0.10833, 0.06667), (0.375, 0.17500, 0.01667)]
+
+"""
+    dead_time_fraction(depower) -> Float64
+
+`τ_d/(τ_d + T_k)` [-] of the low crosswind flights at `depower` [-]: dead time and lag
+linear in [`PLANT_SPLIT`](@ref), held at its ends outside 0.25 – 0.375.
+"""
+function dead_time_fraction(depower)
+    dps = first.(PLANT_SPLIT)
+    u = clamp(depower, first(dps), last(dps))
+    k = clamp(searchsortedlast(dps, u), 1, length(dps) - 1)
+    w = (u - dps[k]) / (dps[k + 1] - dps[k])
+    τ = (1 - w) * PLANT_SPLIT[k][2] + w * PLANT_SPLIT[k + 1][2]
+    T = (1 - w) * PLANT_SPLIT[k][3] + w * PLANT_SPLIT[k + 1][3]
+    return τ / (τ + T)
+end
+
+"""
+    plant_coeffs(depower) -> (; c1, c2)
+
+`c1` [1/m] and `c2` [-] of the plant at `depower` [-], linear in [`PLANT_COEFFS`](@ref),
+held at its ends outside 0.25 – 0.375.
+"""
+function plant_coeffs(depower)
+    dps = first.(PLANT_COEFFS)
+    u = clamp(depower, first(dps), last(dps))
+    k = clamp(searchsortedlast(dps, u), 1, length(dps) - 1)
+    w = (u - dps[k]) / (dps[k + 1] - dps[k])
+    return (; c1 = (1 - w) * PLANT_COEFFS[k][2] + w * PLANT_COEFFS[k + 1][2],
+            c2 = (1 - w) * PLANT_COEFFS[k][3] + w * PLANT_COEFFS[k + 1][3])
+end
 
 """
     turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0) -> StateSpace

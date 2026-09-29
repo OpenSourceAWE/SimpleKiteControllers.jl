@@ -21,10 +21,12 @@ from `output/turn_rate_low_flights.csv` (unpacked from
 
 The scenarios whose phase-4 `v_a` drops below `va_min` are left out; with the
 scenarios of 2026-09-29 these are Cabauw 3 m/s and Maasvlakte 3.5 and 4 m/s, and
-`include_low_va = true` rates them too.
+`SNC_INCLUDE_LOW_VA = true` before the include rates them too.
 
-The bins are collected once with `retune_guided.jl`'s `collect_scenarios`; B and C
-redefine `reelout_margins` in `Main`, which `bin_margins` calls. A later include of
+B is the model's own since 2026-09-29 (`plant_coeffs` in `course_loop_model.jl`),
+so B equals what `stability_global.jl` reports. The bins are collected once with
+`retune_guided.jl`'s `collect_scenarios`; all three variants redefine
+`reelout_margins` in `Main`, which `bin_margins` calls. A later include of
 `stability_opt_reelout.jl` restores the original. Writes
 `output/stability_new_coeffs.csv`. About 3 minutes.
 
@@ -40,7 +42,9 @@ using Printf
 using DelimitedFiles: readdlm, writedlm
 
 va_min = 12.0             # [m/s] scenarios whose phase-4 v_a drops below this are left out
-include_low_va = false    # true: rate them anyway
+# true: rate them anyway; read and cleared like SHOW_PLOTS (`SNC_INCLUDE_LOW_VA = true`)
+include_low_va = @isdefined(SNC_INCLUDE_LOW_VA) ? SNC_INCLUDE_LOW_VA : false
+SNC_INCLUDE_LOW_VA = false
 
 # collect_scenarios, scenario_margins, live_settings; and through it stability_opt_reelout.jl.
 include(joinpath(@__DIR__, "retune_guided.jl"))
@@ -84,23 +88,22 @@ isempty(excluded) || @info (include_low_va ? "Rated although phase-4 v_a < $va_m
                                              "Left out, phase-4 v_a < $va_min m/s: ") * join(excluded, ", ")
 
 snc_settings = live_settings()
-snc_A = [scenario_margins(d, snc_settings; inner = true) for d in snc_data]
 
-snc_variant = Ref(:B)
-# `reelout_margins` of stability_opt_reelout.jl with the plant's coefficients replaced.
+snc_variant = Ref(:A)
+# `reelout_margins` of stability_opt_reelout.jl with the plant's coefficients chosen by
+# `snc_variant`. B is the model's own since 2026-09-29 (`plant_coeffs`); A rebuilds the one before.
 @eval Main function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true)
     dp = clamp(depower, DP_LO, DP_HI)
     tc = turn_rate_coeffs(f.body_damping, dp)
     K = C1_SETPOINT / tc.c1 * f.heading_p * f.v_app_ref / max(v_app, V_MIN_PATTERN)   # as flown: table c1
     C = course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts)
     G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
-    c1 = snc_interp(snc_low.c1, depower)
-    c2 = snc_interp(snc_low.c2, depower)          # gravity term c2/v_a
+    c1, c2 = snc_variant[] === :A ? (tc.c1, c2_at(v_app)) :   # table c1, C3
+             values(plant_coeffs(depower))                     # the model's own, c2/v_a
     if snc_variant[] === :C
-        τ = τp = snc_interp(snc_low.dead, depower)
-        T_kite = Tp = snc_interp(snc_low.lag, depower)
+        τp = snc_interp(snc_low.dead, depower)
+        Tp = snc_interp(snc_low.lag, depower)
     else
-        τ, T_kite = kite_dead_time(tc, v_app), kite_lag(tc, v_app)
         τp, Tp = pattern_dead_time_lag(tc, v_app, dp)
     end
     function margins(Lp)
@@ -114,13 +117,15 @@ snc_variant = Ref(:B)
     end
     results = [begin
                    Pp = turn_rate_plant(c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
-                   P = inner ? turn_rate_plant(c1, c2, τ, v_app, gravity, Ts; lag, kite_lag = T_kite) : nothing
-                   (; inner = inner ? margins(C * P) : nothing, guided = margins(C * G * Pp))
+                   # The same plant for both, as in stability_opt_reelout.jl; the inner loop without the guidance.
+                   (; inner = inner ? margins(C * kite_correction(Ts) * Pp) : nothing, guided = margins(C * G * Pp))
                end for gravity in (-cosd(el_c), cosd(el_c))]
     worst_inner = inner ? argmin(r -> r.α, [r.inner for r in results]) : nothing
     guided = argmin(r -> r.α, [r.guided for r in results])
     return (; inner = worst_inner, guided, K, delay = τp)
 end
+snc_variant[] = :A
+snc_A = [Base.invokelatest(scenario_margins, d, snc_settings; inner = true) for d in snc_data]
 snc_variant[] = :B
 snc_B = [Base.invokelatest(scenario_margins, d, snc_settings; inner = true) for d in snc_data]
 snc_variant[] = :C
