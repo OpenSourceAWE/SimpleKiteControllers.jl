@@ -27,10 +27,11 @@ The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
 :heading)`, and the joint model, which starts where the flight's fit window does.
 The elevation panel carries `max_elevation`.
 
-About two to three minutes per flight. `DEPOWER` is read and cleared like
-`SHOW_PLOTS`:
+About two to three minutes per flight. `DEPOWER` and `TR_V_WIND` (the wind
+speed, default the table's `V_WIND`) are read and cleared like `SHOW_PLOTS`:
 
     DEPOWER = 0.3; include("plot_turn_rate_identification.jl")   # default 0.275
+    TR_V_WIND = 6.5; include("plot_turn_rate_identification.jl") # low v_a
 """
 
 using Pkg
@@ -41,7 +42,7 @@ end
 using MakieControlPlots
 using LaTeXStrings
 using LinearAlgebra: norm
-using Statistics: median
+using Statistics: median, var
 
 # `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay` and `lag_filter`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
@@ -50,6 +51,10 @@ include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
 
 depower = @isdefined(DEPOWER) ? Float64(DEPOWER) : 0.275
 DEPOWER = 0.275
+# [m/s] wind of the flights; V_WIND = 9.51 is the table's. At 6.5 the pattern flies v_a 13 – 36 m/s,
+# 39 % of it below 20 m/s where V3 found the law too fast; at 5.0 it drifts out of the window (2026-09-29).
+v_wind = @isdefined(TR_V_WIND) ? Float64(TR_V_WIND) : V_WIND
+TR_V_WIND = V_WIND
 # One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
 # `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
 # `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
@@ -109,6 +114,76 @@ model_rate(fit, dl, d = round(Int, dl.dead_time / DT + 0.5)) =
     rad2deg.(dl.c1 .* fit.v_app .* shift_delay(lag_filter(fit.us, dl.lag, DT), d) .+
              dl.c2 ./ fit.v_app .* sin.(fit.psi) .* cos.(fit.beta))
 
+# ==================== INERTIA LAW ======================== #
+
+"""
+    law_data(f, source) -> NamedTuple
+
+The samples of flight `f`'s fit window for a turn-rate fit on `source` (`:heading`
+or `:course`): the rate [rad/s] (`calc_turn_rate`, aligned to `time[2:end]`), the
+angle it is the rate of, the steering, `v_a`, the elevation and `v_τ` [m/s].
+"""
+function law_data(f, source)
+    sl = f.sl
+    rng = 2:length(sl.time)
+    w = findall(>=(f.t_fit), sl.time[rng])
+    ang = source === :course ? sl.course : sl.heading
+    vk = norm.(sl.vel_kite)
+    v_tau = sqrt.(max.(vk .^ 2 .- Float64.(first.(sl.v_reelout)) .^ 2, 0.0))
+    return (; rate = calc_turn_rate(sl; source, dt = DT)[w],
+            ang = Float64.(wrap_to_pi.(ang[rng][w])), us = Float64.(sl.steering[rng][w]),
+            v_app = Float64.(sl.v_app[rng][w]), beta = Float64.(sl.elevation[rng][w]),
+            v_tau = v_tau[rng][w])
+end
+
+"""
+    inertia_law_fit(data, dt; es=0:0.05:3, lag_max=0.5, t_max=0.5) -> NamedTuple
+
+Fit the turn-rate law with the kite's inertia term, in V3Kite's sign convention
+and with `k2 = 1` (`PlanIdentifyTurnRateLaw.md`),
+
+    rate = (c1·v_a²·u_s + c2·sin(angle)·cos(β)) / (v_a + e·v_τ),
+
+on the flights `data` (from `law_data`). `e = 0` is the current law. For a fixed
+`e` the law is linear in `c1`, `c2`; `e`, the dead time (whole samples up to
+`t_max`) and the first-order lag (`0:2dt:lag_max`) are searched on grids, each
+flight's steering filtered and shifted on its own and the first `t_max/dt`
+samples of every flight dropped, as in `joint_delay_lag_fit`.
+
+Returns `(; best, current)`, each `(; e, c1, c2, dead_time, lag, d, rms)`: the best
+fit over all `e`, and the best with `e = 0`.
+"""
+function inertia_law_fit(data, dt; es = 0:0.05:3, lag_max = 0.5, t_max = 0.5)
+    dmax = round(Int, t_max / dt)
+    trim(x) = x[dmax + 1:end]
+    cat(field) = reduce(vcat, [trim(getfield(x, field)) for x in data])
+    rate, ang, v_app, beta, v_tau = cat(:rate), cat(:ang), cat(:v_app), cat(:beta), cat(:v_tau)
+    grav = sin.(ang) .* cos.(beta)
+    best = current = nothing
+    for T in 0:2dt:lag_max
+        ufs = [lag_filter(x.us, T, dt) for x in data]
+        for d in 0:dmax
+            us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])
+            for e in es
+                den = v_app .+ e .* v_tau
+                A = [v_app .^ 2 .* us ./ den grav ./ den]
+                c = A \ rate
+                rms = sqrt(sum(abs2, rate .- A * c) / length(rate))
+                cand = (; e, c1 = c[1], c2 = c[2], dead_time = max(d - 0.5, 0.0) * dt, lag = T, d, rms)
+                (isnothing(best) || rms < best.rms) && (best = cand)
+                e == 0 && (isnothing(current) || rms < current.rms) && (current = cand)
+            end
+        end
+    end
+    best.e >= last(es) - step(es) / 2 && @warn "inertia_law_fit: e hit the end of its grid, $(last(es))."
+    return (; best, current)
+end
+
+"The turn rate [rad/s] of the law `p` (from `inertia_law_fit`) on one flight's `data`"
+law_rate(x, p) = let us = shift_delay(lag_filter(x.us, p.lag, DT), p.d)
+    (p.c1 .* x.v_app .^ 2 .* us .+ p.c2 .* sin.(x.ang) .* cos.(x.beta)) ./ (x.v_app .+ p.e .* x.v_tau)
+end
+
 # ======================== FLIGHTS ======================== #
 
 # The table's row for this cell, if any: the 73° result to compare with.
@@ -120,7 +195,7 @@ isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: nothing to co
 
 flights = NamedTuple[]
 for (; a, az_reverse, el_hold_tilt) in flight_settings
-    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor,
+    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor, v_wind,
                              elevation = start_elevation, heading_center,
                              start_steering = a, steering_step = 0.0, az_reverse, el_hold,
                              el_hold_tilt)
@@ -171,6 +246,34 @@ isnothing(row) ||
             row["c1"], row["c2"], get(row, "dead_time", NaN), get(row, "kite_lag", NaN), "", "",
             row["v_app"])
 
+# Current law (e = 0) against the law with the inertia term, on the heading and on the course,
+# each with its own delay and lag; VAF per v_a bin on all flights, the first t_max skipped.
+va_bins = [10, 15, 20, 25, 30, 40, 60]   # [m/s]
+laws = Dict(source => inertia_law_fit([law_data(f, source) for f in flights], DT)
+            for source in (:heading, :course))
+for source in (:heading, :course)
+    data = [law_data(f, source) for f in flights]
+    L = laws[source]
+    println()
+    @printf("%s rate: current law c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
+            source, L.current.c1, L.current.c2, L.current.dead_time, L.current.lag, rad2deg(L.current.rms))
+    @printf("%s rate: inertia law e = %.2f, c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
+            source, L.best.e, L.best.c1, L.best.c2, L.best.dead_time, L.best.lag, rad2deg(L.best.rms))
+    skip = round(Int, 0.5 / DT)
+    meas = reduce(vcat, [x.rate[skip + 1:end] for x in data])
+    va = reduce(vcat, [x.v_app[skip + 1:end] for x in data])
+    pred(p) = reduce(vcat, [law_rate(x, p)[skip + 1:end] for x in data])
+    cur, new = pred(L.current), pred(L.best)
+    @printf("  v_a bin [m/s]   samples   VAF current   VAF inertia\n")
+    for k in 1:length(va_bins) - 1
+        i = findall(v -> va_bins[k] <= v < va_bins[k + 1], va)
+        length(i) < 100 && continue
+        vaf(p) = 1 - var(meas[i] .- p[i]) / var(meas[i])
+        @printf("  %4d – %-4d     %7d   %11.3f   %11.3f\n", va_bins[k], va_bins[k + 1], length(i),
+                vaf(cur), vaf(new))
+    end
+end
+
 # ========================= PLOTS ========================= #
 
 for f in flights
@@ -203,7 +306,8 @@ for f in flights
             nothing,
             ["elevation", "max_elevation"],
         ],
-        fig = @sprintf("Turn-rate identification, depower %.3f, amplitude %.3f", depower, f.a),
+        fig = @sprintf("Turn-rate identification, depower %.3f, amplitude %.3f, wind %.1f m/s",
+                       depower, f.a, v_wind),
     )
     display(p)
     sleep(0.1)  # Allow Makie to render the plot before continuing

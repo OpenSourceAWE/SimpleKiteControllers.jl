@@ -182,13 +182,61 @@ Turn-rate VAF on each flight's window:
   steady flights are at $v_\mathrm{a}$ ≥ 14 m/s, mostly above 20 m/s, where the
   current law already fits with VAF ≥ 0.98. V3's failure was below 20 m/s.
 
-Next:
+### Low $v_\mathrm{a}$ and the inertia law (2026-09-29, depower 0.275)
 
-1. Make a steady flight at low $v_\mathrm{a}$ (below 20 m/s), e.g. a higher
-   `el_hold` or a larger depower at 0.10 – 0.125: that is where the current law
-   fails and the inertia term should show.
-2. Fit the new law on these flights (Steps 1 – 2) and compare it with the current
-   one per $v_\mathrm{a}$ bin.
+**Low $v_\mathrm{a}$ by lower wind.** `TR_V_WIND = 6.5` (m/s, against the table's
+9.51): 0.10 and 0.125 fly the full 200 s at $v_\mathrm{a}$ 12.7 – 36 m/s, with 38 and
+15 % of the samples below 20 m/s. 0.075 sinks to the floor after 70 s, and its
+single fit is meaningless (negative $c_1$, dead time at the search limit). At
+5.0 m/s 0.10 drifts to 84° of azimuth and sinks after 69 s.
+
+**The inertia law against the current one.** Fitted on the five steady flights at
+depower 0.275 (0.075, 0.10, 0.125 at 9.51 m/s; 0.10, 0.125 at 6.5 m/s), each law
+with its own dead time and lag, by `inertia_law_fit` in
+`plot_turn_rate_identification.jl`:
+
+$$
+\text{rate} = \frac{c_1 v_\mathrm{a}^2 u_\mathrm{s} + c_2 \sin(\text{angle}) \cos\beta}{v_\mathrm{a} + e\, v_\tau},
+$$
+
+$e = k_4 m / k_2$, $e = 0$ the current law, searched over 0 – 3.
+
+| rate | law | $e$ | $c_1$ | $c_2$ | dead [s] | lag [s] | rms [°/s] |
+|---|---|---|---|---|---|---|---|
+| heading | current = best | 0 | 0.267 | 3.18 | 0.042 | 0.100 | 4.83 |
+| course | current | 0 | 0.274 | 1.27 | 0.000 | 0.167 | 12.79 |
+| course | inertia | 3.0 (grid end) | 1.027 | −3.45 | 0.042 | 0.100 | 11.01 |
+
+VAF per $v_\mathrm{a}$ bin:
+
+| $v_\mathrm{a}$ [m/s] | samples | heading, current | course, current | course, inertia |
+|---|---|---|---|---|
+| 10 – 15 | 2 349 | 0.983 | 0.961 | 0.873 |
+| 15 – 20 | 3 631 | 0.997 | 0.958 | 0.982 |
+| 20 – 25 | 6 166 | 0.999 | 0.970 | 0.990 |
+| 25 – 30 | 7 081 | 0.997 | 0.957 | 0.984 |
+| 30 – 40 | 18 486 | 0.995 | 0.954 | 0.972 |
+| 40 – 60 | 15 810 | 0.986 | 0.913 | 0.925 |
+
+- **Heading: the inertia term is not supported.** The best $e$ is 0, and the
+  current law explains the heading rate with VAF 0.983 – 0.999 in every bin,
+  10 – 15 m/s included. The success criterion (VAF ≥ 0.90 in every bin) is met
+  by the current law.
+- **So V3's failure below 20 m/s does not reproduce in these flights.** They fly
+  at a constant tether length, with the steering at a moderate fixed amplitude.
+  V3's low-$v_\mathrm{a}$ samples were the fig8 transitions (steering near the
+  clamp) and the reel-out (radial speed, a faster kite than the table), which is
+  where `865b3fd` placed the cause.
+- **Course:** the current law fits it worse than the heading. The inertia law
+  improves it above 15 m/s, but runs to the end of the $e$ grid with a negative
+  $c_2$, and is worse at 10 – 15 m/s: not a physical fit. The course rate is not
+  a better quantity to model the steering response on.
+
+Next, if the plan continues: test the reel-out, the one effect these flights
+leave out, by flying the same pattern with the winch reeling out (constant
+$v_\mathrm{ro}$), and fit both laws on it. If the heading law still holds there,
+the low-$v_\mathrm{a}$ error of V3 is the steering clamp, and the turn-rate law
+needs no change.
 
 ## Decisions to make first
 
