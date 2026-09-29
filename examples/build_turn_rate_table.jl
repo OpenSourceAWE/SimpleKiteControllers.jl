@@ -243,11 +243,12 @@ is the caller's), then a relay controller flips the steering between `-u_s` and
 `+u_s` whenever the heading leaves the `±HEADING_OFFSET` band, stepping `u_s` up
 by `STEERING_STEP` after `CYCLES_PER_LEVEL` upward crossings.
 
-Returns `(; outcome, u_s_max, min_elevation, fit)`. `outcome` is `:sweep_done`
+Returns `(; outcome, u_s_max, min_elevation, fit, sl)`. `outcome` is `:sweep_done`
 (reached `max_steering_cap`), `:time_limit`, `:low_elevation`, or `:error` (the
 solver diverged — the fit still runs on whatever was logged). `fit` is the
 `identify_turn_rate_law` result, with `c3` given re-fitted by `_identify` with the
-gravity term of Eq. (9) fixed, or `nothing` when even that failed.
+gravity term of Eq. (9) fixed, or `nothing` when even that failed. `sl` is the
+sweep's log, for plotting (`plot_turn_rate_identification.jl`).
 """
 function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP,
                               elevation_floor::Real = MIN_ELEVATION, v_wind::Real = V_WIND,
@@ -325,7 +326,7 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
         nothing
     end
 
-    return (; outcome, u_s_max = steering, min_elevation, fit)
+    return (; outcome, u_s_max = steering, min_elevation, fit, sl)
 end
 
 """
