@@ -265,10 +265,14 @@ Heading-rate VAF of the current law per $v_\mathrm{a}$ bin:
   (turn rate ∝ $v_\mathrm{a}^2$ at low $v_\mathrm{a}$) the best $E$ is 6 m/s: VAF
   −2.99 below 10 m/s and 0.968 at 10 – 15 m/s, with $c_1$ 0.327, $c_2$ 3.77. A
   diagnostic, not a law.
-- **Within the operating range the current law holds.** Pattern flight does not
-  go below $v_\mathrm{a}$ = 12.8 m/s (V4), and at 10 – 15 m/s the current law meets
-  the success criterion (VAF 0.952 ≥ 0.90). The failure is below 10 m/s, where the
-  kite reels out at ~50° of elevation with little aerodynamic force.
+- **The operating range reaches into it at the lowest wind speeds.** Reel-out
+  samples ($v_\mathrm{ro}$ > 0.1 m/s, phase ≥ 3) below $v_\mathrm{a}$ = 12 m/s in the 22
+  scenarios of 2026-09-29: Maasvlakte 3.5 m/s 82 % (lowest 7.7 m/s), Maasvlakte
+  4 m/s 43 % (10.0), Cabauw 3 m/s 16 % (9.9); none in the other 19, whose lowest
+  $v_\mathrm{a}$ is 13 – 33 m/s. (The 12.8 m/s of V4 was the range of its logs, not
+  of the scenarios.) At 10 – 15 m/s the current law meets the success criterion
+  (VAF 0.952 ≥ 0.90); below 10 m/s, reached only at Maasvlakte 3.5 m/s, it does
+  not.
 
 ### Conclusion so far
 
@@ -278,14 +282,49 @@ current heading law with a delay shortened for high $v_\mathrm{a}$ (the pattern 
 explains the heading rate with VAF ≥ 0.95 from $v_\mathrm{a}$ = 10 m/s up. The one
 consistent difference from the table is $c_2$, 1.6 – 2.6 × the 73° rows, which the
 low-elevation flights identify far better. The low-$v_\mathrm{a}$ gain drop while
-reeling out is real, but below the operating range, and not what the inertia term
-describes.
+reeling out is real and not what the inertia term describes; below 10 m/s it
+concerns only the lowest wind speed flown (Maasvlakte 3.5 m/s).
 
 Open, if it is worth pursuing:
 
 1. Whether $c_2$ from the low flights should replace the table's, and what that
    does to the gravity pole in the stability analysis (Table 6 of the paper).
 2. What makes the turn rate drop below $v_\mathrm{a}$ ≈ 12 m/s while reeling out.
+   Dropped (2026-09-29): only the lowest wind speeds reel out there (see above).
+
+### The low pattern over depower (2026-09-29)
+
+`plot_turn_rate_vs_depower.jl` flies the low pattern (the three amplitudes of
+`flight_settings`, 9.51 m/s, constant length) at every depower of the table and
+plots the joint fit of the steady flights over the depower next to the 73° rows
+(results in `output/turn_rate_low_flights.csv`):
+
+| depower | steady flights | $c_1$ low / table | $c_2$ low / table | dead + lag [s] low / table | $v_\mathrm{a}$ [m/s] |
+|---|---|---|---|---|---|
+| 0.25 | 2 of 3 | 0.306 / 0.269 | 3.15 / 0.67 | 0.11 / 0.39 | 15 – 55 |
+| 0.275 | 3 | 0.265 / 0.245 | 3.68 / 1.44 | 0.13 / 0.41 | 14 – 51 |
+| 0.30 | 3 | 0.233 / 0.219 | 3.69 / 1.85 | 0.14 / 0.42 | 12 – 47 |
+| 0.325 | 2 | 0.195 / 0.192 | 3.70 / 2.20 | 0.16 / 0.44 | 16 – 43 |
+| 0.35 | 1 | 0.166 / 0.168 | 3.71 / 2.43 | 0.18 / 0.46 | 15 – 39 |
+| 0.375 | 1 | 0.144 / 0.147 | 3.86 / 2.43 | 0.19 / 0.46 | 12 – 35 |
+| 0.40 | 0 | 0.135 / 0.131 | 4.17 / 2.45 | 0.24 / 0.47 | 14 – 25 |
+
+- **$c_1$ agrees with the table from depower 0.325 up** (−2 to +3 %) and is higher
+  below it: +6 % at 0.30, +8 % at 0.275, +14 % at 0.25.
+- **$c_2$ is nearly independent of the depower:** 3.7 ± 0.05 from 0.275 to 0.35,
+  3.15 at 0.25 and 3.9 – 4.2 at the two highest. The table's $c_2$ rises from 0.67
+  to 2.45 over the depower range; at 73° $\cos\beta$ is small, so it is poorly
+  identified there. A $c_2$ independent of the depower fits a gravity term,
+  which depends on the kite's weight rather than its trim.
+- **The delay grows with the depower in both,** 0.11 → 0.24 s low and 0.39 →
+  0.47 s in the table, the low flights shorter because of their higher $v_\mathrm{a}$.
+- **Reliability:** at 0.35 and 0.375 only 0.125 flew steadily, and at 0.40 none
+  did: the row at 0.40 is from flights that sank, $v_\mathrm{a}$ ≤ 25 m/s.
+- **For question 1:** the current law's gravity term is $c_2/v_\mathrm{a}$, so with
+  $c_2$ ≈ 3.7 the coefficient of Eq. (9) of the paper, $c_3 = c_2/v_\mathrm{a}$, is
+  0.23 1/s at $v_\mathrm{a}$ ≈ 16 m/s and 0.11 1/s at 35 m/s, while the paper
+  uses a constant 0.23 1/s from `identify_c3.jl`. Which form holds is the next
+  thing to check.
 
 ## Decisions to make first
 

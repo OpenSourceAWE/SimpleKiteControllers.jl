@@ -15,7 +15,8 @@ window, at `v_a` ≈ 20 – 50 m/s (depower 0.275, 2026-09-29).
 
 One flight per entry of `flight_settings`, each at a fixed amplitude for
 `SWEEP_SIM_TIME`. Each is fitted on its own (`identify_turn_rate_law`, then
-`fit_delay_lag`), and all together (`joint_delay_lag_fit`): one dead time, lag,
+`fit_delay_lag`), and all steady ones together (`joint_delay_lag_fit`; all of them
+if none flew the full time): one dead time, lag,
 `c1` and `c2` for every flight, the steering of each flight filtered and shifted
 separately so no shift crosses from one flight into the next. The fit window of
 a flight starts at the first sample below `max_elevation` after `T_START` and
@@ -60,6 +61,12 @@ TR_V_WIND = V_WIND
 # [m/s] reel-out speed of the flights from T_START on, up to REELOUT_L_MAX; 0 holds the length.
 v_reelout = @isdefined(TR_V_REELOUT) ? Float64(TR_V_REELOUT) : 0.0
 TR_V_REELOUT = 0.0
+# Plots, and the comparison of the current law with the inertia law (~1 – 2 min); both on by
+# default, read and cleared like SHOW_PLOTS. `plot_turn_rate_vs_depower.jl` switches both off.
+show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
+SHOW_PLOTS = true
+fit_laws = @isdefined(TR_FIT_LAWS) ? TR_FIT_LAWS : true
+TR_FIT_LAWS = true
 # One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
 # `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
 # `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
@@ -230,7 +237,11 @@ for (; a, az_reverse, el_hold_tilt) in flight_settings
                    last(sl.time), t_fit)
 end
 isempty(flights) && error("No flight reached max_elevation; nothing to fit.")
-joint = joint_delay_lag_fit([f.fit for f in flights], DT)
+# The steady flights, if any: a flight that sank to the floor is a transient with a short window.
+joint_flights = let steady = filter(f -> f.outcome == :time_limit, flights)
+    isempty(steady) ? flights : steady
+end
+joint = joint_delay_lag_fit([f.fit for f in joint_flights], DT)
 
 # ======================== REPORT ========================= #
 
@@ -244,7 +255,7 @@ for f in flights
             extrema(f.fit.v_app)..., extrema(f.v_ratio)..., median(f.v_ratio), extrema(f.el[iw])...)
 end
 @printf("joint, %d flights        %7.4f %9.3f %8.3f %8.3f %8.3f %9d  (pure delay: rms %.3f °/s)\n",
-        length(flights), joint.c1, joint.c2, joint.dead_time, joint.lag, rad2deg(joint.rms_lag),
+        length(joint_flights), joint.c1, joint.c2, joint.dead_time, joint.lag, rad2deg(joint.rms_lag),
         joint.n, rad2deg(joint.rms_delay))
 isnothing(row) ||
     @printf("table row, 73°         %7.4f %9.3f %8.3f %8.3f %8s %9s  v_a %.1f m/s (c1, c2 of the pure-delay fit)\n",
@@ -254,10 +265,10 @@ isnothing(row) ||
 # Current law (e = 0) against the law with the inertia term, on the heading and on the course,
 # each with its own delay and lag; VAF per v_a bin on all flights, the first t_max skipped.
 va_bins = [10, 15, 20, 25, 30, 40, 60]   # [m/s]
-laws = Dict(source => inertia_law_fit([law_data(f, source) for f in flights], DT)
-            for source in (:heading, :course))
-for source in (:heading, :course)
-    data = [law_data(f, source) for f in flights]
+laws = fit_laws ? Dict(source => inertia_law_fit([law_data(f, source) for f in joint_flights], DT)
+                       for source in (:heading, :course)) : nothing
+for source in (fit_laws ? (:heading, :course) : ())
+    data = [law_data(f, source) for f in joint_flights]
     L = laws[source]
     println()
     @printf("%s rate: current law c1 = %.4f, c2 = %.3f, dead %.3f s, lag %.3f s, rms %.2f °/s\n",
@@ -281,7 +292,7 @@ end
 
 # ========================= PLOTS ========================= #
 
-for f in flights
+for f in (show_plots ? flights : NamedTuple[])
     sl = f.sl
     # calc_turn_rate is aligned to time[2:end], so every other signal starts at index 2 too.
     rng = 2:length(sl.time)
