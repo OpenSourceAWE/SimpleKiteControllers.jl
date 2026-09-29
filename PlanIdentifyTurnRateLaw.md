@@ -315,20 +315,99 @@ plots the joint fit of the steady flights over the depower next to the 73° rows
 
 - **$c_1$ agrees with the table from depower 0.325 up** (−2 to +3 %) and is higher
   below it: +6 % at 0.30, +8 % at 0.275, +14 % at 0.25.
-- **$c_2$ is nearly independent of the depower:** 3.7 ± 0.05 from 0.275 to 0.35,
-  3.15 at 0.25 and 3.9 – 4.2 at the two highest. The table's $c_2$ rises from 0.67
-  to 2.45 over the depower range; at 73° $\cos\beta$ is small, so it is poorly
-  identified there. A $c_2$ independent of the depower fits a gravity term,
-  which depends on the kite's weight rather than its trim.
+- **$c_2$ rises with the depower, much less than the table's:** 3.15 ± 0.23 at
+  0.25, 3.68 – 3.71 from 0.275 to 0.35, 3.86 ± 0.25 at 0.375 and 4.17 at 0.40
+  (±2 standard errors; no bars at 0.40, see Reliability). The step from 0.25 to
+  0.275 is larger than the bars, so $c_2$ is not constant; between 0.275 and 0.35
+  it is flat within them. The table's $c_2$ rises from 0.67 to 2.45; at 73°
+  $\cos\beta$ is small, so it is poorly identified there.
 - **The delay grows with the depower in both,** 0.11 → 0.24 s low and 0.39 →
   0.47 s in the table, the low flights shorter because of their higher $v_\mathrm{a}$.
 - **Reliability:** at 0.35 and 0.375 only 0.125 flew steadily, and at 0.40 none
   did: the row at 0.40 is from flights that sank, $v_\mathrm{a}$ ≤ 25 m/s.
 - **For question 1:** the current law's gravity term is $c_2/v_\mathrm{a}$, so with
-  $c_2$ ≈ 3.7 the coefficient of Eq. (9) of the paper, $c_3 = c_2/v_\mathrm{a}$, is
+  $c_2$ ≈ 3.7 (depower 0.275 – 0.35) the coefficient of Eq. (9) of the paper, $c_3 = c_2/v_\mathrm{a}$, is
   0.23 1/s at $v_\mathrm{a}$ ≈ 16 m/s and 0.11 1/s at 35 m/s, while the paper
   uses a constant 0.23 1/s from `identify_c3.jl`. Which form holds is the next
   thing to check.
+
+### The low-flight coefficients in the stability analysis (2026-09-29)
+
+**The form of the gravity term** (`examples/gravity_term_form.jl`). The heading
+rate fitted as $c_1 v_\mathrm{a} u_\mathrm{s} + c_g \sin\psi\cos\beta\, v_\mathrm{a}^{-n}$,
+$n$ = 0 – 2, each with its own dead time and lag, on the steady flights at
+depower 0.275 ($n = 0$: the constant $c_3$ of Eq. (9); $n = 1$: $c_2/v_\mathrm{a}$):
+
+| flights | rms $n = 0$ [°/s] | rms $n = 1$ [°/s] | best $n$ | $c_3$ ($n = 0$) [1/s] | $c_2$ ($n = 1$) |
+|---|---|---|---|---|---|
+| 9.51 m/s, constant length | 5.674 | 5.696 | 0.3 | 0.098 | 3.45 |
+| 6.5 m/s, constant length | 2.164 | 2.167 | 0.5 | 0.112 | 2.81 |
+| reeling out, 9.51 + 6.5 m/s | 3.173 | 3.251 | 0.5 | 0.106 | 2.90 |
+| all constant length | 4.818 | 4.833 | 0.5 | 0.103 | 3.18 |
+
+- **The data do not decide the form.** The two differ by 0.1 – 2.5 % in rms, and
+  the best exponent lies between them, over $v_\mathrm{a}$ 6 – 51 m/s.
+- **They do decide the size:** about 0.10 1/s in the operating range, in either
+  form, less than half the 0.23 1/s of Eq. (9) (`identify_c3.jl`, fitted on the
+  flown figures of eight). Why that fit gives twice the value is not yet known.
+- The $1/v_\mathrm{a}$ form follows from the force balance (gravity against the
+  aerodynamic damping $\propto v_\mathrm{a}$); a constant $c_3$ is empirical. So
+  $c_2/v_\mathrm{a}$ is justified by the physics, and the data are consistent with it.
+
+**Is the model still conservative?** (`gravity_term_form.jl`, part 2.) The pattern
+model of `validate_margins.jl` at the six points where margins were measured,
+with the table's $c_1$ and $C_3$ (A) or the low-flight $c_1$ and $c_2/v_\mathrm{a}$
+(B), the stable sign of the gravity pole as in the original comparison:
+
+| point | measured DM / GM | A DM / GM | B DM / GM | B against measured | $c_3$ A → B [1/s] |
+|---|---|---|---|---|---|
+| 150 m, 33.6 m/s | 0.274 s / 3.51 | 0.222 s / 2.59 | 0.182 s / 2.33 | −34 / −34 % | 0.23 → 0.106 |
+| 200 m, 22.4 m/s | 0.480 s / 3.35 | 0.305 s / 2.59 | 0.251 s / 2.34 | −48 / −30 % | 0.23 → 0.160 |
+| 200 m, 34.7 m/s | 0.324 s / 4.11 | 0.271 s / 2.89 | 0.224 s / 2.60 | −31 / −37 % | 0.23 → 0.103 |
+| 300 m, 23.7 m/s | 0.301 s / 4.56 | 0.326 s / 2.62 | 0.266 s / 2.37 | −12 / −48 % | 0.23 → 0.151 |
+| 300 m, 33.6 m/s | 0.363 s / 5.0 | 0.316 s / 2.81 | 0.258 s / 2.53 | −29 / −49 % | 0.23 → 0.106 |
+| 300 m, 40.1 m/s | 0.344 s / 3.80 | 0.312 s / 3.06 | 0.257 s / 2.75 | −25 / −28 % | 0.23 → 0.089 |
+
+B is below every measured margin, lower than A: for the stable sign a smaller
+gravity term removes stabilization, and at the fig8 depower 0.27 B's $c_1$ is
+~10 % above the table. The operating points are rebuilt from $L$ and
+$v_\mathrm{a}$ ($v_\mathrm{k} = 0.96\,v_\mathrm{a}$), not from the run records, so A does
+not reproduce the earlier model column exactly (delay margin 8 – 12 % higher,
+above the measurement at 300 m, 23.7 m/s); A against B is like for like.
+
+**The scenarios** (`examples/stability_new_coeffs.jl`). The worst bin of each
+reel-out scenario, 19 of 22: Cabauw 3 m/s and Maasvlakte 3.5 and 4 m/s are left
+out, their phase-4 $v_\mathrm{a}$ drops to 10.1, 8.3 and 10.6 m/s. A as Table 6;
+B the plant's $c_1$, $c_2/v_\mathrm{a}$ from the low flights, the pattern-law delay;
+C as B with the low flights' dead time and lag, independent of $v_\mathrm{a}$. The
+controller keeps the table's $c_1$ (as flown); the worse sign of the gravity pole.
+
+| | $\alpha$ inner | $\alpha$ guided | delay margin guided [s] |
+|---|---|---|---|
+| A (Table 6) | 0.89 – 1.33 | 0.308 – 0.447 | 0.203 – 0.304 |
+| B | 0.83 – 1.34 | 0.385 – 0.536 | 0.252 – 0.329 |
+| C | 1.21 – 1.39 | 0.456 – 0.592 | 0.298 – 0.370 |
+
+- B raises $\alpha$ guided by 0.04 – 0.09 in every scenario (worst: Cabauw 10 m/s,
+  0.308 → 0.385), mostly because the destabilizing gravity pole is smaller
+  ($c_2/v_\mathrm{a}$ ≈ 0.10 – 0.18 1/s at the worst bins' $v_\mathrm{a}$ 20 – 37 m/s).
+- C is optimistic: one delay per depower, fitted at $v_\mathrm{a}$ 14 – 51 m/s, at
+  every $v_\mathrm{a}$. B keeps the $v_\mathrm{a}$-dependent pattern law validated in V4.
+- The three left out, A → B: Cabauw 3 m/s $\alpha$ guided 0.319 → 0.333, inner
+  0.683 → 0.596; Maasvlakte 3.5 m/s 0.317 → 0.307, inner 0.599 → **0.449**;
+  Maasvlakte 4 m/s 0.330 → 0.341, inner 0.675 → 0.585. Their worst bins are at
+  $v_\mathrm{a}$ 15 – 17 m/s, where $c_2/v_\mathrm{a}$ ≈ 0.22 – 0.25 1/s is no smaller
+  than 0.23, and their depower ~0.29 has $c_1$ 6 – 8 % above the table.
+
+**Assessment.** Switching the stability analysis to B is justified: the
+coefficients are well identified in the low pattern, B keeps the model
+conservative against every measured margin, and the $c_2/v_\mathrm{a}$ form follows
+from the physics. The data do not favour it over a constant $c_3$; what they show
+is that the gravity coefficient is ≈ 0.10 1/s, not 0.23. Limits to state: the
+coefficients come from relay flights at 150 m and constant length, the worst bins
+are at 155 – 205 m while reeling out; few steady flights at depower ≥ 0.35; no
+held-out validation; at the three lowest wind speeds B does not help, and below
+$v_\mathrm{a}$ = 10 m/s while reeling out neither law describes the kite.
 
 ## Decisions (settled 2026-09-29)
 
@@ -350,9 +429,8 @@ $c_2$, not a physical fit. The heading stays the fitted quantity, as in
   so $c_1 = k_1/k_2$, $c_2 = k_3 m g/k_2$, $e = k_4 m/k_2$, and $e = 0$ is the current
   law with the table's meaning of $c_1$ and $c_2$.
 - The gravity term keeps V3Kite's sign and angle (the heading). Whether its
-  coefficient is $c_2/v_\mathrm{a}$ with a constant $c_2$ (as the low flights
-  suggest) or a constant $c_3$ (as Eq. (9) of the paper uses) is still open, see
-  "Open".
+  coefficient is $c_2/v_\mathrm{a}$ (the table's form) or a constant $c_3$ (as Eq. (9)
+  of the paper uses) is still open, see "Open".
 
 ## Identification, as done
 
@@ -401,11 +479,11 @@ reaches.
 
 ## Open
 
-1. **$c_2$ and the gravity term.** The low flights give $c_2$ ≈ 3.7 at every
-   depower, 1.6 – 2.6 × the table's 73° rows. Decide whether it replaces the
-   table's, and check the form of the term ($c_2/v_\mathrm{a}$ or a constant $c_3$)
-   and its effect on the gravity pole in the stability analysis (Table 6 of the
-   paper).
+1. **Switch the stability analysis to B** (see "The low-flight coefficients in the
+   stability analysis"): `course_loop_model.jl` and `stability_opt_reelout.jl` with
+   $c_1(u_\mathrm{d})$ and $c_2(u_\mathrm{d})/v_\mathrm{a}$ of the low flights, then the
+   paper: Eq. (9), the $c_3$ identification and Fig. 5, Table 6 and its paragraph.
+   Before that: why `identify_c3.jl` gives 0.23 1/s where the low flights give ≈ 0.10.
 2. **$c_1$ below depower 0.325.** 6 – 14 % above the table in the low pattern.
 
 ## Out of scope
