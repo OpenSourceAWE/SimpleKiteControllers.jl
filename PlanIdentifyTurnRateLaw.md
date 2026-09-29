@@ -232,11 +232,60 @@ VAF per $v_\mathrm{a}$ bin:
   $c_2$, and is worse at 10 – 15 m/s: not a physical fit. The course rate is not
   a better quantity to model the steering response on.
 
-Next, if the plan continues: test the reel-out, the one effect these flights
-leave out, by flying the same pattern with the winch reeling out (constant
-$v_\mathrm{ro}$), and fit both laws on it. If the heading law still holds there,
-the low-$v_\mathrm{a}$ error of V3 is the steering clamp, and the turn-rate law
-needs no change.
+### Reeling out (2026-09-29, depower 0.275)
+
+`_run_turn_rate_sweep(...; v_reelout)` reels out at a constant speed from `T_START`
+(ramped in over 2 s, fed forward to the length loop) up to `REELOUT_L_MAX` = 380 m;
+`TR_V_REELOUT` in the script. At 1.0 m/s the tether grows from 150 to 339 m in
+the 200 s. The steady flights (0.10 and 0.125; at 9.51 m/s also 0.075; 0.075 sinks
+at 6.5 m/s):
+
+| wind [m/s] | $v_\mathrm{a}$ [m/s] | below 20 m/s | best $e$ (heading) | $c_1$ | $c_2$ | dead [s] | lag [s] | rms [°/s] |
+|---|---|---|---|---|---|---|---|---|
+| 9.51 | 15 – 47 | 0 – 3 % | 0.05 | 0.269 | 3.46 | 0.042 | 0.100 | 2.52 |
+| 6.5 | 5.7 – 31 | 23 – 36 % | 0 | 0.260 | 2.51 | 0.092 | 0.133 | 2.98 |
+
+Heading-rate VAF of the current law per $v_\mathrm{a}$ bin:
+
+| $v_\mathrm{a}$ [m/s] | 5 – 10 | 10 – 15 | 15 – 20 | 20 – 30 | 30 – 60 |
+|---|---|---|---|---|---|
+| 6.5 m/s, reeling out | **−6.95** (1 157) | 0.952 (927) | 0.999 | 0.998 | 0.999 |
+| 9.51 m/s, reeling out | | | 0.70 (298) | 0.998 – 0.999 | 0.999 |
+
+- **Reeling out reproduces V3's low-$v_\mathrm{a}$ error.** Below 10 m/s the current
+  law has the right shape (correlation 0.97 with the measurement) but predicts 3 ×
+  the turn rate (least-squares slope of the measured on the predicted 0.31); at
+  10 – 15 m/s the slope is 0.88. At constant length there was no such error down
+  to 10 m/s (previous section), so it comes with the reel-out.
+- **The inertia term does not explain it.** Refitted on $v_\mathrm{a}$ < 15 m/s only,
+  its best $e$ is still 0. It lowers the turn rate where $v_\tau/v_\mathrm{a}$ is
+  large, but the worst samples have the SMALLER ratio: median 0.41 below 10 m/s,
+  0.82 at 10 – 15 m/s.
+- **A constant term helps only in part.** With the denominator $v_\mathrm{a} + E$
+  (turn rate ∝ $v_\mathrm{a}^2$ at low $v_\mathrm{a}$) the best $E$ is 6 m/s: VAF
+  −2.99 below 10 m/s and 0.968 at 10 – 15 m/s, with $c_1$ 0.327, $c_2$ 3.77. A
+  diagnostic, not a law.
+- **Within the operating range the current law holds.** Pattern flight does not
+  go below $v_\mathrm{a}$ = 12.8 m/s (V4), and at 10 – 15 m/s the current law meets
+  the success criterion (VAF 0.952 ≥ 0.90). The failure is below 10 m/s, where the
+  kite reels out at ~50° of elevation with little aerodynamic force.
+
+### Conclusion so far
+
+The inertia law with $v_\tau$ is not supported by any of the flights: at constant
+length and reeling out, at $v_\mathrm{a}$ 6 – 51 m/s, its best $e$ is 0 or 0.05. The
+current heading law with a delay shortened for high $v_\mathrm{a}$ (the pattern law)
+explains the heading rate with VAF ≥ 0.95 from $v_\mathrm{a}$ = 10 m/s up. The one
+consistent difference from the table is $c_2$, 1.6 – 2.6 × the 73° rows, which the
+low-elevation flights identify far better. The low-$v_\mathrm{a}$ gain drop while
+reeling out is real, but below the operating range, and not what the inertia term
+describes.
+
+Open, if it is worth pursuing:
+
+1. Whether $c_2$ from the low flights should replace the table's, and what that
+   does to the gravity pole in the stability analysis (Table 6 of the paper).
+2. What makes the turn rate drop below $v_\mathrm{a}$ ≈ 12 m/s while reeling out.
 
 ## Decisions to make first
 

@@ -27,11 +27,13 @@ The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
 :heading)`, and the joint model, which starts where the flight's fit window does.
 The elevation panel carries `max_elevation`.
 
-About two to three minutes per flight. `DEPOWER` and `TR_V_WIND` (the wind
-speed, default the table's `V_WIND`) are read and cleared like `SHOW_PLOTS`:
+About two to three minutes per flight. `DEPOWER`, `TR_V_WIND` (the wind speed,
+default the table's `V_WIND`) and `TR_V_REELOUT` (the reel-out speed, default 0)
+are read and cleared like `SHOW_PLOTS`:
 
     DEPOWER = 0.3; include("plot_turn_rate_identification.jl")   # default 0.275
     TR_V_WIND = 6.5; include("plot_turn_rate_identification.jl") # low v_a
+    TR_V_REELOUT = 1.0; include("plot_turn_rate_identification.jl") # reeling out
 """
 
 using Pkg
@@ -55,6 +57,9 @@ DEPOWER = 0.275
 # 39 % of it below 20 m/s where V3 found the law too fast; at 5.0 it drifts out of the window (2026-09-29).
 v_wind = @isdefined(TR_V_WIND) ? Float64(TR_V_WIND) : V_WIND
 TR_V_WIND = V_WIND
+# [m/s] reel-out speed of the flights from T_START on, up to REELOUT_L_MAX; 0 holds the length.
+v_reelout = @isdefined(TR_V_REELOUT) ? Float64(TR_V_REELOUT) : 0.0
+TR_V_REELOUT = 0.0
 # One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
 # `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
 # `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
@@ -195,7 +200,7 @@ isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: nothing to co
 
 flights = NamedTuple[]
 for (; a, az_reverse, el_hold_tilt) in flight_settings
-    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor, v_wind,
+    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor, v_wind, v_reelout,
                              elevation = start_elevation, heading_center,
                              start_steering = a, steering_step = 0.0, az_reverse, el_hold,
                              el_hold_tilt)
@@ -306,8 +311,8 @@ for f in flights
             nothing,
             ["elevation", "max_elevation"],
         ],
-        fig = @sprintf("Turn-rate identification, depower %.3f, amplitude %.3f, wind %.1f m/s",
-                       depower, f.a, v_wind),
+        fig = @sprintf("Turn-rate identification, depower %.3f, amplitude %.3f, wind %.1f m/s, reel-out %.1f m/s",
+                       depower, f.a, v_wind, v_reelout),
     )
     display(p)
     sleep(0.1)  # Allow Makie to render the plot before continuing

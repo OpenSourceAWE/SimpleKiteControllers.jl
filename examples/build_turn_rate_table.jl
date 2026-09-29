@@ -106,6 +106,8 @@ const CYCLES_PER_LEVEL = 2
 const MAX_STEERING_CAP = 0.175
 
 const MIN_ELEVATION    = 50.0
+# [m] a sweep flown with `v_reelout` stops reeling out here, the reel-out runs' length.
+const REELOUT_L_MAX    = 380.0
 # Cells that cannot pass MIN_ELEVATION: the relay sweep at depower 0.40 sinks to
 # 48.1° (2026-09-25) and stops 3.6 s into the excitation at the 50° floor
 # (2026-09-27), so it is flown at a lower floor, recorded in its row.
@@ -230,7 +232,7 @@ end
                          heading_center=0.0, start_steering=START_STEERING,
                          steering_step=STEERING_STEP, az_reverse=nothing,
                          el_hold=nothing, el_hold_gain=3.0,
-                         el_hold_tilt=45.0) -> NamedTuple
+                         el_hold_tilt=45.0, v_reelout=0.0) -> NamedTuple
 
 One steering-amplitude sweep at the fixed conditions above, for `depower`.
 `v_wind` [m/s] other than `V_WIND` flies the sweep at another airspeed, for the
@@ -264,6 +266,10 @@ el_hold_tilt`, which holds the kite near that elevation. A fast turn (a large
 amplitude) overshoots the band, so it needs a smaller `el_hold_tilt`, or the
 heading passes 180° (straight down) and the kite loops into the ground.
 
+`v_reelout` [m/s] reels the tether out from `T_START` on, ramped in over 2 s and
+fed forward to the length loop, until `REELOUT_L_MAX`; 0 (the table's) holds the
+length.
+
 Returns `(; outcome, u_s_max, min_elevation, fit, sl)`. `outcome` is `:sweep_done`
 (reached `max_steering_cap`), `:time_limit`, `:low_elevation`, or `:error` (the
 solver diverged — the fit still runs on whatever was logged). `fit` is the
@@ -279,7 +285,7 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
                               steering_step::Real = STEERING_STEP,
                               az_reverse::Union{Nothing, Real} = nothing,
                               el_hold::Union{Nothing, Real} = nothing, el_hold_gain::Real = 3.0,
-                              el_hold_tilt::Real = 45.0)
+                              el_hold_tilt::Real = 45.0, v_reelout::Real = 0.0)
     @info @sprintf("build_turn_rate_table: depower = %.3f, max_steering_cap = %.3f, \
                     elevation floor %.1f°, wind %.2f m/s", depower, max_steering_cap,
                    elevation_floor, v_wind)
@@ -289,6 +295,7 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
         system_yaml = SWEEP_PROJECT, aero_mode = SWEEP_AERO_MODE, remake_model = false)
 
     l0 = s.sys_state.l_tether[1]
+    l_set = l0
     wpc = WinchPosController(WCSettings(true; dt = s.dt); dt = s.dt)
 
     steering = start_steering
@@ -343,8 +350,12 @@ function _run_turn_rate_sweep(depower; max_steering_cap::Real = MAX_STEERING_CAP
                 end
             end
 
+            v_set = t < T_START || l_set >= REELOUT_L_MAX ? 0.0 :
+                    v_reelout * clamp((t - T_START) / 2.0, 0.0, 1.0)
+            l_set = min(l_set + v_set * s.dt, REELOUT_L_MAX)
             step!(s; rel_depower = depower, rel_steering,
-                  set_torque = winch_torque!(wpc, s, l0), vsm_interval = VSM_INTERVAL)
+                  set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set),
+                  vsm_interval = VSM_INTERVAL)
 
             el = rad2deg(s.sys_state.elevation)
             min_elevation = min(min_elevation, el)
