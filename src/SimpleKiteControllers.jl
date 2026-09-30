@@ -12,6 +12,7 @@ using Printf: @printf, @sprintf
 using HTTP, JSON3, StructTypes
 using SHA: sha256
 using Dates: now, format
+using OrderedCollections: OrderedDict
 using WinchControllers: WCSettings, WinchPosController, WinchController, LowerForceController
 
 # Figure-of-eight inner-loop (course) controller
@@ -40,6 +41,8 @@ export winch_state_pct, lap_durations, on_log, weighted_prediction
 
 # Commented run summaries (examples/simple_opt_reelout.jl, examples/simple_reelout.jl)
 export write_yaml_commented, time_keyed
+export package_git_state, success_verdict, simulation_block, fig8_metrics_block, reelout_block
+export performance_block, opt_cycle_max
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
@@ -124,6 +127,8 @@ include("run_inputs.jl")
 # After winch_kv_table.jl: build_winch sets the wind-dependent winch tables;
 # after figure_eight_controller.jl: build_controllers builds a FigureEightController.
 include("winch_setup.jl")
+# After fig8_metrics.jl and fc_settings.jl: the summary sections score a log and read FC_Settings.
+include("run_summary.jl")
 # Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
 include("startup_retry.jl")
 # After startup_retry.jl: with_size_box measures a path with elevation_amplitude.

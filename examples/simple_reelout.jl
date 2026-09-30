@@ -611,205 +611,23 @@ summary = OrderedDict{String, Any}()
 # …". It is the one line a reader looks for, so it is not buried at the end of
 # `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
 # A failure names the criteria that broke, exactly as the console does. The nested
-# key stays as well here; see the comment on it below.
-summary["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
-    isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
-    "FAILED: " * join(fig8m.criteria_failed, ", "),
-    "pass/fail verdict vs V3Kite's success criteria")
+# key stays as well here: `run_metrics` reads the sweep's runs from there — a shape
+# sweep flies THIS script — and dropping it would put `success_criteria: null` in
+# every row of output/optimization_results.yaml.
+summary["success_criteria"] = success_verdict(fig8m)
 run_time = Dates.now()
-# The package repo, not `examples/` — this reports the controller code, not the script's own project.
-pkg_dir = pkgdir(SimpleKiteControllers)
-git_hash, git_status = try
-    hash = strip(read(`git -C $pkg_dir rev-parse --short HEAD`, String))
-    dirty = !isempty(strip(read(`git -C $pkg_dir status --porcelain`, String)))
-    (hash, dirty ? "dirty" : "clean")
-catch
-    ("unknown", "unknown")
-end
-summary["simulation"] = OrderedDict{String, Any}(
-    "script" => (basename(@__FILE__), "script that produced this run"),
-    "project" => (PROJECT, "system project flown"),
-    "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
-    "wind_speed" => (project_set.v_wind, "mean wind speed in m/s passed to init"),
-    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
-    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
-    "hostname" => (gethostname(), "machine the run executed on"),
-    "git_hash" => (git_hash, "SimpleKiteControllers.jl commit hash"),
-    "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
-if fig8m !== nothing
-    summary["fig8_metrics"] = OrderedDict{String, Any}(
-        "settled_from" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
-        "settle_time" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
-        "laps" => (fig8m.laps, "figure-eight laps completed"),
-        "cross_track_deg" => OrderedDict(
-            "rms" => (round(fig8m.rms_d; digits = 2), "RMS cross-track error [deg]"),
-            "mean" => (round(fig8m.mean_d; digits = 2), "mean cross-track error [deg]"),
-            "max" => (round(fig8m.max_d; digits = 2), "max cross-track error [deg]")),
-        "elevation_deg" => OrderedDict(
-            "min_settled" => (round(fig8m.min_elevation_settled; digits = 1), "min elevation, settled window [deg]"),
-            "min_whole_run" => (round(fig8m.min_elevation_all; digits = 1), "min elevation, whole run [deg]")),
-        "peak_turn_rate_deg_s" => (round(Int, fig8m.max_turn_rate), "peak heading rate [deg/s]"),
-        "extent" => OrderedDict(
-            "azimuth_deg" => OrderedDict(
-                "min" => (round(-fig8m.az_reach_neg; digits = 1), "flown azimuth reach, negative side [deg]"),
-                "max" => (round(fig8m.az_reach_pos; digits = 1), "flown azimuth reach, positive side [deg]")),
-            "azimuth_pct_of_amplitude" => OrderedDict(
-                "min" => (round(Int, 100 * fig8m.az_fill_neg), "negative reach as % of the pattern's ±A"),
-                "max" => (round(Int, 100 * fig8m.az_fill_pos), "positive reach as % of the pattern's ±A")),
-            "worst_lobe_deg" => OrderedDict(
-                "min" => (round(-fig8m.az_reach_neg_worst; digits = 1), "weakest lobe, negative side [deg]"),
-                "max" => (round(fig8m.az_reach_pos_worst; digits = 1), "weakest lobe, positive side [deg]")),
-            "elevation_span_deg" => (round(fig8m.el_span; digits = 1), "flown elevation span [deg]"),
-            "elevation_span_pct_of_b" => (round(Int, 100 * fig8m.el_fill), "flown span as % of the pattern's B")),
-        "tether_force_N" => OrderedDict(
-            "mean" => (round(Int, fig8m.mean_force), "mean tether force, settled window [N]"),
-            "std" => (round(Int, fig8m.std_force), "std tether force, settled window [N]"),
-            "cv_pct" => (round(100 * fig8m.cv_force; digits = 1), "coefficient of variation [%]")),
-        "steering" => OrderedDict(
-            "peak_abs_u_s" => (round(fig8m.max_steering_used; digits = 3), "peak |rel_steering| commanded"),
-            "pct_time_within_2pct_of_peak" => (round(Int, 100 * fig8m.steering_sat_frac),
-                "% of time within 2% of peak (saturation)"),
-            "hf_std_steering" => (round(fig8m.steering_hf_std; digits = 4), "high-frequency std of steering (chatter)"),
-            "hf_std_turnrate_deg_s" => (round(fig8m.turnrate_hf_std; digits = 2),
-                "high-frequency std of heading rate [deg/s]")),
-        "tape" => OrderedDict(
-            "delivered_peak_abs_u_s" => (round(fig8m.max_steering_delivered; digits = 3),
-                "peak steering the KCU tape delivered"),
-            "commanded_peak_abs_u_s" => (round(fig8m.max_steering_used; digits = 3), "peak steering commanded"),
-            "rate_limited_pct_time" => (round(Int, 100 * fig8m.tape_rate_frac),
-                "% of time the tape's rate limit was hit"),
-            "rate_limited_peak_per_s" => (round(fig8m.max_tape_rate; digits = 3), "peak tape rate reached [1/s]"),
-            "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")),
-        # Deliberately the same string as the top-level verdict above, which is
-        # where a reader should look. This copy stays because `run_metrics` reads
-        # the sweep's runs from here — a shape sweep flies THIS script — and
-        # dropping it would put `success_criteria: null` in every row of
-        # output/optimization_results.yaml.
-        "success_criteria" => (isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
-            "FAILED: " * join(fig8m.criteria_failed, ", "), "same verdict as the top-level key"))
-end
-
-reelout_summary = OrderedDict{String, Any}()
-# On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-fig8 = findall(x -> Int(x) == 4, sl.sys_state)
-if isempty(fig8)
-    # Reel-out runs from phase 3, so this is about the anchor only.
-    @warn "Phase 4 never reached — no fig8 apparent wind speed."
-else
-    va = Float64.(sl.v_app[fig8])
-    duration = sl.time[fig8[end]] - sl.time[fig8[1]]
-    @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
-             | v_app_ref = %.1f (%+.1f%%)\n",
-            duration, mean(va), minimum(va), maximum(va),
-            fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
-    reelout_summary["v_app_phase4"] = OrderedDict(
-        "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
-        "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
-        "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
-        "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
-        "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
-        "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
-            "mean v_app deviation from v_app_ref [%]"))
-end
-# Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
-# stop_reason is "" when the run ended with reel-out still going.
-reelout_stop_reason = isempty(stop_reason) ? "none" : stop_reason
-@printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
-        l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
-reelout_summary["tether"] = OrderedDict(
-    "start_m" => (l_tether, "tether length at run start [m]"),
-    "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
-    "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
-    "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
-    "laps_reeled" => (round(fig8_idx_progress / n_path; digits = 2),
-        "figure-eight laps completed by the time reel-out ended"))
-
-rp = reelout_power(sl)
-if isnothing(rp)
-    @warn "Tether never reeled out — no reel-out power to report."
-else
-    @printf("  Reel-out force: mean %.0f N, peak %.0f N (cf=%.2f).\n",
-            rp.mean_force, rp.peak_force, rp.cf_force_ro)
-    # Both totals: an earlier engagement trades mean power for a longer window.
-    @printf("  Reel-out power: mean %.0f W, peak %.0f W (cf=%.2f) over %.1f s (%d samples), \
-             E = %.1f kJ; whole run E = %.1f kJ.\n",
-            rp.mean_power, rp.peak_power, rp.cf_power_ro, rp.duration, rp.n,
-            rp.energy / 1000, rp.energy_run / 1000)
-    reelout_summary["force"] = OrderedDict(
-        "mean_N" => (round(Int, rp.mean_force), "mean tether force over the reeling window [N]"),
-        "peak_N" => (round(Int, rp.peak_force), "peak tether force over the reeling window [N]"),
-        "cf_force_ro" => (round(rp.cf_force_ro; digits = 2), "crest factor: peak_N / mean_N"))
-    reelout_summary["power"] = OrderedDict(
-        "mean_W" => (round(Int, rp.mean_power), "mean reel-out power over the reeling window [W]"),
-        "peak_W" => (round(Int, rp.peak_power), "peak reel-out power over the reeling window [W]"),
-        "cf_power_ro" => (round(rp.cf_power_ro; digits = 2), "crest factor: peak_W / mean_W"),
-        "duration" => (round(rp.duration; digits = 1), "reeling window length [s]"),
-        "n_samples" => (rp.n, "sample count in the reeling window"),
-        "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
-        "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
-end
-
-ws = winch_state_pct(sl)
-if isnothing(ws)
-    @warn "Tether never reeled out — no winch controller states to report."
-else
-    @printf("  Winch states over the reeling window: speed %.1f %%, lower force %.1f %%, \
-             upper force %.1f %%.\n",
-            ws.speed_pct, ws.lower_force_pct, ws.upper_force_pct)
-    reelout_summary["winch_state"] = OrderedDict(
-        "speed_pct" => (round(ws.speed_pct; digits = 1),
-            "% of the reeling window in speed control (state 1)"),
-        "lower_force_pct" => (round(ws.lower_force_pct; digits = 1),
-            "% in the LowerForceController, reeling in (state 0)"),
-        "upper_force_pct" => (round(ws.upper_force_pct; digits = 1),
-            "% in the UpperForceController, force capped at f_high (state 2)"),
-        "n_samples" => (ws.n, "sample count in the reeling window"))
-end
-
-rr = reelout_ringing(sl)
-if isnothing(rr)
-    @warn "Tether never reeled out — no ringing to report."
-elseif rr.n_peaks == 0
-    @printf("  Reel-out ring: none detected (peak %.2f m/s vs steady %.2f m/s).\n",
-            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
-    reelout_summary["ringing"] = OrderedDict(
-        "n_peaks" => (0, "ring peaks detected above peak_floor"),
-        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
-        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
-else
-    @printf("  Reel-out ring: period %.2f s, zeta %.2f, overshoot %.2f m/s, decays in %.1f s \
-             (peak %.2f m/s vs steady %.2f m/s).\n",
-            rr.period_s, rr.zeta, rr.overshoot_m_s, rr.duration_s,
-            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
-    reelout_summary["ringing"] = OrderedDict(
-        "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
-        "period" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
-        "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
-        "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
-        "duration" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
-        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
-        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
-end
-summary["reelout"] = reelout_summary
-
-# Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
-if t_sim > 0
-    steps = round(Int, t_sim / s.dt)
-    @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
-             (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
-            t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / steps,
-            steps, s.dt, fcs.vsm_interval)
-    summary["performance"] = OrderedDict(
-        "sim_time" => (round(t_sim; digits = 1), "simulated time [s]"),
-        "wall_time" => (round(t_wall; digits = 1), "wall-clock time [s]"),
-        "realtime_factor" => (round(t_sim / t_wall; digits = 2), "sim_time / wall_time"),
-        "ms_per_step" => (round(1000 * t_wall / steps; digits = 1), "wall time per step [ms]"),
-        "steps" => (steps, "step count"),
-        "dt" => (s.dt, "simulation timestep [s]"),
-        "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))
-else
-    @warn "No simulated time elapsed — no performance figure."
-end
+# The sections this script shares with simple_opt_reelout.jl are the package's.
+summary["simulation"] = simulation_block(basename(@__FILE__), PROJECT, TURBULENCE,
+                                         project_set.v_wind, run_time)
+fig8m === nothing ||
+    (summary["fig8_metrics"] = fig8_metrics_block(fig8m, lap_durations(sl); nested_verdict = true))
+# The window's mean and peak force and power too: `run_metrics` reads them.
+reelout_sections = reelout_block(sl, fcs, l_tether; stop_reason,
+                                 laps_reeled = fig8_idx_progress / n_path, window_means = true)
+rp = reelout_sections.rp
+summary["reelout"] = reelout_sections.block
+performance_section = performance_block(t_sim, t_wall, s.dt, fcs.vsm_interval)
+isnothing(performance_section) || (summary["performance"] = performance_section)
 
 # A recap of the numbers scattered above; last key, so `success_criteria` stays
 # the first thing a reader sees. No optimizer here, so no power_ratio or
