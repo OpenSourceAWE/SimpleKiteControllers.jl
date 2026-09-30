@@ -91,7 +91,7 @@ flown here; the pattern's centre and extent are measured off the installed path.
 `reelout_feasibility.jl` (abort/warn policy on the gates of
 [`check_reelout_feasibility`](@ref), defining `feas`, `c1_at`, `phase5_margin`)
 and `reelout_results.jl` (scoring, summary YAML, archive, plots, finished-run
-marker) are `include`d at top level and share this script's globals.
+marker) are `include`d at top level and read the run's state by name (`publish_run_state!`).
 
 Logs to `output/<log_file>_opt.arrow` and `_opt.yaml`, leaving the lemniscate
 run's files intact for comparison. `REF_PATH` and `LOG_NAME` carry the flown
@@ -208,8 +208,6 @@ dist_u = Float64[]      # [-] steering sent to the model, controller plus distur
 # reel-out law's force slope around the force F̄ low-passed over τF [s], zero mean speed, and a slow
 # pull back to the length the hold began at. `nothing` holds the length rigidly, as flown.
 isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $hold_compliance"
-hold_f_lp = NaN         # [N] low-passed force of the compliant hold
-hold_l0 = NaN           # [m] length the compliant hold began at
 # V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1, point C):
 # STEER_GAIN_FACTOR (`steer_gain_factor`) multiplies rel_steering, and
 # EXTRA_STEER_DELAY (`extra_steer_delay`) adds a FIFO delay to it, in samples. Both act only from
@@ -228,8 +226,6 @@ hold_l0 = NaN           # [m] length the compliant hold began at
 # feed-forward goes through a FIFO of its own, so the two stay aligned.
 steer_delay_buf = Float64[]
 ff_delay_buf = Float64[]
-t_phase4 = NaN          # [s] time phase 4 was first reached this run; NaN before that
-xt_start = NaN          # [s] first step of phase `xtrack_phase`; τ counts from here
 isnothing(xtrack_offset) || @info "Cross-track offset in force (test input)."
 xt_t = Float64[]        # [s] time of each phase-5 step
 xt_delta = Float64[]    # [deg] offset commanded
@@ -320,7 +316,6 @@ s = init_model(project, project_set, fcs, wpc, EFFECTIVE_SIM_TIME; turbulence = 
 # The controllers, built after `init` so the soft-start ramp begins when reel-out starts; see `build_controllers`.
 (; rc, f_high_nominal, stop_criteria, guard_lfc, l_set, fec) = build_controllers(fcs, rcs, s)
 const F_HIGH_NOMINAL = f_high_nominal
-first_lap_f_high_applied = false
 
 # ================= OPTIMIZED REFERENCE PATH ================== #
 
@@ -374,7 +369,143 @@ end
 # One row per depower value the optimizer reports back (startup, each ACCEPTED reopt), for summary and plot.
 opt_depower_log = NamedTuple[]
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
-depower_flown_opt = fcs.depower_setpoint
+"""
+    RunState
+
+Everything the startup functions and the simulation loop WRITE, in one place, so they take it as an
+argument (`st`) instead of rebinding script globals. Comments give the meaning and the unit; the
+loop-only bookkeeping is grouped as in the loop. [`publish_run_state!`](@ref) copies the fields
+into the script's globals under the same names, for `reelout_feasibility.jl`, `reelout_results.jl`
+and the plots, which read them by name.
+"""
+Base.@kwdef mutable struct RunState
+    # ---- the optimizer's answer and what the retries make of it ----
+    opt_result::Any = nothing               # the reply the run flies (startup, or the retry that took over)
+    opt_table::Any = nothing                # its /trajectory table
+    opt_downloops::Any = nothing
+    opt_power_pred::Float64 = NaN           # [W] predicted mean reel-out power of the installed path
+    opt_paths_raw::Vector{Any} = Any[]      # every optimizer answer as it arrived, before any lift
+    opt_paths_at::Vector{Any} = Any[]       # (sim time [s], phase) each of those was installed at
+    opt_r_scale::Any = nothing              # anchor ratio x headroom of the turn-radius request
+    opt_r_min::Any = nothing                # [m] turn-radius request, or nothing
+    opt_box_now::Any = nothing              # pattern limits sent with the last re-optimization request
+    incumbent_score::Any = nothing          # score of the best startup path so far
+    inc_result::Any = nothing
+    inc_table::Any = nothing
+    inc_raw::Any = nothing
+    startup_wing_frac::Float64 = 1.0        # share of the lobe lift the startup path could carry
+    c1_startup::Float64 = NaN               # [-] turn-rate gain the startup path is checked against
+    depower_flown_opt::Float64 = NaN        # [-] rel_depower the optimizer asked for
+    # ---- the startup pattern's geometry ----
+    n_path_initial::Int = 0
+    path_min_h_start::Any = NaN
+    az_c_path::Any = NaN
+    el_c_path::Any = NaN
+    az_amp_path::Any = NaN
+    el_height_path::Any = NaN
+    pred_timeline::Vector{Any} = Any[]      # (; t, power): which path was flown when
+    p5_history::Vector{Any} = Any[]         # every path flown, for the phase-5 fallback
+    p5_fallback_done::Bool = false          # checked once, from the stop latch on, at the next crossing
+    p5_q_az_prev::Float64 = NaN             # [deg] Q's azimuth from the path centre, last step
+    p5_fallback::Any = nothing              # (; t, from_margin, to_margin, to_t) when a fallback was blended in
+    ccs::Any = nothing                      # course controller settings
+    cc::Any = nothing                       # course controller
+    # ---- winch and reel-out ----
+    l_set::Float64 = NaN                    # [m] tether length setpoint
+    transition_start::Float64 = NaN         # [s] time phase 3 began; `reelout_delay` counts from it
+    stop_start::Float64 = NaN               # [s] time the soft-stop deceleration latched; NaN = not yet
+    stop_v_entry::Float64 = NaN             # [m/s] v_set at the moment it latched
+    stop_dp_entry::Float64 = NaN            # [-] rel_depower at the moment it latched
+    stop_T::Float64 = NaN                   # [s] duration of the linear decel to reach 0 at reelout_l_max
+    reelout_started::Bool = false           # true once the gate has opened; LATCHED, never re-closes
+    reelout_start_t::Float64 = NaN          # [s] time it opened; the soft-start ramp counts from here
+    reelout_trigger_fired::Bool = false     # true if the FORCE trigger opened it, not the timer
+    reelout_done::Bool = false              # true once either stop criterion has ended reel-out
+    stop_reason::String = ""                # "length", "laps", or "" if reel-out never stopped
+    final_start::Float64 = NaN              # [s] time phase 5 began; the run ends `fcs.final_time` after it
+    e_mech::Float64 = 0.0                   # [Wh] running mechanical energy, logged for the viewer
+    first_lap_f_high_applied::Bool = false
+    # ---- feed-forward, depower ----
+    ff_log::Vector{Float64} = Float64[]     # [-] feed-forward steering per step
+    ff_chi_log::Vector{Float64} = Float64[] # [rad] chord correction per step
+    ff_u_filt::Float64 = 0.0                # [-] low-passed feed-forward steering
+    ff_chi_filt::Float64 = 0.0              # [rad] low-passed chord correction
+    dp_final_extra::Float64 = 0.0           # [-] phase-5 force limiter's depower above depower_final
+    dp_final_extra_peak::Float64 = 0.0      # [-] the most it asked for, for the summary
+    rel_depower_prev::Float64 = NaN         # [-] depower commanded last step; the gain reads c1 there
+    depower_flown::Float64 = NaN            # [-] current blended output
+    depower_blend_from::Float64 = NaN
+    depower_blend_to::Union{Nothing, Float64} = nothing
+    depower_blend_t0::Float64 = NaN
+    # ---- lap counter and scored reference ----
+    fig8_n::Int = 0                         # live lap count: 0 before phase 4, 1 at first entry, +1 per traversal
+    fig8_idx_prev::Int = 0
+    fig8_idx_progress::Float64 = 0.0
+    n_path::Int = 0
+    raw_az::Any = nothing                   # the reference TRACKING is scored against
+    raw_el::Any = nothing
+    chk_points::Int = 0                     # resolution the path in the air is checked at
+    # ---- elevation lift ----
+    el_applied::Float64 = 0.0               # [deg] lift the path in the air actually carries
+    lift_on::Bool = false                   # `el_offset_final` latched in; never cleared once set
+    el_shift_events::Vector{NamedTuple} = NamedTuple[]  # in-air shift attempts, one per outcome CHANGE
+    lift_t::Float64 = NaN                   # [s] when it latched; NaN = never
+    lift_remaining::Float64 = NaN           # [m] of reel-out left at that moment
+    el_shift_warned::Bool = false           # a held-back shift warns once
+    el_shift_lap::Int = 0                   # lap and target of the last in-air shift attempt
+    el_shift_target::Float64 = NaN
+    # ---- per-step logs of the pattern asked for ----
+    geom_t::Vector{Float64} = Float64[]
+    geom_az_c::Vector{Float64} = Float64[]
+    geom_az_amp::Vector{Float64} = Float64[]
+    geom_el_h::Vector{Float64} = Float64[]
+    geom_d_raw::Vector{Float64} = Float64[] # cross-track error to the scored reference
+    n_droop_bins::Int = 5                   # where in the pattern the kite ends up low, binned on |azimuth|
+    droop_n::Vector{Int} = zeros(Int, 5)
+    droop_flown::Vector{Float64} = zeros(5) # [deg] kite below the path's elevation centre
+    droop_ref::Vector{Float64} = zeros(5)   # [-] depth of the path at Q, in half-spans
+    droop_sag::Vector{Float64} = zeros(5)   # [deg] kite below the path at Q
+    # ---- re-optimization (stage 4) and blend ----
+    reopt_pending::Bool = false             # a solve is queued on the server
+    reopt_n::Int = 0                        # solves completed, accepted or rejected
+    reopt_lap::Float64 = 0.0                # lap count at which the last request went out
+    reopt_next_poll::Float64 = 0.0          # [s] next /status poll
+    reopt_t_request::Float64 = NaN          # [s] when the pending request went out
+    reopt_blocked_s::Float64 = 0.0          # [s] wall time spent frozen waiting for a reply
+    reopt_last_solve_s::Float64 = NaN       # [s] wall time the last blocking wait took
+    reopt_events::Vector{NamedTuple} = NamedTuple[]  # one row per solve, for the run summary
+    reopt_t_wall_request::Float64 = NaN     # [s] time() when the cycle's first request went out
+    reopt_cycles::Vector{NamedTuple} = NamedTuple[]  # (; t, l, status, wall_s) per completed cycle
+    blend_retries_total::Int = 0            # cold-restart attempts spent on a rejected reply
+    el_min_extra::Float64 = 0.0             # [deg] shortfall of the last reply gated out; carried across cycles
+    blend_from::Any = nothing               # the blend in progress; fold-free across w in [0, 1]
+    blend_to::Any = nothing
+    blend_t0::Float64 = NaN
+    raw_from::Any = nothing                 # the scored reference's endpoints of the SAME blend
+    raw_to::Any = nothing
+    # ---- test inputs ----
+    t_phase4::Float64 = NaN                 # [s] time phase 4 was first reached this run; NaN before that
+    xt_start::Float64 = NaN                 # [s] first step of phase `xtrack_phase`; τ counts from here
+    hold_f_lp::Float64 = NaN                # [N] low-passed force of the compliant hold
+    hold_l0::Float64 = NaN                  # [m] length the compliant hold began at
+end
+
+"""
+    publish_run_state!(mod, st)
+
+Copy every field of `st` into a global of `mod` under the same name. Called once the startup is done
+and again after the loop, because `reelout_feasibility.jl`, `reelout_results.jl` and the plots read the
+run's state by name. The functions themselves never touch these globals.
+"""
+function publish_run_state!(mod::Module, st::RunState)
+    for name in fieldnames(RunState)
+        # `eval`, not `setglobal!`: Julia >= 1.12 refuses to assign a binding that does not exist yet.
+        Core.eval(mod, :($name = $(QuoteNode(getfield(st, name)))))
+    end
+    return nothing
+end
+
+st = RunState(; l_set, opt_r_scale, opt_r_min, depower_flown_opt = fcs.depower_setpoint)
 
 """
     startup_params(el_center) -> InitParams
@@ -427,6 +558,7 @@ t_solve_start = time()
    guess_az, guess_el) =
     solve_startup(tos, startup_params, startup_solve, start_params, el_center_seed_base, l_set,
                   winch, inflow)
+st.opt_result = opt_result
 startup_seed_offset == 0 ||
     @warn @sprintf("Startup path solved from a RETRY seed centred at %.0f° \
                     (%+.1f° off guess_el_center): a different optimum than the \
@@ -534,29 +666,27 @@ pattern_depower(reply) =
     tos.fly_opt_depower && !isnothing(reply.depower) ?
         awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
 # The turn-rate law the retry reads a path against; `reelout_feasibility.jl` looks it up again later.
-c1_startup = c1_at_depower(fcs.depower_setpoint)
+st.c1_startup = c1_at_depower(fcs.depower_setpoint)
 # Resample but never upsample; the lobe lift is rationed to fit the curvature gate.
-startup_wing_frac = 1.0
-install_optimized_path!(reply) = begin
-    global startup_wing_frac, c1_startup
+install_optimized_path!(st::RunState, reply) = begin
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
     lift = wing_lift(az, el)
     resample = min(tos.resample_points, length(az) - 1)
-    c1_startup = c1_at_depower(pattern_depower(reply))
-    startup_wing_frac = 1.0
-    if !isnan(c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
+    st.c1_startup = c1_at_depower(pattern_depower(reply))
+    st.startup_wing_frac = 1.0
+    if !isnan(st.c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
         for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
-            startup_wing_frac = fw
+            st.startup_wing_frac = fw
             set_path!(fec, az, el .+ fw .* lift; resample)
             check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                   c1 = c1_startup, prn = false).margin >=
+                                   c1 = st.c1_startup, prn = false).margin >=
                 tos.min_feasibility_margin && break
         end
-        startup_wing_frac < 1 &&
+        st.startup_wing_frac < 1 &&
             @info @sprintf("Lobe lift held back on the startup path to fit the \
                             curvature gate: %.0f %% of %.2f°.",
-                           100 * startup_wing_frac, fcs.el_offset_wing)
+                           100 * st.startup_wing_frac, fcs.el_offset_wing)
     else
         set_path!(fec, az, el .+ lift; resample)
     end
@@ -564,56 +694,55 @@ install_optimized_path!(reply) = begin
 end
 # Every optimizer answer as it arrived, before any lift; installed paths shrink as the tether grows.
 """
-    adopt_startup_path!()
+    adopt_startup_path!(st)
 
 Take the startup reply as the path of the run: install it (every optimizer answer is kept as it arrived,
 before any lift, with where and when it was installed), record its success for a rerun, apply the winch
 gain it chose, and re-measure the anchor ratio and the turn-radius request off it.
 """
-function adopt_startup_path!()
-    global opt_paths_raw, opt_paths_at, opt_table, opt_downloops, opt_power_pred, opt_r_scale, opt_r_min
-    opt_paths_raw = [install_optimized_path!(opt_result)]
+function adopt_startup_path!(st::RunState)
+    st.opt_paths_raw = [install_optimized_path!(st, st.opt_result)]
     # Where each of those was installed: (sim time [s], phase); the startup path goes in before the run.
-    opt_paths_at = [(0.0, 0)]
+    st.opt_paths_at = [(0.0, 0)]
 
     # set_path! REVERSES a path that does not match up_loops, so a mismatch must be caught here.
-    opt_table = chain_trajectory(opt_chain)
+    st.opt_table = chain_trajectory(opt_chain)
     # Installed above, so applied: stored for a rerun that sends the same requests.
     record_opt_success!(opt_chain)
-    apply_optimized_kv!(opt_table, 0.0, l_tether)
-    opt_downloops = opt_table["spline"]["downloops"]
-    opt_power_pred = Float64(opt_table["metrics"]["avg_power_W"])
+    apply_optimized_kv!(st.opt_table, 0.0, l_tether)
+    st.opt_downloops = st.opt_table["spline"]["downloops"]
+    st.opt_power_pred = Float64(st.opt_table["metrics"]["avg_power_W"])
     # The anchor ratio, now measured off the reply; guarded so a request that is off stays off.
     if opt_r_on
-        opt_r_scale = reelout_anchor_ratio(opt_table) * tos.turn_radius_headroom
-        opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                            c1 = c1_startup)
+        st.opt_r_scale = reelout_anchor_ratio(st.opt_table) * tos.turn_radius_headroom
+        st.opt_r_min = min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
+                                            c1 = st.c1_startup)
     end
-    isnothing(opt_r_min) ||
+    isnothing(st.opt_r_min) ||
         @info @sprintf("Turn-radius request for the re-optimizations: %.2f m — the \
                         gate's %.2f m at margin %.2f, x %.3f for the lap's reel-out \
                         (%.1f -> %.1f m) and x %.2f of headroom.",
-                       opt_r_min, opt_r_min / opt_r_scale, tos.min_feasibility_margin,
-                       reelout_anchor_ratio(opt_table),
-                       minimum(Float64.(opt_table["table"]["distance_radial"])),
-                       maximum(Float64.(opt_table["table"]["distance_radial"])),
+                       st.opt_r_min, st.opt_r_min / st.opt_r_scale, tos.min_feasibility_margin,
+                       reelout_anchor_ratio(st.opt_table),
+                       minimum(Float64.(st.opt_table["table"]["distance_radial"])),
+                       maximum(Float64.(st.opt_table["table"]["distance_radial"])),
                        tos.turn_radius_headroom)
 end
-adopt_startup_path!()
+adopt_startup_path!(st)
 
 # ---- Corrected retries of the STARTUP solve: one lever per attempt (ceiling, width, radius) ---- #
 # The decisions (which lever, what the answers imply) are `next_lever` & co. of src/startup_retry.jl.
 
 # Read at TOP level: the retry block defines `incumbent_score` only when it runs.
 margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                        c1 = c1_startup, prn = false).margin
+                                        c1 = st.c1_startup, prn = false).margin
 
 # All three startup gates and the record of a rejected curve, defined at top level so the retries below and the
 # incumbent's record after them share them.
 el_floor_start = fcs.min_elevation + tos.candidate_elevation_margin
-score_installed() = begin
+score_installed(st::RunState) = begin
     margin = check_pattern_feasible(fec, l_tether, fcs.max_steering;
-                                    c1 = c1_startup, prn = false).margin
+                                    c1 = st.c1_startup, prn = false).margin
     el_ok = minimum(fec.el_path) >= el_floor_start
     height = NaN
     clr_ok = true
@@ -644,30 +773,23 @@ save_failed_trajectory(name, az, el; margin = NaN, power = NaN) = begin
     @info "Saved failed trajectory to $file (margin $margin)."
 end
 """
-    retry_startup!()
+    retry_startup!(st)
 
 Corrected retries of the STARTUP solve, for a startup path whose turn margin is below
 `min_feasibility_margin`: one lever per attempt (`next_lever`), the best path so far installed
-in `fec` and in the `opt_*` globals the rest of the run reads, `incumbent_score` and `inc_*` (the
+in `fec` and in the `opt_*` fields of `st` the rest of the run reads, `incumbent_score` and `inc_*` (the
 incumbent, which `startup_incumbent` records afterwards) included.
 """
-function retry_startup!()
-    global opt_result, opt_table, opt_downloops, opt_power_pred
-    global opt_paths_raw, opt_paths_at, opt_r_scale, opt_r_min
-    global incumbent_score, inc_result, inc_table, inc_raw
-    incumbent_score = score_installed()
-    inc_result, inc_table, inc_raw = opt_result, opt_table, opt_paths_raw[1]
-    ladder = RetryLadder(; m_reply = incumbent_score.margin)  # what the answers so far imply
+function retry_startup!(st::RunState)
+    st.incumbent_score = score_installed(st)
+    st.inc_result, st.inc_table, st.inc_raw = st.opt_result, st.opt_table, st.opt_paths_raw[1]
+    ladder = RetryLadder(; m_reply = st.incumbent_score.margin)  # what the answers so far imply
     t_retries = time()
     for attempt in 1:max(Int(tos.startup_retries_max), 0)
-        # Script globals written inside the loop; without the declaration each becomes a fresh local.
-        global opt_result, opt_table, opt_downloops, opt_power_pred
-        global opt_paths_raw, opt_paths_at, opt_r_scale, opt_r_min
-        global incumbent_score, inc_result, inc_table, inc_raw
-        ask = next_lever(ladder, tos, inc_raw[1], inc_raw[2], opt_r_sent,
+        ask = next_lever(ladder, tos, st.inc_raw[1], st.inc_raw[2], opt_r_sent,
                          isnothing(opt_box) ? nothing : opt_box.elevation_min, el_floor_start,
-                         margin -> min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                                           margin, c1 = c1_startup))
+                         margin -> min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
+                                                           margin, c1 = st.c1_startup))
         if isnothing(ask.lever)
             @info @sprintf("Startup retries stop at %d/%d: no radius under the \
                             %.2f m that 422'd can reach past margin %.3f (the \
@@ -690,8 +812,8 @@ function retry_startup!()
                         min_feasibility_margin = %.2f: retry %d/%d (%s) at \
                         L = %.1f m, turn radius %.2f m (was %.2f m)%s, targeting \
                         margin %.3f%s.",
-                       incumbent_score.margin, tos.min_feasibility_margin,
-                       attempt, Int(tos.startup_retries_max), lever, l_set,
+                       st.incumbent_score.margin, tos.min_feasibility_margin,
+                       attempt, Int(tos.startup_retries_max), lever, st.l_set,
                        r_ask, prev_ask,
                        (isnothing(el_cap) ? ", no elevation ceiling" :
                            @sprintf(", elevation ceiling %.1f° (the incumbent \
@@ -711,13 +833,13 @@ function retry_startup!()
         local att_result, att_table, att_raw, att_score
         try
             att_result = chain_step(opt_chain,
-                                    StepParams(; length = opt_length(tos, l_set),
+                                    StepParams(; length = opt_length(tos, st.l_set),
                                                winch_params = winch_first_lap,
                                                min_turn_radius = r_ask,
                                                pattern_limits = box_ask))
             att_table = chain_trajectory(opt_chain)
-            att_raw = install_optimized_path!(att_result)
-            att_score = score_installed()
+            att_raw = install_optimized_path!(st, att_result)
+            att_score = score_installed(st)
         catch exc
             exc isa HTTP.StatusError && exc.status == 422 || rethrow()
             kind = record_422!(ladder, ask)
@@ -759,10 +881,10 @@ function retry_startup!()
                        time() - t_attempt)
         takes_over = att_score.ok ||
                      (att_score.el_ok && att_score.clr_ok &&
-                      att_score.margin > incumbent_score.margin)
-        if !takes_over && att_score.margin > incumbent_score.margin &&
+                      att_score.margin > st.incumbent_score.margin)
+        if !takes_over && att_score.margin > st.incumbent_score.margin &&
            (!att_score.el_ok || !att_score.clr_ok)
-            install_optimized_path!(inc_result)     # incumbent stays flown
+            install_optimized_path!(st, st.inc_result)     # incumbent stays flown
             @warn @sprintf("Startup retry %d reached margin %.3f but dropped \
                             below a floor (clearance %s, elevation %s); wider \
                             cannot recover clearance — retries stop here.",
@@ -772,105 +894,105 @@ function retry_startup!()
             break
         elseif takes_over
             record_opt_success!(opt_chain)
-            incumbent_score = att_score
-            inc_result, inc_table, inc_raw = att_result, att_table, att_raw
-            apply_optimized_kv!(inc_table, 0.0, l_set)
+            st.incumbent_score = att_score
+            st.inc_result, st.inc_table, st.inc_raw = att_result, att_table, att_raw
+            apply_optimized_kv!(st.inc_table, 0.0, st.l_set)
             # Only adoption moves these: a discarded retry leaves the `opt_*` state untouched.
-            opt_result = inc_result
-            opt_table = inc_table
-            opt_downloops = inc_table["spline"]["downloops"]
-            opt_power_pred = Float64(inc_table["metrics"]["avg_power_W"])
-            opt_paths_raw = [inc_raw]
-            opt_paths_at = [(0.0, 0)]
-            opt_r_scale = reelout_anchor_ratio(inc_table) *
+            st.opt_result = st.inc_result
+            st.opt_table = st.inc_table
+            st.opt_downloops = st.inc_table["spline"]["downloops"]
+            st.opt_power_pred = Float64(st.inc_table["metrics"]["avg_power_W"])
+            st.opt_paths_raw = [st.inc_raw]
+            st.opt_paths_at = [(0.0, 0)]
+            st.opt_r_scale = reelout_anchor_ratio(st.inc_table) *
                           tos.turn_radius_headroom
-            opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                                c1 = c1_startup)
+            st.opt_r_min = min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
+                                                c1 = st.c1_startup)
             if att_score.ok
                 @info @sprintf("Startup path clears the gates at margin %.3f \
                                 after %d solves (%.1f s of wall time).",
-                               incumbent_score.margin, attempt, time() - t_retries)
+                               st.incumbent_score.margin, attempt, time() - t_retries)
                 break
             end
             @info "Kept retry $attempt as the best-so-far; trying again."
         else
-            install_optimized_path!(inc_result)     # put the incumbent back
+            install_optimized_path!(st, st.inc_result)     # put the incumbent back
             save_failed_trajectory("startup_retry$attempt", att_raw[1],
                                    att_raw[2]; margin = att_score.margin,
                                    power = Float64(att_table["metrics"]["avg_power_W"]))
             @info @sprintf("Startup retry %d gave margin %.3f, no better than \
                             %.3f — keeping the incumbent.",
-                           attempt, att_score.margin, incumbent_score.margin)
+                           attempt, att_score.margin, st.incumbent_score.margin)
         end
         record_converged!(ladder, ask, att_score.margin)
     end
 end
-if opt_r_on && !isnan(c1_startup) && margin_startup < tos.min_feasibility_margin
-    retry_startup!()
+if opt_r_on && !isnan(st.c1_startup) && margin_startup < tos.min_feasibility_margin
+    retry_startup!(st)
 end
 
 if margin_startup < tos.min_feasibility_margin
     # The incumbent is what the gates will refuse; `incumbent_score` exists exactly when this fires.
-    save_failed_trajectory("startup_incumbent", inc_raw[1], inc_raw[2];
-                           margin = incumbent_score.margin,
-                           power = opt_power_pred)
+    save_failed_trajectory("startup_incumbent", st.inc_raw[1], st.inc_raw[2];
+                           margin = st.incumbent_score.margin,
+                           power = st.opt_power_pred)
 end
 
-if !isnothing(opt_result.depower)
-    global depower_flown_opt = awetrim_depower_to_v3kite(opt_result.depower.value)
+if !isnothing(st.opt_result.depower)
+    st.depower_flown_opt = awetrim_depower_to_v3kite(st.opt_result.depower.value)
     push!(opt_depower_log,
-          (; t = 0.0, l_dp = opt_result.depower.value, u_p_equiv = depower_flown_opt))
+          (; t = 0.0, l_dp = st.opt_result.depower.value, u_p_equiv = st.depower_flown_opt))
 end
 
 # The pattern's own geometry, captured now: with reopt_enabled `fec` holds another path at the end.
 """
-    capture_startup_geometry!()
+    capture_startup_geometry!(st)
 
 The startup pattern's own geometry, captured now (with `reopt_enabled`, `fec` holds another path at the
 end), and the prediction timeline that says which path was flown when, so the run is scored against the
 path in the air. Refuses a path that flies against `up_loops`.
 """
-function capture_startup_geometry!()
-    global n_path_initial, path_min_h_start, az_c_path, el_c_path, az_amp_path, el_height_path, pred_timeline
-    n_path_initial = length(fec.az_path)
-    path_min_h_start = path_min_height(fec, l_tether)
-    az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
-    el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
-    az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
-    el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
+function capture_startup_geometry!(st::RunState)
+    st.n_path_initial = length(fec.az_path)
+    st.path_min_h_start = path_min_height(fec, l_tether)
+    st.az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
+    st.el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
+    st.az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
+    st.el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
 
     # Which path was flown when, so the run is scored against the prediction of the path in the air.
-    pred_timeline = [(t = 0.0, power = opt_power_pred)]
-    opt_downloops == !fcs.up_loops ||
-        error("The optimizer returned a downloops = $opt_downloops path while this run \
+    st.pred_timeline = [(t = 0.0, power = st.opt_power_pred)]
+    st.opt_downloops == !fcs.up_loops ||
+        error("The optimizer returned a downloops = $(st.opt_downloops) path while this run \
                flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
                not fly it reversed.")
 end
-capture_startup_geometry!()
+capture_startup_geometry!(st)
 
 @info @sprintf("Optimized path: %d points, azimuth %.1f°…%.1f°, elevation \
                 %.1f°…%.1f° (centre %.1f°), predicted mean reel-out power %.0f W.",
                length(fec.az_path), minimum(fec.az_path), maximum(fec.az_path),
-               minimum(fec.el_path), maximum(fec.el_path), el_c_path, opt_power_pred)
+               minimum(fec.el_path), maximum(fec.el_path), st.el_c_path, st.opt_power_pred)
 
 # The three gates on the installed path; defines `el_floor`, `c1_at` and `phase5_margin` for the loop.
+# They read the run's state by name, so it is published first.
+publish_run_state!(@__MODULE__, st)
 include(joinpath(@__DIR__, "reelout_feasibility.jl"))
 
 # Every path the kite has flown, as installed (lobe lift included), with its phase-5 margin and the
 # elevation lift it carried: the candidates `final_margin_min` falls back to for phase 5.
 """
-    init_phase5_and_controller!()
+    init_phase5_and_controller!(st)
 
 The record of every path flown, for the phase-5 fallback (`final_margin_min`), and the course controller,
 whose dive aims at the pattern centre, which is the OPTIMIZED path's now.
 """
-function init_phase5_and_controller!()
-    global p5_history, p5_fallback_done, p5_q_az_prev, p5_fallback, ccs, cc
-    p5_history = [(t = 0.0, az = copy(fec.az_path), el = copy(fec.el_path), raw = opt_paths_raw[end],
+function init_phase5_and_controller!(st::RunState)
+    st.p5_history = [(t = 0.0, az = copy(fec.az_path), el = copy(fec.el_path), raw = st.opt_paths_raw[end],
                    margin = phase5_margin(fec.az_path, fec.el_path), el_applied = 0.0)]
-    p5_fallback_done = false    # checked once, from the stop latch on, at the next crossing
-    p5_q_az_prev = NaN          # [deg] Q's azimuth from the path centre, last step; arms the crossing gate
-    p5_fallback = nothing       # (; t, from_margin, to_margin, to_t) when a fallback was blended in
+    st.p5_fallback_done = false    # checked once, from the stop latch on, at the next crossing
+    st.p5_q_az_prev = NaN          # [deg] Q's azimuth from the path centre, last step; arms the crossing gate
+    st.p5_fallback = nothing       # (; t, from_margin, to_margin, to_t) when a fallback was blended in
 
     @info @sprintf("Elevation lift: el_offset_final = %+.2f°, el_offset_lead = %.1f s \
                     (%s), reelout_softstop = %.1f s.",
@@ -880,112 +1002,38 @@ function init_phase5_and_controller!()
                    fcs.reelout_softstop)
 
     # The dive aims at the pattern centre, which is the OPTIMIZED path's now.
-    ccs = CourseControllerSettings(fcs; dt = s.dt)
-    ccs.el_center = el_c_path
-    cc = CourseController(ccs)
+    st.ccs = CourseControllerSettings(fcs; dt = s.dt)
+    st.ccs.el_center = st.el_c_path
+    st.cc = CourseController(st.ccs)
 end
-init_phase5_and_controller!()
+init_phase5_and_controller!(st)
 
 
 """
-    init_loop_state!()
+    init_loop_state!(st)
 
-The loop's own state, as the script's globals: the soft-stop and reel-out latches, the feed-forward
-filters, the lap counter, the scored reference, the elevation-lift bookkeeping, the per-step logs of
-the pattern asked for, the re-optimization and blend bookkeeping and the optimizer's depower ramp.
-`reelout_results.jl` and the plots read them after the run, under these names.
+The loop's state that cannot be a `RunState` default because it depends on the run: the lap counter's
+starting index, the scored reference, the path resolution, the last commanded depower and the depower
+ramp's start. The rest starts at the defaults of `RunState`.
 """
-function init_loop_state!()
-    global transition_start, stop_start, stop_v_entry, stop_dp_entry, stop_T, ff_log, ff_chi_log, ff_u_filt, ff_chi_filt, dp_final_extra, dp_final_extra_peak, rel_depower_prev, reelout_started, reelout_start_t, reelout_trigger_fired, reelout_done, stop_reason, final_start, e_mech, fig8_n, fig8_idx_prev, fig8_idx_progress, n_path, raw_az, raw_el, chk_points, el_applied, lift_on, el_shift_events, lift_t, lift_remaining, el_shift_warned, el_shift_lap, el_shift_target, geom_t, geom_az_c, geom_az_amp, geom_el_h, geom_d_raw, n_droop_bins, droop_n, droop_flown, droop_ref, droop_sag, reopt_pending, reopt_n, reopt_lap, reopt_next_poll, reopt_t_request, reopt_blocked_s, reopt_last_solve_s, reopt_events, reopt_t_wall_request, reopt_cycles, blend_retries_total, el_min_extra, blend_from, blend_to, blend_t0, raw_from, raw_to, depower_flown, depower_blend_from, depower_blend_to, depower_blend_t0
-    transition_start = NaN            # [s] time phase 3 began; `reelout_delay` counts from it
-    stop_start = NaN            # [s] time the soft-stop deceleration latched; NaN = not yet
-    stop_v_entry = NaN          # [m/s] v_set at the moment it latched
-    stop_dp_entry = NaN         # [-] rel_depower at the moment it latched
-    stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
-    ff_log = Float64[]          # [-] feed-forward steering per step, for the analysis after the run
-    ff_chi_log = Float64[]      # [rad] chord correction per step
-    ff_u_filt = 0.0             # [-] low-passed feed-forward steering
-    ff_chi_filt = 0.0           # [rad] low-passed chord correction
-    dp_final_extra = 0.0        # [-] phase-5 force limiter's depower above depower_final
-    dp_final_extra_peak = 0.0   # [-] the most it asked for, for the summary
-    rel_depower_prev = fcs.depower_setpoint  # [-] depower commanded last step; the gain reads c1 there
-    reelout_started = false    # true once the gate below has opened; LATCHED, never re-closes
-    reelout_start_t = NaN       # [s] time it opened; the soft-start ramp counts from here
-    reelout_trigger_fired = false # true if the FORCE trigger opened it, not the timer
-    reelout_done = false        # true once either stop criterion has ended reel-out
-    stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
-    final_start = NaN           # [s] time phase 5 began; the run ends `fcs.final_time` after it
-    e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
-
+function init_loop_state!(st::RunState)
+    st.rel_depower_prev = fcs.depower_setpoint  # the gain reads c1 there
     # fig_8 live lap count: 0 before phase 4, 1 at first entry, +1 per traversal; the post-run `fig8` is another thing.
-    fig8_n = 0
-    fig8_idx_prev = fec.last_idx
-    fig8_idx_progress = 0.0
-    n_path = length(fec.az_path)
+    st.fig8_idx_prev = fec.last_idx
+    st.n_path = length(fec.az_path)
     # The reference TRACKING is scored against: the optimizer's curve, canonicalized and blended like the flown one, never lifted.
-    raw_az, raw_el = prepare_path(opt_paths_raw[1]...;
-                                  resample = min(tos.resample_points, length(opt_paths_raw[1][1]) - 1),
-                                  up_loops = fcs.up_loops)
-    length(raw_az) == n_path ||
-        error("scored reference has $(length(raw_az)) points, the flown path $n_path")
+    st.raw_az, st.raw_el = prepare_path(st.opt_paths_raw[1]...;
+                                        resample = min(tos.resample_points, length(st.opt_paths_raw[1][1]) - 1),
+                                        up_loops = fcs.up_loops)
+    length(st.raw_az) == st.n_path ||
+        error("scored reference has $(length(st.raw_az)) points, the flown path $(st.n_path)")
     # Resolution the path in the air is worth checking at (the reply's own, not `n_path`); updated per install.
-    chk_points = n_path
-
-    # Elevation lift: `el_offset_final` once it latches, delivered through an install or an in-air blend.
-    el_applied = 0.0            # [deg] lift the path in the air actually carries
-    lift_on = false             # `el_offset_final` latched in; never cleared once set
-    el_shift_events = NamedTuple[]  # in-air shift attempts, one entry per outcome CHANGE
-    lift_t = NaN                # [s] when it latched; NaN = never
-    lift_remaining = NaN        # [m] of reel-out left at that moment
-    el_shift_warned = false     # a held-back shift warns once; re-armed by the next delivery
-    # The lap and target of the last in-air shift attempt: one attempt per lap and per target.
-    el_shift_lap = 0
-    el_shift_target = NaN
-
-    # The pattern the kite is ASKED to fly, per step; the size criteria are scored lap by lap against it.
-    geom_t = Float64[]
-    geom_az_c = Float64[]
-    geom_az_amp = Float64[]
-    geom_el_h = Float64[]
-    # Cross-track error to the scored reference `raw_az`/`raw_el`, per step, on the same clock.
-    geom_d_raw = Float64[]
-
-    # Where in the pattern the kite ends up low, binned on |azimuth| as a fraction of the path's own amplitude.
-    n_droop_bins = 5
-    droop_n = zeros(Int, n_droop_bins)
-    droop_flown = zeros(n_droop_bins)   # [deg] kite below the path's elevation centre
-    droop_ref = zeros(n_droop_bins)     # [-] depth of the path at Q, in half-spans
-    droop_sag = zeros(n_droop_bins)     # [deg] kite below the path at Q
-
-    # ---- Re-optimization (stage 4): re-anchor the path to the flown length; `reopt_blocking` freezes the loop meanwhile.
-    reopt_pending = false       # a solve is queued on the server
-    reopt_n = 0                 # solves completed, accepted or rejected
-    reopt_lap = 0.0             # lap count at which the last request went out
-    reopt_next_poll = 0.0       # [s] next /status poll
-    reopt_t_request = NaN       # [s] when the pending request went out
-    reopt_blocked_s = 0.0       # [s] wall time spent frozen waiting for a reply
-    reopt_last_solve_s = NaN    # [s] wall time the last blocking wait took
-    reopt_events = NamedTuple[] # one row per solve, for the run summary
-    # Wall clock of the current cycle's FIRST request, and one row per cycle with the time to the verdict.
-    reopt_t_wall_request = NaN  # [s] time() when the cycle's first request went out
-    reopt_cycles = NamedTuple[] # (; t, l, status, wall_s) per completed cycle
-    blend_retries_total = 0     # cold-restart attempts spent on a rejected reply
-    # [deg] shortfall of the last reply gated out for clearance or elevation; carried across cycles.
-    el_min_extra = 0.0
-    # The blend in progress; both endpoints are fold-free across w in [0, 1] (the accept gate's fold check).
-    blend_from = nothing
-    blend_to = nothing
-    blend_t0 = NaN
-    # The scored reference's endpoints of the SAME blend, set only by a reopt install.
-    raw_from = nothing
-    raw_to = nothing
-    # Same mechanism, scalar, for the optimizer's rel_depower override.
-    depower_flown = depower_flown_opt    # current blended output
-    depower_blend_from = depower_flown
-    depower_blend_to = nothing
-    depower_blend_t0 = NaN
+    st.chk_points = st.n_path
+    # Same mechanism as the path blend, scalar, for the optimizer's rel_depower override.
+    st.depower_flown = st.depower_flown_opt    # current blended output
+    st.depower_blend_from = st.depower_flown
 end
-init_loop_state!()
+init_loop_state!(st)
 
 toc("Start simulation loop...")
 
@@ -998,18 +1046,19 @@ isempty(wc_overrides) ||
     WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
 
 """
-    run_loop!()
+    run_loop!(st)
 
 The simulation loop: steps the model `s` until its steps or the reel-out and phase 5 are over.
-It works on the script's globals (the run's settings, controllers and the loop's own state: every
-one it writes is declared `global` where it is assigned), which `reelout_results.jl` and the plots
-read afterwards. The `try` stays at the call, so the wall time survives an early `break` or a throw.
+Everything it writes lives in `st`; the run's settings and controllers (`fcs`, `tos`, `s`, `rc`, ...)
+are read from the script, unchanged during the loop. `publish_run_state!` hands `st` to
+`reelout_results.jl` and the plots afterwards. The `try` stays at the call, so the wall time survives
+an early `break` or a throw.
 """
-function run_loop!()
+function run_loop!(st::RunState)
     for _ in 1:s.steps
         t = s.sys_state.time
-        t - final_start >= fcs.final_time && break
-        isnan(final_start) && t >= EFFECTIVE_SIM_TIME && break
+        t - st.final_start >= fcs.final_time && break
+        isnan(st.final_start) && t >= EFFECTIVE_SIM_TIME && break
 
         # L0 attractor guidance -> commanded course [rad]; the lead is re-read every step.
         fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
@@ -1017,9 +1066,9 @@ function run_loop!()
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))
-        if !isnothing(xtrack_offset) && cc.phase >= xtrack_phase
-            isnan(xt_start) && (global xt_start = t)
-            local δ = xtrack_offset(t - xt_start)
+        if !isnothing(xtrack_offset) && st.cc.phase >= xtrack_phase
+            isnan(st.xt_start) && (st.xt_start = t)
+            local δ = xtrack_offset(t - st.xt_start)
             if δ != 0
                 local na, ne = path_normal(fec, attractor_index(fec))
                 az_attr += δ * na / cosd(el_attr)
@@ -1032,96 +1081,96 @@ function run_loop!()
             push!(xt_d, signed_cross_track(fec, rad2deg(Float64(s.sys_state.azimuth)),
                                            rad2deg(Float64(s.sys_state.elevation))))
             push!(xt_q, fec.last_idx)
-            push!(xt_phase, cc.phase); push!(xt_L, Float64(s.sys_state.l_tether[1]))
-            push!(xt_va, Float64(s.sys_state.v_app)); push!(xt_dp, rel_depower_prev)
+            push!(xt_phase, st.cc.phase); push!(xt_L, Float64(s.sys_state.l_tether[1]))
+            push!(xt_va, Float64(s.sys_state.v_app)); push!(xt_dp, st.rel_depower_prev)
             push!(xt_vk, sqrt(max(norm(s.sys_state.vel_kite)^2 - Float64(s.sys_state.v_reelout[1])^2, 0.0)))
         end
 
         # Entry state machine, descent limiter, feedback fusion, PID and rel_depower: see CourseController.
         heading = Float64(s.sys_state.heading)
         local v_kite = norm(s.sys_state.vel_kite)
-        phase_before = cc.phase
+        phase_before = st.cc.phase
         # Loop gain is heading_p * c1, so every phase flies heading_p * c1(setpoint)/c1(u_d), u_d rounded for the memo.
-        local gain_scale = loop_gain_scale(c1_setpoint, rel_depower_prev, c1_depower_max, c1_ctrl_at)
+        local gain_scale = loop_gain_scale(c1_setpoint, st.rel_depower_prev, c1_depower_max, c1_ctrl_at)
         # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.
         local u_ff, chi_ff, ff_u_next, ff_chi_next =
-            feedforward_step(fcs, dt0, fec, cc.phase, cc.err, Float64(s.sys_state.v_app),
+            feedforward_step(fcs, dt0, fec, st.cc.phase, st.cc.err, Float64(s.sys_state.v_app),
                              Float64(s.sys_state.l_tether[1]), v_kite, dmin, c1_setpoint,
-                             gain_scale, ff_u_filt, ff_chi_filt)
-        global ff_u_filt = ff_u_next
-        global ff_chi_filt = ff_chi_next
-        push!(ff_log, u_ff)
-        push!(ff_chi_log, chi_ff)
-        local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
+                             gain_scale, st.ff_u_filt, st.ff_chi_filt)
+        st.ff_u_filt = ff_u_next
+        st.ff_chi_filt = ff_chi_next
+        push!(st.ff_log, u_ff)
+        push!(st.ff_chi_log, chi_ff)
+        local rel_steering, rel_depower, phase = calc_steering(st.cc, chi_set, heading,
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
             dmin, tangent = path_tangent(fec), gain_scale, u_ff, chi_ff)
-        phase_before == 2 && phase == 3 && (global transition_start = t)
+        phase_before == 2 && phase == 3 && (st.transition_start = t)
         # The optimizer's depower from phase 3 on, ramped over path_blend_time; phase 5 below still wins.
         if tos.fly_opt_depower && phase in (3, 4)
             # The entry ladder's depower is the FROM endpoint the first time, so the 2->3 hand-over ramps too.
-            if phase_before < 3 && isnothing(depower_blend_to)
-                global depower_blend_from = rel_depower
-                global depower_blend_to = depower_flown_opt
-                global depower_blend_t0 = t
+            if phase_before < 3 && isnothing(st.depower_blend_to)
+                st.depower_blend_from = rel_depower
+                st.depower_blend_to = st.depower_flown_opt
+                st.depower_blend_t0 = t
             end
-            local w_dp, dp_flown = blended_depower(depower_blend_from, depower_blend_to,
-                                                   depower_blend_t0, t, tos.path_blend_time,
-                                                   depower_flown_opt)
-            global depower_flown = dp_flown
-            w_dp >= 1.0 && (global depower_blend_to = nothing)
-            rel_depower = depower_flown
+            local w_dp, dp_flown = blended_depower(st.depower_blend_from, st.depower_blend_to,
+                                                   st.depower_blend_t0, t, tos.path_blend_time,
+                                                   st.depower_flown_opt)
+            st.depower_flown = dp_flown
+            w_dp >= 1.0 && (st.depower_blend_to = nothing)
+            rel_depower = st.depower_flown
         end
         # Separate from calc_steering's ladder so it can fire the SAME step as a 3->4 transition.
-        if phase in (3, 4) && reelout_done
-            set_phase!(cc, 5)
+        if phase in (3, 4) && st.reelout_done
+            set_phase!(st.cc, 5)
             phase = 5
-            isnan(final_start) && (global final_start = t)
+            isnan(st.final_start) && (st.final_start = t)
         end
         # Ramps depower toward depower_final with the soft-stop, never BELOW the depower the stop latched at.
-        if !isnan(stop_start)
-            rel_depower = stop_depower(fcs, stop_dp_entry, stop_start, stop_T, t)
+        if !isnan(st.stop_start)
+            rel_depower = stop_depower(fcs, st.stop_dp_entry, st.stop_start, st.stop_T, t)
         elseif phase == 5
             rel_depower = fcs.depower_final
         end
         # Force limiter from the STOP LATCH on: integrates on the force the stopped drum is about to see.
-        if fcs.depower_final_max > fcs.depower_final && (phase == 5 || !isnan(stop_start))
-            ramping = !isnan(stop_start) && t - stop_start < stop_T
-            global dp_final_extra = final_force_extra(fcs, dp_final_extra, winch_force(s),
+        if fcs.depower_final_max > fcs.depower_final && (phase == 5 || !isnan(st.stop_start))
+            ramping = !isnan(st.stop_start) && t - st.stop_start < st.stop_T
+            st.dp_final_extra = final_force_extra(fcs, st.dp_final_extra, winch_force(s),
                                                       Float64(s.sys_state.v_app),
                                                       Float64(s.sys_state.v_reelout[1]),
                                                       ramping, s.dt)
-            rel_depower = min(rel_depower + dp_final_extra, fcs.depower_final_max)
-            dp_final_extra > dp_final_extra_peak && (global dp_final_extra_peak = dp_final_extra)
+            rel_depower = min(rel_depower + st.dp_final_extra, fcs.depower_final_max)
+            st.dp_final_extra > st.dp_final_extra_peak && (st.dp_final_extra_peak = st.dp_final_extra)
         end
-        chi_cmd = cc.chi_cmd
-        w_lim = cc.w_lim
-        w_course = cc.w_course
-        err = cc.err
+        chi_cmd = st.cc.chi_cmd
+        w_lim = st.cc.w_lim
+        w_course = st.cc.w_course
+        err = st.cc.err
 
         # Elevation shift target: `el_offset_final`, latched at the stop latch (or phase 5).
-        if !lift_on && phase >= 4
-            if lift_should_start(fcs, stop_start, phase, Float64(s.sys_state.v_reelout[1]), l_set)
-                global lift_on = true
-                global lift_t = t
-                global lift_remaining = fcs.reelout_l_max - l_set
+        if !st.lift_on && phase >= 4
+            if lift_should_start(fcs, st.stop_start, phase, Float64(s.sys_state.v_reelout[1]), st.l_set)
+                st.lift_on = true
+                st.lift_t = t
+                st.lift_remaining = fcs.reelout_l_max - st.l_set
                 @info @sprintf("Elevation lift of %+.2f° starting at t = %.1f s \
                                 (%.1f m of reel-out left, phase %d).",
-                               fcs.el_offset_final, t, fcs.reelout_l_max - l_set, phase)
+                               fcs.el_offset_final, t, fcs.reelout_l_max - st.l_set, phase)
             end
         end
-        el_target = lift_on ? fcs.el_offset_final : 0.0
+        el_target = st.lift_on ? fcs.el_offset_final : 0.0
 
         # fig_8: 1 the instant phase first reaches >= 4, then +1 per traversal, unwrapped across the `mod1` wrap.
         if phase >= 4
-            if fig8_n == 0
-                global fig8_n = 1
-                global fig8_idx_prev = fec.last_idx
-                global t_phase4 = t   # V1 hook: this run's phase-4 start
+            if st.fig8_n == 0
+                st.fig8_n = 1
+                st.fig8_idx_prev = fec.last_idx
+                st.t_phase4 = t   # V1 hook: this run's phase-4 start
                 if fcs.first_lap_force_frac < 1
                     rcs.f_high = F_HIGH_NOMINAL * fcs.first_lap_force_frac
-                    global first_lap_f_high_applied = true
+                    st.first_lap_f_high_applied = true
                     @info @sprintf("Lap 1: upper force limit held at %.0f N \
                                     (%.0f %% of %.0f N) for this lap.",
                                    rcs.f_high, 100 * fcs.first_lap_force_frac,
@@ -1129,16 +1178,16 @@ function run_loop!()
                 end
             else
                 # A step moves Q by a fraction of a point; a jump is Q changing branch.
-                global fig8_idx_progress += lap_index_step(fec.last_idx, fig8_idx_prev, n_path)
-                global fig8_idx_prev = fec.last_idx
+                st.fig8_idx_progress += lap_index_step(fec.last_idx, st.fig8_idx_prev, st.n_path)
+                st.fig8_idx_prev = fec.last_idx
                 # Never counted DOWN: Q can slip a fraction of a point backwards at an install.
-                global fig8_n = max(fig8_n, 1 + floor(Int, fig8_idx_progress / n_path))
+                st.fig8_n = max(st.fig8_n, 1 + floor(Int, st.fig8_idx_progress / st.n_path))
                 # Lap 1 only: the upper force limit is held down; `F_HIGH_NOMINAL` goes back on lap 2.
-                if fcs.first_lap_force_frac < 1 && fig8_n > 1 && first_lap_f_high_applied
+                if fcs.first_lap_force_frac < 1 && st.fig8_n > 1 && st.first_lap_f_high_applied
                     rcs.f_high = F_HIGH_NOMINAL
-                    global first_lap_f_high_applied = false
+                    st.first_lap_f_high_applied = false
                     @info @sprintf("Lap %d: upper force limit back to %.0f N.",
-                                   fig8_n, F_HIGH_NOMINAL)
+                                   st.fig8_n, F_HIGH_NOMINAL)
                 end
             end
 
@@ -1148,11 +1197,11 @@ function run_loop!()
             el_kite = rad2deg(Float64(s.sys_state.elevation))
             if az_amp > 0 && el_half > 0
                 el_c = 0.5 * (el_hi + el_lo)
-                b = azimuth_bin(fec.az_path[fec.last_idx], az_lo, az_hi, n_droop_bins)
-                droop_n[b] += 1
-                droop_flown[b] += el_c - el_kite
-                droop_ref[b] += (el_c - fec.el_path[fec.last_idx]) / el_half
-                droop_sag[b] += el_kite - fec.el_path[fec.last_idx]
+                b = azimuth_bin(fec.az_path[fec.last_idx], az_lo, az_hi, st.n_droop_bins)
+                st.droop_n[b] += 1
+                st.droop_flown[b] += el_c - el_kite
+                st.droop_ref[b] += (el_c - fec.el_path[fec.last_idx]) / el_half
+                st.droop_sag[b] += el_kite - fec.el_path[fec.last_idx]
             end
         end
 
@@ -1161,11 +1210,11 @@ function run_loop!()
             l_now = Float64(s.sys_state.l_tether[1])
 
             # Queue on a lap boundary, never while a solve or a blend is running, never past max_reopt.
-            if !reopt_pending && isnothing(blend_to) && reopt_n < tos.max_reopt &&
-               fig8_idx_progress >= (reopt_lap + tos.reopt_every_n_laps) * n_path
+            if !st.reopt_pending && isnothing(st.blend_to) && st.reopt_n < tos.max_reopt &&
+               st.fig8_idx_progress >= (st.reopt_lap + tos.reopt_every_n_laps) * st.n_path
                 try
                     # Clocked from here, so a request that fails while being BUILT still has a start.
-                    global reopt_t_wall_request = time()
+                    st.reopt_t_wall_request = time()
                     # Seeds: `nothing` is a warm `/step`, a number a cold `/init` from the guess (see `use_step`).
                     el_seeds = if tos.use_step
                         tos.reopt_blocking ? (nothing, el_center_seed) :
@@ -1177,23 +1226,23 @@ function run_loop!()
                         (el_center_seed,)
                     end
                     # Asked for under the turn authority the reply will be JUDGED with (depower_final's c1 from phase 5).
-                    opt_r_on && (global opt_r_min =
-                        min_turn_radius_request(fcs, tos; scale = opt_r_scale,
-                                                c1 = c1_at(phase)))
+                    opt_r_on && (st.opt_r_min =
+                        min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
+                                                c1 = c1_at(phase, st)))
                     # The floor moves with the length: box rebuilt per request, `size_box_growth` x the previous install.
-                    global opt_box_now = with_size_box(
+                    st.opt_box_now = with_size_box(
                         pattern_limits_from(tos;
                             elevation_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
-                                                                  extra = el_min_extra),
+                                                                  extra = st.el_min_extra),
                             wind_speed = cap_wind),
-                        opt_paths_raw[end]..., tos.size_box_growth)
+                        st.opt_paths_raw[end]..., tos.size_box_growth)
                     for (attempt, el_seed) in enumerate(el_seeds)
                         if isnothing(el_seed)
                             # `min_turn_radius` is re-sent because it MOVES with the length; `nothing` means "keep".
                             chain_step(opt_chain,
                                        StepParams(; length = opt_length(tos, l_now), winch_params = winch_reopt,
-                                                  min_turn_radius = opt_r_min,
-                                                  pattern_limits = opt_box_now);
+                                                  min_turn_radius = st.opt_r_min,
+                                                  pattern_limits = st.opt_box_now);
                                        wait = false)
                         else
                             guess_az_r, guess_el_r =
@@ -1208,8 +1257,8 @@ function run_loop!()
                                                       input_depower = depower_seed(tos, inflow.wind_speed),
                                                       reg_weight = tos.reg_weight,
                                                       detect_simple_bounds = tos.detect_simple_bounds,
-                                                      min_turn_radius = opt_r_min,
-                                                      pattern_limits = opt_box_now)
+                                                      min_turn_radius = st.opt_r_min,
+                                                      pattern_limits = st.opt_box_now)
                             # A known failure is served by `opt_chain`, not skipped here: skipping would leave
                             # the chain on the warm lineage, and every later step would miss the cache.
                             reopt_reply = chain_init(opt_chain, reopt_params)
@@ -1217,25 +1266,25 @@ function run_loop!()
                                        StepParams(opt_length(tos, l_now), winch_reopt, reopt_reply.trajectory);
                                        wait = false)
                         end
-                        global reopt_pending = true
-                        global reopt_t_request = t
-                        global reopt_lap = fig8_idx_progress / n_path
-                        global reopt_next_poll = t + tos.reopt_poll_interval
+                        st.reopt_pending = true
+                        st.reopt_t_request = t
+                        st.reopt_lap = st.fig8_idx_progress / st.n_path
+                        st.reopt_next_poll = t + tos.reopt_poll_interval
                         @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
                                         (lap %.1f, request %d of %d, %s)%s%s.",
-                                       l_now, t, reopt_lap, reopt_n + 1, tos.max_reopt,
+                                       l_now, t, st.reopt_lap, st.reopt_n + 1, tos.max_reopt,
                                        isnothing(el_seed) ? "warm start" :
                                            @sprintf("guess el %.0f°", el_seed),
-                                       isnothing(opt_box_now) ? "" :
+                                       isnothing(st.opt_box_now) ? "" :
                                            @sprintf(", box |az| <= %s, el %s..%s, half-span <= %s",
-                                                    isnothing(opt_box_now.azimuth_max) ? "-" :
-                                                        @sprintf("%.1f°", opt_box_now.azimuth_max),
-                                                    isnothing(opt_box_now.elevation_min) ? "-" :
-                                                        @sprintf("%.1f°", opt_box_now.elevation_min),
-                                                    isnothing(opt_box_now.elevation_max) ? "-" :
-                                                        @sprintf("%.1f°", opt_box_now.elevation_max),
-                                                    isnothing(opt_box_now.elevation_amplitude_max) ? "-" :
-                                                        @sprintf("%.1f°", opt_box_now.elevation_amplitude_max)),
+                                                    isnothing(st.opt_box_now.azimuth_max) ? "-" :
+                                                        @sprintf("%.1f°", st.opt_box_now.azimuth_max),
+                                                    isnothing(st.opt_box_now.elevation_min) ? "-" :
+                                                        @sprintf("%.1f°", st.opt_box_now.elevation_min),
+                                                    isnothing(st.opt_box_now.elevation_max) ? "-" :
+                                                        @sprintf("%.1f°", st.opt_box_now.elevation_max),
+                                                    isnothing(st.opt_box_now.elevation_amplitude_max) ? "-" :
+                                                        @sprintf("%.1f°", st.opt_box_now.elevation_amplitude_max)),
                                        tos.reopt_blocking ? " — holding the simulation" : "")
                         # Freeze here, so the reply is anchored to `l_now` and not to a length the run drifted to.
                         tos.reopt_blocking || break
@@ -1249,10 +1298,10 @@ function run_loop!()
                                end) == "solving"
                             sleep(tos.reopt_poll_interval)
                         end
-                        global reopt_last_solve_s = time() - t_block
-                        global reopt_blocked_s += reopt_last_solve_s
+                        st.reopt_last_solve_s = time() - t_block
+                        st.reopt_blocked_s += st.reopt_last_solve_s
                         # Collect on THIS step: the reply is already on the server.
-                        global reopt_next_poll = t
+                        st.reopt_next_poll = t
                         # Retry only a solver failure, and only while a seed is left.
                         failed = (try
                                       chain_status(opt_chain)["state"]
@@ -1265,19 +1314,19 @@ function run_loop!()
                     end
                 catch exc
                     # A refused request must not take the run with it: the path in the air is still flyable.
-                    global reopt_n += 1
-                    push!(reopt_events, (; t, l = l_now, status = "request failed",
+                    st.reopt_n += 1
+                    push!(st.reopt_events, (; t, l = l_now, status = "request failed",
                                          detail = first(sprint(showerror, exc), 120)))
-                    push!(reopt_cycles, (; t, l = l_now, status = "request failed",
-                                         wall_s = time() - reopt_t_wall_request))
+                    push!(st.reopt_cycles, (; t, l = l_now, status = "request failed",
+                                         wall_s = time() - st.reopt_t_wall_request))
                     @warn "Re-optimization request failed; flying on with the \
                            current path." exception = exc
                 end
             end
 
             # Collect: poll rather than block, and validate before installing.
-            if reopt_pending && t >= reopt_next_poll
-                global reopt_next_poll = t + tos.reopt_poll_interval
+            if st.reopt_pending && t >= st.reopt_next_poll
+                st.reopt_next_poll = t + tos.reopt_poll_interval
                 local state = try
                     chain_status(opt_chain)["state"]
                 catch exc
@@ -1285,8 +1334,8 @@ function run_loop!()
                     "solving"
                 end
                 if state != "solving"
-                    global reopt_pending = false
-                    global reopt_n += 1
+                    st.reopt_pending = false
+                    st.reopt_n += 1
                     event = (; t, l = l_now, status = state, detail = "")
                     if state == "converged"
                         tab = chain_trajectory(opt_chain)
@@ -1296,17 +1345,17 @@ function run_loop!()
                     # A clearance/elevation rejection retries the FLOOR, not the guess; `el_min_extra` carries the shortfall.
                     reject_low = false
                     # Frozen for the retry chain; the first entry is the startup solve, which `min_power_frac_prev` skips.
-                    prev_install_pred = length(pred_timeline) > 1 ?
-                        pred_timeline[end].power : NaN
+                    prev_install_pred = length(st.pred_timeline) > 1 ?
+                        st.pred_timeline[end].power : NaN
                     for blend_attempt in 0:tos.blend_max_retries
                         if blend_attempt > 0
-                            global blend_retries_total += 1
+                            st.blend_retries_total += 1
                             # Alternating +/- `reopt_retry_el_offset`, never scaled UP by `blend_attempt`.
                             retry_el_seed = el_center_seed +
                                 (reject_low || isodd(blend_attempt) ? 1 : -1) *
                                 tos.reopt_retry_el_offset
                             retry_el_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
-                                                                 extra = el_min_extra)
+                                                                 extra = st.el_min_extra)
                             @info @sprintf("  ... candidate at L = %.0f m rejected \
                                             (%s); cold-restarting from guess el \
                                             %.0f°%s (retry %d of %d), holding the \
@@ -1314,10 +1363,10 @@ function run_loop!()
                                            l_now, reject_reason, retry_el_seed,
                                            isnothing(retry_el_min) ? "" :
                                                @sprintf(", floor %.1f°%s", retry_el_min,
-                                                        el_min_extra > 0 ?
+                                                        st.el_min_extra > 0 ?
                                                             @sprintf(" (+%.1f° for the \
                                                                       shortfall)",
-                                                                     el_min_extra) : ""),
+                                                                     st.el_min_extra) : ""),
                                            blend_attempt, tos.blend_max_retries)
                             retry_az, retry_el = figure_eight_path(tos.guess_a,
                                 tos.guess_b, 0.0,
@@ -1329,12 +1378,12 @@ function run_loop!()
                                 input_depower = depower_seed(tos, inflow.wind_speed),
                                 reg_weight = tos.reg_weight,
                                 detect_simple_bounds = tos.detect_simple_bounds,
-                                min_turn_radius = opt_r_min,
+                                min_turn_radius = st.opt_r_min,
                                 pattern_limits = with_size_box(
                                     pattern_limits_from(tos;
                                         elevation_min = retry_el_min,
                                         wind_speed = cap_wind),
-                                    opt_paths_raw[end]..., tos.size_box_growth))
+                                    st.opt_paths_raw[end]..., tos.size_box_growth))
                             retry_reply = chain_init(opt_chain, retry_params)
                             chain_step(opt_chain,
                                        StepParams(opt_length(tos, l_now), winch_reopt, retry_reply.trajectory);
@@ -1351,7 +1400,7 @@ function run_loop!()
                                     "solving"
                                 end
                             end
-                            global reopt_blocked_s += time() - t_retry
+                            st.reopt_blocked_s += time() - t_retry
                             if retry_state != "converged"
                                 @warn @sprintf("Blend-fold retry %d of %d for L = \
                                                 %.0f m did not converge (%s); giving \
@@ -1368,7 +1417,7 @@ function run_loop!()
                             # k_v and input_depower are applied only in the accept gate below, see above.
                         end
                         # Re-measure the anchor SCALE off the reply; the radius itself is derived where the request goes out.
-                        opt_r_on && (global opt_r_scale = reelout_anchor_ratio(tab) *
+                        opt_r_on && (st.opt_r_scale = reelout_anchor_ratio(tab) *
                                                           tos.turn_radius_headroom)
                         # What the optimizer measured, in the request's metres; the gate reads the same curve AT THE ANCHOR.
                         opt_r_reply = opt_float(tab["metrics"], "turn_radius_min_m")
@@ -1408,12 +1457,12 @@ function run_loop!()
                         # TWO resolutions: the CHECKS at the reply's own, what is FLOWN at `n_path` so the lap counter holds.
                         chk_az, chk_el = prepare_path(new_az, new_el;
                             resample = n_native, up_loops = fcs.up_loops)
-                        global chk_points = n_native
+                        st.chk_points = n_native
                         cand_az, cand_el = prepare_path(new_az, new_el;
-                            resample = n_path, up_loops = fcs.up_loops)
+                            resample = st.n_path, up_loops = fcs.up_loops)
                         # Canonicalized like `cand_az`/`cand_el`, so `blend_folds` and `blend_paths` pair the same points.
                         cand_from = prepare_path(fec.az_path, fec.el_path;
-                            resample = n_path, up_loops = fcs.up_loops)
+                            resample = st.n_path, up_loops = fcs.up_loops)
                         # At the CURRENT length, which is what it will be flown at.
                         margin = isnan(feas.c1) ? Inf :
                             check_pattern_feasible(chk_az, chk_el, l_now,
@@ -1423,18 +1472,18 @@ function run_loop!()
                         new_pred = Float64(tab["metrics"]["avg_power_W"])
                         cand_folds = blend_folds(tos, cand_from..., cand_az, cand_el)
                         # Raw against raw: the reply's curve against the previous install's, before either carries a lift.
-                        cand_size = pattern_size_growth(opt_paths_raw[end]..., cand_raw...)
+                        cand_size = pattern_size_growth(st.opt_paths_raw[end]..., cand_raw...)
                         # The accept gate: turn margin, clearance, elevation floor, blend fold and power, size growth.
                         gate = gate_candidate(tos, (; margin, clearance, l_now,
                                                     chk_el_min = minimum(chk_el), el_floor,
-                                                    folds = cand_folds, new_pred, opt_power_pred,
+                                                    folds = cand_folds, new_pred, st.opt_power_pred,
                                                     prev_install_pred,
                                                     power_gate_off = power_gate_off(new_pred),
                                                     size = cand_size, blend_attempt, opt_r_reply,
-                                                    r_span, opt_r_min))
+                                                    r_span, st.opt_r_min))
                         if gate.verdict == :retry
                             # A height shortfall is re-asked at a raised floor; any other retry gets a fresh reply.
-                            isnothing(gate.raise) || (global el_min_extra += gate.raise)
+                            isnothing(gate.raise) || (st.el_min_extra += gate.raise)
                             reject_reason = gate.reason
                             reject_low = gate.low
                             continue   # at the top
@@ -1448,51 +1497,51 @@ function run_loop!()
                                                 power_gate_wind_min %.1f): installing anyway.",
                                                l_now, new_pred, project_set.v_wind,
                                                tos.power_gate_wind_min)
-                            global blend_from = cand_from
-                            global blend_to = (cand_az, cand_el)
+                            st.blend_from = cand_from
+                            st.blend_to = (cand_az, cand_el)
                             # The scored reference follows the same ramp, unlifted curve to unlifted curve.
-                            global raw_from = prepare_path(raw_az, raw_el;
-                                resample = n_path, up_loops = fcs.up_loops)
-                            global raw_to = prepare_path(cand_raw[1], cand_raw[2];
-                                resample = n_path, up_loops = fcs.up_loops)
-                            global raw_az, raw_el = raw_from
+                            st.raw_from = prepare_path(st.raw_az, st.raw_el;
+                                resample = st.n_path, up_loops = fcs.up_loops)
+                            st.raw_to = prepare_path(cand_raw[1], cand_raw[2];
+                                resample = st.n_path, up_loops = fcs.up_loops)
+                            st.raw_az, st.raw_el = st.raw_from
                             # Here, not before the gates: a REJECTED reply is not a path the kite ever flies.
-                            push!(opt_paths_raw, cand_raw)
-                            push!(opt_paths_at, (t, phase))
-                            global blend_t0 = t
+                            push!(st.opt_paths_raw, cand_raw)
+                            push!(st.opt_paths_at, (t, phase))
+                            st.blend_t0 = t
                             # k_v and input_depower move only for the `tab` that made it here.
                             let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
-                                global depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
-                                global depower_blend_from = depower_flown
-                                global depower_blend_to = depower_flown_opt
-                                global depower_blend_t0 = t
-                                push!(opt_depower_log, (; t, l_dp, u_p_equiv = depower_flown_opt))
+                                st.depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
+                                st.depower_blend_from = st.depower_flown
+                                st.depower_blend_to = st.depower_flown_opt
+                                st.depower_blend_t0 = t
+                                push!(opt_depower_log, (; t, l_dp, u_p_equiv = st.depower_flown_opt))
                             end
                             apply_optimized_kv!(tab, t, l_now)
                             record_opt_success!(opt_chain)
-                            abs(el_target - el_applied) > 1e-6 &&
-                                push!(el_shift_events,
-                                      (; t, delta = el_target - el_applied, margin,
+                            abs(el_target - st.el_applied) > 1e-6 &&
+                                push!(st.el_shift_events,
+                                      (; t, delta = el_target - st.el_applied, margin,
                                        status = "carried by an install"))
-                            global el_applied = el_target
+                            st.el_applied = el_target
                             # Arm the in-air warning again: one warning per SHIFT, not per run.
-                            global el_shift_warned = false
+                            st.el_shift_warned = false
                             # Install the aligned OLD path (w = 0, new point indices) and re-base the lap counter on it.
-                            set_path!(fec, blend_from[1], blend_from[2];
+                            set_path!(fec, st.blend_from[1], st.blend_from[2];
                                       up_loops = fcs.up_loops)
-                            global fig8_idx_prev = fec.last_idx
+                            st.fig8_idx_prev = fec.last_idx
                             # A no-op while paths are resampled to `n_path`; `fig8_idx_progress` counts POINTS.
                             n_path_new = length(fec.az_path)
-                            global fig8_idx_progress *= n_path_new / n_path
-                            global n_path = n_path_new
-                            push!(pred_timeline, (t = t, power = new_pred))
-                            global margin5.margin = phase5_margin(chk_az, chk_el)
-                            push!(p5_history, (t, az = copy(cand_az), el = copy(cand_el), raw = cand_raw,
-                                               margin = margin5.margin, el_applied))
+                            st.fig8_idx_progress *= n_path_new / st.n_path
+                            st.n_path = n_path_new
+                            push!(st.pred_timeline, (t = t, power = new_pred))
+                            margin5.margin = phase5_margin(chk_az, chk_el)
+                            push!(st.p5_history, (t, az = copy(cand_az), el = copy(cand_el), raw = cand_raw,
+                                               margin = margin5.margin, st.el_applied))
                             # Not a rejection reason: said once, so a phase 5 flown on the clamp is not a surprise.
                             if !isnan(margin5.margin) &&
                                margin5.margin < tos.min_feasibility_margin && !margin5.warned
-                                global margin5.warned = true
+                                margin5.warned = true
                                 @warn @sprintf("The path installed at %.0f m has a \
                                                 curvature margin of %.2f at \
                                                 depower_final (%.2f here at \
@@ -1518,18 +1567,18 @@ function run_loop!()
                         end
                     end
                         end
-                    push!(reopt_events, event)
+                    push!(st.reopt_events, event)
                     # Non-blocking: an upper bound on the solve, by at most one `reopt_poll_interval`.
-                    push!(reopt_cycles, (; t, l = l_now, status = event.status,
-                                         wall_s = time() - reopt_t_wall_request))
+                    push!(st.reopt_cycles, (; t, l = l_now, status = event.status,
+                                         wall_s = time() - st.reopt_t_wall_request))
                     # Blocking collects on the SAME step as the request, so the wall time is the figure that counts.
                     @info @sprintf("Re-optimization %d: %s%s (%s).",
-                                   reopt_n, event.status,
+                                   st.reopt_n, event.status,
                                    isempty(event.detail) ? "" : " — " * event.detail,
                                    tos.reopt_blocking ?
-                                       @sprintf("%.1f s of wall time, held", reopt_last_solve_s) :
+                                       @sprintf("%.1f s of wall time, held", st.reopt_last_solve_s) :
                                        @sprintf("%.1f s of sim after the request",
-                                                t - reopt_t_request))
+                                                t - st.reopt_t_request))
                 end
             end
         end
@@ -1537,39 +1586,39 @@ function run_loop!()
         # Blend: `blend_to` is guaranteed fold-free across all of w by the accept gate, so a plain linear ramp.
         # OUTSIDE the re-optimization block: the in-air lift queues blends too, with re-optimization off and
         # into phase 5; inside it they were reported as delivered but never ran (2026-09-26).
-        if phase >= 4 && !isnothing(blend_to)
-            w = clamp((t - blend_t0) / tos.path_blend_time, 0.0, 1.0)
-            b_az, b_el = blend_paths(blend_from[1], blend_from[2],
-                                     blend_to[1], blend_to[2], w)
+        if phase >= 4 && !isnothing(st.blend_to)
+            w = clamp((t - st.blend_t0) / tos.path_blend_time, 0.0, 1.0)
+            b_az, b_el = blend_paths(st.blend_from[1], st.blend_from[2],
+                                     st.blend_to[1], st.blend_to[2], w)
             set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
-            if !isnothing(raw_to)
-                global raw_az, raw_el = blend_paths(raw_from[1], raw_from[2],
-                                                    raw_to[1], raw_to[2], w)
+            if !isnothing(st.raw_to)
+                st.raw_az, st.raw_el = blend_paths(st.raw_from[1], st.raw_from[2],
+                                                    st.raw_to[1], st.raw_to[2], w)
             end
             if w >= 1
-                global blend_from = nothing
-                global blend_to = nothing
-                global raw_from = nothing
-                global raw_to = nothing
+                st.blend_from = nothing
+                st.blend_to = nothing
+                st.raw_from = nothing
+                st.raw_to = nothing
             end
         end
 
         # ---- Deliver the elevation shift in the air, AFTER the re-optimizer, which has first claim on `blend_to` ---- #
         if phase >= 4
             # The shift reaches the kite at an install or, when none is due, as a blend onto the path in the air.
-            el_delta = el_target - el_applied
-            if abs(el_delta) > 1e-6 && isnothing(blend_to) && !reopt_pending &&
-               !(fig8_n == el_shift_lap && el_target == el_shift_target)
-                global el_shift_lap = fig8_n
-                global el_shift_target = el_target
+            el_delta = el_target - st.el_applied
+            if abs(el_delta) > 1e-6 && isnothing(st.blend_to) && !st.reopt_pending &&
+               !(st.fig8_n == st.el_shift_lap && el_target == st.el_shift_target)
+                st.el_shift_lap = st.fig8_n
+                st.el_shift_target = el_target
                 # Scored at `chk_points`, the resolution the path in the air came at; only the CHECK is downsampled.
-                chk_n = min(chk_points, length(fec.az_path) - 1)
+                chk_n = min(st.chk_points, length(fec.az_path) - 1)
                 function shift_margin(e)
                     isnan(feas.c1) && return Inf
                     a, b = prepare_path(fec.az_path, e; resample = chk_n,
                                         up_loops = fcs.up_loops)
                     check_pattern_feasible(a, b, Float64(s.sys_state.l_tether[1]),
-                        fcs.max_steering; c1 = c1_at(phase), prn = false).margin
+                        fcs.max_steering; c1 = c1_at(phase, st), prn = false).margin
                 end
                 # Rationed down to a quarter of the shift, never below.
                 # A rung that clears the margin can still fold `blend_paths` in between, so that is checked too.
@@ -1591,25 +1640,25 @@ function run_loop!()
                 end
                 if !isnothing(hit)
                     fm, shifted, hit_margin = hit
-                    global blend_from = (copy(fec.az_path), copy(fec.el_path))
-                    global blend_to = (copy(fec.az_path), shifted)
-                    global blend_t0 = t
+                    st.blend_from = (copy(fec.az_path), copy(fec.el_path))
+                    st.blend_to = (copy(fec.az_path), shifted)
+                    st.blend_t0 = t
                     went_in = fm * el_delta
-                    push!(el_shift_events, (; t, delta = went_in,
+                    push!(st.el_shift_events, (; t, delta = went_in,
                                             margin = hit_margin,
                                             status = fm < 1 ?
                                                 @sprintf("blended in (%.0f %%)", 100 * fm) :
                                                 "blended in"))
-                    global el_applied = el_applied + went_in
-                    global el_shift_warned = false
+                    st.el_applied = st.el_applied + went_in
+                    st.el_shift_warned = false
                     fm < 1 &&
                         @info @sprintf("Elevation shift rationed to fit the curvature \
                                         gate: %.0f %% of %+.2f°; the rest is retried \
                                         next lap.", 100 * fm, el_delta)
-                elseif !el_shift_warned
-                    push!(el_shift_events, (; t, delta = el_delta,
+                elseif !st.el_shift_warned
+                    push!(st.el_shift_events, (; t, delta = el_delta,
                                             margin, status = "held back"))
-                    global el_shift_warned = true
+                    st.el_shift_warned = true
                     @warn @sprintf("Elevation shift of %+.2f° held back: the curvature \
                                     margin would be %.2f even rationed to a quarter. \
                                     Retrying as the tether grows.", el_delta, margin)
@@ -1624,47 +1673,47 @@ function run_loop!()
         # startup path is far taller at full length (attractor up to ~36° vs ~18°), and blended in
         # mid-lobe the kite fell 14° behind it and spun an extra loop (Maasvlakte 8.25 m/s, 2026-09-26).
         local p5_crossing = false
-        if fcs.final_margin_min > 0 && !p5_fallback_done && (!isnan(stop_start) || phase >= 5)
+        if fcs.final_margin_min > 0 && !st.p5_fallback_done && (!isnan(st.stop_start) || phase >= 5)
             local az_q = fec.az_path[fec.last_idx] - (minimum(fec.az_path) + maximum(fec.az_path)) / 2
-            p5_crossing = !isnan(p5_q_az_prev) && signbit(az_q) != signbit(p5_q_az_prev)
-            global p5_q_az_prev = az_q
+            p5_crossing = !isnan(st.p5_q_az_prev) && signbit(az_q) != signbit(st.p5_q_az_prev)
+            st.p5_q_az_prev = az_q
         end
-        if fcs.final_margin_min > 0 && !p5_fallback_done && p5_crossing &&
-           isnothing(blend_to) && !reopt_pending
-            global p5_fallback_done = true
+        if fcs.final_margin_min > 0 && !st.p5_fallback_done && p5_crossing &&
+           isnothing(st.blend_to) && !st.reopt_pending
+            st.p5_fallback_done = true
             # Native margins, as each install computed them: on the 360-point resampled path a
             # 100-point reply reads about half its margin, an artefact of the resampling's kinks.
-            local m_now = p5_history[end].margin
+            local m_now = st.p5_history[end].margin
             if !isnan(m_now) && m_now < fcs.final_margin_min
-                local k = findlast(h -> !isnan(h.margin) && h.margin >= fcs.final_margin_min, p5_history)
+                local k = findlast(h -> !isnan(h.margin) && h.margin >= fcs.final_margin_min, st.p5_history)
                 if isnothing(k)
                     @warn @sprintf("Phase-5 margin %.2f < final_margin_min %.2f and no earlier \
                                     install meets it: flying phase 5 on the current path.",
                                    m_now, fcs.final_margin_min)
                 else
-                    local h = p5_history[k]
+                    local h = st.p5_history[k]
                     # The lift the kite carries now, not the one that install was made with.
-                    local to = prepare_path(h.az, h.el .+ (el_applied - h.el_applied);
-                                            resample = n_path, up_loops = fcs.up_loops)
+                    local to = prepare_path(h.az, h.el .+ (st.el_applied - h.el_applied);
+                                            resample = st.n_path, up_loops = fcs.up_loops)
                     local from = prepare_path(fec.az_path, fec.el_path;
-                                              resample = n_path, up_loops = fcs.up_loops)
+                                              resample = st.n_path, up_loops = fcs.up_loops)
                     local m_to = h.margin
                     if blend_folds(tos, from..., to...)
                         @warn @sprintf("Phase-5 fallback to the path installed at t = %.1f s \
                                         skipped: the blend would fold.", h.t)
                     else
-                        global blend_from = from
-                        global blend_to = to
-                        global blend_t0 = t
-                        global raw_from = prepare_path(raw_az, raw_el; resample = n_path,
+                        st.blend_from = from
+                        st.blend_to = to
+                        st.blend_t0 = t
+                        st.raw_from = prepare_path(st.raw_az, st.raw_el; resample = st.n_path,
                                                        up_loops = fcs.up_loops)
-                        global raw_to = prepare_path(h.raw[1], h.raw[2]; resample = n_path,
+                        st.raw_to = prepare_path(h.raw[1], h.raw[2]; resample = st.n_path,
                                                      up_loops = fcs.up_loops)
-                        global raw_az, raw_el = raw_from
+                        st.raw_az, st.raw_el = st.raw_from
                         # Install the aligned current path (w = 0) and re-base the lap counter, as an install does.
-                        set_path!(fec, blend_from[1], blend_from[2]; up_loops = fcs.up_loops)
-                        global fig8_idx_prev = fec.last_idx
-                        global p5_fallback = (; t, from_margin = m_now, to_margin = m_to, to_t = h.t)
+                        set_path!(fec, st.blend_from[1], st.blend_from[2]; up_loops = fcs.up_loops)
+                        st.fig8_idx_prev = fec.last_idx
+                        st.p5_fallback = (; t, from_margin = m_now, to_margin = m_to, to_t = h.t)
                         @info @sprintf("Phase-5 fallback at t = %.1f s: the flown path has a \
                                         phase-5 margin of %.2f, below final_margin_min = %.2f; \
                                         blending to the path installed at t = %.1f s \
@@ -1678,61 +1727,61 @@ function run_loop!()
         # REEL_OUT: `reelout_delay` seconds after phase 3, and only until l_set reaches reelout_l_max.
         local v_set = 0.0
         # The gate LATCHES: `reelout_f_trigger` opens it early, and once open it never re-closes.
-        if phase >= 3 && !reelout_started
-            by_timer, by_force = reelout_release(fcs, t, transition_start, winch_force(s))
+        if phase >= 3 && !st.reelout_started
+            by_timer, by_force = reelout_release(fcs, t, st.transition_start, winch_force(s))
             if by_timer || by_force
-                global reelout_started = true
-                global reelout_start_t = t
-                global reelout_trigger_fired = by_force && !by_timer
+                st.reelout_started = true
+                st.reelout_start_t = t
+                st.reelout_trigger_fired = by_force && !by_timer
                 by_force && !by_timer &&
                     @info @sprintf("  ... reel-out released EARLY at t = %.1f s by \
                                     force %.0f N >= %.0f N (%.1f s before the \
                                     %.1f s delay would have).",
                                    t, winch_force(s), fcs.reelout_f_trigger,
-                                   transition_start + fcs.reelout_delay - t,
+                                   st.transition_start + fcs.reelout_delay - t,
                                    fcs.reelout_delay)
             end
         end
-        if reelout_started && !reelout_done
+        if st.reelout_started && !st.reelout_done
             # The INSTANTANEOUS force: reeling out faster when the kite pulls harder is what regulates the force.
             v_raw = calc_v_set(rc, reel_out_speed(s), winch_force(s), rcs.f_low)
             # Ramps the COMMAND, not the law, from when the gate OPENED; `t_startup` does not do this,
             # but released in proportion to tether load, so the soft-start never overrides the force limiter.
-            v_cmd = reelout_command(fcs, v_raw, t, reelout_start_t, winch_force(s),
+            v_cmd = reelout_command(fcs, v_raw, t, st.reelout_start_t, winch_force(s),
                                     rcs.f_low, rcs.f_high)
 
-            remaining = fcs.reelout_l_max - l_set
+            remaining = fcs.reelout_l_max - st.l_set
             # Soft-stop: latch once `reelout_softstop` seconds would cover the rest, then decelerate linearly to 0.
-            if isnan(stop_start) && fcs.reelout_softstop > 0 && v_cmd > 0 &&
+            if isnan(st.stop_start) && fcs.reelout_softstop > 0 && v_cmd > 0 &&
                remaining <= v_cmd * fcs.reelout_softstop
-                global stop_start = t
-                global stop_v_entry = v_cmd
-                global stop_dp_entry = rel_depower
-                global stop_T = 2 * remaining / v_cmd
+                st.stop_start = t
+                st.stop_v_entry = v_cmd
+                st.stop_dp_entry = rel_depower
+                st.stop_T = 2 * remaining / v_cmd
             end
             # Second stop criterion: N COMPLETE laps by `fig8_idx_progress` (`fig8_n` reads 1 during the first lap).
-            if isnan(stop_start) && fcs.n_fig_eight > 0 &&
-               fig8_idx_progress >= fcs.n_fig_eight * n_path
-                global stop_reason = "laps"
+            if isnan(st.stop_start) && fcs.n_fig_eight > 0 &&
+               st.fig8_idx_progress >= fcs.n_fig_eight * st.n_path
+                st.stop_reason = "laps"
                 if fcs.reelout_softstop > 0 && v_cmd > 0
-                    global stop_start = t
-                    global stop_v_entry = v_cmd
-                    global stop_dp_entry = rel_depower
+                    st.stop_start = t
+                    st.stop_v_entry = v_cmd
+                    st.stop_dp_entry = rel_depower
                     # No remaining distance to solve T from: same nominal duration instead.
-                    global stop_T = 2 * fcs.reelout_softstop
+                    st.stop_T = 2 * fcs.reelout_softstop
                 else
-                    global reelout_done = true   # hard stop, as reelout_l_max does today
+                    st.reelout_done = true   # hard stop, as reelout_l_max does today
                 end
             end
-            v_set = isnan(stop_start) ? v_cmd :
-                soft_stop_speed(stop_v_entry, t, stop_start, stop_T)
-            global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
+            v_set = isnan(st.stop_start) ? v_cmd :
+                soft_stop_speed(st.stop_v_entry, t, st.stop_start, st.stop_T)
+            st.l_set = min(st.l_set + v_set * s.dt, fcs.reelout_l_max)
             on_timer(rc)
-            if l_set >= fcs.reelout_l_max
-                global reelout_done = true
-                isempty(stop_reason) && (global stop_reason = "length")
-            elseif !isnan(stop_start) && stop_reason == "laps" && t - stop_start >= stop_T
-                global reelout_done = true   # the soft-stop ramp has run out
+            if st.l_set >= fcs.reelout_l_max
+                st.reelout_done = true
+                isempty(st.stop_reason) && (st.stop_reason = "length")
+            elseif !isnan(st.stop_start) && st.stop_reason == "laps" && t - st.stop_start >= st.stop_T
+                st.reelout_done = true   # the soft-stop ramp has run out
             end
         elseif phase < 3
             # Force floor BEFORE reel-out: `guard_lfc` (NOT `rc`, see above) stepped by hand through calc_v_set's setters.
@@ -1747,20 +1796,20 @@ function run_loop!()
             on_timer(guard_lfc)
             if guard_lfc.active
                 v_set = v_guard
-                global l_set = l_set + v_set * s.dt
+                st.l_set = st.l_set + v_set * s.dt
             end
         end
-        if !isnothing(hold_compliance) && reelout_done && phase == 5
+        if !isnothing(hold_compliance) && st.reelout_done && phase == 5
             local f_now_h = winch_force(s)
-            if isnan(hold_f_lp)
-                global hold_f_lp = f_now_h
-                global hold_l0 = l_set
+            if isnan(st.hold_f_lp)
+                st.hold_f_lp = f_now_h
+                st.hold_l0 = st.l_set
             end
-            global hold_f_lp += s.dt / hold_compliance.τF * (f_now_h - hold_f_lp)
-            local slope = rcs.kv / (2 * sqrt(max(hold_f_lp, 1.0)))     # [m/s per N], of v = kv·√F
-            v_set = hold_compliance.gain * slope * (f_now_h - hold_f_lp) -
-                    (l_set - hold_l0) / hold_compliance.τpos
-            global l_set = l_set + v_set * s.dt
+            st.hold_f_lp += s.dt / hold_compliance.τF * (f_now_h - st.hold_f_lp)
+            local slope = rcs.kv / (2 * sqrt(max(st.hold_f_lp, 1.0)))     # [m/s per N], of v = kv·√F
+            v_set = hold_compliance.gain * slope * (f_now_h - st.hold_f_lp) -
+                    (st.l_set - st.hold_l0) / hold_compliance.τpos
+            st.l_set = st.l_set + v_set * s.dt
         end
 
         if !isnothing(steer_disturbance)
@@ -1776,7 +1825,7 @@ function run_loop!()
             popfirst!(steer_delay_buf) : rel_steering
         local delayed_ff = length(ff_delay_buf) > extra_steer_delay ?
             popfirst!(ff_delay_buf) : u_ff
-        if !isnan(t_phase4) && t - t_phase4 >= hook_settle
+        if !isnan(st.t_phase4) && t - st.t_phase4 >= hook_settle
             local u_scaled = steer_gain_feedback_only ?
                 delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
                 delayed_u * steer_gain_factor
@@ -1788,10 +1837,10 @@ function run_loop!()
         end
         # `v_ff = v_set` removes the position loop's 2 s lag; `acceleration_limit` is `rcs.max_acc`, not the plant's own.
         step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
-              set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set,
+              set_torque = winch_torque!(wpc, s, st.l_set; v_ff = v_set,
                                          speed_limit = rcs.v_sat,
                                          acceleration_limit = rcs.max_acc))
-        global rel_depower_prev = rel_depower
+        st.rel_depower_prev = rel_depower
 
         # Report the overspeed rather than the opaque solver abort it causes later.
         if Float64(s.sys_state.v_app) > fcs.v_app_abort
@@ -1809,7 +1858,7 @@ function run_loop!()
         s.sys_state.var_01 = dmin              # cross-track error [deg]
         s.sys_state.var_02 = az_attr           # attractor azimuth [deg]
         s.sys_state.var_03 = el_attr           # attractor elevation [deg]
-        s.sys_state.var_04 = el_c_path         # pattern-centre elevation [deg]
+        s.sys_state.var_04 = st.el_c_path         # pattern-centre elevation [deg]
         s.sys_state.var_05 = chi_set           # RAW guidance course [rad]
         s.sys_state.var_06 = rad2deg(err)      # REGULATED error [deg]
         # A weight, not a flag: a step here means entry_d_blend is too narrow.
@@ -1819,35 +1868,37 @@ function run_loop!()
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
         az_lo_g, az_hi_g = extrema(fec.az_path)
         el_lo_g, el_hi_g = extrema(fec.el_path)
-        push!(geom_t, t)
-        push!(geom_az_c, 0.5 * (az_hi_g + az_lo_g))
-        push!(geom_az_amp, 0.5 * (az_hi_g - az_lo_g))
-        push!(geom_el_h, el_hi_g - el_lo_g)
-        push!(geom_d_raw, path_distance(raw_az, raw_el,
+        push!(st.geom_t, t)
+        push!(st.geom_az_c, 0.5 * (az_hi_g + az_lo_g))
+        push!(st.geom_az_amp, 0.5 * (az_hi_g - az_lo_g))
+        push!(st.geom_el_h, el_hi_g - el_lo_g)
+        push!(st.geom_d_raw, path_distance(st.raw_az, st.raw_el,
                                         rad2deg(Float64(s.sys_state.azimuth)),
                                         rad2deg(Float64(s.sys_state.elevation))))
-        s.sys_state.fig_8 = Int16(fig8_n)      # live lap count
-        s.sys_state.var_10 = l_set             # tether length setpoint [m]
+        s.sys_state.fig_8 = Int16(st.fig8_n)      # live lap count
+        s.sys_state.var_10 = st.l_set             # tether length setpoint [m]
         s.sys_state.var_11 = v_set             # REEL_OUT speed setpoint [m/s]
         s.sys_state.var_12 = get_state(rc)     # WinchController state (0/1/2)
         s.sys_state.var_13 = get_f_err(rc)     # force error [N], NaN in speed control
         # Not filled anywhere in the model chain: without this the log and the viewer read 0.
         s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd
         # Same for e_mech, which KiteViewers prints in Wh: the running integral of the viewer's p_mech.
-        global e_mech += s.sys_state.winch_force[1] * s.sys_state.v_reelout[1] *
+        st.e_mech += s.sys_state.winch_force[1] * s.sys_state.v_reelout[1] *
                          s.dt / 3600
-        s.sys_state.e_mech = e_mech
+        s.sys_state.e_mech = st.e_mech
     end
     return nothing
 end
 # Assigned OUTSIDE the try: the loop's wall time must survive an early break.
 t_wall_start = time()
 try
-    run_loop!()
+    run_loop!(st)
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
     @error "Simulation stopped early at t≈$(round(s.sys_state.time, digits=2))s" exception=(exc, catch_backtrace())
 end
+# The results file and the plots read the run's state by name; an early break or a throw is published too.
+publish_run_state!(@__MODULE__, st)
 # The loop ALONE: saving the log and scoring it below are not simulation.
 t_wall = time() - t_wall_start
 t_sim = Float64(s.sys_state.time)

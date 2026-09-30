@@ -64,12 +64,12 @@ isnothing(feas.feas_start) ||
 # The c1 to check a path against at time t — from phase 5 that is depower_final's;
 # before that the one at `depower`, which with fly_opt_depower is the depower a
 # reply carries (a candidate's own, when scoring it) or the one currently flown
-# (`depower_flown_opt`, when sizing a request). A cell the table cannot serve
+# (`st.depower_flown_opt`, when sizing a request). A cell the table cannot serve
 # falls back to the startup law, as `c1_at(feas, phase)` itself does.
 c1_at(phase::Integer, depower::Real) = phase >= 5 ? c1_at(feas, phase) :
     (c1 = c1_at_depower(depower); isnan(c1) ? feas.c1 : c1)
-c1_at(phase::Integer) =
-    c1_at(phase, tos.fly_opt_depower ? depower_flown_opt : fcs.depower_setpoint)
+c1_at(phase::Integer, st::RunState) =
+    c1_at(phase, tos.fly_opt_depower ? st.depower_flown_opt : fcs.depower_setpoint)
 
 # What phase 5 will fly a candidate path with; NaN when the table could not serve
 # depower_final. See phase5_margin's docstring for why this is NOT comparable to
