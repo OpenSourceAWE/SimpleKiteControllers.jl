@@ -1043,15 +1043,21 @@ isempty(inputs.wc_overrides) ||
     WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
 
 """
-    run_loop!(st)
+    run_loop!(st, setup)
 
 The simulation loop: steps the model `s` until its steps or the reel-out and phase 5 are over.
 Everything it writes lives in `st`; the run's settings and controllers (`fcs`, `tos`, `s`, `rc`, ...)
-are read from the script, unchanged during the loop. `publish_run_state!` hands `st` to
+come in `setup`, a NamedTuple of the script's globals under the same names, unchanged during the
+loop. Passed as an argument, not read as globals, so the loop compiles against their concrete types. `publish_run_state!` hands `st` to
 `reelout_results.jl` and the plots afterwards. The `try` stays at the call, so the wall time survives
 an early `break` or a throw.
 """
-function run_loop!(st::RunState)
+function run_loop!(st::RunState, setup::NamedTuple)
+    (; EFFECTIVE_SIM_TIME, F_HIGH_NOMINAL, c1_depower_max, c1_setpoint, cap_wind, dt0,
+       el_center_seed, el_floor, extra_steer_delay, fcs, feas, fec, guard_lfc, hold_compliance,
+       hook_settle, inflow, margin5, opt_chain, opt_depower_log, opt_r_on, project_set, rc, rcs,
+       s, steer_disturbance, steer_gain_factor, steer_gain_feedback_only, tos, winch_reopt, wpc,
+       xtrack_offset, xtrack_phase) = setup
     for _ in 1:s.steps
         t = s.sys_state.time
         t - st.final_start >= fcs.final_time && break
@@ -1889,7 +1895,11 @@ end
 # The loop ALONE: saving the log and scoring it below are not simulation. The `try` is inside
 # `@elapsed`, so the loop's wall time survives an early break.
 t_wall = @elapsed try
-    run_loop!(st)
+    run_loop!(st, (; EFFECTIVE_SIM_TIME, F_HIGH_NOMINAL, c1_depower_max, c1_setpoint, cap_wind, dt0,
+        el_center_seed, el_floor, extra_steer_delay, fcs, feas, fec, guard_lfc, hold_compliance,
+        hook_settle, inflow, margin5, opt_chain, opt_depower_log, opt_r_on, project_set, rc,
+        rcs, s, steer_disturbance, steer_gain_factor, steer_gain_feedback_only, tos,
+        winch_reopt, wpc, xtrack_offset, xtrack_phase))
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
     @error "Simulation stopped early at t≈$(round(s.sys_state.time, digits=2))s" exception=(exc, catch_backtrace())
