@@ -290,11 +290,7 @@ guard_lfc = LowerForceController(rcs)
 # grows from the first step of phase 3 onward until it reaches `reelout_l_max`.
 l_set = s.sys_state.l_tether[1]
 
-fec = FigureEightController(FigureEightSettings(;
-    dt = s.dt, A = fcs.f8_a, B = fcs.f8_b,
-    az_center = 0.0, el_center = fcs.el_center,
-    attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
-    reacquire_margin = fcs.reacquire_margin))
+fec = FigureEightController(fcs; dt = s.dt)
 
 # Never hardcode these: both arguments move them a lot. The lookup key is
 # `body_damping`, the value `init` was given: the damping the model FLIES the

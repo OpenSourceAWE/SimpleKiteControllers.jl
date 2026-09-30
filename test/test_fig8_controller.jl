@@ -137,6 +137,23 @@ end
         @test dmin < 1e-9
     end
 
+    @testset "controller_from_fc_settings" begin
+        fcs = FC_Settings()
+        explicit = FigureEightController(FigureEightSettings(;
+            dt = 0.02, A = fcs.f8_a, B = fcs.f8_b, az_center = 0.0, el_center = fcs.el_center,
+            attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
+            reacquire_margin = fcs.reacquire_margin))
+        fec = FigureEightController(fcs; dt = 0.02)
+        # Mutable, so compared field by field.
+        @test all(getfield(fec.fes, f) == getfield(explicit.fes, f) for f in fieldnames(FigureEightSettings))
+        @test fec.az_path == explicit.az_path && fec.el_path == explicit.el_path
+        # A sweep's own size replaces the settings' one, the rest still comes from `fcs`.
+        swept = FigureEightController(fcs; dt = 0.02, A = fcs.f8_a + 5, B = fcs.f8_b + 2)
+        @test (swept.fes.A, swept.fes.B) == (fcs.f8_a + 5, fcs.f8_b + 2)
+        @test swept.fes.el_center == fcs.el_center
+        @test swept.fes.reacquire_margin == fcs.reacquire_margin
+    end
+
     @testset "set_path" begin
         # An externally supplied path replaces the lemniscate and stays flyable.
         src = _make_test_controller()

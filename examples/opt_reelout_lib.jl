@@ -150,11 +150,7 @@ function build_controllers(fcs, rcs, s)
                    stop_criteria)
     guard_lfc = LowerForceController(rcs)
     l_set = s.sys_state.l_tether[1]
-    fec = FigureEightController(FigureEightSettings(;
-        dt = s.dt, A = fcs.f8_a, B = fcs.f8_b,
-        az_center = 0.0, el_center = fcs.el_center,
-        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
-        reacquire_margin = fcs.reacquire_margin))
+    fec = FigureEightController(fcs; dt = s.dt)
     return (; rc, f_high_nominal, stop_criteria, guard_lfc, l_set, fec)
 end
 

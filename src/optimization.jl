@@ -123,11 +123,7 @@ the worst case (see `examples/simple_reelout.jl`).
 """
 function pattern_margin(fcs::FC_Settings, f8_a, f8_b, l_tether; c1 = V3_TURN_RATE_C1)
     # dt does not enter the geometry; the controller is built only to be measured.
-    fec = FigureEightController(FigureEightSettings(;
-        dt = 0.01, A = f8_a, B = f8_b,
-        az_center = 0.0, el_center = fcs.el_center,
-        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
-    reacquire_margin = fcs.reacquire_margin))
+    fec = FigureEightController(fcs; dt = 0.01, A = f8_a, B = f8_b)
     return check_pattern_feasible(fec, l_tether, fcs.max_steering; c1, prn = false).margin
 end
 

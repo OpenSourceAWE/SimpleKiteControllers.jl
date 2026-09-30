@@ -719,6 +719,20 @@ function apply_overrides!(obj, overrides, label, typename, what)
 end
 
 """
+    FigureEightController(fcs::FC_Settings; dt, A = fcs.f8_a, B = fcs.f8_b)
+
+The figure-eight controller of a run flown with `fcs`: the lemniscate `A` x `B` [deg]
+centred at azimuth 0 and `fcs.el_center`, with `fcs`'s attractor distance, loop direction
+and reacquire margin, stepped at `dt` [s]. `A`/`B` default to the settings' own size; a
+sweep over the size passes its own.
+"""
+FigureEightController(fcs::FC_Settings; dt, A = fcs.f8_a, B = fcs.f8_b) =
+    FigureEightController(FigureEightSettings(;
+        dt, A, B, az_center = 0.0, el_center = fcs.el_center,
+        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
+        reacquire_margin = fcs.reacquire_margin))
+
+"""
     project_file(project = "system_fig8_200m.yaml") -> String
 
 Path of the system project to hand to the kite model, absolute when this package
