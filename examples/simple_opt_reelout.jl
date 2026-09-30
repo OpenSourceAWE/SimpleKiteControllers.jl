@@ -117,26 +117,14 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
-using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds, request_constraints
-using SimpleKiteControllers: with_elevation_max, with_azimuth_amplitude_min, with_size_box
-# The decisions of the startup retries (src/startup_retry.jl), the reopt gate and the loop.
-using SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
-    azimuth_amplitude, elevation_amplitude, gate_candidate, retried
-using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
-    final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
-    soft_stop_speed
-# The feasibility gates of the startup path and the laws the loop reads off their verdicts.
-using SimpleKiteControllers: check_startup_path, c1_at, phase5_margin, Phase5MarginState
-using SimpleKiteControllers: optimizer_conditions
+using SimpleKiteControllers: opt_length, request_constraints, with_elevation_max,
+    with_azimuth_amplitude_min, optimizer_conditions
+# The decisions of the startup retries (src/startup_retry.jl).
+using SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!
 import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
-using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
-    get_state, get_f_err, wcsLowerForceLimit,
-    LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
-    set_tracking, set_force, get_v_set_out, calc_vro
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
-using LinearAlgebra: norm
-using Statistics: mean
+using Statistics: mean   # for reelout_results.jl
 using Printf
 import Dates
 using OrderedCollections: OrderedDict
@@ -153,11 +141,10 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The optimizer client, part of the package but not exported (src/awetrim_client.jl),
 # `HTTP.StatusError` for a 422, and YAML for the saved trajectories and optimizer paths.
 using HTTP, YAML
-using SimpleKiteControllers: Trajectory, InitParams, StepParams, opt_float, chain_init,
-    chain_step, chain_status, chain_trajectory, record_opt_success!, optimizer_session,
-    solve_startup, reelout_anchor_ratio, free_speed_reference, winch_from_wc, depower_seed,
-    awetrim_depower_to_v3kite, elevation_min_request, min_turn_radius_request,
-    pattern_limits_from
+using SimpleKiteControllers: Trajectory, InitParams, StepParams, chain_init, chain_step,
+    chain_trajectory, record_opt_success!, optimizer_session, solve_startup, reelout_anchor_ratio,
+    free_speed_reference, winch_from_wc, depower_seed, awetrim_depower_to_v3kite,
+    min_turn_radius_request
 # The functions moved out of this script, see Plan_refactor_opt_reelout.md.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
 # Reference curve and log name for simple_reelout_plots.jl; set by reelout_results.jl, cleared here.
@@ -389,189 +376,12 @@ function write_run_done(setup, st, status::AbstractString; err = nothing)
     end
 end
 
-"""
-    apply_optimized_kv!(setup, tab, t, l)
-
-Move the winch gain the optimizer chose out of a `/trajectory` reply and into the
-`WCSettings` the run reads, so it flies the `k_v` the path was solved for. `wc`,
-`rcs` and `rc.wcs` are one object, and every sub-controller of `rc` holds a
-reference to it, so a single assignment reaches all of them. A reply that did not
-optimize the gain carries no `k_v` under `optimized_parameters` and this is then a
-no-op. A gain that ran into its own bracket is reported: the value is the edge of
-the box, not an optimum.
-"""
-function apply_optimized_kv!(setup, tab, t, l)
-    (; tos, wc, rc, opt_kv_log) = setup
-    tos.optimize_k_v || return
-    params = get(tab, "optimized_parameters", nothing)
-    raw = params === nothing ? nothing : get(params, "k_v", nothing)
-    raw === nothing && return
-    k_v = Float64(raw)
-    k_v > 0 || return
-    at_bound = something(get(params, "k_v_at_bound", false), false)
-    if isempty(opt_kv_log) || abs(k_v - last(opt_kv_log).k_v) > 1e-9
-        @info @sprintf("  ... optimizer chose k_v = %.5f at L = %.0f m (was %.5f)%s",
-                       k_v, l, wc.kv, at_bound ? " — AT ITS BRACKET EDGE" : "")
-        at_bound && @warn "k_v hit the K_V_BRACKET_FACTOR bound: the optimizer wanted \
-                           to retune further than it was allowed, so this is the edge \
-                           of the box rather than an optimum."
-    end
-    wc.kv = k_v
-    @assert rc.wcs === wc "the reel-out controller must read the WCSettings the gain is written to"
-    # EVERY accepted install with a gain, repeats included; a rejected candidate never reaches this function.
-    push!(opt_kv_log, (; t, l, k_v, at_bound))
-    return
-end
-
 # The caller's inputs, passed as `run_example("simple_opt_reelout.jl"; show_plots = false, ...)`
 # (src/script_inputs.jl); a plain `include` runs with the defaults, see `run_input_defaults`.
 # The setup-only ones (the *_overrides, path_tr_project, output_path, run_archive) are read as `inputs.<name>`.
 setup = setup_run(script_inputs(@__FILE__, run_input_defaults()))
 
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
-"""
-    RunState
-
-Everything the startup functions and the simulation loop WRITE, in one place, so they take it as an
-argument (`st`) instead of rebinding script globals. Comments give the meaning and the unit; the
-loop-only bookkeeping is grouped as in the loop. `startup_feasibility` and `reelout_results.jl`
-read the fields as `st.<field>`, and so does `DelayedInjection` in `validate_margins.jl`, during the
-loop: `st` is the one global of the run's state.
-"""
-Base.@kwdef mutable struct RunState
-    # ---- the optimizer's answer and what the retries make of it ----
-    opt_result::Any = nothing               # the reply the run flies (startup, or the retry that took over)
-    opt_table::Any = nothing                # its /trajectory table
-    opt_downloops::Any = nothing
-    opt_power_pred::Float64 = NaN           # [W] predicted mean reel-out power of the installed path
-    opt_paths_raw::Vector{Any} = Any[]      # every optimizer answer as it arrived, before any lift
-    opt_paths_at::Vector{Any} = Any[]       # (sim time [s], phase) each of those was installed at
-    opt_r_scale::Any = nothing              # anchor ratio x headroom of the turn-radius request
-    opt_r_min::Any = nothing                # [m] turn-radius request, or nothing
-    opt_box_now::Any = nothing              # pattern limits sent with the last re-optimization request
-    incumbent_score::Any = nothing          # score of the best startup path so far
-    inc_result::Any = nothing
-    inc_table::Any = nothing
-    inc_raw::Any = nothing
-    startup_wing_frac::Float64 = 1.0        # share of the lobe lift the startup path could carry
-    c1_startup::Float64 = NaN               # [-] turn-rate gain the startup path is checked against
-    depower_flown_opt::Float64 = NaN        # [-] rel_depower the optimizer asked for
-    # ---- the startup pattern's geometry ----
-    n_path_initial::Int = 0
-    path_min_h_start::Any = NaN
-    az_c_path::Any = NaN
-    el_c_path::Any = NaN
-    az_amp_path::Any = NaN
-    el_height_path::Any = NaN
-    pred_timeline::Vector{Any} = Any[]      # (; t, power): which path was flown when
-    p5_history::Vector{Any} = Any[]         # every path flown, for the phase-5 fallback
-    p5_fallback_done::Bool = false          # checked once, from the stop latch on, at the next crossing
-    p5_q_az_prev::Float64 = NaN             # [deg] Q's azimuth from the path centre, last step
-    p5_fallback::Any = nothing              # (; t, from_margin, to_margin, to_t) when a fallback was blended in
-    ccs::Any = nothing                      # course controller settings
-    cc::Any = nothing                       # course controller
-    # ---- winch and reel-out ----
-    l_set::Float64 = NaN                    # [m] tether length setpoint
-    transition_start::Float64 = NaN         # [s] time phase 3 began; `reelout_delay` counts from it
-    stop_start::Float64 = NaN               # [s] time the soft-stop deceleration latched; NaN = not yet
-    stop_v_entry::Float64 = NaN             # [m/s] v_set at the moment it latched
-    stop_dp_entry::Float64 = NaN            # [-] rel_depower at the moment it latched
-    stop_T::Float64 = NaN                   # [s] duration of the linear decel to reach 0 at reelout_l_max
-    reelout_started::Bool = false           # true once the gate has opened; LATCHED, never re-closes
-    reelout_start_t::Float64 = NaN          # [s] time it opened; the soft-start ramp counts from here
-    reelout_trigger_fired::Bool = false     # true if the FORCE trigger opened it, not the timer
-    reelout_done::Bool = false              # true once either stop criterion has ended reel-out
-    stop_reason::String = ""                # "length", "laps", or "" if reel-out never stopped
-    final_start::Float64 = NaN              # [s] time phase 5 began; the run ends `fcs.final_time` after it
-    e_mech::Float64 = 0.0                   # [Wh] running mechanical energy, logged for the viewer
-    first_lap_f_high_applied::Bool = false
-    # ---- feed-forward, depower ----
-    ff_log::Vector{Float64} = Float64[]     # [-] feed-forward steering per step
-    ff_chi_log::Vector{Float64} = Float64[] # [rad] chord correction per step
-    ff_u_filt::Float64 = 0.0                # [-] low-passed feed-forward steering
-    ff_chi_filt::Float64 = 0.0              # [rad] low-passed chord correction
-    dp_final_extra::Float64 = 0.0           # [-] phase-5 force limiter's depower above depower_final
-    dp_final_extra_peak::Float64 = 0.0      # [-] the most it asked for, for the summary
-    rel_depower_prev::Float64 = NaN         # [-] depower commanded last step; the gain reads c1 there
-    depower_flown::Float64 = NaN            # [-] current blended output
-    depower_blend_from::Float64 = NaN
-    depower_blend_to::Union{Nothing, Float64} = nothing
-    depower_blend_t0::Float64 = NaN
-    # ---- lap counter and scored reference ----
-    fig8_n::Int = 0                         # live lap count: 0 before phase 4, 1 at first entry, +1 per traversal
-    fig8_idx_prev::Int = 0
-    fig8_idx_progress::Float64 = 0.0
-    n_path::Int = 0
-    raw_az::Any = nothing                   # the reference TRACKING is scored against
-    raw_el::Any = nothing
-    chk_points::Int = 0                     # resolution the path in the air is checked at
-    # ---- elevation lift ----
-    el_applied::Float64 = 0.0               # [deg] lift the path in the air actually carries
-    lift_on::Bool = false                   # `el_offset_final` latched in; never cleared once set
-    el_shift_events::Vector{NamedTuple} = NamedTuple[]  # in-air shift attempts, one per outcome CHANGE
-    lift_t::Float64 = NaN                   # [s] when it latched; NaN = never
-    lift_remaining::Float64 = NaN           # [m] of reel-out left at that moment
-    el_shift_warned::Bool = false           # a held-back shift warns once
-    el_shift_lap::Int = 0                   # lap and target of the last in-air shift attempt
-    el_shift_target::Float64 = NaN
-    # ---- per-step logs of the pattern asked for ----
-    geom_t::Vector{Float64} = Float64[]
-    geom_az_c::Vector{Float64} = Float64[]
-    geom_az_amp::Vector{Float64} = Float64[]
-    geom_el_h::Vector{Float64} = Float64[]
-    geom_d_raw::Vector{Float64} = Float64[] # cross-track error to the scored reference
-    n_droop_bins::Int = 5                   # where in the pattern the kite ends up low, binned on |azimuth|
-    droop_n::Vector{Int} = zeros(Int, 5)
-    droop_flown::Vector{Float64} = zeros(5) # [deg] kite below the path's elevation centre
-    droop_ref::Vector{Float64} = zeros(5)   # [-] depth of the path at Q, in half-spans
-    droop_sag::Vector{Float64} = zeros(5)   # [deg] kite below the path at Q
-    # ---- re-optimization (stage 4) and blend ----
-    reopt_pending::Bool = false             # a solve is queued on the server
-    reopt_n::Int = 0                        # solves completed, accepted or rejected
-    reopt_lap::Float64 = 0.0                # lap count at which the last request went out
-    reopt_next_poll::Float64 = 0.0          # [s] next /status poll
-    reopt_t_request::Float64 = NaN          # [s] when the pending request went out
-    reopt_blocked_s::Float64 = 0.0          # [s] wall time spent frozen waiting for a reply
-    reopt_last_solve_s::Float64 = NaN       # [s] wall time the last blocking wait took
-    reopt_events::Vector{NamedTuple} = NamedTuple[]  # one row per solve, for the run summary
-    reopt_t_wall_request::Float64 = NaN     # [s] time() when the cycle's first request went out
-    reopt_cycles::Vector{NamedTuple} = NamedTuple[]  # (; t, l, status, wall_s) per completed cycle
-    blend_retries_total::Int = 0            # cold-restart attempts spent on a rejected reply
-    el_min_extra::Float64 = 0.0             # [deg] shortfall of the last reply gated out; carried across cycles
-    blend_from::Any = nothing               # the blend in progress; fold-free across w in [0, 1]
-    blend_to::Any = nothing
-    blend_t0::Float64 = NaN
-    raw_from::Any = nothing                 # the scored reference's endpoints of the SAME blend
-    raw_to::Any = nothing
-    # ---- test inputs ----
-    t_phase4::Float64 = NaN                 # [s] time phase 4 was first reached this run; NaN before that
-    xt_start::Float64 = NaN                 # [s] first step of phase `xtrack_phase`; τ counts from here
-    hold_f_lp::Float64 = NaN                # [N] low-passed force of the compliant hold
-    hold_l0::Float64 = NaN                  # [m] length the compliant hold began at
-    dist_t::Vector{Float64} = Float64[]     # [s] time of each disturbed step
-    dist_d::Vector{Float64} = Float64[]     # [-] disturbance added
-    dist_u::Vector{Float64} = Float64[]     # [-] steering sent to the model, controller plus disturbance
-    # Kept full of the last `extra_steer_delay` raw commands from the start of the run,
-    # so it is already primed with real history by the time the hook switches on. The
-    # feed-forward goes through a FIFO of its own, so the two stay aligned.
-    steer_delay_buf::Vector{Float64} = Float64[]
-    ff_delay_buf::Vector{Float64} = Float64[]
-    xt_t::Vector{Float64} = Float64[]       # [s] time of each phase-5 step
-    xt_delta::Vector{Float64} = Float64[]   # [deg] offset commanded
-    xt_d::Vector{Float64} = Float64[]       # [deg] signed cross-track error to the unshifted path, right of travel > 0
-    xt_q::Vector{Int} = Int[]               # [-] index of the closest path point Q
-    xt_phase::Vector{Int} = Int[]           # [-] flight phase, and the operating point for the model:
-    xt_L::Vector{Float64} = Float64[]       # [m] tether length
-    xt_va::Vector{Float64} = Float64[]      # [m/s] apparent wind speed
-    xt_vk::Vector{Float64} = Float64[]      # [m/s] kite speed normal to the tether
-    xt_dp::Vector{Float64} = Float64[]      # [-] depower
-    # ---- results, for the finished-run marker (`write_run_done`) ----
-    fig8m::Any = nothing                    # the scored verdict, once `reelout_results` has it
-    opt_power_meas::Any = nothing           # [W] measured mean reel-out power, or nothing
-    archive_dir::String = "none"            # the run's archive folder, "none" until (or unless) it exists
-end
-
-
 st = RunState(; l_set = setup.l_set, opt_r_scale = setup.opt_r_scale, opt_r_min = setup.opt_r_min,
               depower_flown_opt = setup.fcs.depower_setpoint)
 
@@ -1119,9 +929,6 @@ isempty(setup.inputs.wc_overrides) ||
     WinchControllers.set_v_sw(setup.rc.ufc, WinchControllers.calc_vro(setup.wc, setup.rc.ufc.f_set))
 
 
-# One function per block of the step, in the order they run (examples/opt_reelout_loop.jl).
-include(joinpath(@__DIR__, "opt_reelout_loop.jl"))
-
 """
     run_loop!(st, setup)
 
@@ -1129,44 +936,32 @@ The simulation loop: steps the model `s` until its steps or the reel-out and pha
 Everything it writes lives in `st`; the run's settings and controllers (`fcs`, `tos`, `s`, `rc`, ...)
 come in `setup` (see `setup_run`), unchanged during the loop. Passed as an argument, not read as a global, so the loop compiles against their concrete
 types. `reelout_results.jl` reads `st` afterwards. The `try` stays at the call, so the wall time survives
-an early `break` or a throw. Each block of a step is a function of `opt_reelout_loop.jl`.
+an early `break` or a throw. What happens before and after `step!` is the package's
+(`step_commands!`, `record_step!`, src/reelout_loop.jl); only the model calls are here.
 """
 function run_loop!(st::RunState, setup::NamedTuple)
-    (; effective_sim_time, fcs, fec, rcs, s, tos, wpc) = setup
-    for _ in 1:s.steps
-        t = s.sys_state.time
+    (; effective_sim_time, fcs, rcs, wpc) = setup
+    model = setup.s
+    for _ in 1:model.steps
+        t = model.sys_state.time
         t - st.final_start >= fcs.final_time && break
         isnan(st.final_start) && t >= effective_sim_time && break
-
-        # L0 attractor guidance -> commanded course [rad]; the lead is re-read every step.
-        fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
-                                                        Float64(s.sys_state.l_tether[1]))
-        chi_set, az_attr, el_attr, dmin =
-            navigate_fig8(fec, Float64(s.sys_state.azimuth),
-                          Float64(s.sys_state.elevation))
-        chi_set, az_attr, el_attr = xtrack_input!(st, setup, t, chi_set, az_attr, el_attr)
-
-        cmd = steering_command!(st, setup, t, chi_set, dmin)
-        (; rel_depower, phase) = cmd
-        el_target = update_lift_target!(st, setup, t, phase)
-        phase >= 4 && count_laps!(st, setup, t)
-        tos.reopt_enabled && phase == 4 && reoptimize!(st, setup, t, phase, el_target)
-        # OUTSIDE the re-optimization block: the in-air lift queues blends too, with re-optimization off and
-        # into phase 5; inside it they were reported as delivered but never ran (2026-09-26).
-        phase >= 4 && advance_blend!(st, setup, t)
-        phase >= 4 && deliver_lift_in_air!(st, setup, t, phase, el_target)
-        phase5_fallback!(st, setup, t, phase)
-
-        v_set = winch_setpoint!(st, setup, t, phase, rel_depower)
-        rel_steering = steering_hooks!(st, setup, t, cmd.rel_steering, cmd.u_ff)
+        # What the package's blocks need of the model, read once: none of them changes it before `step!`.
+        plant = (; ss = model.sys_state, dt = model.dt, force = winch_force(model),
+                 v_reel = reel_out_speed(model))
+        commands = step_commands!(st, setup, plant, t)
+        (; rel_depower, rel_steering, v_set) = commands
         # `v_ff = v_set` removes the position loop's 2 s lag; `acceleration_limit` is `rcs.max_acc`, not the plant's own.
-        step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
-              set_torque = winch_torque!(wpc, s, st.l_set; v_ff = v_set,
+        step!(model; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
+              set_torque = winch_torque!(wpc, model, st.l_set; v_ff = v_set,
                                          speed_limit = rcs.v_sat,
                                          acceleration_limit = rcs.max_acc))
         st.rel_depower_prev = rel_depower
-        overspeed(setup) && break
-        record_step!(st, setup, t, phase, v_set, (; chi_set, az_attr, el_attr, dmin), cmd)
+        # After step!, which overwrites parts of sys_state.
+        plant = (; ss = model.sys_state, dt = model.dt, aoa = span_mean_aoa(model.sys),
+                 wind_factor_200 = calc_wind_factor(model.am, 200.0))
+        check_overspeed(setup, plant) && break
+        record_step!(st, setup, plant, t, commands)
     end
     return nothing
 end

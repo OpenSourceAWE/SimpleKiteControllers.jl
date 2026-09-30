@@ -13,7 +13,9 @@ using HTTP, JSON3, StructTypes
 using SHA: sha256
 using Dates: now, format
 using OrderedCollections: OrderedDict
-using WinchControllers: WCSettings, WinchPosController, WinchController, LowerForceController
+using WinchControllers: WCSettings, WinchPosController, WinchController, LowerForceController,
+    calc_v_set, on_timer, set_f_set, set_reset, set_v_sw, set_v_act, set_tracking, set_force,
+    get_v_set_out, calc_vro, get_state, get_f_err
 
 # Figure-of-eight inner-loop (course) controller
 export CourseController, CourseControllerSettings, calc_steering, set_phase!
@@ -87,6 +89,9 @@ export scenario_site, selected_scenarios_dir, apply_windspeed_override!
 # Caller inputs of the example scripts (examples/*.jl)
 export run_example, script_inputs
 
+# One reel-out run of examples/simple_opt_reelout.jl: its state, and its loop around the model's step!.
+export RunState, step_commands!, record_step!, check_overspeed, apply_optimized_kv!
+
 """
     skc_data_path() -> String
 
@@ -143,6 +148,9 @@ include("reopt_gate.jl")
 include("loop_decisions.jl")
 # Last: the AWETrim REST client of the example scripts, which uses the request helpers above.
 include("awetrim_client.jl")
+# The state of a reel-out run, and one step of its loop, which uses everything above.
+include("run_state.jl")
+include("reelout_loop.jl")
 
 function __init__()
     reload_turn_rate_table!()

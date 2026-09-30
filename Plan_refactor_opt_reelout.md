@@ -20,13 +20,12 @@ Measured by parsing the files (non-blank, non-comment, non-docstring lines;
 
 | File                      | Code lines | In functions | In `RunState` | Top level |
 |---------------------------|-----------:|-------------:|--------------:|----------:|
-| `simple_opt_reelout.jl`   | 751        | 552 (73 %)   | 119 (16 %)    | 80 (11 %) |
-| `opt_reelout_loop.jl`     | 794        | 794 (100 %)  | –             | 0         |
+| `simple_opt_reelout.jl`   | 589        | 522 (89 %)   | –             | 67 (11 %) |
 | `reelout_results.jl`      | 573        | 571 (100 %)  | –             | 2         |
 | `simple_reelout_plots.jl` | 363        | 346 (95 %)   | –             | 17        |
 
-The script and `opt_reelout_loop.jl` together: 1545 code lines, 90 % in
-functions, 5 % at top level. The remaining top level of the script is the header, the `using` lines, and
+`RunState` and the step of the loop are in the package now
+(`src/run_state.jl`, `src/reelout_loop.jl`). The remaining top level of the script is the header, the `using` lines, and
 about ten orchestration calls: `setup_run`, `RunState(...)`,
 `solve_startup_path!`, `adopt_startup_path!`, `finish_startup!`,
 `capture_startup_geometry!`, `startup_feasibility`, `init_loop_state!`,
@@ -81,27 +80,36 @@ dominates, so the refactor bought clarity, not speed.
   pure and unit-tested (`src/startup_retry.jl`: `RetryLadder`, `next_lever`,
   `record_422!`, `record_converged!`, checked against the old inline code on
   110,000 random steps).
-- **Stage 4, loop.** `mutable struct RunState` (in the script) holds everything
-  the startup functions and the loop write: 115 fields, one struct instead of
-  the planned `LoopState` + `RunLogs`. `run_loop!(st, setup)` is the loop. The
-  script is down to 8 globals, and `st` is the only global holding run state.
-  The accept/reject gate is pure (`src/reopt_gate.jl`: `gate_candidate`,
-  checked against the old chain on 100,000 random candidates), as are the
-  step-wise decisions (`src/loop_decisions.jl`: `loop_gain_scale`,
-  `feedforward_step`, `reelout_command`, `soft_stop_speed`, …).
-  `run_loop!` is 39 lines: it calls one function per block of the step, in
-  `examples/opt_reelout_loop.jl` (included after `RunState`):
-  `xtrack_input!`, `steering_command!` (with `depower_command!`),
-  `update_lift_target!`, `count_laps!`, `reoptimize!` (`request_reopt!`,
-  `collect_reopt!` → `gate_and_install!` → `cold_retry!`,
-  `evaluate_candidate!`, `install_candidate!`), `advance_blend!`,
-  `deliver_lift_in_air!`, `phase5_fallback!`, `winch_setpoint!`
-  (`release_reelout!`, `reelout_speed!`, `entry_force_guard!`,
-  `compliant_hold!`), `steering_hooks!`, `overspeed` and `record_step!`.
-  Each takes `(st, setup, t, …)` and returns what the later blocks read. The
-  longest is `request_reopt!` at 115 lines, most of it the request's log
-  message. Checked IDENTICAL on both replay baselines and on the live
-  old/new pairs above.
+- **Stage 4, loop.** `mutable struct RunState` (`src/run_state.jl`) holds
+  everything the startup functions and the loop write: 115 fields, one struct
+  instead of the planned `LoopState` + `RunLogs`, plain data without a model
+  type. The script is down to 8 globals, and `st` is the only global holding
+  run state. The accept/reject gate is pure (`src/reopt_gate.jl`:
+  `gate_candidate`, checked against the old chain on 100,000 random
+  candidates), as are the step-wise decisions (`src/loop_decisions.jl`:
+  `loop_gain_scale`, `feedforward_step`, `reelout_command`, `soft_stop_speed`,
+  …).
+
+  `run_loop!(st, setup)` in the script is 26 lines and holds only the model
+  calls: it reads the model into `plant = (; ss, dt, force, v_reel)`, calls
+  `step_commands!(st, setup, plant, t)`, then `step!` and `winch_torque!`,
+  then reads `plant = (; ss, dt, aoa, wind_factor_200)` again for
+  `check_overspeed` and `record_step!`. Everything else is in
+  `src/reelout_loop.jl`, one function per block of the step, in the order
+  `step_commands!` calls them: `xtrack_input!`, `steering_command!` (with
+  `depower_command!`), `update_lift_target!`, `count_laps!`, `reoptimize!`
+  (`request_reopt!`, `collect_reopt!` → `gate_and_install!` → `cold_retry!`,
+  `evaluate_candidate!`, `install_candidate!`, `apply_optimized_kv!`),
+  `advance_blend!`, `deliver_lift_in_air!`, `phase5_fallback!`,
+  `winch_setpoint!` (`release_reelout!`, `reelout_speed!`,
+  `entry_force_guard!`, `compliant_hold!`) and `steering_hooks!`. None of
+  them touches the model, so the package still does not depend on V3Kite.
+  Exported: `RunState`, `step_commands!`, `record_step!`, `check_overspeed`,
+  `apply_optimized_kv!`. The script's imports lost 42 names, the four re-imported exports included.
+
+  Done in three steps (split in the script, `plant` instead of the model,
+  move into `src/`), each checked IDENTICAL on both replay baselines and on
+  the live old/new pairs above.
 - **Stage 5, results interface.** Not needed in the planned form (copying
   fields back to globals). `reelout_results(setup, st, timing)` and the
   analysis scripts read `st.<field>` and `setup.<field>` directly. The
@@ -126,23 +134,22 @@ check, as before.
    for readability and error detection, not speed (see above).
 2. **Where the functions live.** The plan put them in
    `examples/opt_reelout_lib.jl`. In fact that file holds only `init_model`.
-   The step blocks of the loop are in `examples/opt_reelout_loop.jl`, and the
-   setup and startup functions (`setup_run`, `retry_startup!`, …) and
-   `run_loop!` itself stayed in the script. The script is about 1200 lines,
-   not the planned 250.
-3. **Orchestration into the package (new, not part of the original plan).**
-   Because the orchestration functions are in the script, it imports about 50
-   unexported package internals by name (lines 118–130 and 156–160). Moving
-   `setup_run`, the startup functions, `RunState`, `run_loop!` and the step
-   blocks into `src/`
-   would cut the imports to a few exported entry points. The blocker is that
-   the script needs V3Kite (`init`, the model), and the package must not
-   depend on V3Kite. The model therefore has to stay a caller-supplied
-   argument, the same way `init_model` and `winch_adapter.jl` stay in
-   `examples/`.
-
-Small cleanup: line 129 of the script re-imports `check_startup_path`, `c1_at`,
-`phase5_margin` and `Phase5MarginState`, which are already exported.
+   The setup and startup functions (`setup_run`, `solve_startup_path!`,
+   `retry_startup!`, …) stayed in the script, which is about 1000 lines, not
+   the planned 250.
+3. **Setup and startup into the package.** The next candidates for `src/`
+   are the startup functions: `retry_startup!` and its helpers use the
+   remaining imported internals (`RetryLadder`, `next_lever`, `chain_init`,
+   …). `setup_run` calls `init_model` and so needs V3Kite. The model would
+   have to be passed in (e.g. an `init_model` function argument), since the
+   package must not depend on V3Kite.
+4. **Unit tests for the step blocks.** The functions in `src/reelout_loop.jl`
+   take hand-made `st`, `setup` and `plant`, so blends, the phase-5 fallback,
+   the lap counter and the winch setpoint could be tested without a model,
+   like `test_loop_decisions.jl`. Not written yet.
+5. **A typed `setup`.** The block functions read about 40 fields of the
+   `setup` NamedTuple that `setup_run` builds. A documented struct would make
+   that interface explicit.
 
 A first `runtests.jl` after a flown script used to fail once
 (`turn_rate_coeffs` expected the default table, but the script had left the
