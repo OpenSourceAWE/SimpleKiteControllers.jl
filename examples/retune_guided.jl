@@ -45,7 +45,7 @@ end
 using Printf
 using Statistics: median
 using Base.CoreLogging: with_logger, NullLogger
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 "Sites and their projects, as `stability_opt_reelout.jl` supports them"
 const RETUNE_SITES = ("cabauw" => "system_reelout_cabauw.yaml",

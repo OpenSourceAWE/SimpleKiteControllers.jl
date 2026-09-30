@@ -94,7 +94,6 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.
 include(joinpath(@__DIR__, "awetrim_client.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's input, `run_example("simple_opt_fig8.jl"; show_plots = false)`; a plain `include` plots.
 (; show_plots) = script_inputs(@__FILE__, (; show_plots = true))
 # The reference curve simple_fig8_plots.jl draws; set below, once it is known.

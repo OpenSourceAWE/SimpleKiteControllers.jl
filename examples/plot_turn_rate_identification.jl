@@ -30,7 +30,7 @@ The elevation panel carries `max_elevation`.
 
 About two to three minutes per flight. The inputs `depower`, `v_wind` (the wind speed,
 default the table's `V_WIND`) and `v_reelout` (the reel-out speed, default 0) are
-passed with `run_example` (`examples/script_inputs.jl`):
+passed with `run_example` (`src/script_inputs.jl`):
 
     run_example("plot_turn_rate_identification.jl"; depower = 0.3)    # default 0.275
     run_example("plot_turn_rate_identification.jl"; v_wind = 6.5)     # low v_a
@@ -51,7 +51,7 @@ using DelimitedFiles: writedlm
 # `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay`, `lag_filter` and
 # `joint_delay_lag_fit`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 # ==================== USER PARAMETERS ==================== #
 

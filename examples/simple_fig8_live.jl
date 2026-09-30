@@ -189,7 +189,7 @@ feasibility margin built from it — was identified without tether damping and i
 only an estimate here. Both are diagnostic, so this costs the diagnosis, not the
 run.
 
-`run_example("simple_fig8_live.jl"; show_plots = false)` (`examples/script_inputs.jl`)
+`run_example("simple_fig8_live.jl"; show_plots = false)` (`src/script_inputs.jl`)
 suppresses the figures at the end, which is what makes a sweep bearable. The
 inputs hold for that one run: a plain `include` flies with the defaults, so a
 sweep can never silently swallow the plots of a later run. Because `fcs` is rebuilt from the YAML file on every
@@ -244,7 +244,6 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's inputs, `run_example("simple_fig8_live.jl"; show_plots = false, record_video = true)`;
 # a plain `include` flies with these defaults.
 inputs = script_inputs(@__FILE__, (; show_plots = true, record_video = false))

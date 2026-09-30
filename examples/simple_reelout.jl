@@ -105,7 +105,7 @@ not by pre-defining or mutating `fcs` in the REPL. The one exception is the inpu
 `fcs_overrides`, a `Dict{Symbol, Any}` of field => value applied on top of the file,
 which is how the shape sweep (`examples/optimize_fig8.jl`) flies one `f8_a`/`f8_b`
 pair per run: `run_example("simple_reelout.jl"; fcs_overrides, output_path,
-run_archive = false, show_plots = false)` (`examples/script_inputs.jl`).
+run_archive = false, show_plots = false)` (`src/script_inputs.jl`).
 `output_path` and `run_archive` let those parallel runs keep their logs apart and
 skip the per-run archive. The inputs hold for that one run: a plain `include` flies
 with the defaults, so a value from a sweep never changes an interactive run. The
@@ -173,7 +173,6 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's inputs, `run_example("simple_reelout.jl"; show_plots = false, ...)`, see the
 # docstring; a plain `include` flies with these defaults.
 (; show_plots, fcs_overrides, output_path, run_archive) =

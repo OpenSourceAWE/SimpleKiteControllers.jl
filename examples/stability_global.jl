@@ -22,7 +22,7 @@ shows its Bode plot and the margins over tether length, and leaves its `L` in
 `Main` for `diskmargin(L)`.
 
 About 35 s per scenario. `run_example("stability_global.jl"; verbose = true)` shows each
-scenario's full per-bin output (`examples/script_inputs.jl`).
+scenario's full per-bin output (`src/script_inputs.jl`).
 
     include("stability_global.jl")
 """
@@ -37,7 +37,7 @@ using Base.CoreLogging: with_logger, NullLogger
 import YAML
 
 using SimpleKiteControllers: selected_scenarios_dir
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
 scenarios_dir = selected_scenarios_dir()

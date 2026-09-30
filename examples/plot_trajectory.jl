@@ -16,9 +16,9 @@ Run from the repo root or anywhere:
     include("examples/plot_trajectory.jl")
 
 Pass a file explicitly to plot a specific one instead of the newest
-(`examples/script_inputs.jl`):
+(`src/script_inputs.jl`):
 
-    include("examples/script_inputs.jl")
+    using SimpleKiteControllers: run_example
     run_example("plot_trajectory.jl"; traj_file = "startup_incumbent_20260827_114530.yaml")
 """
 
@@ -33,7 +33,7 @@ using LaTeXStrings
 
 const TRAJ_DIR = joinpath(@__DIR__, "..", "trajectories")
 
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 # A file in TRAJ_DIR, e.g. "startup_retry3_2026-08-27_1700.yaml"; `nothing` for the newest.
 (; traj_file) = script_inputs(@__FILE__, (; traj_file = nothing))
 

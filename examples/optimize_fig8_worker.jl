@@ -33,7 +33,6 @@ end
 
 using SimpleKiteControllers
 using Printf
-include(joinpath(@__DIR__, "script_inputs.jl"))
 import Dates
 
 const WORKER_ID = isempty(ARGS) ? 1 : parse(Int, ARGS[1])

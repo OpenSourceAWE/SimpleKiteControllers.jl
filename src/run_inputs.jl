@@ -7,7 +7,7 @@
     run_input_defaults() -> NamedTuple
 
 Every input a caller of `simple_opt_reelout.jl` may pass with
-`run_example("simple_opt_reelout.jl"; ...)` (see `examples/script_inputs.jl`), at its default:
+`run_example("simple_opt_reelout.jl"; ...)` (see `src/script_inputs.jl`), at its default:
 
 - `show_plots`: draw the figures.
 - `run_archive`: copy the log and its inputs to `output/archives/<stamp>/`.

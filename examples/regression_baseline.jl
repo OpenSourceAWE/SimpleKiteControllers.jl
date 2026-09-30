@@ -26,7 +26,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using SimpleKiteControllers: read_gui_field, write_gui_field, set_selected_project
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 include(joinpath(@__DIR__, "compare_runs.jl"))
 
 const SITE_PROJECT = Dict("maasvlakte" => "system_reelout_maasvlakte.yaml",

@@ -17,6 +17,7 @@ using Test
     include("test_reelout_metrics.jl")
     include("test_summary_yaml.jl")
     include("test_gui_state.jl")
+    include("test_script_inputs.jl")
     include("test_startup_retry.jl")
     include("test_reelout_budget.jl")
     include("test_reopt_gate.jl")

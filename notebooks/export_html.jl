@@ -9,7 +9,7 @@ entry, so it needs the notebook already open and served — start it first (Kaim
 `KaimonSlate.serve_notebook("notebooks/results.jl")`). The notebook id and hub URL default to
 `results` and `http://127.0.0.1:8765`; override with the `SLATE_NOTEBOOK`/`SLATE_HUB_URL`
 environment variables, or with the inputs `notebook`/`hub_url` of
-`run_example(joinpath("..", "notebooks", "export_html.jl"); ...)` (`examples/script_inputs.jl`),
+`run_example(joinpath("..", "notebooks", "export_html.jl"); ...)` (`src/script_inputs.jl`),
 as `publish.jl` does.
 
 The export inlines every image, but not the interactive 3D-path pages
@@ -26,7 +26,7 @@ the run.
 
 using Downloads
 
-include(joinpath(@__DIR__, "..", "examples", "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 # The caller's inputs, see the docstring; a plain `include` takes the environment's. Plain globals
 # instead of consts so this file can be included repeatedly into Main without "already declared"

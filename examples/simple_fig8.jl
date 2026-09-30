@@ -143,7 +143,7 @@ feasibility margin built from it — was identified without tether damping and i
 only an estimate here. Both are diagnostic, so this costs the diagnosis, not the
 run.
 
-`run_example("simple_fig8.jl"; show_plots = false)` (`examples/script_inputs.jl`)
+`run_example("simple_fig8.jl"; show_plots = false)` (`src/script_inputs.jl`)
 suppresses the figures at the end, which is what makes a sweep bearable. The
 inputs hold for that one run: a plain `include` flies with the defaults, so a
 sweep can never silently swallow the plots of a later run. Because `fcs` is rebuilt from the YAML file on every
@@ -192,7 +192,6 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's inputs, `run_example("simple_fig8.jl"; show_plots = false, ...)`; a plain `include`
 # flies with these defaults. The V1 hooks and `steer_injection` are explained where they act, below.
 (; show_plots, steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle,

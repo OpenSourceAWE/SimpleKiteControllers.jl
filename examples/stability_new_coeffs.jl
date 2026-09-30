@@ -43,7 +43,7 @@ using DelimitedFiles: readdlm, writedlm
 
 va_min = 12.0             # [m/s] scenarios whose phase-4 v_a drops below this are left out
 # The input `include_low_va = true` rates them anyway; read before anything else runs a script.
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 (; include_low_va) = script_inputs(@__FILE__, (; include_low_va = false))
 
 # collect_scenarios, scenario_margins, live_settings; and through it stability_opt_reelout.jl.

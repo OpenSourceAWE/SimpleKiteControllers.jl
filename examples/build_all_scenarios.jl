@@ -31,7 +31,7 @@ end
 
 import YAML
 using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 "Project flown at each site, see `scenario_site`"
 const SITE_PROJECTS = ("maasvlakte" => "system_reelout_maasvlakte.yaml",

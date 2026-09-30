@@ -155,10 +155,6 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "awetrim_client.jl"))
 # The functions moved out of this script, see Plan_refactor_opt_reelout.md.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
-# The caller's inputs, passed as `run_example("simple_opt_reelout.jl"; show_plots = false, ...)`
-# (script_inputs.jl); a plain `include` runs with the defaults, see `run_input_defaults`.
-# The setup-only ones (the *_overrides, path_tr_project, output_path, run_archive) are read as `inputs.<name>`.
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # Reference curve and log name for simple_reelout_plots.jl; set by reelout_results.jl, cleared here.
 REF_PATH = nothing
 LOG_NAME = nothing
@@ -422,6 +418,9 @@ function apply_optimized_kv!(setup, tab, t, l)
     return
 end
 
+# The caller's inputs, passed as `run_example("simple_opt_reelout.jl"; show_plots = false, ...)`
+# (src/script_inputs.jl); a plain `include` runs with the defaults, see `run_input_defaults`.
+# The setup-only ones (the *_overrides, path_tr_project, output_path, run_archive) are read as `inputs.<name>`.
 setup = setup_run(script_inputs(@__FILE__, run_input_defaults()))
 
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.

@@ -96,7 +96,6 @@ using Printf
 using Base.CoreLogging: with_logger, NullLogger
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's inputs, `run_example("stability_opt_reelout.jl"; show_plots = false, ...)`; a plain
 # `include` runs with these defaults. `project` replaces the menu's selection (used by
 # `retune_guided.jl`), `log_dir` the folder the log is read from, and `gravity_scale` scales the

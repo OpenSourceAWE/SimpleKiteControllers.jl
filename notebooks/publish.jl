@@ -28,7 +28,7 @@ using Downloads
 
 # `scenario_site`: the site of the active reel-out project.
 using SimpleKiteControllers: scenario_site
-include(joinpath(@__DIR__, "..", "examples", "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 SIMRESULTS_REPO = get(ENV, "SIMRESULTS_REPO",
                       normpath(joinpath(@__DIR__, "..", "..", "SimulationResults")))

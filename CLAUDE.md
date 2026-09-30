@@ -34,7 +34,7 @@ The example is run by `include`, not from the shell — it activates `examples/`
 include("examples/simple_fig8.jl")     # cached: ~2x realtime, 150 s sim = ~75 s wall
 ```
 
-A script's caller inputs are keywords, not globals (`examples/script_inputs.jl`):
+A script's caller inputs are keywords, not globals (`src/script_inputs.jl`):
 `run_example("simple_fig8.jl"; show_plots = false)` suppresses the figures at the end.
 They hold for that one run — a plain `include` runs with the defaults, so a sweep
 passes them per run and a leftover value never silently changes a later run. A

@@ -369,7 +369,7 @@ Guided α with both time constants from the log (linear bins):
 ## Measuring the margin in the simulation (2026-09-25)
 
 To test the model directly, `simple_opt_reelout.jl` now accepts a test input.
-The input `steer_disturbance` (`run_example`, `examples/script_inputs.jl`) is a
+The input `steer_disturbance` (`run_example`, `src/script_inputs.jl`) is a
 function `t -> Δu`, added to `rel_steering` after the controller. When it is
 set, the run keeps `st.dist_t`, `st.dist_d` (the disturbance) and
 `st.dist_u` (the steering sent to the model).

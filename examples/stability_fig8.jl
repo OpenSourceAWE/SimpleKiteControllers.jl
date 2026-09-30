@@ -93,7 +93,6 @@ using LinearAlgebra: diagm
 using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "script_inputs.jl"))
 # The caller's input, `run_example("stability_fig8.jl"; show_plots = false)`; a plain `include` plots.
 (; show_plots) = script_inputs(@__FILE__, (; show_plots = true))
 

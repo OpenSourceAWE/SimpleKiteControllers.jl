@@ -25,7 +25,7 @@ the fit window), so the figure can be redrawn without flying (`from_csv`). The
 PDF goes to LearningControl's `figures/`, as in `plot_c1_c2.jl`.
 
 About two to three minutes of flying. The inputs `depower` (default 0.275) and
-`from_csv` are passed with `run_example` (`examples/script_inputs.jl`):
+`from_csv` are passed with `run_example` (`src/script_inputs.jl`):
 
     include("plot_relay_low_elevation.jl")                          # fly, save, plot
     run_example("plot_relay_low_elevation.jl"; from_csv = true)     # plot the saved flight
@@ -39,7 +39,7 @@ end
 using MakieControlPlots
 using LaTeXStrings
 using DelimitedFiles: readdlm, writedlm
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 # ==================== USER PARAMETERS ==================== #
 

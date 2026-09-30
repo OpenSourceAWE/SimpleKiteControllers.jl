@@ -20,7 +20,7 @@ live `data/` directory or whatever a prior run left in `Main`.
 using REPL.TerminalMenus
 # `selected_scenarios_dir`: the site folder of the active project.
 using SimpleKiteControllers: selected_scenarios_dir
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 using SimpleKiteControllers: write_yaml_commented
 
 """

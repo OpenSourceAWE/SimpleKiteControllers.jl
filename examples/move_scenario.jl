@@ -19,7 +19,7 @@ refuses to overwrite a non-empty scenario folder unless `overwrite = true`,
 but running this file always passes `overwrite = true` — a later run at the
 same wind speed is meant to replace the one before it. The input
 `unique_scenario = true` keeps both instead (`copy_scenario.jl`, or
-`run_example("move_scenario.jl"; unique_scenario = true)`, see `script_inputs.jl`):
+`run_example("move_scenario.jl"; unique_scenario = true)`, see `src/script_inputs.jl`):
 the run then lands in `v08_2`, `v08_3`, ... rather than replacing `v08`. The input
 `scenario_archive = "output/archives/<stamp>"` moves that run instead of the last one.
 
@@ -42,7 +42,7 @@ using YAML
 # `compress_scenario`, run on the folder once the files have landed in it; it
 # does `using SimpleKiteControllers`, the home of `scenario_site`.
 include(joinpath(@__DIR__, "compress.jl"))
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 const OUTPUT_DIR = normpath(joinpath(@__DIR__, "..", "output"))
 const RUN_DONE_FILE = joinpath(OUTPUT_DIR, "last_run_done.txt")

@@ -34,7 +34,7 @@ path are strongly autocorrelated, so those come out far too small. The dead time
 and lag trade against each other within a block, so their bars also carry that.
 
 About 5 – 10 minutes per depower. The inputs `from_csv` and `from_raw` do without flying
-(`examples/script_inputs.jl`):
+(`src/script_inputs.jl`):
 
     include("plot_turn_rate_vs_depower.jl")                          # fly, save, plot
     run_example("plot_turn_rate_vs_depower.jl"; from_csv = true)     # plot the saved rows
@@ -53,7 +53,7 @@ using DelimitedFiles: readdlm, writedlm
 using Statistics: std
 using Base.CoreLogging: with_logger, NullLogger
 import Dates
-include(joinpath(@__DIR__, "script_inputs.jl"))
+using SimpleKiteControllers: run_example, script_inputs
 
 (; from_csv, from_raw) = script_inputs(@__FILE__, (; from_csv = false, from_raw = false))
 

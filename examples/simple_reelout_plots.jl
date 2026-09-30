@@ -75,7 +75,7 @@ simple_reelout.jl:
     include("simple_reelout_plots.jl")
 
 `run_example("simple_reelout_plots.jl"; scenario_path = "output/scenarios/<name>")`
-(`examples/script_inputs.jl`) replots an archived run instead — `project_set` and the log are reloaded from that
+(`src/script_inputs.jl`) replots an archived run instead — `project_set` and the log are reloaded from that
 folder's own copies rather than the live `data/` directory. `plot_scenario.jl`
 is the menu-driven front end for that.
 
@@ -100,11 +100,6 @@ include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
-
-# A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`, the input
-# `scenario_path` (`plot_scenario.jl` passes it). It holds for that one run: a stale value
-# must not silently redirect a LATER live run's plots at an old archive.
-include(joinpath(@__DIR__, "script_inputs.jl"))
 
 """
     live_global(name) -> value or nothing
@@ -632,4 +627,7 @@ end
 if "path_webgl" in selected_plots()
     import WGLMakie
 end
+# A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`, the input
+# `scenario_path` (`plot_scenario.jl` passes it). It holds for that one run: a stale value
+# must not silently redirect a LATER live run's plots at an old archive.
 draw_reelout_plots(script_inputs(@__FILE__, (; scenario_path = nothing)).scenario_path)
