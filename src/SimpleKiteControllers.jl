@@ -50,6 +50,9 @@ export check_reelout_feasibility
 # Simulated time of a reel-out run under a wind-speed override (examples/simple_opt_reelout.jl)
 export reelout_budget, sim_budget, BUDGET_HEIGHT
 
+# Run inputs of examples/simple_opt_reelout.jl and their defaults
+export run_input_defaults
+
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
 export with_file_lock, init_results_file, record_result!, load_results
@@ -90,6 +93,8 @@ include("traj_opt_settings.jl")
 include("reelout_feasibility.jl")
 # Reel-out time budget of examples/simple_opt_reelout.jl under a wind-speed override.
 include("reelout_budget.jl")
+# Run inputs of examples/simple_opt_reelout.jl and their defaults.
+include("run_inputs.jl")
 # Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
 include("startup_retry.jl")
 # After startup_retry.jl: with_size_box measures a path with elevation_amplitude.
