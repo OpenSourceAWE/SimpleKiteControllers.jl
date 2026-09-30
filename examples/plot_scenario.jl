@@ -4,7 +4,7 @@
 """
 Interactive menu to replot an archived scenario from the active project's
 site folder under `output/scenarios/` (`cabauw/` or `maasvlakte/`, see
-`selected_scenarios_dir` in `gui_state.jl`).
+`selected_scenarios_dir` in `src/gui_state.jl`).
 
 Each subfolder there (`v08`, `v09`, ...) is a self-contained copy of one
 `simple_opt_reelout.jl` run — its log plus every settings file that produced
@@ -19,7 +19,7 @@ live `data/` directory or whatever a prior run left in `Main`.
 
 using REPL.TerminalMenus
 # `selected_scenarios_dir`: the site folder of the active project.
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: selected_scenarios_dir
 include(joinpath(@__DIR__, "script_inputs.jl"))
 using SimpleKiteControllers: write_yaml_commented
 

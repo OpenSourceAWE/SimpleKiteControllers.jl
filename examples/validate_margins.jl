@@ -75,7 +75,6 @@ using Dates
 using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "script_inputs.jl"))
 include(joinpath(@__DIR__, "course_loop_model.jl"))
 

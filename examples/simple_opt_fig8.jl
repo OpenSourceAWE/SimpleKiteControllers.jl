@@ -90,7 +90,6 @@ toc("Loaded packages in: ")
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.

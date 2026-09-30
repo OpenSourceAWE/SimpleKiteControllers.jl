@@ -63,7 +63,6 @@ toc("Loaded packages in: ")
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
 VIEWER_INTERVAL = 3     # draw every n-th logged row
 REPLAY_TIME_LAPSE = 3.0 # 1 = realtime, N = N times faster

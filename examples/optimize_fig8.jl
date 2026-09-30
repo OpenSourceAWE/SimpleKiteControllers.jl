@@ -88,9 +88,9 @@ using KiteUtils: Settings
 using Printf
 import Dates
 
-# Also creates data/gui.yaml from its .default if missing — done HERE, once,
+# Creates data/gui.yaml from its .default if missing — done HERE, once,
 # rather than by six workers racing to copy the same file.
-include(joinpath(@__DIR__, "gui_state.jl"))
+ensure_gui_state_file()
 
 const OUTPUT_ROOT = normpath(joinpath(@__DIR__, "..", "output"))
 const WORKER_SCRIPT = joinpath(@__DIR__, "optimize_fig8_worker.jl")

@@ -101,10 +101,6 @@ include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
-# Read fresh from data/gui.yaml on every include, same as simple_reelout.jl (a
-# fig8 selection falls back to the reel-out default there and here alike), so a
-# manual re-include never plots against a stale project.
-include(joinpath(@__DIR__, "gui_state.jl"))
 # A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`, the input
 # `scenario_path` (`plot_scenario.jl` passes it). It holds for that one run: a stale value
 # must not silently redirect a LATER live run's plots at an old archive.

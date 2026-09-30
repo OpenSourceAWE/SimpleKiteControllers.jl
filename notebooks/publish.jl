@@ -27,7 +27,7 @@ using Dates
 using Downloads
 
 # `scenario_site`: the site of the active reel-out project.
-include(joinpath(@__DIR__, "..", "examples", "gui_state.jl"))
+using SimpleKiteControllers: scenario_site
 include(joinpath(@__DIR__, "..", "examples", "script_inputs.jl"))
 
 SIMRESULTS_REPO = get(ENV, "SIMRESULTS_REPO",

@@ -30,7 +30,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 import YAML
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
 include(joinpath(@__DIR__, "script_inputs.jl"))
 
 "Project flown at each site, see `scenario_site`"

@@ -1,34 +1,42 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-"""
-Read/write access to `data/gui.yaml`, the single state file of the example
-menu: which system project (`system_*.yaml`), simulation time, set of
-plots, turbulence level and wind speed the example scripts fly/show.
+# Read/write access to `data/gui.yaml`, the single state file of the example
+# menu: which system project (`system_*.yaml`), simulation time, set of
+# plots, turbulence level and wind speed the example scripts fly/show.
+#
+# Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
+# [`selected_project`](@ref)/[`selected_sim_time`](@ref)/[`selected_plots`](@ref)
+# /[`selected_turbulence`](@ref)/[`selected_windspeed`](@ref) fresh on every
+# `include`, so a manual re-include always reflects the file on disk rather than
+# a REPL variable left over from an earlier run. `select_project()`,
+# `select_sim_time()`, `select_plots()`, `select_turbulence()` and
+# `select_windspeed()` (`examples/select_*.jl`) are the only writers, besides
+# the sweeps of `examples/build_all_scenarios.jl` and `examples/regression_baseline.jl`.
+#
+# `default_turbulence` shares the file because V3Kite's
+# `get_default_turbulence`/`set_default_turbulence` read and write it there, in
+# this package's `data/` rather than the model's read-only one; the writes are
+# line-based, so all four keys and the comments survive each other.
 
-Not `Main` globals: `simple_fig8.jl` and `simple_fig8_plots.jl` call
-[`selected_project`](@ref)/[`selected_sim_time`](@ref)/[`selected_plots`](@ref)
-/[`selected_turbulence`](@ref)/[`selected_windspeed`](@ref) fresh on every
-`include`, so a manual re-include always reflects the file on disk rather than
-a REPL variable left over from an earlier run. `select_project()`,
-`select_sim_time()`, `select_plots()`, `select_turbulence()` and
-`select_windspeed()` (`examples/select_*.jl`) are the only writers.
-
-`default_turbulence` shares the file because V3Kite's
-`get_default_turbulence`/`set_default_turbulence` read and write it there, in
-this package's `data/` rather than the model's read-only one; the writes are
-line-based, so all four keys and the comments survive each other.
-"""
-
-using SimpleKiteControllers: skc_data_path
 using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_section,
                  wind_vec_from_angles
 
+"The menu's state file, `data/gui.yaml` of this package"
 gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
+"The system project the figure-of-eight scripts fly without a selection"
 default_project() = "system_fig8_200m.yaml"
+"The system project the reel-out scripts fly without a reel-out selection"
 default_reelout_project() = "system_reelout_maasvlakte.yaml"
+"The plots shown without a selection"
 default_plots() = ["pattern", "path_3d", "time_series", "power", "aerodynamics"]
 
+"""
+    ensure_gui_state_file() -> String
+
+The path of [`gui_state_file`](@ref), created from its `.default` copy if it does
+not exist yet.
+"""
 function ensure_gui_state_file()
     state_file = gui_state_file()
     if !isfile(state_file)
@@ -40,6 +48,12 @@ function ensure_gui_state_file()
     return state_file
 end
 
+"""
+    read_gui_field(name) -> Union{String, Nothing}
+
+The value of the scalar `name:` in `data/gui.yaml`, unquoted, or `nothing` when
+the key is missing or empty.
+"""
 function read_gui_field(name::String)
     state_file = ensure_gui_state_file()
     isfile(state_file) || return nothing
@@ -53,6 +67,12 @@ function read_gui_field(name::String)
     return nothing
 end
 
+"""
+    write_gui_field(name, value)
+
+Set the scalar `name:` in `data/gui.yaml` to `value`, adding it under `gui:` when
+it is missing; line-based, so every other key and comment is kept.
+"""
 function write_gui_field(name::String, value)
     state_file = ensure_gui_state_file()
     lines = readfile(state_file)

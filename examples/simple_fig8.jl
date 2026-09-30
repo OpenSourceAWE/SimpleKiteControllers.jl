@@ -149,7 +149,7 @@ inputs hold for that one run: a plain `include` flies with the defaults, so a
 sweep can never silently swallow the plots of a later run. Because `fcs` is rebuilt from the YAML file on every
 `include` (see above), a sweep over an `FC_Settings` field cannot mutate `fcs` in
 the loop — it must rewrite the YAML file itself between iterations, e.g. with
-KiteUtils' `update_yaml_scalar` (`examples/gui_state.jl` uses it the same way for
+KiteUtils' `update_yaml_scalar` (`src/gui_state.jl` uses it the same way for
 `data/gui.yaml`).
 
 Which system project is flown (150m/200m/300m pattern), the run length
@@ -157,7 +157,7 @@ Which system project is flown (150m/200m/300m pattern), the run length
 seconds), the turbulence level (`use_turbulence`, `default` to leave the
 settings YAML in charge) and the mean wind speed (`default` for the project's
 own `v_wind`) are read fresh on every `include` from `data/gui.yaml`
-(`examples/gui_state.jl`), not `Main` globals: run `select_project()`
+(`src/gui_state.jl`), not `Main` globals: run `select_project()`
 (`examples/select_project.jl`), `select_sim_time()`
 (`examples/select_sim_time.jl`), `select_turbulence()`
 (`examples/select_turbulence.jl`) and `select_windspeed()`
@@ -190,7 +190,6 @@ toc("Loaded packages in: ")
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "script_inputs.jl"))

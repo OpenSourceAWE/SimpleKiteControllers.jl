@@ -5,7 +5,7 @@
 Plot mean, max and min reel-out power, tether force and reel-out speed against
 wind speed across every archived scenario in the active project's site folder
 under `output/scenarios/` (`cabauw/` or `maasvlakte/`, see
-`selected_scenarios_dir` in `gui_state.jl` and `move_scenario.jl`) — one point
+`selected_scenarios_dir` in `src/gui_state.jl` and `move_scenario.jl`) — one point
 per `vNN` folder, read from that scenario's
 own run-summary YAML (`summary.av_power_ro`/`max_power_ro`/`min_power_ro`,
 `summary.av_force_ro`/`max_force_ro`/`min_force_ro`,
@@ -28,7 +28,7 @@ end
 using YAML, GLMakie, MakieControlPlots
 using SimpleKiteControllers: skc_data_path
 # `selected_scenarios_dir`: the site folder of the active project.
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: scenario_site, selected_scenarios_dir
 
 const MAX_TETHER_FORCE_N =
     YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]

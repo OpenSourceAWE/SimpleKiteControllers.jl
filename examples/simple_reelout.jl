@@ -135,7 +135,7 @@ now, not here; see that file's header comment.
 
 The run length and the turbulence level are read from `data/gui.yaml` exactly as
 in `simple_fig8.jl`. The system project is too, but only when the selection is a
-reel-out one: `selected_reelout_project()` (`examples/gui_state.jl`) ignores a
+reel-out one: `selected_reelout_project()` (`src/gui_state.jl`) ignores a
 fig8 selection left over from `simple_fig8.jl` — whose FORCE-mode `fc_settings`
 this script rejects at startup — and flies `system_reelout_maasvlakte.yaml` instead, so
 no `select_project()` call is needed in between. Selecting another
@@ -171,7 +171,6 @@ toc("Loaded packages in: ")
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "script_inputs.jl"))

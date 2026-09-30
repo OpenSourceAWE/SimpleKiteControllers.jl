@@ -4,7 +4,7 @@
 """
 Disk-margin stability analysis of the reel-out course loop over every archived
 scenario of the active project's site (`output/scenarios/<site>/vNN`, see
-`selected_scenarios_dir` in `gui_state.jl`).
+`selected_scenarios_dir` in `src/gui_state.jl`).
 
 For each non-empty scenario folder this runs `stability_opt_reelout.jl` with
 the input `log_dir` set to that folder: the operating points (tether length, `v_a`, kite
@@ -36,7 +36,7 @@ using Printf
 using Base.CoreLogging: with_logger, NullLogger
 import YAML
 
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: selected_scenarios_dir
 include(joinpath(@__DIR__, "script_inputs.jl"))
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 

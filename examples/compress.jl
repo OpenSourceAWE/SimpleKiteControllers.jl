@@ -48,10 +48,6 @@ using KiteUtils
 using StaticArrays
 using Printf
 
-# `selected_reelout_project`, the default source of the settings whose
-# `segments` decide how many tether nodes the point block holds.
-include(joinpath(@__DIR__, "gui_state.jl"))
-
 const SA = KiteUtils.StructArrays
 const Arrow = KiteUtils.Arrow
 

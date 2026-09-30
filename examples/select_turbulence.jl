@@ -20,9 +20,7 @@ seconds).
 """
 
 using V3Kite: set_default_turbulence
-using SimpleKiteControllers: skc_data_path
-
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: skc_data_path, ensure_gui_state_file, selected_turbulence
 
 """
     select_turbulence()

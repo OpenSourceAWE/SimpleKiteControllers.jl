@@ -6,7 +6,7 @@ Interactive menu to choose which system project (`system_*.yaml`) the
 example scripts fly.
 
 Writes the choice to `data/gui.yaml` via [`set_selected_project`](@ref)
-(`examples/gui_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
+(`src/gui_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
 and `simple_fig8_plots.jl` read the current selection straight off disk on
 every `include` instead of relying on a REPL variable.
 
@@ -18,9 +18,8 @@ between; a `system_reelout_*.yaml` chosen here does reach them.
 
 using REPL
 using REPL.TerminalMenus
-using SimpleKiteControllers: skc_data_path
-
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: skc_data_path, selected_project, selected_reelout_project,
+    set_selected_project
 
 """
     select_project()

@@ -40,7 +40,7 @@ end
 
 using YAML
 # `compress_scenario`, run on the folder once the files have landed in it; it
-# pulls in `gui_state.jl`, the home of `scenario_site`.
+# does `using SimpleKiteControllers`, the home of `scenario_site`.
 include(joinpath(@__DIR__, "compress.jl"))
 include(joinpath(@__DIR__, "script_inputs.jl"))
 
@@ -82,7 +82,7 @@ end
     archive_site(archive_dir)
 
 The site subfolder of `output/scenarios/` a run belongs in — `scenario_site`
-(`gui_state.jl`) of the system project its own summary YAML records, not of
+(`src/gui_state.jl`) of the system project its own summary YAML records, not of
 whatever `gui.yaml` selects by now.
 """
 function archive_site(archive_dir::AbstractString)

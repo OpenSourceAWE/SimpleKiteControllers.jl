@@ -25,7 +25,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: read_gui_field, write_gui_field, set_selected_project
 include(joinpath(@__DIR__, "script_inputs.jl"))
 include(joinpath(@__DIR__, "compare_runs.jl"))
 

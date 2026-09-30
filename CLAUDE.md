@@ -250,7 +250,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   project file at all; V3Kite loads them from `v3_data_path()` directly.
 - **One state file, `data/gui.yaml`** (gitignored; `gui.yaml.default` is the template).
   Project, `sim_time`, plots and `default_turbulence` all live in its `gui:` section.
-  `examples/gui_state.jl` reads it with a line regex and writes it with KiteUtils'
+  `src/gui_state.jl` reads it with a line regex and writes it with KiteUtils'
   `update_yaml_scalar`, and V3Kite's `set_default_turbulence(; data_path = skc_data_path())`
   writes the turbulence key into the same file — line-based on both sides, so the keys and
   the comments survive each other. `simple_fig8.jl` passes the level to `init` as

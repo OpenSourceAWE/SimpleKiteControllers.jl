@@ -7,14 +7,14 @@ Interactive menu to choose the simulation time `simple_fig8.jl` flies:
 seconds, entered numerically.
 
 Writes the choice to `data/gui.yaml` via [`set_selected_sim_time`](@ref)
-(`examples/gui_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
+(`src/gui_state.jl`) rather than a `Main` global, so `simple_fig8.jl`
 reads the current selection straight off disk on every `include`.
 """
 
 using REPL
 using REPL.TerminalMenus
 
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: selected_sim_time, set_selected_sim_time
 
 """
     ask_sim_time_seconds() -> Union{Float64, Nothing}

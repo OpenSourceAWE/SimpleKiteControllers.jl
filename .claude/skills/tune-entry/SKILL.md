@@ -116,7 +116,7 @@ run was too short to say anything.
 Set up and fly one:
 
 ```julia
-include("examples/gui_state.jl")
+using SimpleKiteControllers  # set_selected_windspeed, set_selected_sim_time
 set_selected_windspeed(4.0)      # the wind speed under test
 set_selected_sim_time(60.0)      # screening budget; see the scaling above
 include("examples/simple_opt_reelout.jl")

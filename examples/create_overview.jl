@@ -3,7 +3,7 @@
 
 """
 Write `SimulationResults/scenarios/<site>/overview.md`, `site` the active
-project's (`cabauw` or `maasvlakte`, see `scenario_site` in `gui_state.jl`,
+project's (`cabauw` or `maasvlakte`, see `scenario_site` in `src/gui_state.jl`,
 mirroring `output/scenarios/<site>/`): a table with one row per wind speed,
 i.e. per `vNN` scenario folder with any `_N` repeat-run suffix ignored
 (`v05.75` and `v05.75_2` give one row, from the unsuffixed folder if it has a
@@ -54,7 +54,7 @@ using MakieControlPlots
 using Base64
 using SimpleKiteControllers: skc_data_path
 # `scenario_site`: the site folder of the active project.
-include(joinpath(@__DIR__, "gui_state.jl"))
+using SimpleKiteControllers: scenario_site
 
 const SIMRESULTS_SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
 const MAX_TETHER_FORCE_N =

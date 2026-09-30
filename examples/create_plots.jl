@@ -5,7 +5,7 @@
 Batch-generate pattern, time-series, power, aerodynamics and 3D-path plots
 for every archived scenario in the active project's site folder under
 `output/scenarios/` (`cabauw/` or `maasvlakte/`, see `selected_scenarios_dir`
-in `gui_state.jl`), saving one
+in `src/gui_state.jl`), saving one
 `pattern_<scenario>.png`, `time_series_<scenario>.png`, `power_<scenario>.png`,
 `aerodynamics_<scenario>.png` and `path_webgl_<scenario>.html` per scenario
 folder into `notebooks/images/<site>/`, the same site the scenarios were read
@@ -43,8 +43,6 @@ using SimpleKiteControllers: project_file
 
 # Include utility function for pattern plotting
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
-# `selected_scenarios_dir`: the site folder of the active project.
-include(joinpath(@__DIR__, "gui_state.jl"))
 
 
 """

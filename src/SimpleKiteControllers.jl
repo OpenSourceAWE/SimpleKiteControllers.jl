@@ -73,6 +73,14 @@ export format_results_table
 # Data
 export skc_data_path
 
+# State of the example menu, data/gui.yaml (examples/select_*.jl)
+export gui_state_file, ensure_gui_state_file, read_gui_field, write_gui_field
+export default_project, default_reelout_project, default_plots
+export selected_project, selected_reelout_project, selected_fig8_project
+export selected_sim_time, selected_plots, selected_windspeed, selected_turbulence
+export set_selected_project, set_selected_sim_time, set_selected_plots, set_selected_windspeed
+export scenario_site, selected_scenarios_dir, apply_windspeed_override!
+
 """
     skc_data_path() -> String
 
@@ -86,6 +94,8 @@ directory during a run, while these settings belong to the controller.
 """
 skc_data_path() = joinpath(dirname(@__DIR__), "data")
 
+# State of the example menu, data/gui.yaml; after skc_data_path, which locates it.
+include("gui_state.jl")
 # Before figure_eight_controller.jl: its feasibility helpers default c1 to V3_TURN_RATE_C1.
 include("turn_rate_table.jl")
 include("winch_kv_table.jl")
