@@ -155,3 +155,23 @@ function record_converged!(ladder::RetryLadder, ask, margin)
     ladder.width_ok, ladder.relax_width = ask.az_min, false
     return ladder
 end
+
+"""
+    startup_seed_offsets(listed; max_abs = 10.0) -> Vector{Float64}
+
+The centre-elevation offsets [deg] the startup solve may be seeded from, in
+order: 0 (the shipped guess), then `listed` (`startup_retry_el_offsets`), then
+every whole degree not yet in the list by growing magnitude, negative first, out
+to `max_abs`. The tail only exists so a seed the failure cache rejects can be
+replaced by one that has not been tried; how many of them are SENT is the
+caller's budget, not this list. An empty `listed` never retries, so it gets no
+tail either.
+"""
+function startup_seed_offsets(listed; max_abs = 10.0)
+    offsets = [0.0; listed]
+    isempty(listed) && return offsets
+    for k in 1.0:max_abs, o in (-k, k)
+        o in offsets || push!(offsets, o)
+    end
+    return offsets
+end

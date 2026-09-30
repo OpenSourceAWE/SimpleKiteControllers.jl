@@ -34,6 +34,7 @@ export winch_state_pct
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
+export apply_overrides!
 export attractor_distance
 export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 
@@ -43,6 +44,9 @@ export TrajOptSettings, turn_radius_lap_reelout
 # Reel-out feasibility gates (examples/simple_opt_reelout.jl)
 export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
 export check_reelout_feasibility
+
+# Simulated time of a reel-out run under a wind-speed override (examples/simple_opt_reelout.jl)
+export reelout_budget, BUDGET_HEIGHT
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
@@ -82,6 +86,8 @@ include("optimization.jl")
 include("traj_opt_settings.jl")
 # After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.
 include("reelout_feasibility.jl")
+# Reel-out time budget of examples/simple_opt_reelout.jl under a wind-speed override.
+include("reelout_budget.jl")
 # Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
 include("startup_retry.jl")
 # Pure accept gate of a re-optimized path of examples/simple_opt_reelout.jl.

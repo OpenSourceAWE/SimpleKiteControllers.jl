@@ -63,79 +63,36 @@ function read_run_inputs()
 end
 
 """
-    apply_overrides!(obj, overrides, label, typename, what)
-
-Set each `key => value` of `overrides` as a field of the settings struct `obj`,
-converted to the field's type, and log the ones in force as "`what` overrides in
-force". `label` is the name of the global that carried them and `typename` the
-type's name, both for the error of a key that is not a field of `obj`.
-"""
-function apply_overrides!(obj, overrides, label, typename, what)
-    for (key, value) in overrides
-        hasfield(typeof(obj), key) ||
-            error("$label: \"$key\" is not a field of $typename.")
-        setfield!(obj, key, convert(fieldtype(typeof(obj), key), value))
-    end
-    isempty(overrides) ||
-        @info "$what overrides in force: " * join(("$k = $v" for (k, v) in overrides), ", ")
-    return obj
-end
-
-"""
     sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind) -> Union{Float64, Nothing}
 
 Simulated time [s] to ask `init` for, and the message that says how it was chosen.
 
-With no wind-speed override it is `sim_time` (`nothing`: the project's own). With
-one, it is the reel-out budget: the winch's sqrt-law at and above `V_BUDGET_KNOT`
-(wind at `BUDGET_HEIGHT_M`), and below the knot the project's sim time scaled by the
-ratio of the default to the flown wind, which the sqrt-law does not cover.
-`default_v_wind` is the project's wind before the override.
+With no wind-speed override it is `sim_time` (`nothing`: the project's own). With one, it
+is [`reelout_budget`](@ref), fed with the drum's `v_sat`, the winch's `kv` and the wind
+factor at `BUDGET_HEIGHT` of the project's own profile law. `default_v_wind` is the
+project's wind before the override.
 """
 function sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind)
-    BELOW_DEFAULT_EXPONENT = 1.6  # exponent for scaling sim_time below the knot
-    BUDGET_HEIGHT_M = 100.0       # [m] height the budget's wind is taken at
-    V_BUDGET_KNOT = 7.7           # [m/s at BUDGET_HEIGHT_M] sqrt-law valid at/above; legacy scaling below
-    F_BUDGET_COEF = 48.0          # [N/(m/s)²] low-side fit of reeling-mean force ~ w_100², keeps the budget generous
-    REEL_MARGIN = 0.9             # achievable fraction of nominal speed (rings, soft-start)
-    BUDGET_ENTRY_S = 25.0         # park + dive + hold + reelout_delay [s]
-    BUDGET_TAIL_S = 10.0          # soft-stop ramp + phase-5 hold after length stop [s]
-    l_tether = project_set.l_tether
+    isnothing(wind_speed) && return sim_time
     # The drum's own v_sat, read from the file so the budget follows a retune.
-    v_budget_cap =
-        load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq).v_sat
-    # Ratio of the wind at BUDGET_HEIGHT_M to the one at h_ref, from the project's own profile law.
-    budget_wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
-                                          BUDGET_HEIGHT_M)
-    # Reel-out speed the budget assumes [m/s] at mean ground wind `w`: the winch's own law at a
-    # conservative tension estimate from the wind at `BUDGET_HEIGHT_M`, capped by the drum's speed
-    # limit. `winch_kv` stays keyed by the ground wind, which is what its table lists.
-    v_reel_nominal(w) = min(winch_kv(w; project) * sqrt(F_BUDGET_COEF) * w * budget_wind_factor,
-                            v_budget_cap)
-    effective_sim_time = if isnothing(wind_speed)
-        sim_time
-    elseif wind_speed * budget_wind_factor < V_BUDGET_KNOT
-        wind_ratio = default_v_wind / wind_speed
-        scale = wind_ratio <= 1 ? wind_ratio : wind_ratio^BELOW_DEFAULT_EXPONENT
-        something(sim_time, project_set.sim_time) * scale
-    else
-        l_reel = fcs.reelout_l_max - l_tether
-        BUDGET_ENTRY_S + l_reel / (REEL_MARGIN * v_reel_nominal(project_set.v_wind)) +
-            BUDGET_TAIL_S
-    end
-    isnothing(wind_speed) || @info @sprintf("simple_opt_reelout.jl: wind-speed override active, \
-                                            %s",
-        wind_speed * budget_wind_factor < V_BUDGET_KNOT ?
+    v_cap = load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq).v_sat
+    # Ratio of the wind at BUDGET_HEIGHT to the one at h_ref, from the project's own profile law.
+    wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
+                                   BUDGET_HEIGHT)
+    l_reel = fcs.reelout_l_max - project_set.l_tether
+    # `winch_kv` stays keyed by the ground wind, which is what its table lists.
+    b = reelout_budget(wind_speed, default_v_wind, something(sim_time, project_set.sim_time);
+                       l_reel, kv = winch_kv(wind_speed; project), v_cap, wind_factor)
+    w_budget = wind_speed * wind_factor
+    @info "simple_opt_reelout.jl: wind-speed override active, " * (b.below_knot ?
         @sprintf("sim_time scaled to %.1f s (%.1f m/s at %.0f m, below the %.1f m/s knot).",
-                 effective_sim_time, wind_speed * budget_wind_factor, BUDGET_HEIGHT_M,
-                 V_BUDGET_KNOT) :
+                 b.time, w_budget, BUDGET_HEIGHT, SimpleKiteControllers.BUDGET_KNOT) :
         @sprintf("reel-out budget %.1f s (%.0f s entry + %.0f m at %.2f m/s of %.2f nominal \
                   + %.0f s tail; %.1f m/s at %.0f m)",
-                 effective_sim_time, BUDGET_ENTRY_S, fcs.reelout_l_max - l_tether,
-                 v_reel_nominal(project_set.v_wind) * REEL_MARGIN,
-                 v_reel_nominal(project_set.v_wind), BUDGET_TAIL_S,
-                 wind_speed * budget_wind_factor, BUDGET_HEIGHT_M))
-    return effective_sim_time
+                 b.time, SimpleKiteControllers.BUDGET_ENTRY, l_reel,
+                 b.v_nominal * SimpleKiteControllers.BUDGET_REEL_MARGIN, b.v_nominal,
+                 SimpleKiteControllers.BUDGET_TAIL, w_budget, BUDGET_HEIGHT))
+    return b.time
 end
 
 """

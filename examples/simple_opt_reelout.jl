@@ -112,6 +112,7 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using SimpleKiteControllers: startup_seed_offsets
 import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
@@ -401,26 +402,6 @@ opt_length(l) = tos.opt_length_round > 0 ?
 opt_depower_log = NamedTuple[]
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
 depower_flown_opt = fcs.depower_setpoint
-
-"""
-    startup_seed_offsets(listed; max_abs = 10.0) -> Vector{Float64}
-
-The centre-elevation offsets [deg] the startup solve may be seeded from, in
-order: 0 (the shipped guess), then `listed` (`startup_retry_el_offsets`), then
-every whole degree not yet in the list by growing magnitude, negative first, out
-to `max_abs`. The tail only exists so a seed the failure cache rejects can be
-replaced by one that has not been tried; how many of them are SENT is the
-caller's budget, not this list. An empty `listed` never retries, so it gets no
-tail either.
-"""
-function startup_seed_offsets(listed; max_abs = 10.0)
-    offsets = [0.0; listed]
-    isempty(listed) && return offsets
-    for k in 1.0:max_abs, o in (-k, k)
-        o in offsets || push!(offsets, o)
-    end
-    return offsets
-end
 
 """
     startup_params(el_center) -> InitParams

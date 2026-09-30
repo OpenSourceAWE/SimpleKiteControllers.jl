@@ -9,7 +9,7 @@ each attempt pulls and what the ladder learns from an answer. Pure numbers, no o
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
-    azimuth_amplitude, RETRY_GAIN_MAX
+    azimuth_amplitude, RETRY_GAIN_MAX, startup_seed_offsets
 
 @testset verbose = true "startup_retry" begin
     tos = (; startup_retry_step = 1.05, startup_retry_slack = 1.0, min_feasibility_margin = 1.0,
@@ -105,5 +105,16 @@ import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_conve
         record_422!(L, (; el_cap = 18.0, az_min = nothing, r_ask = 8.0))
         record_422!(L, (; el_cap = 19.0, az_min = nothing, r_ask = 8.0))
         @test L.cap_bad == 19.0
+    end
+
+    @testset "startup_seed_offsets" begin
+        # No listed retries: the shipped guess only, and no walked-out tail.
+        @test startup_seed_offsets(Float64[]) == [0.0]
+        # The listed seeds first, in order, then the whole degrees they miss, negative first.
+        @test startup_seed_offsets([2.0, -1.0]; max_abs = 3.0) ==
+              [0.0, 2.0, -1.0, 1.0, -2.0, -3.0, 3.0]
+        offsets = startup_seed_offsets([4.0])
+        @test length(offsets) == length(unique(offsets))
+        @test maximum(abs, offsets) == 10.0
     end
 end

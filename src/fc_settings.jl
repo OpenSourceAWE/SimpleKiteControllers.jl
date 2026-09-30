@@ -700,6 +700,25 @@ function load_yaml_fields!(obj, filename::AbstractString, section::AbstractStrin
 end
 
 """
+    apply_overrides!(obj, overrides, label, typename, what)
+
+Set each `key => value` of `overrides` as a field of the settings struct `obj`,
+converted to the field's type, and log the ones in force as "`what` overrides in
+force". `label` is the name of the global that carried them and `typename` the
+type's name, both for the error of a key that is not a field of `obj`.
+"""
+function apply_overrides!(obj, overrides, label, typename, what)
+    for (key, value) in overrides
+        hasfield(typeof(obj), key) ||
+            error("$label: \"$key\" is not a field of $typename.")
+        setfield!(obj, key, convert(fieldtype(typeof(obj), key), value))
+    end
+    isempty(overrides) ||
+        @info "$what overrides in force: " * join(("$k = $v" for (k, v) in overrides), ", ")
+    return obj
+end
+
+"""
     project_file(project = "system_fig8_200m.yaml") -> String
 
 Path of the system project to hand to the kite model, absolute when this package
