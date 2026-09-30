@@ -93,3 +93,20 @@ function gate_candidate(tos, c)
     end
     return (; verdict = :accept, reason = "", detail = "", raise = nothing, low = false)
 end
+
+"""
+    blend_folds(tos, az0, el0, az1, el1) -> Bool
+
+Does `blend_paths` between these two closed curves collapse `path_min_radius`
+anywhere across `w` in `[0, 1]`, relative to the smaller of the two endpoints'
+own radius? Sampled at `tos.blend_probe_points` points; a fold shows up as a
+near-zero radius against endpoints that are not, so a coarse sweep catches it —
+see the tuning log entry on why this replaced a runtime hold/jump-cap instead.
+"""
+function blend_folds(tos, az0, el0, az1, el1)
+    r0 = min(path_min_radius(az0, el0), path_min_radius(az1, el1))
+    r0 <= 0 && return false   # degenerate endpoint; not this check's job
+    any(w -> path_min_radius(blend_paths(az0, el0, az1, el1, w)...) <
+             tos.blend_fold_margin * r0,
+        range(0.0, 1.0; length = tos.blend_probe_points))
+end

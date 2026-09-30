@@ -8,7 +8,7 @@ order, and whether it asks for a fresh reply or gives up. Pure numbers, no optim
 
 using Test
 using SimpleKiteControllers
-import SimpleKiteControllers: gate_candidate, retried
+import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length
 
 @testset verbose = true "reopt_gate" begin
     tos = (; min_feasibility_margin = 1.0, min_height = 40.0, elevation_min_from_gates = true,
@@ -82,5 +82,23 @@ import SimpleKiteControllers: gate_candidate, retried
         @test gate(; bad...).verdict == :reject
         @test gate(; Base.structdiff(bad, (; margin = 0))...).reason == "clearance 10.0 m"
         @test occursin("descends", gate(; Base.structdiff(bad, (; margin = 0, clearance = 0))...).reason)
+    end
+
+    @testset "blend_folds" begin
+        fold_tos = (; blend_fold_margin = 0.3, blend_probe_points = 21)
+        az0, el0 = figure_eight_path(20.0, 8.0, 0.0, 30.0, 0.0, 100)
+        az1, el1 = figure_eight_path(24.0, 9.0, 0.0, 32.0, 0.0, 100)
+        @test !blend_folds(fold_tos, az0, el0, az0, el0)
+        @test !blend_folds(fold_tos, az0, el0, az1, el1)
+        # Mirrored, the path is flown the other way round: half-way the blend collapses to a line.
+        @test blend_folds(fold_tos, az0, el0, -az0, el0)
+    end
+
+    @testset "opt_length" begin
+        # The settled length's 5th-decimal jitter is rounded away, so the request is repeatable.
+        @test opt_length((; opt_length_round = 0.5), 150.00282) == 150.0
+        @test opt_length((; opt_length_round = 0.5), 150.00290) == 150.0
+        @test opt_length((; opt_length_round = 0.5), 150.3) == 150.5
+        @test opt_length((; opt_length_round = 0.0), 150.00282) == 150.00282
     end
 end

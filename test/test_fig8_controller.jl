@@ -1403,4 +1403,26 @@ end
             SimpleKiteControllers._TURN_RATE_TABLE[] = old
         end
     end
+
+    @testset "cross_track" begin
+        fec = _make_test_controller()
+        n = length(fec.az_path)
+        calc_attractor(fec, fec.az_path[30], fec.el_path[30])
+        q = fec.last_idx
+        # The normal is a unit vector at right angles to the tangent (sin chi, cos chi).
+        na, ne = path_normal(fec, q)
+        @test hypot(na, ne) ≈ 1
+        @test sin(fec.tangent[q]) * na + cos(fec.tangent[q]) * ne ≈ 0 atol = 1e-12
+        # On the path the error is zero; half a degree of arc along the normal reads as +0.5, against it -0.5.
+        az_q, el_q = fec.az_path[q], fec.el_path[q]
+        @test signed_cross_track(fec, az_q, el_q) == 0
+        @test signed_cross_track(fec, az_q + 0.5na / cosd(el_q), el_q + 0.5ne) ≈ 0.5 rtol = 1e-2
+        @test signed_cross_track(fec, az_q - 0.5na / cosd(el_q), el_q - 0.5ne) ≈ -0.5 rtol = 1e-2
+        # The attractor is the first point at least attractor_distance of arc ahead of Q.
+        ia = attractor_index(fec)
+        steps = mod(ia - q, n)
+        arc = sum(fec.seg_len[mod1(q + i, n)] for i in 0:(steps - 1))
+        @test arc >= fec.fes.attractor_distance
+        @test arc - fec.seg_len[mod1(ia - 1, n)] < fec.fes.attractor_distance
+    end
 end

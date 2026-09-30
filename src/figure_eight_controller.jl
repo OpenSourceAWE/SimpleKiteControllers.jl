@@ -811,6 +811,42 @@ flown along it arrives moving in the right direction.
 path_tangent(fec::FigureEightController) = fec.tangent[fec.last_idx]
 
 """
+    attractor_index(fec::FigureEightController) -> Int
+
+Index of the attractor point: `attractor_distance` of arc ahead of the closest point Q of the
+last [`calc_attractor`](@ref) call, as `calc_attractor` walks it.
+"""
+function attractor_index(fec::FigureEightController)
+    n, k, cum = length(fec.az_path), fec.last_idx, 0.0
+    while cum < fec.fes.attractor_distance
+        cum += fec.seg_len[k]
+        k = mod1(k + 1, n)
+        k == fec.last_idx && break
+    end
+    return k
+end
+
+"""
+    path_normal(fec::FigureEightController, i) -> (az, el)
+
+Right-hand normal (azimuth, elevation) of path point `i`, in degrees of arc; `tangent` is a
+bearing.
+"""
+path_normal(fec::FigureEightController, i) = (cos(fec.tangent[i]), -sin(fec.tangent[i]))
+
+"""
+    signed_cross_track(fec::FigureEightController, az, el) -> Float64
+
+Signed cross-track error [deg] of the kite at `az`, `el` [deg] to the path at the closest
+point Q of the last [`calc_attractor`](@ref) call, right of travel > 0.
+"""
+function signed_cross_track(fec::FigureEightController, az, el)
+    iq = fec.last_idx
+    na, ne = path_normal(fec, iq)
+    return (az - fec.az_path[iq]) * cosd(el) * na + (el - fec.el_path[iq]) * ne
+end
+
+"""
     path_turn_rate(fec::FigureEightController, lead, speed; smooth = 0.0) -> Float64
 
 Course rate [rad/s] the reference path asks for `lead` degrees of arc ahead of

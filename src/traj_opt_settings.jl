@@ -949,3 +949,20 @@ function turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
     end
     return 1.987 * v_wind + 14.18
 end
+
+"""
+    opt_length(tos, l) -> Float64
+
+Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` [m]
+(`0.0` sends `l` unchanged). The flown `l_set` is never rounded — see the setting's
+docstring for why the request is.
+
+Every constraint that depends on the length is sized at this one too, not at the
+flown length: the settled `l_set` moves in the 5th decimal with the plant
+(150.00282 against 150.00290 m after the SymbolicAWEModels 0.18 bump), and a
+`min_turn_radius` changed by 1e-7 of itself missed the failure cache and flipped
+which startup seed converges, and so which of two optima the run flew
+(2026-09-26, 10 m/s: path centre 26.7° or 40.8°).
+"""
+opt_length(tos, l) = tos.opt_length_round > 0 ?
+    round(l / tos.opt_length_round) * tos.opt_length_round : l

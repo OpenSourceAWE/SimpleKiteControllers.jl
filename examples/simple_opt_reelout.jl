@@ -112,7 +112,7 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
-using SimpleKiteControllers: startup_seed_offsets
+using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds
 import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
@@ -229,27 +229,6 @@ xt_L = Float64[]        # [m] tether length
 xt_va = Float64[]       # [m/s] apparent wind speed
 xt_vk = Float64[]       # [m/s] kite speed normal to the tether
 xt_dp = Float64[]       # [-] depower
-
-"Index of the attractor point: `attractor_distance` of arc ahead of Q, as `calc_attractor` walks it."
-function attractor_index(fec)
-    n, k, cum = length(fec.az_path), fec.last_idx, 0.0
-    while cum < fec.fes.attractor_distance
-        cum += fec.seg_len[k]
-        k = mod1(k + 1, n)
-        k == fec.last_idx && break
-    end
-    return k
-end
-
-"Right-hand normal (azimuth, elevation) of path point `i`, in degrees of arc; `tangent` is a bearing."
-path_normal(fec, i) = (cos(fec.tangent[i]), -sin(fec.tangent[i]))
-
-"Signed cross-track error [deg] of the kite at `az`, `el` [deg] to the path at Q, right of travel > 0."
-function signed_cross_track(fec, az, el)
-    iq = fec.last_idx
-    na, ne = path_normal(fec, iq)
-    return (az - fec.az_path[iq]) * cosd(el) * na + (el - fec.el_path[iq]) * ne
-end
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -377,26 +356,9 @@ end
 # STARTING length, re-optimizing during the run is stage 4, below.
 (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain) =
     optimizer_session(tos, inflow, replay_paths, log_name)
-"""
-    opt_length(l)
-
-Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` metres
-(`0.0` sends `l` unchanged). The flown `l_set` is never rounded — see the setting's
-docstring for why the request is.
-
-Every constraint that depends on the length is sized at this one too, not at the
-flown length: the settled `l_set` moves in the 5th decimal with the plant
-(150.00282 against 150.00290 m after the SymbolicAWEModels 0.18 bump), and a
-`min_turn_radius` changed by 1e-7 of itself missed the failure cache and flipped
-which startup seed converges, and so which of two optima the run flew
-(2026-09-26, 10 m/s: path centre 26.7° or 40.8°).
-"""
-opt_length(l) = tos.opt_length_round > 0 ?
-    round(l / tos.opt_length_round) * tos.opt_length_round : l
-
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
 (; turn_radius_reel, opt_r_scale, depower_request, c1_request, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
-    request_constraints(tos, fcs, inflow, cap_wind, opt_length(l_set))
+    request_constraints(tos, fcs, inflow, cap_wind, opt_length(tos, l_set))
 
 # One row per depower value the optimizer reports back (startup, each ACCEPTED reopt), for summary and plot.
 opt_depower_log = NamedTuple[]
@@ -413,7 +375,7 @@ first-lap winch.
 function startup_params(el_center)
     az, el = figure_eight_path(tos.guess_a, tos.guess_b,
                                0.0, el_center, 0.0, tos.guess_points)
-    InitParams(; name = tos.name, length = opt_length(l_set),
+    InitParams(; name = tos.name, length = opt_length(tos, l_set),
                winch_params = winch_first_lap, inflow_conditions = inflow,
                trajectory = Trajectory(collect(az), collect(el)),
                input_depower = depower_seed(tos, inflow.wind_speed),
@@ -439,10 +401,10 @@ function startup_solve(params)
                        tos.opt_warm_start_awe_trim, winch.use_awe_trim)
         warm_winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
                                    use_awe_trim = tos.opt_warm_start_awe_trim)
-        seed_trajectory = chain_step(opt_chain, StepParams(opt_length(l_set), warm_winch,
+        seed_trajectory = chain_step(opt_chain, StepParams(opt_length(tos, l_set), warm_winch,
                                                            reply.trajectory)).trajectory
     end
-    result = chain_step(opt_chain, StepParams(opt_length(l_set), winch_first_lap,
+    result = chain_step(opt_chain, StepParams(opt_length(tos, l_set), winch_first_lap,
                                               seed_trajectory))
     return result, seed_trajectory
 end
@@ -804,7 +766,7 @@ function retry_startup!()
         local att_result, att_table, att_raw, att_score
         try
             att_result = chain_step(opt_chain,
-                                    StepParams(; length = opt_length(l_set),
+                                    StepParams(; length = opt_length(tos, l_set),
                                                winch_params = winch_first_lap,
                                                min_turn_radius = r_ask,
                                                pattern_limits = box_ask))
@@ -1080,38 +1042,16 @@ function init_loop_state!()
 end
 init_loop_state!()
 
-
-"""
-    blend_folds(az0, el0, az1, el1) -> Bool
-
-Does `blend_paths` between these two closed curves collapse `path_min_radius`
-anywhere across `w` in `[0, 1]`, relative to the smaller of the two endpoints'
-own radius? Sampled at `tos.blend_probe_points` points; a fold shows up as a
-near-zero radius against endpoints that are not, so a coarse sweep catches it —
-see the tuning log entry on why this replaced a runtime hold/jump-cap instead.
-"""
-function blend_folds(az0, el0, az1, el1)
-    r0 = min(path_min_radius(az0, el0), path_min_radius(az1, el1))
-    r0 <= 0 && return false   # degenerate endpoint; not this check's job
-    any(w -> path_min_radius(blend_paths(az0, el0, az1, el1, w)...) <
-             tos.blend_fold_margin * r0,
-        range(0.0, 1.0; length = tos.blend_probe_points))
-end
-
 toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
 
 # Assigned OUTSIDE the try: the loop's wall time must survive an early break.
-for (key, value) in wc_overrides
-    hasfield(typeof(wc), key) || error("WC_OVERRIDES: \"$key\" is not a field of $(typeof(wc)).")
-    setfield!(wc, key, convert(fieldtype(typeof(wc), key), value))
-end
-if !isempty(wc_overrides)
-    # The upper force controller's switching speed was derived from kv when `rc` was built.
+apply_overrides!(wc, wc_overrides, "WC_OVERRIDES", string(typeof(wc)), "winch (simulation only)")
+# The upper force controller's switching speed was derived from kv when `rc` was built.
+isempty(wc_overrides) ||
     WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
-    @info "winch overrides in force (simulation only): " * join(("$k = $v" for (k, v) in wc_overrides), ", ")
-end
+
 """
     run_loop!()
 
@@ -1298,7 +1238,7 @@ function run_loop!()
                     # The floor moves with the length: box rebuilt per request, `size_box_growth` x the previous install.
                     global opt_box_now = with_size_box(
                         pattern_limits_from(tos;
-                            elevation_min = elevation_min_request(fcs, tos, opt_length(l_now);
+                            elevation_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
                                                                   extra = el_min_extra),
                             wind_speed = cap_wind),
                         opt_paths_raw[end]..., tos.size_box_growth)
@@ -1306,7 +1246,7 @@ function run_loop!()
                         if isnothing(el_seed)
                             # `min_turn_radius` is re-sent because it MOVES with the length; `nothing` means "keep".
                             chain_step(opt_chain,
-                                       StepParams(; length = opt_length(l_now), winch_params = winch_reopt,
+                                       StepParams(; length = opt_length(tos, l_now), winch_params = winch_reopt,
                                                   min_turn_radius = opt_r_min,
                                                   pattern_limits = opt_box_now);
                                        wait = false)
@@ -1315,7 +1255,7 @@ function run_loop!()
                                 figure_eight_path(tos.guess_a, tos.guess_b,
                                                   0.0, el_seed,
                                                   0.0, tos.guess_points)
-                            reopt_params = InitParams(; name = tos.name, length = opt_length(l_now),
+                            reopt_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
                                                       winch_params = winch_reopt,
                                                       inflow_conditions = inflow,
                                                       trajectory = Trajectory(collect(guess_az_r),
@@ -1329,7 +1269,7 @@ function run_loop!()
                             # the chain on the warm lineage, and every later step would miss the cache.
                             reopt_reply = chain_init(opt_chain, reopt_params)
                             chain_step(opt_chain,
-                                       StepParams(opt_length(l_now), winch_reopt, reopt_reply.trajectory);
+                                       StepParams(opt_length(tos, l_now), winch_reopt, reopt_reply.trajectory);
                                        wait = false)
                         end
                         global reopt_pending = true
@@ -1420,7 +1360,7 @@ function run_loop!()
                             retry_el_seed = el_center_seed +
                                 (reject_low || isodd(blend_attempt) ? 1 : -1) *
                                 tos.reopt_retry_el_offset
-                            retry_el_min = elevation_min_request(fcs, tos, opt_length(l_now);
+                            retry_el_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
                                                                  extra = el_min_extra)
                             @info @sprintf("  ... candidate at L = %.0f m rejected \
                                             (%s); cold-restarting from guess el \
@@ -1437,7 +1377,7 @@ function run_loop!()
                             retry_az, retry_el = figure_eight_path(tos.guess_a,
                                 tos.guess_b, 0.0,
                                 retry_el_seed, 0.0, tos.guess_points)
-                            retry_params = InitParams(; name = tos.name, length = opt_length(l_now),
+                            retry_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
                                 winch_params = winch_reopt, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(retry_az),
                                                         collect(retry_el)),
@@ -1452,7 +1392,7 @@ function run_loop!()
                                     opt_paths_raw[end]..., tos.size_box_growth))
                             retry_reply = chain_init(opt_chain, retry_params)
                             chain_step(opt_chain,
-                                       StepParams(opt_length(l_now), winch_reopt, retry_reply.trajectory);
+                                       StepParams(opt_length(tos, l_now), winch_reopt, retry_reply.trajectory);
                                        wait = false)
                             t_retry = time()
                             retry_state = "solving"
@@ -1536,7 +1476,7 @@ function run_loop!()
                         clearance = path_min_height(chk_az, chk_el, l_now)
                         # Gated against BOTH the startup prediction and the previous install's (`min_power_frac*`).
                         new_pred = Float64(tab["metrics"]["avg_power_W"])
-                        cand_folds = blend_folds(cand_from..., cand_az, cand_el)
+                        cand_folds = blend_folds(tos, cand_from..., cand_az, cand_el)
                         # Raw against raw: the reply's curve against the previous install's, before either carries a lift.
                         cand_size = pattern_size_growth(opt_paths_raw[end]..., cand_raw...)
                         # The accept gate: turn margin, clearance, elevation floor, blend fold and power, size growth.
@@ -1695,7 +1635,7 @@ function run_loop!()
                     m = shift_margin(e)
                     isnan(margin) && (margin = m)   # the WHOLE shift's margin, reported
                     if m >= tos.min_feasibility_margin &&
-                       !blend_folds(fec.az_path, fec.el_path, fec.az_path, e)
+                       !blend_folds(tos, fec.az_path, fec.el_path, fec.az_path, e)
                         hit = (fm, e, m)
                         break
                     end
@@ -1764,7 +1704,7 @@ function run_loop!()
                     local from = prepare_path(fec.az_path, fec.el_path;
                                               resample = n_path, up_loops = fcs.up_loops)
                     local m_to = h.margin
-                    if blend_folds(from..., to...)
+                    if blend_folds(tos, from..., to...)
                         @warn @sprintf("Phase-5 fallback to the path installed at t = %.1f s \
                                         skipped: the blend would fold.", h.t)
                     else
