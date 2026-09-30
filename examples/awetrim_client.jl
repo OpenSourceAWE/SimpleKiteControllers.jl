@@ -37,4 +37,5 @@ using SimpleKiteControllers: OPT_FAILURE_CACHE, opt_request_key, opt_failures, o
 using SimpleKiteControllers: OPT_CHAIN_CACHE, OptChain, chain_key, chain_init, chain_step,
     chain_status, chain_trajectory, record_opt_success!, rebuild_session!, replay_entries,
     clear_opt_chain_cache
-using SimpleKiteControllers: guess_el_center_seed, reelout_anchor_ratio, optimizer_session
+using SimpleKiteControllers: guess_el_center_seed, reelout_anchor_ratio, optimizer_session,
+    solve_startup
