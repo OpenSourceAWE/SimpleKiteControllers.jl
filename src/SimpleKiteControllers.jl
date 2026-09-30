@@ -9,7 +9,7 @@ using LinearAlgebra: dot, cross, norm
 using StaticArrays: SVector
 using Statistics: mean, std
 using Printf: @printf, @sprintf
-using WinchControllers: WCSettings, WinchPosController
+using WinchControllers: WCSettings, WinchPosController, WinchController, LowerForceController
 
 # Figure-of-eight inner-loop (course) controller
 export CourseController, CourseControllerSettings, calc_steering, set_phase!
@@ -54,8 +54,8 @@ export reelout_budget, sim_budget, BUDGET_HEIGHT
 # Run inputs of examples/simple_opt_reelout.jl and their defaults
 export run_input_defaults
 
-# Winch settings and length loop of a run (examples/simple_opt_reelout.jl)
-export load_wc_settings, build_winch
+# Winch settings, length loop and controllers of a run (examples/simple_opt_reelout.jl)
+export load_wc_settings, build_winch, build_controllers
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
@@ -99,7 +99,8 @@ include("reelout_feasibility.jl")
 include("reelout_budget.jl")
 # Run inputs of examples/simple_opt_reelout.jl and their defaults.
 include("run_inputs.jl")
-# After winch_kv_table.jl: build_winch sets the wind-dependent winch tables.
+# After winch_kv_table.jl: build_winch sets the wind-dependent winch tables;
+# after figure_eight_controller.jl: build_controllers builds a FigureEightController.
 include("winch_setup.jl")
 # Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
 include("startup_retry.jl")

@@ -36,39 +36,6 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_m
 end
 
 """
-    build_controllers(fcs, rcs, s) -> (; rc, f_high_nominal, stop_criteria, guard_lfc, l_set, fec)
-
-The controllers of the run, built on the settled model `s`: the reel-out winch controller
-`rc` (built after `init`, so its soft-start ramp begins when reel-out starts; `rcs` is the
-one `WCSettings` of both winches), the nominal force ceiling `f_high_nominal` captured
-before the first-lap reduction (`winch_from_wc` sends this one to the optimizer), the
-standalone force-floor guard for phases 0-2 (`rc`'s own `SpeedController` would wind up
-while its output is ignored), the length setpoint `l_set` (the settled length, growing
-from phase 3 until it reaches `reelout_l_max`) and the figure-of-eight controller `fec`.
-"""
-function build_controllers(fcs, rcs, s)
-    rcs.dt = s.dt
-    rc = WinchController(rcs)
-    f_high_nominal = rcs.f_high
-    stop_criteria = fcs.n_fig_eight > 0 ?
-        @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
-        @sprintf("%.0f m", fcs.reelout_l_max)
-    @info @sprintf("Winch: REEL_OUT mode — %s, stopping at %s.",
-                   rcs.force_limit == "soft" ?
-                       @sprintf("soft force limit inverting kv = %.4f saturated at [%.0f, %.0f] N \
-                                 (beta %.0e/%.0e, force filtered at tau = %.2f s); the \
-                                 UpperForceController is held in reset",
-                                rcs.kv, rcs.f_low, rcs.f_high, rcs.softminus_beta,
-                                rcs.softplus_beta, rcs.force_limit_tau) :
-                       @sprintf("v_set = %.3f * sqrt(force)", rcs.kv),
-                   stop_criteria)
-    guard_lfc = LowerForceController(rcs)
-    l_set = s.sys_state.l_tether[1]
-    fec = FigureEightController(fcs; dt = s.dt)
-    return (; rc, f_high_nominal, stop_criteria, guard_lfc, l_set, fec)
-end
-
-"""
     optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
         -> (; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt)
 
