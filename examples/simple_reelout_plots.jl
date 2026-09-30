@@ -65,8 +65,8 @@ design variable; that one is ALWAYS drawn, flat when the gain was fixed.
 Neither rides a `var_` slot — all sixteen are taken. Both are read from the RUN
 SUMMARY on a scenario replot (`traj_opt.guess.depower_optimized_rel`,
 `traj_opt.guess.k_v_optimized`, `traj_opt.winch.k_v_flown`) and from the live
-globals (`opt_depower_log`, `opt_kv_log`) only for the run that just flew —
-see `depower_series`/`kv_series` for why a replot must never touch the globals.
+run's `opt_depower_log`/`opt_kv_log` (`live_global`) only for the run that just flew —
+see `depower_series`/`kv_series` for why a replot must never touch them.
 An archive from before `depower_optimized_rel` was written gets no `u_d` panel.
 
 Run from the REPL after (or instead of, if the log already exists) running
@@ -111,6 +111,21 @@ project = project_file(selected_reelout_project())
 include(joinpath(@__DIR__, "script_inputs.jl"))
 (; scenario_path) = script_inputs(@__FILE__, (; scenario_path = nothing))
 
+"""
+    live_global(name) -> value or nothing
+
+What the live run left under `name`: a `simple_opt_reelout.jl` run that just finished
+keeps it in its `setup` (and names its log in `LOG_NAME`), `simple_reelout.jl` as a
+global of that name; `nothing` when neither has one.
+"""
+function live_global(name::Symbol)
+    if @isdefined(LOG_NAME) && LOG_NAME isa AbstractString && @isdefined(setup) &&
+       setup isa NamedTuple && haskey(setup, name)
+        return getproperty(setup, name)
+    end
+    return isdefined(@__MODULE__, name) ? getfield(@__MODULE__, name) : nothing
+end
+
 if !isnothing(scenario_path)
     # Every setting comes from ITS OWN copies inside the folder, not the live
     # data/ directory or whatever a prior run left in `Main` — a scenario exists
@@ -147,20 +162,23 @@ if !isnothing(scenario_path)
     fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
     pattern_project = scenario_project
 else
-    # Same rule as simple_reelout.jl: an `fcs` already in `Main` wins. Included at
+    # Same rule as simple_reelout.jl: the live run's `fcs` wins (`live_global`). Included at
     # the end of a run that is the fcs actually FLOWN, so rebuilding it from the
     # YAML here would both draw the wrong reference path and throw away the
     # caller's assignments; only a standalone re-include with no `fcs` around
     # reads the file.
-    if !(@isdefined(fcs) && fcs isa FC_Settings)
-        fcs = FC_Settings(fc_settings(project))
+    fcs = let f = live_global(:fcs)
+        f isa FC_Settings ? f : FC_Settings(fc_settings(project))
     end
     # Same rule again, for the wind speed actually flown: a live run's
     # `project_set` (with any override already applied by
     # `apply_windspeed_override!`) wins.
-    if !(@isdefined(project_set) && project_set isa Settings)
-        project_set = Settings(project)
-        apply_windspeed_override!(project_set, selected_windspeed())
+    project_set = let p = live_global(:project_set)
+        p isa Settings ? p : begin
+            p = Settings(project)
+            apply_windspeed_override!(p, selected_windspeed())
+            p
+        end
     end
     pattern_project = project
 end
@@ -227,7 +245,7 @@ replot has, since `k_v` is not a log column. `moved` is false when the optimizer
 never retuned the gain (`optimize_k_v` off), and the series is then the flat gain
 the run actually flew, read back from the winch the law used.
 
-`live = false` (a scenario replot) ignores `rc`/`winch`/`opt_kv_log` entirely and
+`live = false` (a scenario replot) ignores `rc`/`winch`/`opt_kv_log` (see `live_global`) entirely and
 reads only the summary. Without that, replotting an archive from the REPL that
 just flew something else would draw THAT run's gain onto this run's plot — the
 globals outlive the run that set them.
@@ -238,21 +256,24 @@ are ordered by their summary key so the retry wins, as it does live.
 function kv_series(summary, times; live::Bool)
     traj = isnothing(summary) ? nothing : get(summary, "traj_opt", nothing)
     wsum = isnothing(traj) ? nothing : get(traj, "winch", nothing)
-    seed = if live && @isdefined(winch) && hasproperty(winch, :k_v)
+    winch = live ? live_global(:winch) : nothing
+    rc = live ? live_global(:rc) : nothing
+    opt_kv_log = live ? live_global(:opt_kv_log) : nothing
+    seed = if !isnothing(winch) && hasproperty(winch, :k_v)
         Float64(winch.k_v)
     elseif !isnothing(wsum)
         Float64(wsum["k_v"])
     else
         NaN
     end
-    flown = if live && @isdefined(rc) && hasproperty(rc, :wcs)
+    flown = if !isnothing(rc) && hasproperty(rc, :wcs)
         Float64(rc.wcs.kv)
     elseif !isnothing(wsum)
         Float64(get(wsum, "k_v_flown", seed))
     else
         seed
     end
-    t_kv, k_kv = if live && @isdefined(opt_kv_log) && !isempty(opt_kv_log)
+    t_kv, k_kv = if !isnothing(opt_kv_log) && !isempty(opt_kv_log)
         (Float64[e.t for e in opt_kv_log], Float64[e.k_v for e in opt_kv_log])
     else
         guess = isnothing(traj) ? nothing : get(traj, "guess", nothing)
@@ -284,7 +305,8 @@ run's replies against this archive's flown depower. Archives written before
 that key existed get no panel rather than a wrong one.
 """
 function depower_series(summary, times; live::Bool)
-    t_dp, u_dp = if live && @isdefined(opt_depower_log) && !isempty(opt_depower_log)
+    opt_depower_log = live ? live_global(:opt_depower_log) : nothing
+    t_dp, u_dp = if !isnothing(opt_depower_log) && !isempty(opt_depower_log)
         (Float64[e.t for e in opt_depower_log], Float64[e.u_p_equiv for e in opt_depower_log])
     else
         traj = isnothing(summary) ? nothing : get(summary, "traj_opt", nothing)

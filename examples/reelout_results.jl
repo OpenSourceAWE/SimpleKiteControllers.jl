@@ -4,13 +4,17 @@
 """
     reelout_results.jl — scoring, summary, archive and plots of an optimized reel-out run.
 
-`include`d by `simple_opt_reelout.jl` as its last step, after the log has been
-saved. It reads the run's globals (`fcs`, `tos`, `sl`, ...) and its `RunState`
-`st` (`st.reopt_events`, `st.el_applied`, `st.opt_power_pred`, ...), reloads the log, prints
-the results block, writes the summary YAML next to it, copies both plus every
-input YAML into a timestamped archive folder, draws the plots and writes the
-finished-run marker. Nothing here touches the plant, so a change to it is
-checked by re-scoring an existing log rather than by flying again.
+`include`d by `simple_opt_reelout.jl` before its last step, which calls
+[`reelout_results`](@ref) once the log has been saved. It reads the run's
+`setup` (`fcs`, `tos`, ...) and its `RunState` `st` (`st.reopt_events`,
+`st.el_applied`, `st.opt_power_pred`, ...), reloads the log, prints the results
+block, writes the summary YAML next to it, copies both plus every input YAML
+into a timestamped archive folder, draws the plots and writes the finished-run
+marker. Nothing here touches the plant, so a change to it is checked by
+re-scoring an existing log rather than by flying again.
+
+Every step is a function of its own; `reelout_results` runs them in order and
+leaves no globals behind but `REF_PATH` and `LOG_NAME`, the plots' hand-over.
 """
 
 # ==================== RESULTS ==================== #
@@ -57,9 +61,6 @@ function write_yaml_commented(io, indent, node; comment_col = 36, color = false)
     end
 end
 
-syslog = load_log(log_name; path = output_path)
-sl = syslog.syslog
-
 """
     lap_durations(sl) -> (; t_start::Vector{Float64}, dt::Vector{Float64})
 
@@ -79,12 +80,7 @@ function lap_durations(sl)
     starts = [t[findfirst(>=(k), f8)] for k in 1:maximum(f8; init = 0)]
     (; t_start = starts[1:max(0, end - 1)], dt = diff(starts))
 end
-laps_flown = lap_durations(sl)
-# The geometry is passed in too: without it the criteria are blind to pattern SIZE.
-# require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
-# (which never goes past 4) — checks reel-out actually finished within the run.
-# From the flown path, not from fcs.f8_*. `az_center` is in RADIANS here (it is
-# compared against the logged azimuth), the two extents in degrees.
+
 """
     on_log(t_log, t_src, v_src) -> Vector{Float64}
 
@@ -106,95 +102,122 @@ function on_log(t_log, t_src, v_src)
     return out
 end
 
-# The size criteria against the pattern actually commanded, lap by lap. The
-# startup path is only the FIRST of them, and it is the widest the run ever flies:
-# scored against it, the last laps are asked for a reach nothing ever commanded.
-t_log = Float64.(sl.time)
-have_geom = !isempty(st.geom_t)
-az_c_log = have_geom ? deg2rad.(on_log(t_log, st.geom_t, st.geom_az_c)) : deg2rad(st.az_c_path)
-az_amp_log = have_geom ? on_log(t_log, st.geom_t, st.geom_az_amp) : st.az_amp_path
-el_h_log = have_geom ? on_log(t_log, st.geom_t, st.geom_el_h) : st.el_height_path
-# The cross-track error scored is the one to the optimizer's UNLIFTED curve
-# (`raw_az`/`raw_el` in the run script), not `var_01`, the guidance's own error
-# to the corrected path it steers for — see the comment at `raw_az`.
-d_raw_log = have_geom ? on_log(t_log, st.geom_t, st.geom_d_raw) : nothing
-fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = az_c_log,
-                   az_amplitude = az_amp_log, el_height = el_h_log,
-                   min_span_frac = fcs.min_span_frac, require_final = true,
-                   max_force = project_set.max_force, cross_track = d_raw_log)
-# A run that stopped before the metrics window scores nothing, and every line
-# below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
-isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_log[end], digits = 1),
-                          " s, before the metrics window opens at park_time + entry_time = ",
-                          fcs.park_time + fcs.entry_time, " s. Nothing to score; the log is ",
-                          joinpath(output_path, log_name * ".arrow"), ".")
+"""
+    score_log(setup, st) -> NamedTuple
 
-# What every lift costs on the OTHER axis. A pattern raised is a pattern flown
-# narrower, and the three size criteria are the first thing a lift breaks — the
-# 2.5 s el_offset_lead failed the azimuth reach by hundredths of a degree while
-# passing everything else. Reported next to the elevation that lift bought, so a
-# run says both halves of the trade rather than one.
-az_amp_mean = have_geom ? mean(az_amp_log) : st.az_amp_path
-el_h_mean = have_geom ? mean(el_h_log) : st.el_height_path
-# In FILL fractions, since that is what the criteria are scored on once the
-# commanded pattern moves; the degrees are the same margin read against the mean
-# geometry, for a number that can be compared with a lift.
-span_checks = [("azimuth_reach_pos", fig8m.az_fill_pos, az_amp_mean),
-               ("azimuth_reach_neg", fig8m.az_fill_neg, az_amp_mean),
-               ("elevation_span", fig8m.el_fill, el_h_mean)]
-span_margins = [(; name, fill, flown = fill * ref,
-                 required = fcs.min_span_frac * ref,
-                 margin = (fill - fcs.min_span_frac) * ref,
-                 pct = 100 * (fill / fcs.min_span_frac - 1))
-                for (name, fill, ref) in span_checks]
-span_worst = argmin(m -> m.margin, span_margins)
-i_final = findall(==(5), Int.(sl.sys_state))
-el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_final])))
-# What the path in the air actually carries, not what was asked for: the lift only
-# reaches the kite through an install or an in-air blend that the curvature gate
-# can refuse.
-lift_mean = st.el_applied
-@info @sprintf("Lift budget: %+.2f° of lift delivered (lobes up to %+.2f°); the \
-                tightest size criterion is %s with %+.2f° (%+.0f %%) to spare; min \
-                elevation %.1f° over the run, %.1f° in phase 5.",
-               lift_mean, fcs.el_offset_wing,
-               replace(span_worst.name, "_" => " "), span_worst.margin,
-               span_worst.pct, fig8m.min_elevation_all, el_min_final)
+Reload the saved log and score it with `print_fig8_metrics` against the pattern
+actually commanded, lap by lap (`st.geom_*`); `st.fig8m` keeps the verdict for the
+finished-run marker. Also prints the lift budget: what every lift costs on the
+pattern-size criteria. Returns the log `sl`, `fig8m`, the laps flown and the
+numbers the summary's `lift_budget` reports.
+"""
+function score_log(setup, st::RunState)
+    (; fcs, project_set, output_path, log_name) = setup
+    sl = load_log(log_name; path = output_path).syslog
+    laps_flown = lap_durations(sl)
+    # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
+    # require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
+    # (which never goes past 4) — checks reel-out actually finished within the run.
+    # From the flown path, not from fcs.f8_*. `az_center` is in RADIANS here (it is
+    # compared against the logged azimuth), the two extents in degrees.
 
-summary = OrderedDict{String, Any}()
-# The FIRST key of the file, the same words the console logs as "Success criteria:
-# …". It is the one line a reader looks for, so it is not buried at the end of
-# `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
-# A failure names the criteria that broke, exactly as the console does.
-# `examples/wind_scan.jl`, which reads these summaries out of the archives, falls
-# back to the old nested position so runs flown before this still parse.
-summary["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
+    # The size criteria against the pattern actually commanded, lap by lap. The
+    # startup path is only the FIRST of them, and it is the widest the run ever flies:
+    # scored against it, the last laps are asked for a reach nothing ever commanded.
+    t_log = Float64.(sl.time)
+    have_geom = !isempty(st.geom_t)
+    az_c_log = have_geom ? deg2rad.(on_log(t_log, st.geom_t, st.geom_az_c)) : deg2rad(st.az_c_path)
+    az_amp_log = have_geom ? on_log(t_log, st.geom_t, st.geom_az_amp) : st.az_amp_path
+    el_h_log = have_geom ? on_log(t_log, st.geom_t, st.geom_el_h) : st.el_height_path
+    # The cross-track error scored is the one to the optimizer's UNLIFTED curve
+    # (`raw_az`/`raw_el` in the run script), not `var_01`, the guidance's own error
+    # to the corrected path it steers for — see the comment at `raw_az`.
+    d_raw_log = have_geom ? on_log(t_log, st.geom_t, st.geom_d_raw) : nothing
+    fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
+                       min_elevation = fcs.min_elevation, az_center = az_c_log,
+                       az_amplitude = az_amp_log, el_height = el_h_log,
+                       min_span_frac = fcs.min_span_frac, require_final = true,
+                       max_force = project_set.max_force, cross_track = d_raw_log)
+    st.fig8m = fig8m
+    # A run that stopped before the metrics window scores nothing, and every line
+    # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
+    isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_log[end], digits = 1),
+                              " s, before the metrics window opens at park_time + entry_time = ",
+                              fcs.park_time + fcs.entry_time, " s. Nothing to score; the log is ",
+                              joinpath(output_path, log_name * ".arrow"), ".")
+
+    # What every lift costs on the OTHER axis. A pattern raised is a pattern flown
+    # narrower, and the three size criteria are the first thing a lift breaks — the
+    # 2.5 s el_offset_lead failed the azimuth reach by hundredths of a degree while
+    # passing everything else. Reported next to the elevation that lift bought, so a
+    # run says both halves of the trade rather than one.
+    az_amp_mean = have_geom ? mean(az_amp_log) : st.az_amp_path
+    el_h_mean = have_geom ? mean(el_h_log) : st.el_height_path
+    # In FILL fractions, since that is what the criteria are scored on once the
+    # commanded pattern moves; the degrees are the same margin read against the mean
+    # geometry, for a number that can be compared with a lift.
+    span_checks = [("azimuth_reach_pos", fig8m.az_fill_pos, az_amp_mean),
+                   ("azimuth_reach_neg", fig8m.az_fill_neg, az_amp_mean),
+                   ("elevation_span", fig8m.el_fill, el_h_mean)]
+    span_margins = [(; name, fill, flown = fill * ref,
+                     required = fcs.min_span_frac * ref,
+                     margin = (fill - fcs.min_span_frac) * ref,
+                     pct = 100 * (fill / fcs.min_span_frac - 1))
+                    for (name, fill, ref) in span_checks]
+    span_worst = argmin(m -> m.margin, span_margins)
+    i_final = findall(==(5), Int.(sl.sys_state))
+    el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_final])))
+    # What the path in the air actually carries, not what was asked for: the lift only
+    # reaches the kite through an install or an in-air blend that the curvature gate
+    # can refuse.
+    lift_mean = st.el_applied
+    @info @sprintf("Lift budget: %+.2f° of lift delivered (lobes up to %+.2f°); the \
+                    tightest size criterion is %s with %+.2f° (%+.0f %%) to spare; min \
+                    elevation %.1f° over the run, %.1f° in phase 5.",
+                   lift_mean, fcs.el_offset_wing,
+                   replace(span_worst.name, "_" => " "), span_worst.margin,
+                   span_worst.pct, fig8m.min_elevation_all, el_min_final)
+    return (; sl, fig8m, laps_flown, az_amp_mean, el_h_mean, span_margins, span_worst,
+            el_min_final, lift_mean)
+end
+
+"The pass/fail verdict of `fig8m`, as the console logs it: the summary's first key and its recap's"
+success_verdict(fig8m) = (fig8m === nothing ? "not scored — no settled samples" :
     isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
     "FAILED: " * join(fig8m.criteria_failed, ", "),
     "pass/fail verdict vs V3Kite's success criteria")
-run_time = Dates.now()
-# The package repo, not `examples/` — this reports the controller code, not the script's own project.
-pkg_dir = pkgdir(SimpleKiteControllers)
-git_hash, git_status = try
-    hash = strip(read(`git -C $pkg_dir rev-parse --short HEAD`, String))
-    dirty = !isempty(strip(read(`git -C $pkg_dir status --porcelain`, String)))
-    (hash, dirty ? "dirty" : "clean")
-catch
-    ("unknown", "unknown")
+
+"""
+    simulation_block(setup, run_script, run_time) -> OrderedDict
+
+The summary's `simulation` section: script, project, turbulence, wind, when and
+where the run finished, and the package commit it ran.
+"""
+function simulation_block(setup, run_script, run_time)
+    # The package repo, not `examples/` — this reports the controller code, not the script's own project.
+    pkg_dir = pkgdir(SimpleKiteControllers)
+    git_hash, git_status = try
+        hash = strip(read(`git -C $pkg_dir rev-parse --short HEAD`, String))
+        dirty = !isempty(strip(read(`git -C $pkg_dir status --porcelain`, String)))
+        (hash, dirty ? "dirty" : "clean")
+    catch
+        ("unknown", "unknown")
+    end
+    OrderedDict{String, Any}(
+        "script" => (run_script, "script that produced this run"),
+        "project" => (setup.project_name, "system project flown"),
+        "rel_turbulence" => (setup.turbulence, "turbulence level in [0, 1] passed to init"),
+        "wind_speed" => (setup.project_set.v_wind, "mean wind speed in m/s passed to init"),
+        "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
+        "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
+        "hostname" => (gethostname(), "machine the run executed on"),
+        "git_hash" => (git_hash, "SimpleKiteControllers.jl commit hash"),
+        "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
 end
-summary["simulation"] = OrderedDict{String, Any}(
-    "script" => (run_script, "script that produced this run"),
-    "project" => (PROJECT, "system project flown"),
-    "rel_turbulence" => (TURBULENCE, "turbulence level in [0, 1] passed to init"),
-    "wind_speed" => (project_set.v_wind, "mean wind speed in m/s passed to init"),
-    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
-    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
-    "hostname" => (gethostname(), "machine the run executed on"),
-    "git_hash" => (git_hash, "SimpleKiteControllers.jl commit hash"),
-    "git_status" => (git_status, "SimpleKiteControllers.jl working tree: clean or dirty"))
-if fig8m !== nothing
-    summary["fig8_metrics"] = OrderedDict{String, Any}(
+
+"The summary's `fig8_metrics` section: the numbers the verdict was computed from"
+function fig8_metrics_block(fig8m, laps_flown)
+    OrderedDict{String, Any}(
         "settled_from" => (round(fig8m.stats_start; digits = 1), "sim time the scoring window begins [s]"),
         "settle_time" => (round(fig8m.settle_time_used; digits = 1), "time after t_start to converge [s]"),
         "laps" => (fig8m.laps, "figure-eight laps completed"),
@@ -254,196 +277,149 @@ if fig8m !== nothing
                 "% of time the tape's rate limit was hit"),
             "rate_limited_peak_per_s" => (round(fig8m.max_tape_rate; digits = 3), "peak tape rate reached [1/s]"),
             "rate_limit_per_s" => (fig8m.v_steering, "KCU's configured rate limit [1/s]")))
-    # The verdict these numbers were scored into is the file's first key now.
-end
-
-reelout_summary = OrderedDict{String, Any}()
-# On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
-fig8 = findall(x -> Int(x) == 4, sl.sys_state)
-have_phase4 = !isempty(fig8)
-if !have_phase4
-    # Reel-out runs from phase 3, so this is about the anchor only.
-    @warn "Phase 4 never reached — no fig8 apparent wind speed."
-else
-    va = Float64.(sl.v_app[fig8])
-    duration = sl.time[fig8[end]] - sl.time[fig8[1]]
-    @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
-             | v_app_ref = %.1f (%+.1f%%)\n",
-            duration, mean(va), minimum(va), maximum(va),
-            fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
-    reelout_summary["v_app_phase4"] = OrderedDict(
-        "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
-        "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
-        "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
-        "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
-        "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
-        "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
-            "mean v_app deviation from v_app_ref [%]"))
-
-    # Same phase-4 window, for the power/force/reel-out-speed/depower fields in
-    # `summary["summary"]` — distinct from `reelout.force`/`reelout.power` below,
-    # which are scored over the REELING window (length setpoint growing), not phase 4.
-    f4 = Float64.(getindex.(sl.winch_force, 1))[fig8]
-    vro4 = Float64.(getindex.(sl.v_reelout, 1))[fig8]
-    p4 = f4 .* vro4
-    dp4 = Float64.(sl.depower[fig8])
-    # The power and speed minima skip the last 2 s of phase 4: the soft-stop
-    # ramp winds the speed (and with it the power) down before the length stop
-    # flips to phase 5, and that ramp is a setpoint move, not a dip. Falls back
-    # to the whole window if phase 4 is shorter.
-    t4 = Float64.(sl.time[fig8])
-    i_min = findall(<=(t4[end] - 2.0), t4)
-    isempty(i_min) && (i_min = eachindex(t4))
-    p4_power = (av = mean(p4), min = minimum(p4[i_min]), max = maximum(p4))
-    p4_force = (av = mean(f4), min = minimum(f4[i_min]), max = maximum(f4))
-    p4_v_ro = (av = mean(vro4), min = minimum(vro4[i_min]), max = maximum(vro4))
-    p4_depower_av = mean(dp4)
-    @printf("  Phase 4: power av %.0f W (min %.0f, max %.0f); force av %.0f N \
-             (min %.0f, max %.0f); v_reelout av %.2f m/s (min %.2f, max %.2f); \
-             depower av %.3f.\n",
-            p4_power.av, p4_power.min, p4_power.max,
-            p4_force.av, p4_force.min, p4_force.max,
-            p4_v_ro.av, p4_v_ro.min, p4_v_ro.max, p4_depower_av)
-end
-# Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
-# stop_reason is "" when the run ended with reel-out still going.
-reelout_stop_reason = isempty(st.stop_reason) ? "none" : st.stop_reason
-@printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
-        l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
-reelout_summary["tether"] = OrderedDict(
-    "start_m" => (l_tether, "tether length at run start [m]"),
-    "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
-    "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
-    "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
-    "laps_reeled" => (round(st.fig8_idx_progress / st.n_path; digits = 2),
-        "figure-eight laps completed by the time reel-out ended"))
-
-rp = reelout_power(sl)
-if isnothing(rp)
-    @warn "Tether never reeled out — no reel-out power to report."
-else
-    @printf("  Reel-out force: mean %.0f N, peak %.0f N (cf=%.2f).\n",
-            rp.mean_force, rp.peak_force, rp.cf_force_ro)
-    # Both totals: an earlier engagement trades mean power for a longer window.
-    @printf("  Reel-out power: mean %.0f W, peak %.0f W (cf=%.2f) over %.1f s (%d samples), \
-             E = %.1f kJ; whole run E = %.1f kJ.\n",
-            rp.mean_power, rp.peak_power, rp.cf_power_ro, rp.duration, rp.n,
-            rp.energy / 1000, rp.energy_run / 1000)
-    reelout_summary["force"] = OrderedDict(
-        "cf_force_ro" => (round(rp.cf_force_ro; digits = 2),
-            "crest factor: peak / mean tether force over the reeling window"))
-    reelout_summary["power"] = OrderedDict(
-        "cf_power_ro" => (round(rp.cf_power_ro; digits = 2),
-            "crest factor: peak / mean reel-out power over the reeling window"),
-        "duration" => (round(rp.duration; digits = 1), "reeling window length [s]"),
-        "n_samples" => (rp.n, "sample count in the reeling window"),
-        "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
-        "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
-end
-
-ws = winch_state_pct(sl)
-if isnothing(ws)
-    @warn "Tether never reeled out — no winch controller states to report."
-else
-    @printf("  Winch states over the reeling window: speed %.1f %%, lower force %.1f %%, \
-             upper force %.1f %%.\n",
-            ws.speed_pct, ws.lower_force_pct, ws.upper_force_pct)
-    reelout_summary["winch_state"] = OrderedDict(
-        "speed_pct" => (round(ws.speed_pct; digits = 1),
-            "% of the reeling window in speed control (state 1)"),
-        "lower_force_pct" => (round(ws.lower_force_pct; digits = 1),
-            "% in the LowerForceController, reeling in (state 0)"),
-        "upper_force_pct" => (round(ws.upper_force_pct; digits = 1),
-            "% in the UpperForceController, force capped at f_high (state 2)"),
-        "n_samples" => (ws.n, "sample count in the reeling window"))
-end
-
-rr = reelout_ringing(sl)
-if isnothing(rr)
-    @warn "Tether never reeled out — no ringing to report."
-elseif rr.n_peaks == 0
-    @printf("  Reel-out ring: none detected (peak %.2f m/s vs steady %.2f m/s).\n",
-            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
-    reelout_summary["ringing"] = OrderedDict(
-        "n_peaks" => (0, "ring peaks detected above peak_floor"),
-        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
-        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
-else
-    @printf("  Reel-out ring: period %.2f s, zeta %.2f, overshoot %.2f m/s, decays in %.1f s \
-             (peak %.2f m/s vs steady %.2f m/s).\n",
-            rr.period_s, rr.zeta, rr.overshoot_m_s, rr.duration_s,
-            rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
-    reelout_summary["ringing"] = OrderedDict(
-        "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
-        "period" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
-        "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
-        "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
-        "duration" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
-        "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
-        "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
-end
-summary["reelout"] = reelout_summary
-
-# The comparison this script exists for: what the optimizer promised against what
-# reeling out delivered. `rp` is `nothing` when the tether never reeled out, and
-# then there is nothing to compare.
-#
-# The prediction is a WEIGHTED one whenever a re-optimization installed a path. Each
-# path carries its own `avg_power_W`, and the run flies each for part of the reeling
-# window, so scoring the whole window against the FIRST path's number compares the
-# measurement to a path that was not in the air for some of it. `rp.idx` is that
-# window's samples, so every share below is measured over exactly the samples
-# `measured_W` averages.
-opt_power_meas = isnothing(rp) ? nothing : rp.mean_power
-pred_shares = NamedTuple[]
-opt_power_pred_eff = st.opt_power_pred
-if !isnothing(rp)
-    t_ro = Float64.(sl.time[rp.idx])
-    # Which timeline entry was current at each reeling sample.
-    which = [findlast(e -> e.t <= tq, st.pred_timeline) for tq in t_ro]
-    for (k, e) in enumerate(st.pred_timeline)
-        share = count(==(k), which) / length(which)
-        share > 0 && push!(pred_shares, (; from_s = e.t, power = e.power, share))
-    end
-    opt_power_pred_eff = sum(p.power * p.share for p in pred_shares)
-end
-if !isnothing(opt_power_meas)
-    # Built once and repeated as an `@info` after the archive line: this is the
-    # comparison the script exists for, and here it is buried in the results block.
-    global power_summary = @sprintf("Optimizer predicted %.0f W of mean reel-out \
-                                     power%s; measured %.0f W (%.2f x).",
-        opt_power_pred_eff,
-        length(pred_shares) > 1 ?
-            @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
-                     join((@sprintf("%.0f W for %.0f%%", p.power, 100 * p.share)
-                           for p in pred_shares), ", ")) : " for this path",
-        opt_power_meas, opt_power_meas / opt_power_pred_eff)
-    println("  ", power_summary)
-end
-# A key is omitted rather than written empty when its measurement does not exist:
-# `string(nothing)` would put the bare word `nothing` into the file, which YAML
-# reads back as a string.
-power_block = OrderedDict{String, Any}(
-    "predicted_W" => (round(Int, opt_power_pred_eff),
-        "predicted mean reel-out power of the paths actually flown, weighted by \
-         their share of the reeling window [W]"),
-    "predicted_initial_W" => (round(Int, st.opt_power_pred),
-        "predicted mean reel-out power of the path installed before the run [W]"))
-if length(pred_shares) > 1
-    power_block["predicted_paths"] = OrderedDict(
-        @sprintf("t_%05.1f_s", p.from_s) =>
-            (round(Int, p.power), @sprintf("%.0f%% of the reeling window", 100 * p.share))
-        for p in pred_shares)
-end
-if !isnothing(opt_power_meas)
-    power_block["measured_W"] = (round(Int, opt_power_meas),
-        "mean reel-out power the run harvested [W]")
-    power_block["ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
-        "measured / predicted, against the weighted prediction")
 end
 
 """
-    free_speed_reference(lengths) -> (points, weighted) | nothing
+    reelout_block(setup, st, sl) -> (; block, rp, p4)
+
+The summary's `reelout` section, printed as it is built: apparent wind over phase
+4, the tether's reel-out, force, power, winch states and ringing over the reeling
+window. Also returns `rp` (`reelout_power`, `nothing` when the tether never
+reeled out) and `p4`, the phase-4 power, force, speed and depower for the recap
+(`nothing` when phase 4 was never reached).
+"""
+function reelout_block(setup, st::RunState, sl)
+    (; fcs, l_tether) = setup
+    reelout_summary = OrderedDict{String, Any}()
+    # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
+    fig8 = findall(x -> Int(x) == 4, sl.sys_state)
+    p4 = nothing
+    if isempty(fig8)
+        # Reel-out runs from phase 3, so this is about the anchor only.
+        @warn "Phase 4 never reached — no fig8 apparent wind speed."
+    else
+        va = Float64.(sl.v_app[fig8])
+        duration = sl.time[fig8[end]] - sl.time[fig8[1]]
+        @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
+                 | v_app_ref = %.1f (%+.1f%%)\n",
+                duration, mean(va), minimum(va), maximum(va),
+                fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
+        reelout_summary["v_app_phase4"] = OrderedDict(
+            "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
+            "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
+            "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
+            "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
+            "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
+            "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
+                "mean v_app deviation from v_app_ref [%]"))
+
+        # Same phase-4 window, for the power/force/reel-out-speed/depower fields in
+        # `summary["summary"]` — distinct from `reelout.force`/`reelout.power` below,
+        # which are scored over the REELING window (length setpoint growing), not phase 4.
+        f4 = Float64.(getindex.(sl.winch_force, 1))[fig8]
+        vro4 = Float64.(getindex.(sl.v_reelout, 1))[fig8]
+        pw4 = f4 .* vro4
+        dp4 = Float64.(sl.depower[fig8])
+        # The power and speed minima skip the last 2 s of phase 4: the soft-stop
+        # ramp winds the speed (and with it the power) down before the length stop
+        # flips to phase 5, and that ramp is a setpoint move, not a dip. Falls back
+        # to the whole window if phase 4 is shorter.
+        t4 = Float64.(sl.time[fig8])
+        i_min = findall(<=(t4[end] - 2.0), t4)
+        isempty(i_min) && (i_min = eachindex(t4))
+        p4 = (power = (av = mean(pw4), min = minimum(pw4[i_min]), max = maximum(pw4)),
+              force = (av = mean(f4), min = minimum(f4[i_min]), max = maximum(f4)),
+              v_ro = (av = mean(vro4), min = minimum(vro4[i_min]), max = maximum(vro4)),
+              depower_av = mean(dp4))
+        @printf("  Phase 4: power av %.0f W (min %.0f, max %.0f); force av %.0f N \
+                 (min %.0f, max %.0f); v_reelout av %.2f m/s (min %.2f, max %.2f); \
+                 depower av %.3f.\n",
+                p4.power.av, p4.power.min, p4.power.max,
+                p4.force.av, p4.force.min, p4.force.max,
+                p4.v_ro.av, p4.v_ro.min, p4.v_ro.max, p4.depower_av)
+    end
+    # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
+    # stop_reason is "" when the run ended with reel-out still going.
+    reelout_stop_reason = isempty(st.stop_reason) ? "none" : st.stop_reason
+    @printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
+            l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
+    reelout_summary["tether"] = OrderedDict(
+        "start_m" => (l_tether, "tether length at run start [m]"),
+        "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
+        "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
+        "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
+        "laps_reeled" => (round(st.fig8_idx_progress / st.n_path; digits = 2),
+            "figure-eight laps completed by the time reel-out ended"))
+
+    rp = reelout_power(sl)
+    if isnothing(rp)
+        @warn "Tether never reeled out — no reel-out power to report."
+    else
+        @printf("  Reel-out force: mean %.0f N, peak %.0f N (cf=%.2f).\n",
+                rp.mean_force, rp.peak_force, rp.cf_force_ro)
+        # Both totals: an earlier engagement trades mean power for a longer window.
+        @printf("  Reel-out power: mean %.0f W, peak %.0f W (cf=%.2f) over %.1f s (%d samples), \
+                 E = %.1f kJ; whole run E = %.1f kJ.\n",
+                rp.mean_power, rp.peak_power, rp.cf_power_ro, rp.duration, rp.n,
+                rp.energy / 1000, rp.energy_run / 1000)
+        reelout_summary["force"] = OrderedDict(
+            "cf_force_ro" => (round(rp.cf_force_ro; digits = 2),
+                "crest factor: peak / mean tether force over the reeling window"))
+        reelout_summary["power"] = OrderedDict(
+            "cf_power_ro" => (round(rp.cf_power_ro; digits = 2),
+                "crest factor: peak / mean reel-out power over the reeling window"),
+            "duration" => (round(rp.duration; digits = 1), "reeling window length [s]"),
+            "n_samples" => (rp.n, "sample count in the reeling window"),
+            "energy_kJ" => (round(rp.energy / 1000; digits = 1), "energy over the reeling window [kJ]"),
+            "energy_run_kJ" => (round(rp.energy_run / 1000; digits = 1), "energy over the whole run [kJ]"))
+    end
+
+    ws = winch_state_pct(sl)
+    if isnothing(ws)
+        @warn "Tether never reeled out — no winch controller states to report."
+    else
+        @printf("  Winch states over the reeling window: speed %.1f %%, lower force %.1f %%, \
+                 upper force %.1f %%.\n",
+                ws.speed_pct, ws.lower_force_pct, ws.upper_force_pct)
+        reelout_summary["winch_state"] = OrderedDict(
+            "speed_pct" => (round(ws.speed_pct; digits = 1),
+                "% of the reeling window in speed control (state 1)"),
+            "lower_force_pct" => (round(ws.lower_force_pct; digits = 1),
+                "% in the LowerForceController, reeling in (state 0)"),
+            "upper_force_pct" => (round(ws.upper_force_pct; digits = 1),
+                "% in the UpperForceController, force capped at f_high (state 2)"),
+            "n_samples" => (ws.n, "sample count in the reeling window"))
+    end
+
+    rr = reelout_ringing(sl)
+    if isnothing(rr)
+        @warn "Tether never reeled out — no ringing to report."
+    elseif rr.n_peaks == 0
+        @printf("  Reel-out ring: none detected (peak %.2f m/s vs steady %.2f m/s).\n",
+                rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
+        reelout_summary["ringing"] = OrderedDict(
+            "n_peaks" => (0, "ring peaks detected above peak_floor"),
+            "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
+            "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
+    else
+        @printf("  Reel-out ring: period %.2f s, zeta %.2f, overshoot %.2f m/s, decays in %.1f s \
+                 (peak %.2f m/s vs steady %.2f m/s).\n",
+                rr.period_s, rr.zeta, rr.overshoot_m_s, rr.duration_s,
+                rr.peak_v_reelout_m_s, rr.steady_v_reelout_m_s)
+        reelout_summary["ringing"] = OrderedDict(
+            "n_peaks" => (rr.n_peaks, "ring peaks detected above peak_floor"),
+            "period" => (round(rr.period_s; digits = 2), "mean peak-to-peak ring period [s]"),
+            "zeta" => (round(rr.zeta; digits = 3), "damping ratio from the peak log decrement"),
+            "overshoot_m_s" => (round(rr.overshoot_m_s; digits = 2), "first ring peak's amplitude above the local trend [m/s]"),
+            "duration" => (round(rr.duration_s; digits = 1), "time until the ring decays below settle_frac of overshoot_m_s [s]"),
+            "peak_v_reelout_m_s" => (round(rr.peak_v_reelout_m_s; digits = 2), "raw v_reelout max within ring_span [m/s]"),
+            "steady_v_reelout_m_s" => (round(rr.steady_v_reelout_m_s; digits = 2), "mean v_reelout after ring_span [m/s]"))
+    end
+    return (; block = reelout_summary, rp, p4)
+end
+
+"""
+    free_speed_reference(setup, st, lengths) -> (points, weighted) | nothing
 
 Mean reel-out power an OPTIMAL path could harvest with any winch inside
 `[f_min, f_max]`, solved at `tos.free_speed_reference_points` lengths spanning
@@ -459,7 +435,8 @@ of the same run is served from the solution cache and the run's hit/miss counts
 stay its own. A converged probe is stored as if applied: each is a cold chain
 of one step, and it IS the result this summary uses.
 """
-function free_speed_reference(lengths)
+function free_speed_reference(setup, st::RunState, lengths)
+    (; tos, rcs, inflow, guess_az, guess_el, opt_box) = setup
     n = tos.free_speed_reference_points
     (n < 2 || isempty(lengths)) && return nothing
     lo, hi = extrema(lengths)
@@ -503,362 +480,456 @@ function free_speed_reference(lengths)
     return (; points = solved, weighted = sum(at(l) for l in lengths) / length(lengths))
 end
 
-fs_ref = nothing
 # Only meaningful where k_v's soft floor bites (low force) AND the run either fell
 # short of its own prediction or beat it by more than FREE_SPEED_RATIO_MIN_HIGH;
 # a ratio in between needs no upper bound.
-FREE_SPEED_RATIO_MAX = 0.9
-FREE_SPEED_RATIO_MIN_HIGH = 1.1
-power_ratio_notable = !isnothing(opt_power_meas) &&
-                      (opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX ||
-                       opt_power_meas / opt_power_pred_eff >= FREE_SPEED_RATIO_MIN_HIGH)
-if !isnothing(rp) && tos.free_speed_reference_points >= 2 && have_phase4 &&
-   p4_force.min < 1000 && power_ratio_notable
-    lengths_ro = Float64.(sl.var_10[rp.idx])
-    global fs_ref = free_speed_reference(lengths_ro)
-    if isnothing(fs_ref)
-        @warn "free_speed reference: no solve succeeded, omitting it from the summary."
-    else
-        @printf("  free_speed reference: %.0f W over %.0f-%.0f m (%d of %d solved)%s\n",
-                fs_ref.weighted, minimum(lengths_ro), maximum(lengths_ro),
-                length(fs_ref.points), tos.free_speed_reference_points,
-                isnothing(opt_power_meas) ? "" :
-                    @sprintf("; measured %.0f W is %.2f x it",
-                             opt_power_meas, opt_power_meas / fs_ref.weighted))
-        power_block["free_speed_reference_W"] = (round(Int, fs_ref.weighted),
-            "mean reel-out power an OPTIMAL path could harvest with ANY winch in \
-             [f_min, f_max], solved after the run at $(length(fs_ref.points)) \
-             lengths and weighted by time spent at each. An UPPER BOUND, not a \
-             prediction of this k_v law, and never flown [W]")
-        power_block["free_speed_points"] = OrderedDict(
-            @sprintf("L_%05.1f_m", p.l) => (round(Int, p.power), "free_speed solve [W]")
-            for p in fs_ref.points)
-        isnothing(opt_power_meas) || (power_block["free_speed_ratio"] =
-            (round(opt_power_meas / fs_ref.weighted; digits = 2),
-             "measured / free_speed_reference_W; above 1 means the run harvests more \
-              than the optimizer's own upper bound, which no winch law can explain"))
-    end
-end
-feasibility_block = OrderedDict{String, Any}(
-    "min_required" => (tos.min_feasibility_margin,
-        "min_feasibility_margin of data/traj_opt.yaml [-]"),
-    "turn_radius_headroom" => (tos.turn_radius_headroom,
-        "factor on the gate's number for what the GATE adds: its \
-         finite-difference curvature estimate and the elevation lift [-]"),
-    "turn_radius_request_m" => (isnothing(st.opt_r_min) ? "unset" :
-                                round(st.opt_r_min; digits = 2),
-        "minimum turn radius asked of the optimizer for the LAST request; the \
-         gate's margin/(c1*max_steering) times the headroom and the lap's \
-         reel-out ratio, since the optimizer measures the radius up the reel-out \
-         while the run flies the curve at the anchor [m]"),
-    "turn_radius_scale" => (round(st.opt_r_scale; digits = 3),
-        "the two corrections together, as sent [-]"),
-    "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
-        "reel-out per lap ASSUMED for the startup request, the only one with no \
-         reply to measure it off [m]"))
-if !isnan(feas.c1)
-    feasibility_block["c1_pattern"] = (round(feas.c1; digits = 4),
-        "turn-rate gain the startup gate and requests read the path at: at the \
-         depower the pattern is FLOWN at (the optimizer's own under \
-         fly_opt_depower), not depower_setpoint's [1/m]")
-    feasibility_block["gain_scale_flown"] = (round(c1_setpoint / feas.c1; digits = 3),
-        "heading_p factor phases 3-4 flew with, c1(depower_setpoint)/c1(flown) \
-         for the startup reply; 1.0 when the optimizer's depower is the setpoint [-]")
-    feasibility_block["margin_start"] = (round(feas.feas_start.margin; digits = 2),
-        "curvature margin at the starting length; the worst case only when one \
-         path is flown throughout — see the docstring [-]")
-    feasibility_block["margin_end"] = (round(feas.feas_end.margin; digits = 2),
-        "curvature margin at reelout_l_max [-]")
-end
-if !isnothing(feas.feas_final)
-    feasibility_block["c1_final"] = (round(feas.c1_final; digits = 4),
-        "turn-rate gain at depower_final [1/m]")
-    feasibility_block["margin_final"] = (round(feas.feas_final.margin; digits = 2),
-        "curvature margin phase 5 flies with: depower_final's c1, at \
-         reelout_l_max, on the STARTING path lifted by el_offset_final [-]")
-    isnan(margin5.margin) ||
-        (feasibility_block["margin_final_flown"] =
-            (round(margin5.margin; digits = 2),
-             "the same, for the last path the re-optimizer installed — the one \
-              phase 5 actually inherited [-]"))
-    if !isnothing(st.p5_fallback)
-        feasibility_block["final_fallback_t"] = (round(st.p5_fallback.t; digits = 1),
-            "when phase 5's path fell back to an earlier install (final_margin_min) [s]")
-        feasibility_block["final_fallback_to_t"] = (round(st.p5_fallback.to_t; digits = 1),
-            "install time of the path it fell back to; 0 = the startup path [s]")
-        feasibility_block["margin_final_fallback"] = (round(st.p5_fallback.to_margin; digits = 2),
-            "phase-5 margin of that path, carrying the current lift: the one phase 5 flies [-]")
-    end
-end
-droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
-              for b in 1:st.n_droop_bins]
+const FREE_SPEED_RATIO_MAX = 0.9
+const FREE_SPEED_RATIO_MIN_HIGH = 1.1
 
-summary["traj_opt"] = OrderedDict{String, Any}(
-    "power" => power_block,
-    "guess" => OrderedDict(
-        "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
-        "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
-        "el_center_deg" => (el_center_seed,
-            "centre elevation of the guess the startup path was solved from; \
-             guess_el_center_high at and above guess_el_center_wind_ref, plus \
-             the retry offset below [deg]"),
-        "el_center_retry_offset_deg" => (startup_seed_offset,
-            "offset of the seed the startup solve converged from after a 422 — a \
-             startup_retry_el_offsets entry, or a whole degree walked outward past \
-             them when the failure cache rejected the listed ones; 0 means the \
-             shipped guess converged [deg]"),
-        "points" => (tos.guess_points, "points the guess was sent with"),
-        "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
-            "power-tape length the solve started from, input_depower ramped with \
-             the wind above input_depower_wind_ref; only a seed, the server \
-             optimizes it [m]"),
-        "depower_optimized" => let seen = Dict{String, Int}(), dp = OrderedDict{String, Any}()
-            for e in opt_depower_log
-                k = @sprintf("t_%05.1f_s", e.t)
-                n = get(seen, k, 0) + 1
-                seen[k] = n
-                dp[n == 1 ? k : "$(k)_$n"] =
-                    (round(e.l_dp; digits = 3),
-                     @sprintf("optimizer's l_dp [m]; rel_depower equivalent %.3f \
-                               (awetrim_depower_to_v3kite), against the flown \
-                               depower_setpoint = %.3f",
-                              e.u_p_equiv, fcs.depower_setpoint))
-            end
-            dp
-        end,
-        "depower_optimized_rel" => let seen = Dict{String, Int}(), dp = OrderedDict{String, Any}()
-            for e in opt_depower_log
-                k = @sprintf("t_%05.1f_s", e.t)
-                n = get(seen, k, 0) + 1
-                seen[k] = n
-                dp[n == 1 ? k : "$(k)_$n"] =
-                    (round(e.u_p_equiv; digits = 4),
-                     "the same reply as V3Kite rel_depower, converted with the \
-                      AWETRIM_V3KITE_DEPOWER_OFFSET in force at run time; what a \
-                      replot's u_d panel draws [-]")
-            end
-            dp
-        end,
-        "k_v_optimized" => let seen = Dict{String, Int}(), kv = OrderedDict{String, Any}()
-            for e in opt_kv_log
-                k = @sprintf("t_%05.1f_s", e.t)
-                n = get(seen, k, 0) + 1
-                seen[k] = n
-                kv[n == 1 ? k : "$(k)_$n"] =
-                    (round(e.k_v; digits = 5),
-                     @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
-                               seed winch_kv(v_wind) supplied%s",
-                              e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
-                              e.at_bound ? "; AT ITS BRACKET EDGE" : ""))
-            end
-            kv
-        end),
-    "path" => OrderedDict(
-        "points" => (st.n_path_initial, "points of the path installed before the run"),
-        "points_final" => (length(fec.az_path),
-            "points of the path at the end; differs when reopt installed one"),
-        "az_center_deg" => (round(st.az_c_path; digits = 1), "centre azimuth of the path [deg]"),
-        "az_amplitude_deg" => (round(st.az_amp_path; digits = 1),
-            "half-width of the STARTUP path; the criteria are scored against the \
-             pattern commanded at each lap, whose mean is lift_budget's reference [deg]"),
-        "el_center_deg" => (round(st.el_c_path; digits = 1), "centre elevation of the path [deg]"),
-        "el_height_deg" => (round(st.el_height_path; digits = 1),
-            "elevation span of the path, peak to peak [deg]"),
-        "lobe_lift_pct" => (round(Int, 100 * st.startup_wing_frac),
-            "share of el_offset_wing the STARTUP install carried; held back on the \
-             same rungs as a mid-run install when the full lift fails the curvature gate"),
-        "downloops" => (st.opt_downloops, "traversal direction the optimizer solved for")),
-    "feasibility" => feasibility_block,
-    "reopt" => OrderedDict(
-        "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
-        "warm_start" => (tos.use_step,
-            "/step alone, seeded from the previous optimum; false re-inits from \
-             the parametric guess at every length"),
-        "requests" => (st.reopt_n, "solves that completed, accepted or rejected"),
-        "blocking" => (tos.reopt_blocking,
-            "simulation held while a solve ran"),
-        "blocked" => (round(st.reopt_blocked_s; digits = 1),
-            "wall time the simulation was frozen waiting for replies [s]"),
-        "cache_hits" => (opt_chain.hits,
-            "optimizer steps, startup included, served from the solution or failure \
-             cache (OptChain) without asking the server"),
-        "cache_misses" => (opt_chain.misses, "optimizer steps sent to the server"),
-        "cache_rebuilds" => (opt_chain.rebuilds,
-            "server sessions rebuilt from the cache before a miss"),
-        "replayed_from" => (isnothing(replay_paths) ? "" : String(replay_paths),
-            "scenario whose optimizer results were flown instead of asking the \
-             optimizer (`replay_paths`); empty for a normal run"),
-        "installed" => (count(e -> e.status == "installed", st.reopt_events),
-            "new paths actually flown"),
-        "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()
-            for c in st.reopt_cycles
-                k = @sprintf("t_%05.1f_s", c.t)
-                n = get(seen, k, 0) + 1
-                seen[k] = n
-                cw[n == 1 ? k : "$(k)_$n"] = (round(c.wall_s; digits = 1),
-                    @sprintf("wall time from the first request to the verdict (%s), \
-                              every retry included, at L = %.0f m [s]", c.status, c.l))
-            end
-            cw
-        end,
-        "blend_retries" => (st.blend_retries_total,
-            "cold-restart attempts spent on a rejected reply — a folded blend, a \
-             collapsed prediction, or a clearance/elevation shortfall re-asked at \
-             a raised floor — across every install this run"),
-        # Keyed by time, but two events CAN share one: a blocking solve is
-        # requested and collected on the same step, so a seed skipped from the
-        # failure cache carries the same `t` as the install that follows it. A
-        # plain comprehension silently keeps the last of them — which hid the
-        # cache's own skips the first time it ran — so collisions get a suffix.
-        "events" => let seen = Dict{String, Int}(), ev = OrderedDict{String, Any}()
-            for e in st.reopt_events
-                k = @sprintf("t_%05.1f_s", e.t)
-                n = get(seen, k, 0) + 1
-                seen[k] = n
-                ev[n == 1 ? k : "$(k)_$n"] =
-                    (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
-                     @sprintf("at L = %.0f m", e.l))
-            end
-            ev
-        end),
-    "el_lift" => OrderedDict(
-        "lift_deg" => (fcs.el_offset_final,
-            "el_offset_final, the fixed lift of the path once reel-out ends [deg]"),
-        "lift_lead" => (fcs.el_offset_lead,
-            "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
-        "wing_deg" => (fcs.el_offset_wing,
-            "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
-        "wing_mode" => (fcs.el_offset_wing_mode,
-            "el_offset_wing_mode, the units el_offset_wing_az/_blend are read in"),
-        "wing_az_deg" => (fcs.el_offset_wing_az,
-            "azimuth beyond which that lift is full; it ramps over \
-             el_offset_wing_blend below it [deg or fraction of A]"),
-        "lift_t" => (isnan(st.lift_t) ? "never" : round(st.lift_t; digits = 1),
-            "when the lift actually latched [s]"),
-        "lift_remaining_m" => (isnan(st.lift_remaining) ? "n/a" :
-                               round(st.lift_remaining; digits = 1),
-            "reel-out left at that moment; > 0 means the lead fired, 0 means \
-             phase 5 did [m]"),
-        "shift_delivery" => OrderedDict(
-            @sprintf("t_%05.1f_s", e.t) =>
-                (e.status,
-                 @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
-                          e.delta, e.margin, tos.min_feasibility_margin))
-            for e in st.el_shift_events)),
-    "droop_profile" => OrderedDict(
-        vcat(
-            [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ st.n_droop_bins,
-                      100 * b ÷ st.n_droop_bins) =>
-                 (st.droop_n[b] == 0 ? "n/a" : round(droop_mean[b]; digits = 2),
-                  st.droop_n[b] == 0 ? "no samples in this azimuth band" :
-                  @sprintf("kite below the path's elevation centre [deg], over %d \
-                            samples; the path itself sits %.2f half-spans down there \
-                            and the kite %.2f° under it",
-                           st.droop_n[b], st.droop_ref[b] / st.droop_n[b],
-                           st.droop_sag[b] / st.droop_n[b]))
-             for b in 1:st.n_droop_bins],
-            ["centre_to_lobe_deg" =>
-                 (all(isnan, droop_mean) || isnan(first(droop_mean)) ? "n/a" :
-                  round(maximum(filter(!isnan, droop_mean)) - first(droop_mean);
-                        digits = 2),
-                  "how much deeper the kite flies in its worst azimuth band than in \
-                   the crossing — what a SHAPED lift is aimed at, where \
-                   el_offset_final can only move the pattern rigidly [deg]")])),
-    "lift_budget" => OrderedDict(
-        vcat(
-            ["delivered_deg" => (round(lift_mean; digits = 2),
-                 "rigid lift the path in the air actually carries — el_offset_final \
-                  once it has been delivered [deg]"),
-             "commanded_az_amp_deg" => (round(az_amp_mean; digits = 2),
-                 "mean half-width the run was COMMANDED to fly, against the startup \
-                  path's in traj_opt.path [deg]"),
-             "commanded_el_height_deg" => (round(el_h_mean; digits = 2),
-                 "mean commanded pattern height [deg]"),
-             "wing_deg" => (fcs.el_offset_wing,
-                 "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
-             "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
-                 "lowest elevation over the whole run — usually set in PHASE 5 at 4 m/s \
-                  and up, so el_offset_final does move it; the entry sets it below that [deg]"),
-             "el_min_final_deg" => (isnan(el_min_final) ? "n/a" :
-                                    round(el_min_final; digits = 2),
-                 "lowest elevation in phase 5, which is what el_offset_final buys [deg]")],
-            [string(m.name, "_deg") =>
-                 (round(m.margin; digits = 2),
-                  @sprintf("reach margin: flew %.2f° against the %.2f° required by \
-                            min_span_frac = %.2f, %+.0f %%", m.flown, m.required,
-                           fcs.min_span_frac, m.pct))
-             for m in span_margins],
-            ["tightest" => (replace(span_worst.name, "_" => " "),
-                 @sprintf("the size criterion with the least room, %+.2f° (%+.0f %%) — \
-                           what the NEXT lift has to spend", span_worst.margin,
-                          span_worst.pct))])),
-    "clearance" => OrderedDict(
-        "path_min_m" => (round(st.path_min_h_start; digits = 1),
-            "lowest point of the PRE-FLIGHT path at the starting length [m]"),
-        "flown_min_m" => (round(minimum(first(lt) * sin(el)
-                                        for (lt, el) in zip(sl.l_tether, sl.elevation));
-                                digits = 1),
-            "lowest point the kite actually reached over the run [m]"),
-        "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]"),
-        "elevation_min_asked_deg" => (
-            let b = !isnothing(st.opt_box_now) ? st.opt_box_now : opt_box
-                isnothing(b) || isnothing(b.elevation_min) ? "unset" :
-                    round(b.elevation_min; digits = 2)
+"""
+    power_comparison(setup, st, sl, rp, p4) -> NamedTuple
+
+The comparison this script exists for: what the optimizer promised against what
+reeling out delivered, as the `traj_opt.power` block. `rp` is `nothing` when the
+tether never reeled out, and then there is nothing to compare.
+
+The prediction is a WEIGHTED one whenever a re-optimization installed a path. Each
+path carries its own `avg_power_W`, and the run flies each for part of the reeling
+window, so scoring the whole window against the FIRST path's number compares the
+measurement to a path that was not in the air for some of it. `rp.idx` is that
+window's samples, so every share below is measured over exactly the samples
+`measured_W` averages. Adds the free-speed upper bound (`free_speed_reference`)
+where the ratio is notable and the force low. The measured power goes to
+`st.opt_power_meas` for the finished-run marker.
+"""
+function power_comparison(setup, st::RunState, sl, rp, p4)
+    (; tos) = setup
+    opt_power_meas = isnothing(rp) ? nothing : rp.mean_power
+    st.opt_power_meas = opt_power_meas
+    pred_shares = NamedTuple[]
+    opt_power_pred_eff = st.opt_power_pred
+    if !isnothing(rp)
+        t_ro = Float64.(sl.time[rp.idx])
+        # Which timeline entry was current at each reeling sample.
+        which = [findlast(e -> e.t <= tq, st.pred_timeline) for tq in t_ro]
+        for (k, e) in enumerate(st.pred_timeline)
+            share = count(==(k), which) / length(which)
+            share > 0 && push!(pred_shares, (; from_s = e.t, power = e.power, share))
+        end
+        opt_power_pred_eff = sum(p.power * p.share for p in pred_shares)
+    end
+    power_summary = nothing
+    if !isnothing(opt_power_meas)
+        # Built once and repeated as an `@info` after the archive line: this is the
+        # comparison the script exists for, and here it is buried in the results block.
+        power_summary = @sprintf("Optimizer predicted %.0f W of mean reel-out \
+                                  power%s; measured %.0f W (%.2f x).",
+            opt_power_pred_eff,
+            length(pred_shares) > 1 ?
+                @sprintf(" (weighted over %d paths: %s)", length(pred_shares),
+                         join((@sprintf("%.0f W for %.0f%%", p.power, 100 * p.share)
+                               for p in pred_shares), ", ")) : " for this path",
+            opt_power_meas, opt_power_meas / opt_power_pred_eff)
+        println("  ", power_summary)
+    end
+    # A key is omitted rather than written empty when its measurement does not exist:
+    # `string(nothing)` would put the bare word `nothing` into the file, which YAML
+    # reads back as a string.
+    power_block = OrderedDict{String, Any}(
+        "predicted_W" => (round(Int, opt_power_pred_eff),
+            "predicted mean reel-out power of the paths actually flown, weighted by \
+             their share of the reeling window [W]"),
+        "predicted_initial_W" => (round(Int, st.opt_power_pred),
+            "predicted mean reel-out power of the path installed before the run [W]"))
+    if length(pred_shares) > 1
+        power_block["predicted_paths"] = OrderedDict(
+            @sprintf("t_%05.1f_s", p.from_s) =>
+                (round(Int, p.power), @sprintf("%.0f%% of the reeling window", 100 * p.share))
+            for p in pred_shares)
+    end
+    if !isnothing(opt_power_meas)
+        power_block["measured_W"] = (round(Int, opt_power_meas),
+            "mean reel-out power the run harvested [W]")
+        power_block["ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
+            "measured / predicted, against the weighted prediction")
+    end
+
+    fs_ref = nothing
+    power_ratio_notable = !isnothing(opt_power_meas) &&
+                          (opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX ||
+                           opt_power_meas / opt_power_pred_eff >= FREE_SPEED_RATIO_MIN_HIGH)
+    if !isnothing(rp) && tos.free_speed_reference_points >= 2 && !isnothing(p4) &&
+       p4.force.min < 1000 && power_ratio_notable
+        lengths_ro = Float64.(sl.var_10[rp.idx])
+        fs_ref = free_speed_reference(setup, st, lengths_ro)
+        if isnothing(fs_ref)
+            @warn "free_speed reference: no solve succeeded, omitting it from the summary."
+        else
+            @printf("  free_speed reference: %.0f W over %.0f-%.0f m (%d of %d solved)%s\n",
+                    fs_ref.weighted, minimum(lengths_ro), maximum(lengths_ro),
+                    length(fs_ref.points), tos.free_speed_reference_points,
+                    isnothing(opt_power_meas) ? "" :
+                        @sprintf("; measured %.0f W is %.2f x it",
+                                 opt_power_meas, opt_power_meas / fs_ref.weighted))
+            power_block["free_speed_reference_W"] = (round(Int, fs_ref.weighted),
+                "mean reel-out power an OPTIMAL path could harvest with ANY winch in \
+                 [f_min, f_max], solved after the run at $(length(fs_ref.points)) \
+                 lengths and weighted by time spent at each. An UPPER BOUND, not a \
+                 prediction of this k_v law, and never flown [W]")
+            power_block["free_speed_points"] = OrderedDict(
+                @sprintf("L_%05.1f_m", p.l) => (round(Int, p.power), "free_speed solve [W]")
+                for p in fs_ref.points)
+            isnothing(opt_power_meas) || (power_block["free_speed_ratio"] =
+                (round(opt_power_meas / fs_ref.weighted; digits = 2),
+                 "measured / free_speed_reference_W; above 1 means the run harvests more \
+                  than the optimizer's own upper bound, which no winch law can explain"))
+        end
+    end
+    return (; block = power_block, opt_power_meas, opt_power_pred_eff, fs_ref, power_summary)
+end
+
+"The summary's `traj_opt.feasibility` section: the curvature gates and what phase 5 inherited"
+function feasibility_block(setup, st::RunState)
+    (; tos, feas, margin5, c1_setpoint) = setup
+    block = OrderedDict{String, Any}(
+        "min_required" => (tos.min_feasibility_margin,
+            "min_feasibility_margin of data/traj_opt.yaml [-]"),
+        "turn_radius_headroom" => (tos.turn_radius_headroom,
+            "factor on the gate's number for what the GATE adds: its \
+             finite-difference curvature estimate and the elevation lift [-]"),
+        "turn_radius_request_m" => (isnothing(st.opt_r_min) ? "unset" :
+                                    round(st.opt_r_min; digits = 2),
+            "minimum turn radius asked of the optimizer for the LAST request; the \
+             gate's margin/(c1*max_steering) times the headroom and the lap's \
+             reel-out ratio, since the optimizer measures the radius up the reel-out \
+             while the run flies the curve at the anchor [m]"),
+        "turn_radius_scale" => (round(st.opt_r_scale; digits = 3),
+            "the two corrections together, as sent [-]"),
+        "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
+            "reel-out per lap ASSUMED for the startup request, the only one with no \
+             reply to measure it off [m]"))
+    if !isnan(feas.c1)
+        block["c1_pattern"] = (round(feas.c1; digits = 4),
+            "turn-rate gain the startup gate and requests read the path at: at the \
+             depower the pattern is FLOWN at (the optimizer's own under \
+             fly_opt_depower), not depower_setpoint's [1/m]")
+        block["gain_scale_flown"] = (round(c1_setpoint / feas.c1; digits = 3),
+            "heading_p factor phases 3-4 flew with, c1(depower_setpoint)/c1(flown) \
+             for the startup reply; 1.0 when the optimizer's depower is the setpoint [-]")
+        block["margin_start"] = (round(feas.feas_start.margin; digits = 2),
+            "curvature margin at the starting length; the worst case only when one \
+             path is flown throughout — see the docstring [-]")
+        block["margin_end"] = (round(feas.feas_end.margin; digits = 2),
+            "curvature margin at reelout_l_max [-]")
+    end
+    if !isnothing(feas.feas_final)
+        block["c1_final"] = (round(feas.c1_final; digits = 4),
+            "turn-rate gain at depower_final [1/m]")
+        block["margin_final"] = (round(feas.feas_final.margin; digits = 2),
+            "curvature margin phase 5 flies with: depower_final's c1, at \
+             reelout_l_max, on the STARTING path lifted by el_offset_final [-]")
+        isnan(margin5.margin) ||
+            (block["margin_final_flown"] =
+                (round(margin5.margin; digits = 2),
+                 "the same, for the last path the re-optimizer installed — the one \
+                  phase 5 actually inherited [-]"))
+        if !isnothing(st.p5_fallback)
+            block["final_fallback_t"] = (round(st.p5_fallback.t; digits = 1),
+                "when phase 5's path fell back to an earlier install (final_margin_min) [s]")
+            block["final_fallback_to_t"] = (round(st.p5_fallback.to_t; digits = 1),
+                "install time of the path it fell back to; 0 = the startup path [s]")
+            block["margin_final_fallback"] = (round(st.p5_fallback.to_margin; digits = 2),
+                "phase-5 margin of that path, carrying the current lift: the one phase 5 flies [-]")
+        end
+    end
+    return block
+end
+
+"""
+    time_keyed(row, rows) -> OrderedDict
+
+Summary rows keyed by time, `t_<time>_s`, where `row(e)` gives `(time, value)`. Two
+rows CAN share a time — a blocking solve is requested and collected on the same step,
+so a seed skipped from the failure cache carries the same `t` as the install that
+follows it — and a plain comprehension silently keeps the last of them (which hid the
+cache's own skips the first time it ran), so a repeated key gets a suffix `_2`, `_3`, ...
+"""
+function time_keyed(row, rows)
+    seen = Dict{String, Int}()
+    out = OrderedDict{String, Any}()
+    for e in rows
+        t, value = row(e)
+        k = @sprintf("t_%05.1f_s", t)
+        n = get(seen, k, 0) + 1
+        seen[k] = n
+        out[n == 1 ? k : "$(k)_$n"] = value
+    end
+    return out
+end
+
+"""
+    traj_opt_block(setup, st, power_block, feasibility, scored) -> OrderedDict
+
+The summary's `traj_opt` section: the power comparison, the guess and what the
+optimizer moved, the installed path, the feasibility gates, every
+re-optimization, the elevation lift and what it cost (`scored`, from
+`score_log`), the droop profile, clearance, inflow and winch.
+"""
+function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
+    (; fcs, tos, inflow, winch, rc, fec, opt_chain, opt_box, opt_kv_log, opt_depower_log,
+       replay_paths, el_center_seed, startup_seed_offset) = setup
+    (; sl, fig8m, az_amp_mean, el_h_mean, span_margins, span_worst, el_min_final, lift_mean) = scored
+    droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
+                  for b in 1:st.n_droop_bins]
+    OrderedDict{String, Any}(
+        "power" => power_block,
+        "guess" => OrderedDict(
+            "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
+            "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
+            "el_center_deg" => (el_center_seed,
+                "centre elevation of the guess the startup path was solved from; \
+                 guess_el_center_high at and above guess_el_center_wind_ref, plus \
+                 the retry offset below [deg]"),
+            "el_center_retry_offset_deg" => (startup_seed_offset,
+                "offset of the seed the startup solve converged from after a 422 — a \
+                 startup_retry_el_offsets entry, or a whole degree walked outward past \
+                 them when the failure cache rejected the listed ones; 0 means the \
+                 shipped guess converged [deg]"),
+            "points" => (tos.guess_points, "points the guess was sent with"),
+            "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
+                "power-tape length the solve started from, input_depower ramped with \
+                 the wind above input_depower_wind_ref; only a seed, the server \
+                 optimizes it [m]"),
+            "depower_optimized" => time_keyed(opt_depower_log) do e
+                (e.t, (round(e.l_dp; digits = 3),
+                       @sprintf("optimizer's l_dp [m]; rel_depower equivalent %.3f \
+                                 (awetrim_depower_to_v3kite), against the flown \
+                                 depower_setpoint = %.3f",
+                                e.u_p_equiv, fcs.depower_setpoint)))
             end,
-            "elevation floor the LAST request carried, the higher of \
-             asind(min_height/L) and min_elevation + candidate_elevation_margin at \
-             the length it was made for; the optimizer constrains HEIGHT, and only \
-             at the far end of the lap's reel-out [deg]"),
-        "elevation_min_extra_deg" => (round(st.el_min_extra; digits = 2),
-            "raise a rejected reply's shortfall added to that floor, carried \
-             forward once measured; 0 means no reply was gated out low [deg]")),
-    "inflow" => OrderedDict(
-        "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"),
-        "wind_direction_deg" => (inflow.wind_direction, "direction the wind comes from [deg]"),
-        "profile_law" => (inflow.profile_law, "0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4-6=CUSTOM_*")),
-    "winch" => OrderedDict(
-        "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
-        "optimize_k_v" => (winch.optimize_k_v,
-            "k_v sent as a design variable; the reply's value is then the one flown"),
-        # `rc.wcs`: the gain the RUN flew is the one in the object the reel-out
-        # law actually read, not the one the summary would like it to be.
-        "k_v_flown" => (round(rc.wcs.kv; digits = 5),
-            isempty(opt_kv_log) ?
-                "k_v the run actually flew; == k_v, the optimizer did not move it" :
-                @sprintf("k_v the run actually flew, last of %d optimizer change(s)%s",
-                         length(opt_kv_log),
-                         any(e -> e.at_bound, opt_kv_log) ?
-                             "; one hit the bracket edge, widen it to chase further" : "")),
-        "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
-        "f_max_N" => (winch.f_max, "maximum winch force sent [N]"),
-        "force_limit" => (rc.wcs.force_limit,
-            rc.wcs.force_limit == "soft" ?
-                @sprintf("the reel-out law itself limits the force, inverting the \
-                          optimizer's own saturating tension curve (beta %.0e/%.0e, \
-                          force filtered at tau = %.2f s); the UpperForceController is \
-                          held in reset, so upper_force_pct is 0 by construction",
-                         rc.wcs.softminus_beta, rc.wcs.softplus_beta, rc.wcs.force_limit_tau) :
-                "bare kv*sqrt(force) with the two force controllers switching in at the limits")))
-
-# The longest a new figure of eight took to compute, retries included: the
-# startup solve (which already contains its own retry seed) against every
-# re-optimization cycle from its first request to the verdict.
-opt_cycle_max_s, opt_cycle_max_where = if isempty(st.reopt_cycles)
-    opt_startup_solve_s, "the startup solve, the only solve of the run"
-else
-    c = st.reopt_cycles[argmax(getfield.(st.reopt_cycles, :wall_s))]
-    c.wall_s > opt_startup_solve_s ?
-        (c.wall_s, @sprintf("the re-optimization at t = %.1f s (%s, L = %.0f m); \
-                             the startup solve took %.1f s",
-                            c.t, c.status, c.l, opt_startup_solve_s)) :
-        (opt_startup_solve_s,
-         @sprintf("the startup solve; the slowest re-optimization took %.1f s", c.wall_s))
+            "depower_optimized_rel" => time_keyed(opt_depower_log) do e
+                (e.t, (round(e.u_p_equiv; digits = 4),
+                       "the same reply as V3Kite rel_depower, converted with the \
+                        AWETRIM_V3KITE_DEPOWER_OFFSET in force at run time; what a \
+                        replot's u_d panel draws [-]"))
+            end,
+            "k_v_optimized" => time_keyed(opt_kv_log) do e
+                (e.t, (round(e.k_v; digits = 5),
+                       @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
+                                 seed winch_kv(v_wind) supplied%s",
+                                e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
+                                e.at_bound ? "; AT ITS BRACKET EDGE" : "")))
+            end),
+        "path" => OrderedDict(
+            "points" => (st.n_path_initial, "points of the path installed before the run"),
+            "points_final" => (length(fec.az_path),
+                "points of the path at the end; differs when reopt installed one"),
+            "az_center_deg" => (round(st.az_c_path; digits = 1), "centre azimuth of the path [deg]"),
+            "az_amplitude_deg" => (round(st.az_amp_path; digits = 1),
+                "half-width of the STARTUP path; the criteria are scored against the \
+                 pattern commanded at each lap, whose mean is lift_budget's reference [deg]"),
+            "el_center_deg" => (round(st.el_c_path; digits = 1), "centre elevation of the path [deg]"),
+            "el_height_deg" => (round(st.el_height_path; digits = 1),
+                "elevation span of the path, peak to peak [deg]"),
+            "lobe_lift_pct" => (round(Int, 100 * st.startup_wing_frac),
+                "share of el_offset_wing the STARTUP install carried; held back on the \
+                 same rungs as a mid-run install when the full lift fails the curvature gate"),
+            "downloops" => (st.opt_downloops, "traversal direction the optimizer solved for")),
+        "feasibility" => feasibility,
+        "reopt" => OrderedDict(
+            "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
+            "warm_start" => (tos.use_step,
+                "/step alone, seeded from the previous optimum; false re-inits from \
+                 the parametric guess at every length"),
+            "requests" => (st.reopt_n, "solves that completed, accepted or rejected"),
+            "blocking" => (tos.reopt_blocking,
+                "simulation held while a solve ran"),
+            "blocked" => (round(st.reopt_blocked_s; digits = 1),
+                "wall time the simulation was frozen waiting for replies [s]"),
+            "cache_hits" => (opt_chain.hits,
+                "optimizer steps, startup included, served from the solution or failure \
+                 cache (OptChain) without asking the server"),
+            "cache_misses" => (opt_chain.misses, "optimizer steps sent to the server"),
+            "cache_rebuilds" => (opt_chain.rebuilds,
+                "server sessions rebuilt from the cache before a miss"),
+            "replayed_from" => (isnothing(replay_paths) ? "" : String(replay_paths),
+                "scenario whose optimizer results were flown instead of asking the \
+                 optimizer (`replay_paths`); empty for a normal run"),
+            "installed" => (count(e -> e.status == "installed", st.reopt_events),
+                "new paths actually flown"),
+            "cycle_wall" => time_keyed(st.reopt_cycles) do c
+                (c.t, (round(c.wall_s; digits = 1),
+                       @sprintf("wall time from the first request to the verdict (%s), \
+                                 every retry included, at L = %.0f m [s]", c.status, c.l)))
+            end,
+            "blend_retries" => (st.blend_retries_total,
+                "cold-restart attempts spent on a rejected reply — a folded blend, a \
+                 collapsed prediction, or a clearance/elevation shortfall re-asked at \
+                 a raised floor — across every install this run"),
+            "events" => time_keyed(st.reopt_events) do e
+                (e.t, (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
+                       @sprintf("at L = %.0f m", e.l)))
+            end),
+        "el_lift" => OrderedDict(
+            "lift_deg" => (fcs.el_offset_final,
+                "el_offset_final, the fixed lift of the path once reel-out ends [deg]"),
+            "lift_lead" => (fcs.el_offset_lead,
+                "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
+            "wing_deg" => (fcs.el_offset_wing,
+                "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
+            "wing_mode" => (fcs.el_offset_wing_mode,
+                "el_offset_wing_mode, the units el_offset_wing_az/_blend are read in"),
+            "wing_az_deg" => (fcs.el_offset_wing_az,
+                "azimuth beyond which that lift is full; it ramps over \
+                 el_offset_wing_blend below it [deg or fraction of A]"),
+            "lift_t" => (isnan(st.lift_t) ? "never" : round(st.lift_t; digits = 1),
+                "when the lift actually latched [s]"),
+            "lift_remaining_m" => (isnan(st.lift_remaining) ? "n/a" :
+                                   round(st.lift_remaining; digits = 1),
+                "reel-out left at that moment; > 0 means the lead fired, 0 means \
+                 phase 5 did [m]"),
+            "shift_delivery" => OrderedDict(
+                @sprintf("t_%05.1f_s", e.t) =>
+                    (e.status,
+                     @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
+                              e.delta, e.margin, tos.min_feasibility_margin))
+                for e in st.el_shift_events)),
+        "droop_profile" => OrderedDict(
+            vcat(
+                [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ st.n_droop_bins,
+                          100 * b ÷ st.n_droop_bins) =>
+                     (st.droop_n[b] == 0 ? "n/a" : round(droop_mean[b]; digits = 2),
+                      st.droop_n[b] == 0 ? "no samples in this azimuth band" :
+                      @sprintf("kite below the path's elevation centre [deg], over %d \
+                                samples; the path itself sits %.2f half-spans down there \
+                                and the kite %.2f° under it",
+                               st.droop_n[b], st.droop_ref[b] / st.droop_n[b],
+                               st.droop_sag[b] / st.droop_n[b]))
+                 for b in 1:st.n_droop_bins],
+                ["centre_to_lobe_deg" =>
+                     (all(isnan, droop_mean) || isnan(first(droop_mean)) ? "n/a" :
+                      round(maximum(filter(!isnan, droop_mean)) - first(droop_mean);
+                            digits = 2),
+                      "how much deeper the kite flies in its worst azimuth band than in \
+                       the crossing — what a SHAPED lift is aimed at, where \
+                       el_offset_final can only move the pattern rigidly [deg]")])),
+        "lift_budget" => OrderedDict(
+            vcat(
+                ["delivered_deg" => (round(lift_mean; digits = 2),
+                     "rigid lift the path in the air actually carries — el_offset_final \
+                      once it has been delivered [deg]"),
+                 "commanded_az_amp_deg" => (round(az_amp_mean; digits = 2),
+                     "mean half-width the run was COMMANDED to fly, against the startup \
+                      path's in traj_opt.path [deg]"),
+                 "commanded_el_height_deg" => (round(el_h_mean; digits = 2),
+                     "mean commanded pattern height [deg]"),
+                 "wing_deg" => (fcs.el_offset_wing,
+                     "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
+                 "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
+                     "lowest elevation over the whole run — usually set in PHASE 5 at 4 m/s \
+                      and up, so el_offset_final does move it; the entry sets it below that [deg]"),
+                 "el_min_final_deg" => (isnan(el_min_final) ? "n/a" :
+                                        round(el_min_final; digits = 2),
+                     "lowest elevation in phase 5, which is what el_offset_final buys [deg]")],
+                [string(m.name, "_deg") =>
+                     (round(m.margin; digits = 2),
+                      @sprintf("reach margin: flew %.2f° against the %.2f° required by \
+                                min_span_frac = %.2f, %+.0f %%", m.flown, m.required,
+                               fcs.min_span_frac, m.pct))
+                 for m in span_margins],
+                ["tightest" => (replace(span_worst.name, "_" => " "),
+                     @sprintf("the size criterion with the least room, %+.2f° (%+.0f %%) — \
+                               what the NEXT lift has to spend", span_worst.margin,
+                              span_worst.pct))])),
+        "clearance" => OrderedDict(
+            "path_min_m" => (round(st.path_min_h_start; digits = 1),
+                "lowest point of the PRE-FLIGHT path at the starting length [m]"),
+            "flown_min_m" => (round(minimum(first(lt) * sin(el)
+                                            for (lt, el) in zip(sl.l_tether, sl.elevation));
+                                    digits = 1),
+                "lowest point the kite actually reached over the run [m]"),
+            "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]"),
+            "elevation_min_asked_deg" => (
+                let b = !isnothing(st.opt_box_now) ? st.opt_box_now : opt_box
+                    isnothing(b) || isnothing(b.elevation_min) ? "unset" :
+                        round(b.elevation_min; digits = 2)
+                end,
+                "elevation floor the LAST request carried, the higher of \
+                 asind(min_height/L) and min_elevation + candidate_elevation_margin at \
+                 the length it was made for; the optimizer constrains HEIGHT, and only \
+                 at the far end of the lap's reel-out [deg]"),
+            "elevation_min_extra_deg" => (round(st.el_min_extra; digits = 2),
+                "raise a rejected reply's shortfall added to that floor, carried \
+                 forward once measured; 0 means no reply was gated out low [deg]")),
+        "inflow" => OrderedDict(
+            "wind_speed_m_s" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"),
+            "wind_direction_deg" => (inflow.wind_direction, "direction the wind comes from [deg]"),
+            "profile_law" => (inflow.profile_law, "0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4-6=CUSTOM_*")),
+        "winch" => OrderedDict(
+            "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
+            "optimize_k_v" => (winch.optimize_k_v,
+                "k_v sent as a design variable; the reply's value is then the one flown"),
+            # `rc.wcs`: the gain the RUN flew is the one in the object the reel-out
+            # law actually read, not the one the summary would like it to be.
+            "k_v_flown" => (round(rc.wcs.kv; digits = 5),
+                isempty(opt_kv_log) ?
+                    "k_v the run actually flew; == k_v, the optimizer did not move it" :
+                    @sprintf("k_v the run actually flew, last of %d optimizer change(s)%s",
+                             length(opt_kv_log),
+                             any(e -> e.at_bound, opt_kv_log) ?
+                                 "; one hit the bracket edge, widen it to chase further" : "")),
+            "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
+            "f_max_N" => (winch.f_max, "maximum winch force sent [N]"),
+            "force_limit" => (rc.wcs.force_limit,
+                rc.wcs.force_limit == "soft" ?
+                    @sprintf("the reel-out law itself limits the force, inverting the \
+                              optimizer's own saturating tension curve (beta %.0e/%.0e, \
+                              force filtered at tau = %.2f s); the UpperForceController is \
+                              held in reset, so upper_force_pct is 0 by construction",
+                             rc.wcs.softminus_beta, rc.wcs.softplus_beta, rc.wcs.force_limit_tau) :
+                    "bare kv*sqrt(force) with the two force controllers switching in at the limits")))
 end
-opt_cycle_max_comment = "longest wall time to compute a new figure of eight, retries \
-                         included: $opt_cycle_max_where [s]"
 
-# Speed of the SIMULATED time against the wall clock; > 1 is faster than realtime.
-if t_sim > 0
+"""
+    opt_cycle_max(setup, st) -> (; s, comment)
+
+The longest a new figure of eight took to compute, retries included: the startup
+solve (which already contains its own retry seed) against every re-optimization
+cycle from its first request to the verdict.
+"""
+function opt_cycle_max(setup, st::RunState)
+    (; opt_startup_solve_s) = setup
+    s, which = if isempty(st.reopt_cycles)
+        opt_startup_solve_s, "the startup solve, the only solve of the run"
+    else
+        c = st.reopt_cycles[argmax(getfield.(st.reopt_cycles, :wall_s))]
+        c.wall_s > opt_startup_solve_s ?
+            (c.wall_s, @sprintf("the re-optimization at t = %.1f s (%s, L = %.0f m); \
+                                 the startup solve took %.1f s",
+                                c.t, c.status, c.l, opt_startup_solve_s)) :
+            (opt_startup_solve_s,
+             @sprintf("the startup solve; the slowest re-optimization took %.1f s", c.wall_s))
+    end
+    return (; s, comment = "longest wall time to compute a new figure of eight, retries \
+                            included: $which [s]")
+end
+
+"""
+    performance_block(setup, st, timing, cycle) -> (; block, t_total)
+
+Speed of the SIMULATED time against the wall clock (> 1 is faster than realtime),
+printed and as the summary's `performance` section; `block` is `nothing` when no
+simulated time elapsed. `timing` holds the script's `t_script_start`, `t_wall` and
+`t_sim`; `t_total` is the whole script up to here.
+"""
+function performance_block(setup, st::RunState, timing, cycle)
+    (; s, fcs, opt_chain, opt_startup_solve_s) = setup
+    (; t_script_start, t_wall, t_sim) = timing
+    t_total = time() - t_script_start
+    if t_sim <= 0
+        @warn "No simulated time elapsed — no performance figure."
+        return (; block = nothing, t_total)
+    end
     steps = round(Int, t_sim / s.dt)
     # Rates exclude the frozen time, as in the summary; the raw wall time is still
     # shown, and the gap between the two is `reopt_blocked_s`.
@@ -867,7 +938,6 @@ if t_sim > 0
     # startup solve holds the script before the loop exists, the blocking
     # re-optimizations freeze the loop itself.
     t_opt = opt_startup_solve_s + st.reopt_blocked_s
-    t_total = time() - t_script_start
     @printf("  Performance: %.1f s sim in %.1f s wall%s = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
             t_sim, t_wall,
@@ -880,7 +950,7 @@ if t_sim > 0
             t_total, t_opt, opt_startup_solve_s)
     @printf("               Optimizer steps: %d served from the cache, %d sent, %d \
              session rebuilds.\n", opt_chain.hits, opt_chain.misses, opt_chain.rebuilds)
-    summary["performance"] = OrderedDict(
+    block = OrderedDict(
         "sim_time" => (round(t_sim; digits = 1), "simulated time [s]"),
         "wall_time" => (round(t_wall; digits = 1), "wall-clock time [s]"),
         "total_wall_time" => (round(t_total; digits = 1),
@@ -891,7 +961,7 @@ if t_sim > 0
             "wall time waiting for the optimizer: the startup solve \
              ($(round(opt_startup_solve_s; digits = 1)) s) plus every blocking \
              re-optimization (traj_opt.reopt.blocked) [s]"),
-        "max_optimization_time" => (round(opt_cycle_max_s; digits = 1), opt_cycle_max_comment),
+        "max_optimization_time" => (round(cycle.s; digits = 1), cycle.comment),
         "realtime_factor" => (round(t_sim / max(t_wall - st.reopt_blocked_s, eps()); digits = 2),
             "sim_time / wall_time, excluding time frozen for re-optimization"),
         "ms_per_step" => (round(1000 * (t_wall - st.reopt_blocked_s) / steps; digits = 1),
@@ -899,114 +969,138 @@ if t_sim > 0
         "steps" => (steps, "step count"),
         "dt" => (s.dt, "simulation timestep [s]"),
         "vsm_interval" => (fcs.vsm_interval, "VSM aerodynamic update interval [steps]"))
-else
-    @warn "No simulated time elapsed — no performance figure."
+    return (; block, t_total)
 end
 
-# A recap of the numbers scattered above, written last so it reads as the file's
-# TL;DR without displacing `success_criteria` as the first key.
-summary_block = OrderedDict{String, Any}(
-    "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
-    "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
-    "wind_speed_gnd" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
-if !isnothing(opt_power_meas)
-    summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
-        "measured / predicted reel-out power [-]")
-    # The one to read at low wind: force_law's prediction is against the k_v law
-    # including its soft floor, which at 3 m/s stands the winch still and has come
-    # back NEGATIVE. This is against an upper bound over any winch in
-    # [f_min, f_max], so above 1 is a real disagreement about the physics.
-    # Absent when power_ratio is already above FREE_SPEED_RATIO_MAX (or the
-    # force never dropped low): the reference solves are skipped there.
-    isnothing(fs_ref) || (summary_block["power_ratio_free_speed"] =
-        (round(opt_power_meas / fs_ref.weighted; digits = 2),
-         "measured / free_speed reference reel-out power ($(round(Int, fs_ref.weighted)) W, \
-          an UPPER BOUND over any winch in [f_min, f_max]); above 1 cannot be \
-          explained by any winch law [-]"))
-end
-summary_block["success_criteria"] = (fig8m === nothing ? "not scored — no settled samples" :
-    isempty(fig8m.criteria_failed) ? "all $(fig8m.criteria) passed" :
-    "FAILED: " * join(fig8m.criteria_failed, ", "),
-    "pass/fail verdict vs V3Kite's success criteria")
-fig8m === nothing || (summary_block["cross_track_rms_deg"] = (round(fig8m.rms_d; digits = 2),
-    "RMS cross-track error, settled window [deg]"))
-if t_sim > 0
-    summary_block["total_wall_time"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
-    summary_block["realtime_factor"] = (round(t_sim / max(t_wall - st.reopt_blocked_s, eps()); digits = 2),
-        "sim_time / wall_time, excluding time frozen for re-optimization")
-end
-summary_block["optimization_requests"] = (st.reopt_n, "solves that completed, accepted or rejected")
-summary_block["optimizations_installed"] = (count(e -> e.status == "installed", st.reopt_events),
-    "new paths actually flown")
-isempty(laps_flown.dt) || (summary_block["fastest_fig8"] = (round(minimum(laps_flown.dt); digits = 1),
-    "shortest time for flying one full figure of eight [s]"))
-summary_block["max_optimization_time"] = (round(opt_cycle_max_s; digits = 1),
-    "longest wall time to compute a new figure of eight, retries included [s]")
-if have_phase4
-    summary_block["av_power_ro"] = (round(Int, p4_power.av), "mean reel-out power over phase four [W]")
-    summary_block["min_power_ro"] = (round(Int, p4_power.min), "min reel-out power over phase four, last 2 s excluded [W]")
-    summary_block["max_power_ro"] = (round(Int, p4_power.max), "max reel-out power over phase four [W]")
-    summary_block["min_force_ro"] = (round(Int, p4_force.min), "min tether force over phase four, last 2 s excluded [N]")
-    summary_block["av_force_ro"] = (round(Int, p4_force.av), "mean tether force over phase four [N]")
-    summary_block["max_force_ro"] = (round(Int, p4_force.max), "max tether force over phase four [N]")
-    summary_block["v_ro_min"] = (round(p4_v_ro.min; digits = 2), "min reel-out speed over phase four, last 2 s excluded [m/s]")
-    summary_block["v_ro_av"] = (round(p4_v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
-    summary_block["v_ro_max"] = (round(p4_v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
-    summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
-    # The floor the limiter integrates above: depower_final, or the depower the
-    # stop latched at when that is higher (simple_opt_reelout.jl's stop ramp).
-    dp_final_floor = isnan(st.stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, st.stop_dp_entry)
-    summary_block["max_depower_final"] = (round(min(dp_final_floor + st.dp_final_extra_peak,
-                                                    max(fcs.depower_final_max, dp_final_floor)); digits = 3),
-        "highest depower the force limiter asked for, from the stop latch through phase 5; \
-         the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
-    # The phase-5 counterpart of feasibility.gain_scale_flown, at the limiter's
-    # peak: what simple_opt_reelout.jl scaled heading_p by there, saturated at
-    # the table's usable edge exactly as the run was.
-    if isfinite(c1_setpoint) && isfinite(c1_depower_max)
-        dp5_peak = round(min(fcs.depower_final + st.dp_final_extra_peak,
-                             fcs.depower_final_max, c1_depower_max); digits = 3)
-        c1_5 = c1_at_depower(dp5_peak)
-        summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_setpoint / c1_5 : 1.0; digits = 3),
-            "heading_p factor phase 5 flew with at the limiter's peak, \
-             c1(depower_setpoint)/c1(flown), read at $(dp5_peak) [-]")
+"""
+    recap_block(setup, st, timing, run_time, scored, p4, power, cycle, t_total) -> OrderedDict
+
+A recap of the numbers scattered above, the summary's `summary` section, written
+last so it reads as the file's TL;DR without displacing `success_criteria` as the
+first key. Also printed, coloured, as the run's last word.
+"""
+function recap_block(setup, st::RunState, timing, run_time, scored, p4, power, cycle, t_total)
+    (; fcs, inflow, c1_setpoint, c1_depower_max, c1_at_depower) = setup
+    (; t_wall, t_sim) = timing
+    (; fig8m, laps_flown) = scored
+    (; opt_power_meas, opt_power_pred_eff, fs_ref) = power
+    summary_block = OrderedDict{String, Any}(
+        "date" => (Dates.format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
+        "time" => (Dates.format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
+        "wind_speed_gnd" => (inflow.wind_speed, "wind speed at 6 m sent to the optimizer [m/s]"))
+    if !isnothing(opt_power_meas)
+        summary_block["power_ratio"] = (round(opt_power_meas / opt_power_pred_eff; digits = 2),
+            "measured / predicted reel-out power [-]")
+        # The one to read at low wind: force_law's prediction is against the k_v law
+        # including its soft floor, which at 3 m/s stands the winch still and has come
+        # back NEGATIVE. This is against an upper bound over any winch in
+        # [f_min, f_max], so above 1 is a real disagreement about the physics.
+        # Absent when power_ratio is already above FREE_SPEED_RATIO_MAX (or the
+        # force never dropped low): the reference solves are skipped there.
+        isnothing(fs_ref) || (summary_block["power_ratio_free_speed"] =
+            (round(opt_power_meas / fs_ref.weighted; digits = 2),
+             "measured / free_speed reference reel-out power ($(round(Int, fs_ref.weighted)) W, \
+              an UPPER BOUND over any winch in [f_min, f_max]); above 1 cannot be \
+              explained by any winch law [-]"))
     end
+    summary_block["success_criteria"] = success_verdict(fig8m)
+    fig8m === nothing || (summary_block["cross_track_rms_deg"] = (round(fig8m.rms_d; digits = 2),
+        "RMS cross-track error, settled window [deg]"))
+    if t_sim > 0
+        summary_block["total_wall_time"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
+        summary_block["realtime_factor"] = (round(t_sim / max(t_wall - st.reopt_blocked_s, eps()); digits = 2),
+            "sim_time / wall_time, excluding time frozen for re-optimization")
+    end
+    summary_block["optimization_requests"] = (st.reopt_n, "solves that completed, accepted or rejected")
+    summary_block["optimizations_installed"] = (count(e -> e.status == "installed", st.reopt_events),
+        "new paths actually flown")
+    isempty(laps_flown.dt) || (summary_block["fastest_fig8"] = (round(minimum(laps_flown.dt); digits = 1),
+        "shortest time for flying one full figure of eight [s]"))
+    summary_block["max_optimization_time"] = (round(cycle.s; digits = 1),
+        "longest wall time to compute a new figure of eight, retries included [s]")
+    if !isnothing(p4)
+        summary_block["av_power_ro"] = (round(Int, p4.power.av), "mean reel-out power over phase four [W]")
+        summary_block["min_power_ro"] = (round(Int, p4.power.min), "min reel-out power over phase four, last 2 s excluded [W]")
+        summary_block["max_power_ro"] = (round(Int, p4.power.max), "max reel-out power over phase four [W]")
+        summary_block["min_force_ro"] = (round(Int, p4.force.min), "min tether force over phase four, last 2 s excluded [N]")
+        summary_block["av_force_ro"] = (round(Int, p4.force.av), "mean tether force over phase four [N]")
+        summary_block["max_force_ro"] = (round(Int, p4.force.max), "max tether force over phase four [N]")
+        summary_block["v_ro_min"] = (round(p4.v_ro.min; digits = 2), "min reel-out speed over phase four, last 2 s excluded [m/s]")
+        summary_block["v_ro_av"] = (round(p4.v_ro.av; digits = 2), "mean reel-out speed over phase four [m/s]")
+        summary_block["v_ro_max"] = (round(p4.v_ro.max; digits = 2), "max reel-out speed over phase four [m/s]")
+        summary_block["av_depower_ro"] = (round(p4.depower_av; digits = 3), "mean KCU depower over phase four [-]")
+        # The floor the limiter integrates above: depower_final, or the depower the
+        # stop latched at when that is higher (simple_opt_reelout.jl's stop ramp).
+        dp_final_floor = isnan(st.stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, st.stop_dp_entry)
+        summary_block["max_depower_final"] = (round(min(dp_final_floor + st.dp_final_extra_peak,
+                                                        max(fcs.depower_final_max, dp_final_floor)); digits = 3),
+            "highest depower the force limiter asked for, from the stop latch through phase 5; \
+             the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
+        # The phase-5 counterpart of feasibility.gain_scale_flown, at the limiter's
+        # peak: what simple_opt_reelout.jl scaled heading_p by there, saturated at
+        # the table's usable edge exactly as the run was.
+        if isfinite(c1_setpoint) && isfinite(c1_depower_max)
+            dp5_peak = round(min(fcs.depower_final + st.dp_final_extra_peak,
+                                 fcs.depower_final_max, c1_depower_max); digits = 3)
+            c1_5 = c1_at_depower(dp5_peak)
+            summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_setpoint / c1_5 : 1.0; digits = 3),
+                "heading_p factor phase 5 flew with at the limiter's peak, \
+                 c1(depower_setpoint)/c1(flown), read at $(dp5_peak) [-]")
+        end
+    end
+    return summary_block
 end
-summary["summary"] = summary_block
 
-open(joinpath(output_path, log_name * ".yaml"), "w") do io
-    println(io, "# Run summary for output/", log_name,
-            ".arrow, written by examples/simple_reelout.jl at the end of the run.")
-    write_yaml_commented(io, 0, summary)
-end
+"""
+    write_summary_files(setup, st, summary) -> opt_paths_file
 
-# Every path the optimizer returned that the run went on to fly, AS IT ARRIVED —
-# before `el_offset_wing` and `el_offset_final` were added. The logged attractor walks the CORRECTED path, so it rises with the
-# correction and cannot show what the correction did; these are the curves the
-# kite is meant to land on. Its own file next to the log, archived with it, so
-# `plot_pattern_scenario` can draw them for an archived run as well as a live one.
-# Each carries the sim time and phase it was installed at, so the plot can leave
-# out what only phase 5 flew.
-opt_paths_file = joinpath(output_path, log_name * "_opt_paths.yaml")
-if !isempty(st.opt_paths_raw)
-    YAML.write_file(opt_paths_file, Dict(
-        "paths" => [Dict("installed_t" => round(t_at; digits = 2),
-                         "installed_phase" => ph_at,
-                         "azimuth" => round.(Float64.(paz); digits = 3),
-                         "elevation" => round.(Float64.(pel); digits = 3))
-                    for ((paz, pel), (t_at, ph_at)) in zip(st.opt_paths_raw, st.opt_paths_at)]))
-elseif isfile(opt_paths_file)
-    rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
+Write the summary YAML next to the log, and `<log>_opt_paths.yaml`: every path
+the optimizer returned that the run went on to fly, AS IT ARRIVED — before
+`el_offset_wing` and `el_offset_final` were added. The logged attractor walks the
+CORRECTED path, so it rises with the correction and cannot show what the
+correction did; these are the curves the kite is meant to land on. Its own file
+next to the log, archived with it, so `plot_pattern_scenario` can draw them for
+an archived run as well as a live one. Each carries the sim time and phase it
+was installed at, so the plot can leave out what only phase 5 flew.
+"""
+function write_summary_files(setup, st::RunState, summary)
+    (; output_path, log_name) = setup
+    open(joinpath(output_path, log_name * ".yaml"), "w") do io
+        println(io, "# Run summary for output/", log_name,
+                ".arrow, written by examples/simple_reelout.jl at the end of the run.")
+        write_yaml_commented(io, 0, summary)
+    end
+    opt_paths_file = joinpath(output_path, log_name * "_opt_paths.yaml")
+    if !isempty(st.opt_paths_raw)
+        YAML.write_file(opt_paths_file, Dict(
+            "paths" => [Dict("installed_t" => round(t_at; digits = 2),
+                             "installed_phase" => ph_at,
+                             "azimuth" => round.(Float64.(paz); digits = 3),
+                             "elevation" => round.(Float64.(pel); digits = 3))
+                        for ((paz, pel), (t_at, ph_at)) in zip(st.opt_paths_raw, st.opt_paths_at)]))
+    elseif isfile(opt_paths_file)
+        rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
+    end
+    return opt_paths_file
 end
 
 # ==================== ARCHIVE ==================== #
 
-# One timestamped folder per run under output/archives/, so the exact config
-# that produced a log survives even after the next run overwrites output/*.
-# The input `run_archive = false` skips it: a sweep writes
-# one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
-# and its own results table already records what distinguished the runs.
-if inputs.run_archive
+"""
+    archive_run(setup, run_time, opt_paths_file) -> archive_dir | "none"
+
+One timestamped folder per run under output/archives/, so the exact config
+that produced a log survives even after the next run overwrites output/*.
+The input `run_archive = false` skips it: a sweep writes
+one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
+and its own results table already records what distinguished the runs.
+"""
+function archive_run(setup, run_time, opt_paths_file)
+    (; inputs, project, project_set, output_path, log_name) = setup
+    if !inputs.run_archive
+        @info "Archiving suppressed by run_archive = false."
+        return "none"
+    end
     archive_dir = joinpath(output_path, "archives",
                            Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
     mkpath(archive_dir)
@@ -1040,37 +1134,82 @@ if inputs.run_archive
         isfile(f) && cp(f, joinpath(output_path, basename(f)); force = true)
     end
     @info "Archived run inputs and outputs to $archive_dir"
-else
-    @info "Archiving suppressed by run_archive = false."
+    return archive_dir
 end
 
-plots_failed = nothing
-if show_plots
-    # The flown curve and this run's log name, so the plots draw the optimized
-    # path and load the _opt log instead of the lemniscate run's. The optimizer's
-    # raw curves reach the plots through `<log>_opt_paths.yaml`, written above.
-    REF_PATH = (fec.az_path, fec.el_path)
-    LOG_NAME = log_name
-    # The plots are cosmetic and the run is already scored, logged and archived by
-    # here; a GLMakie failure (needs the main thread, so an eval off it throws)
-    # must not cost the marker that tells a watcher the run is over.
+"""
+    draw_plots(setup) -> plots_failed
+
+`simple_reelout_plots.jl`, handed the flown curve and this run's log name in
+`REF_PATH` and `LOG_NAME`, so the plots draw the optimized path and load the
+_opt log instead of the lemniscate run's; the optimizer's raw curves reach them
+through `<log>_opt_paths.yaml`. Returns the exception the plots threw, or
+`nothing`: they are cosmetic and the run is already scored, logged and archived
+by here, so a GLMakie failure (needs the main thread, so an eval off it throws)
+must not cost the marker that tells a watcher the run is over.
+"""
+function draw_plots(setup)
+    if !setup.show_plots
+        @info "Plots suppressed by show_plots = false."
+        return nothing
+    end
+    global REF_PATH = (setup.fec.az_path, setup.fec.el_path)
+    global LOG_NAME = setup.log_name
     try
         include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
     catch exc
-        global plots_failed = exc
         @error "Plots failed; the run itself completed and is archived." exception =
             (exc, catch_backtrace())
+        return exc
     end
-else
-    @info "Plots suppressed by show_plots = false."
+    return nothing
 end
 
-isnothing(opt_power_meas) || @info power_summary
-printstyled("\nSummary:\n"; bold = true)
-write_yaml_commented(stdout, 1, summary_block; color = true)
+"""
+    reelout_results(setup, st, timing) -> (; summary, fig8m, archive_dir, plots_failed)
 
-# Defined in simple_opt_reelout.jl before anything that can throw, and called
-# from its `catch` too — see the docstring there.
-write_run_done(isnothing(plots_failed) ? "ok" : "ok (plots failed)")
+Score the saved log, print the results block, write the summary YAML and the
+optimizer's paths next to the log, archive the run, draw the plots and write the
+finished-run marker, in that order. `timing` holds the script's `t_script_start`,
+`run_script`, `t_wall` and `t_sim`. The marker's fields are kept in `st` as soon
+as they are known, so a throw on the way still leaves them to the `FAILED` marker
+the script writes.
+"""
+function reelout_results(setup, st::RunState, timing)
+    scored = score_log(setup, st)
+    summary = OrderedDict{String, Any}()
+    # The FIRST key of the file, the same words the console logs as "Success criteria:
+    # …". It is the one line a reader looks for, so it is not buried at the end of
+    # `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
+    # A failure names the criteria that broke, exactly as the console does.
+    # `examples/wind_scan.jl`, which reads these summaries out of the archives, falls
+    # back to the old nested position so runs flown before this still parse.
+    summary["success_criteria"] = success_verdict(scored.fig8m)
+    run_time = Dates.now()
+    summary["simulation"] = simulation_block(setup, timing.run_script, run_time)
+    # The verdict these numbers were scored into is the file's first key now.
+    scored.fig8m === nothing || (summary["fig8_metrics"] = fig8_metrics_block(scored.fig8m, scored.laps_flown))
+    reelout = reelout_block(setup, st, scored.sl)
+    summary["reelout"] = reelout.block
+    power = power_comparison(setup, st, scored.sl, reelout.rp, reelout.p4)
+    summary["traj_opt"] = traj_opt_block(setup, st, power.block, feasibility_block(setup, st), scored)
+    cycle = opt_cycle_max(setup, st)
+    performance = performance_block(setup, st, timing, cycle)
+    isnothing(performance.block) || (summary["performance"] = performance.block)
+    summary_block = recap_block(setup, st, timing, run_time, scored, reelout.p4, power, cycle,
+                                performance.t_total)
+    summary["summary"] = summary_block
 
-nothing
+    opt_paths_file = write_summary_files(setup, st, summary)
+    st.archive_dir = archive_run(setup, run_time, opt_paths_file)
+    plots_failed = draw_plots(setup)
+
+    isnothing(power.power_summary) || @info power.power_summary
+    printstyled("\nSummary:\n"; bold = true)
+    write_yaml_commented(stdout, 1, summary_block; color = true)
+
+    # Defined in simple_opt_reelout.jl before anything that can throw, and called
+    # from its `catch` too — see the docstring there.
+    write_run_done(setup, st, isnothing(plots_failed) ? "ok" : "ok (plots failed)")
+    return (; summary, scored.fig8m, st.archive_dir, plots_failed)
+end
