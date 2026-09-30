@@ -91,7 +91,7 @@ flown here; the pattern's centre and extent are measured off the installed path.
 `reelout_feasibility.jl` (abort/warn policy on the gates of
 [`check_reelout_feasibility`](@ref), defining `feas`, `c1_at`, `phase5_margin`)
 and `reelout_results.jl` (scoring, summary YAML, archive, plots, finished-run
-marker) are `include`d at top level and read the run's state by name (`publish_run_state!`).
+marker) are `include`d at top level and read the run's state from the `RunState` global `st`.
 
 Logs to `output/<log_file>_opt.arrow` and `_opt.yaml`, leaving the lemniscate
 run's files intact for comparison. `REF_PATH` and `LOG_NAME` carry the flown
@@ -357,9 +357,9 @@ opt_depower_log = NamedTuple[]
 
 Everything the startup functions and the simulation loop WRITE, in one place, so they take it as an
 argument (`st`) instead of rebinding script globals. Comments give the meaning and the unit; the
-loop-only bookkeeping is grouped as in the loop. [`publish_run_state!`](@ref) copies the fields
-into the script's globals under the same names, for `reelout_feasibility.jl`, `reelout_results.jl`
-and the plots, which read them by name.
+loop-only bookkeeping is grouped as in the loop. `reelout_feasibility.jl` and `reelout_results.jl`
+read the fields as `st.<field>`, and so does `DelayedInjection` in `validate_margins.jl`, during the
+loop: `st` is the one global of the run's state.
 """
 Base.@kwdef mutable struct RunState
     # ---- the optimizer's answer and what the retries make of it ----
@@ -488,21 +488,6 @@ Base.@kwdef mutable struct RunState
     xt_va::Vector{Float64} = Float64[]      # [m/s] apparent wind speed
     xt_vk::Vector{Float64} = Float64[]      # [m/s] kite speed normal to the tether
     xt_dp::Vector{Float64} = Float64[]      # [-] depower
-end
-
-"""
-    publish_run_state!(mod, st)
-
-Copy every field of `st` into a global of `mod` under the same name. Called once the startup is done
-and again after the loop, because `reelout_feasibility.jl`, `reelout_results.jl` and the plots read the
-run's state by name. The functions themselves never touch these globals.
-"""
-function publish_run_state!(mod::Module, st::RunState)
-    for name in fieldnames(RunState)
-        # `eval`, not `setglobal!`: Julia >= 1.12 refuses to assign a binding that does not exist yet.
-        Core.eval(mod, :($name = $(QuoteNode(getfield(st, name)))))
-    end
-    return nothing
 end
 
 st = RunState(; l_set, opt_r_scale, opt_r_min, depower_flown_opt = fcs.depower_setpoint)
@@ -973,8 +958,6 @@ capture_startup_geometry!(st)
                minimum(fec.el_path), maximum(fec.el_path), st.el_c_path, st.opt_power_pred)
 
 # The three gates on the installed path; defines `el_floor`, `c1_at` and `phase5_margin` for the loop.
-# They read the run's state by name, so it is published first.
-publish_run_state!(@__MODULE__, st)
 include(joinpath(@__DIR__, "reelout_feasibility.jl"))
 
 # Every path the kite has flown, as installed (lobe lift included), with its phase-5 margin and the
@@ -1048,8 +1031,8 @@ isempty(inputs.wc_overrides) ||
 The simulation loop: steps the model `s` until its steps or the reel-out and phase 5 are over.
 Everything it writes lives in `st`; the run's settings and controllers (`fcs`, `tos`, `s`, `rc`, ...)
 come in `setup`, a NamedTuple of the script's globals under the same names, unchanged during the
-loop. Passed as an argument, not read as globals, so the loop compiles against their concrete types. `publish_run_state!` hands `st` to
-`reelout_results.jl` and the plots afterwards. The `try` stays at the call, so the wall time survives
+loop. Passed as an argument, not read as globals, so the loop compiles against their concrete
+types. `reelout_results.jl` reads `st` afterwards. The `try` stays at the call, so the wall time survives
 an early `break` or a throw.
 """
 function run_loop!(st::RunState, setup::NamedTuple)
@@ -1904,8 +1887,6 @@ catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
     @error "Simulation stopped early at t≈$(round(s.sys_state.time, digits=2))s" exception=(exc, catch_backtrace())
 end
-# The results file and the plots read the run's state by name; an early break or a throw is published too.
-publish_run_state!(@__MODULE__, st)
 t_sim = Float64(s.sys_state.time)
 
 @info "Save the log"

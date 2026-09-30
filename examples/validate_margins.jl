@@ -108,7 +108,7 @@ const V1_POINTS = Dict(
 
 `t -> Δu` for `simple_opt_reelout.jl`'s `STEER_DISTURBANCE`, which is called
 with the absolute time: zero until `settle` [s] after phase 4 is first reached
-(the script's global `t_phase4`), then `m(τ)`, τ the time since then. The same
+(`st.t_phase4` of the script's `RunState`, read live during the loop), then `m(τ)`, τ the time since then. The same
 start as `STEER_INJECTION` in `simple_fig8.jl`, so `frf_injection` works on
 either script's runs.
 """
@@ -117,8 +117,7 @@ struct DelayedInjection{F}
     settle::Float64
 end
 function (d::DelayedInjection)(t)
-    tp = isdefined(Main, :t_phase4) ? Main.t_phase4 : NaN
-    tp isa Base.RefValue && (tp = tp[])
+    tp = isdefined(Main, :st) && hasproperty(Main.st, :t_phase4) ? Main.st.t_phase4 : NaN
     return (isnan(tp) || t < tp + d.settle) ? 0.0 : d.m(t - tp - d.settle)
 end
 

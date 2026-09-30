@@ -5,8 +5,8 @@
     reelout_results.jl — scoring, summary, archive and plots of an optimized reel-out run.
 
 `include`d by `simple_opt_reelout.jl` as its last step, after the log has been
-saved. It reads the run's globals (`fcs`, `tos`, `sl`, `reopt_events`,
-`el_applied`, `opt_power_pred`, `pred_timeline`, ...), reloads the log, prints
+saved. It reads the run's globals (`fcs`, `tos`, `sl`, ...) and its `RunState`
+`st` (`st.reopt_events`, `st.el_applied`, `st.opt_power_pred`, ...), reloads the log, prints
 the results block, writes the summary YAML next to it, copies both plus every
 input YAML into a timestamped archive folder, draws the plots and writes the
 finished-run marker. Nothing here touches the plant, so a change to it is
@@ -110,14 +110,14 @@ end
 # startup path is only the FIRST of them, and it is the widest the run ever flies:
 # scored against it, the last laps are asked for a reach nothing ever commanded.
 t_log = Float64.(sl.time)
-have_geom = !isempty(geom_t)
-az_c_log = have_geom ? deg2rad.(on_log(t_log, geom_t, geom_az_c)) : deg2rad(az_c_path)
-az_amp_log = have_geom ? on_log(t_log, geom_t, geom_az_amp) : az_amp_path
-el_h_log = have_geom ? on_log(t_log, geom_t, geom_el_h) : el_height_path
+have_geom = !isempty(st.geom_t)
+az_c_log = have_geom ? deg2rad.(on_log(t_log, st.geom_t, st.geom_az_c)) : deg2rad(st.az_c_path)
+az_amp_log = have_geom ? on_log(t_log, st.geom_t, st.geom_az_amp) : st.az_amp_path
+el_h_log = have_geom ? on_log(t_log, st.geom_t, st.geom_el_h) : st.el_height_path
 # The cross-track error scored is the one to the optimizer's UNLIFTED curve
 # (`raw_az`/`raw_el` in the run script), not `var_01`, the guidance's own error
 # to the corrected path it steers for — see the comment at `raw_az`.
-d_raw_log = have_geom ? on_log(t_log, geom_t, geom_d_raw) : nothing
+d_raw_log = have_geom ? on_log(t_log, st.geom_t, st.geom_d_raw) : nothing
 fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
                    min_elevation = fcs.min_elevation, az_center = az_c_log,
                    az_amplitude = az_amp_log, el_height = el_h_log,
@@ -135,8 +135,8 @@ isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_l
 # 2.5 s el_offset_lead failed the azimuth reach by hundredths of a degree while
 # passing everything else. Reported next to the elevation that lift bought, so a
 # run says both halves of the trade rather than one.
-az_amp_mean = have_geom ? mean(az_amp_log) : az_amp_path
-el_h_mean = have_geom ? mean(el_h_log) : el_height_path
+az_amp_mean = have_geom ? mean(az_amp_log) : st.az_amp_path
+el_h_mean = have_geom ? mean(el_h_log) : st.el_height_path
 # In FILL fractions, since that is what the criteria are scored on once the
 # commanded pattern moves; the degrees are the same margin read against the mean
 # geometry, for a number that can be compared with a lift.
@@ -154,7 +154,7 @@ el_min_final = isempty(i_final) ? NaN : rad2deg(minimum(Float64.(sl.elevation[i_
 # What the path in the air actually carries, not what was asked for: the lift only
 # reaches the kite through an install or an in-air blend that the curvature gate
 # can refuse.
-lift_mean = el_applied
+lift_mean = st.el_applied
 @info @sprintf("Lift budget: %+.2f° of lift delivered (lobes up to %+.2f°); the \
                 tightest size criterion is %s with %+.2f° (%+.0f %%) to spare; min \
                 elevation %.1f° over the run, %.1f° in phase 5.",
@@ -307,7 +307,7 @@ else
 end
 # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
 # stop_reason is "" when the run ended with reel-out still going.
-reelout_stop_reason = isempty(stop_reason) ? "none" : stop_reason
+reelout_stop_reason = isempty(st.stop_reason) ? "none" : st.stop_reason
 @printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
         l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
 reelout_summary["tether"] = OrderedDict(
@@ -315,7 +315,7 @@ reelout_summary["tether"] = OrderedDict(
     "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
     "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
     "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
-    "laps_reeled" => (round(fig8_idx_progress / n_path; digits = 2),
+    "laps_reeled" => (round(st.fig8_idx_progress / st.n_path; digits = 2),
         "figure-eight laps completed by the time reel-out ended"))
 
 rp = reelout_power(sl)
@@ -396,12 +396,12 @@ summary["reelout"] = reelout_summary
 # `measured_W` averages.
 opt_power_meas = isnothing(rp) ? nothing : rp.mean_power
 pred_shares = NamedTuple[]
-opt_power_pred_eff = opt_power_pred
+opt_power_pred_eff = st.opt_power_pred
 if !isnothing(rp)
     t_ro = Float64.(sl.time[rp.idx])
     # Which timeline entry was current at each reeling sample.
-    which = [findlast(e -> e.t <= tq, pred_timeline) for tq in t_ro]
-    for (k, e) in enumerate(pred_timeline)
+    which = [findlast(e -> e.t <= tq, st.pred_timeline) for tq in t_ro]
+    for (k, e) in enumerate(st.pred_timeline)
         share = count(==(k), which) / length(which)
         share > 0 && push!(pred_shares, (; from_s = e.t, power = e.power, share))
     end
@@ -427,7 +427,7 @@ power_block = OrderedDict{String, Any}(
     "predicted_W" => (round(Int, opt_power_pred_eff),
         "predicted mean reel-out power of the paths actually flown, weighted by \
          their share of the reeling window [W]"),
-    "predicted_initial_W" => (round(Int, opt_power_pred),
+    "predicted_initial_W" => (round(Int, st.opt_power_pred),
         "predicted mean reel-out power of the path installed before the run [W]"))
 if length(pred_shares) > 1
     power_block["predicted_paths"] = OrderedDict(
@@ -480,7 +480,7 @@ function free_speed_reference(lengths)
                                 input_depower = depower_seed(tos, inflow.wind_speed),
                                 reg_weight = tos.reg_weight,
                                 detect_simple_bounds = tos.detect_simple_bounds,
-                                min_turn_radius = opt_r_min, pattern_limits = opt_box)
+                                min_turn_radius = st.opt_r_min, pattern_limits = opt_box)
             reply = chain_init(ref_chain, params)
             result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))
             if !isnothing(result.metrics)
@@ -545,13 +545,13 @@ feasibility_block = OrderedDict{String, Any}(
     "turn_radius_headroom" => (tos.turn_radius_headroom,
         "factor on the gate's number for what the GATE adds: its \
          finite-difference curvature estimate and the elevation lift [-]"),
-    "turn_radius_request_m" => (isnothing(opt_r_min) ? "unset" :
-                                round(opt_r_min; digits = 2),
+    "turn_radius_request_m" => (isnothing(st.opt_r_min) ? "unset" :
+                                round(st.opt_r_min; digits = 2),
         "minimum turn radius asked of the optimizer for the LAST request; the \
          gate's margin/(c1*max_steering) times the headroom and the lap's \
          reel-out ratio, since the optimizer measures the radius up the reel-out \
          while the run flies the curve at the anchor [m]"),
-    "turn_radius_scale" => (round(opt_r_scale; digits = 3),
+    "turn_radius_scale" => (round(st.opt_r_scale; digits = 3),
         "the two corrections together, as sent [-]"),
     "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
         "reel-out per lap ASSUMED for the startup request, the only one with no \
@@ -581,17 +581,17 @@ if !isnothing(feas.feas_final)
             (round(margin5.margin; digits = 2),
              "the same, for the last path the re-optimizer installed — the one \
               phase 5 actually inherited [-]"))
-    if !isnothing(p5_fallback)
-        feasibility_block["final_fallback_t"] = (round(p5_fallback.t; digits = 1),
+    if !isnothing(st.p5_fallback)
+        feasibility_block["final_fallback_t"] = (round(st.p5_fallback.t; digits = 1),
             "when phase 5's path fell back to an earlier install (final_margin_min) [s]")
-        feasibility_block["final_fallback_to_t"] = (round(p5_fallback.to_t; digits = 1),
+        feasibility_block["final_fallback_to_t"] = (round(st.p5_fallback.to_t; digits = 1),
             "install time of the path it fell back to; 0 = the startup path [s]")
-        feasibility_block["margin_final_fallback"] = (round(p5_fallback.to_margin; digits = 2),
+        feasibility_block["margin_final_fallback"] = (round(st.p5_fallback.to_margin; digits = 2),
             "phase-5 margin of that path, carrying the current lift: the one phase 5 flies [-]")
     end
 end
-droop_mean = [droop_n[b] > 0 ? droop_flown[b] / droop_n[b] : NaN
-              for b in 1:n_droop_bins]
+droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
+              for b in 1:st.n_droop_bins]
 
 summary["traj_opt"] = OrderedDict{String, Any}(
     "power" => power_block,
@@ -654,30 +654,30 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             kv
         end),
     "path" => OrderedDict(
-        "points" => (n_path_initial, "points of the path installed before the run"),
+        "points" => (st.n_path_initial, "points of the path installed before the run"),
         "points_final" => (length(fec.az_path),
             "points of the path at the end; differs when reopt installed one"),
-        "az_center_deg" => (round(az_c_path; digits = 1), "centre azimuth of the path [deg]"),
-        "az_amplitude_deg" => (round(az_amp_path; digits = 1),
+        "az_center_deg" => (round(st.az_c_path; digits = 1), "centre azimuth of the path [deg]"),
+        "az_amplitude_deg" => (round(st.az_amp_path; digits = 1),
             "half-width of the STARTUP path; the criteria are scored against the \
              pattern commanded at each lap, whose mean is lift_budget's reference [deg]"),
-        "el_center_deg" => (round(el_c_path; digits = 1), "centre elevation of the path [deg]"),
-        "el_height_deg" => (round(el_height_path; digits = 1),
+        "el_center_deg" => (round(st.el_c_path; digits = 1), "centre elevation of the path [deg]"),
+        "el_height_deg" => (round(st.el_height_path; digits = 1),
             "elevation span of the path, peak to peak [deg]"),
-        "lobe_lift_pct" => (round(Int, 100 * startup_wing_frac),
+        "lobe_lift_pct" => (round(Int, 100 * st.startup_wing_frac),
             "share of el_offset_wing the STARTUP install carried; held back on the \
              same rungs as a mid-run install when the full lift fails the curvature gate"),
-        "downloops" => (opt_downloops, "traversal direction the optimizer solved for")),
+        "downloops" => (st.opt_downloops, "traversal direction the optimizer solved for")),
     "feasibility" => feasibility_block,
     "reopt" => OrderedDict(
         "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
         "warm_start" => (tos.use_step,
             "/step alone, seeded from the previous optimum; false re-inits from \
              the parametric guess at every length"),
-        "requests" => (reopt_n, "solves that completed, accepted or rejected"),
+        "requests" => (st.reopt_n, "solves that completed, accepted or rejected"),
         "blocking" => (tos.reopt_blocking,
             "simulation held while a solve ran"),
-        "blocked" => (round(reopt_blocked_s; digits = 1),
+        "blocked" => (round(st.reopt_blocked_s; digits = 1),
             "wall time the simulation was frozen waiting for replies [s]"),
         "cache_hits" => (opt_chain.hits,
             "optimizer steps, startup included, served from the solution or failure \
@@ -688,10 +688,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "replayed_from" => (isnothing(replay_paths) ? "" : String(replay_paths),
             "scenario whose optimizer results were flown instead of asking the \
              optimizer (REPLAY_PATHS); empty for a normal run"),
-        "installed" => (count(e -> e.status == "installed", reopt_events),
+        "installed" => (count(e -> e.status == "installed", st.reopt_events),
             "new paths actually flown"),
         "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()
-            for c in reopt_cycles
+            for c in st.reopt_cycles
                 k = @sprintf("t_%05.1f_s", c.t)
                 n = get(seen, k, 0) + 1
                 seen[k] = n
@@ -701,7 +701,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             end
             cw
         end,
-        "blend_retries" => (@isdefined(blend_retries_total) ? blend_retries_total : 0,
+        "blend_retries" => (st.blend_retries_total,
             "cold-restart attempts spent on a rejected reply — a folded blend, a \
              collapsed prediction, or a clearance/elevation shortfall re-asked at \
              a raised floor — across every install this run"),
@@ -711,7 +711,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         # plain comprehension silently keeps the last of them — which hid the
         # cache's own skips the first time it ran — so collisions get a suffix.
         "events" => let seen = Dict{String, Int}(), ev = OrderedDict{String, Any}()
-            for e in reopt_events
+            for e in st.reopt_events
                 k = @sprintf("t_%05.1f_s", e.t)
                 n = get(seen, k, 0) + 1
                 seen[k] = n
@@ -733,10 +733,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
         "wing_az_deg" => (fcs.el_offset_wing_az,
             "azimuth beyond which that lift is full; it ramps over \
              el_offset_wing_blend below it [deg or fraction of A]"),
-        "lift_t" => (isnan(lift_t) ? "never" : round(lift_t; digits = 1),
+        "lift_t" => (isnan(st.lift_t) ? "never" : round(st.lift_t; digits = 1),
             "when the lift actually latched [s]"),
-        "lift_remaining_m" => (isnan(lift_remaining) ? "n/a" :
-                               round(lift_remaining; digits = 1),
+        "lift_remaining_m" => (isnan(st.lift_remaining) ? "n/a" :
+                               round(st.lift_remaining; digits = 1),
             "reel-out left at that moment; > 0 means the lead fired, 0 means \
              phase 5 did [m]"),
         "shift_delivery" => OrderedDict(
@@ -744,19 +744,19 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                 (e.status,
                  @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
                           e.delta, e.margin, tos.min_feasibility_margin))
-            for e in el_shift_events)),
+            for e in st.el_shift_events)),
     "droop_profile" => OrderedDict(
         vcat(
-            [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ n_droop_bins,
-                      100 * b ÷ n_droop_bins) =>
-                 (droop_n[b] == 0 ? "n/a" : round(droop_mean[b]; digits = 2),
-                  droop_n[b] == 0 ? "no samples in this azimuth band" :
+            [@sprintf("az_%02d_%02d_pct", 100 * (b - 1) ÷ st.n_droop_bins,
+                      100 * b ÷ st.n_droop_bins) =>
+                 (st.droop_n[b] == 0 ? "n/a" : round(droop_mean[b]; digits = 2),
+                  st.droop_n[b] == 0 ? "no samples in this azimuth band" :
                   @sprintf("kite below the path's elevation centre [deg], over %d \
                             samples; the path itself sits %.2f half-spans down there \
                             and the kite %.2f° under it",
-                           droop_n[b], droop_ref[b] / droop_n[b],
-                           droop_sag[b] / droop_n[b]))
-             for b in 1:n_droop_bins],
+                           st.droop_n[b], st.droop_ref[b] / st.droop_n[b],
+                           st.droop_sag[b] / st.droop_n[b]))
+             for b in 1:st.n_droop_bins],
             ["centre_to_lobe_deg" =>
                  (all(isnan, droop_mean) || isnan(first(droop_mean)) ? "n/a" :
                   round(maximum(filter(!isnan, droop_mean)) - first(droop_mean);
@@ -793,7 +793,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
                            what the NEXT lift has to spend", span_worst.margin,
                           span_worst.pct))])),
     "clearance" => OrderedDict(
-        "path_min_m" => (round(path_min_h_start; digits = 1),
+        "path_min_m" => (round(st.path_min_h_start; digits = 1),
             "lowest point of the PRE-FLIGHT path at the starting length [m]"),
         "flown_min_m" => (round(minimum(first(lt) * sin(el)
                                         for (lt, el) in zip(sl.l_tether, sl.elevation));
@@ -801,8 +801,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "lowest point the kite actually reached over the run [m]"),
         "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]"),
         "elevation_min_asked_deg" => (
-            let b = @isdefined(opt_box_now) && !isnothing(opt_box_now) ?
-                    opt_box_now : opt_box
+            let b = !isnothing(st.opt_box_now) ? st.opt_box_now : opt_box
                 isnothing(b) || isnothing(b.elevation_min) ? "unset" :
                     round(b.elevation_min; digits = 2)
             end,
@@ -810,7 +809,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
              asind(min_height/L) and min_elevation + candidate_elevation_margin at \
              the length it was made for; the optimizer constrains HEIGHT, and only \
              at the far end of the lap's reel-out [deg]"),
-        "elevation_min_extra_deg" => (round(el_min_extra; digits = 2),
+        "elevation_min_extra_deg" => (round(st.el_min_extra; digits = 2),
             "raise a rejected reply's shortfall added to that floor, carried \
              forward once measured; 0 means no reply was gated out low [deg]")),
     "inflow" => OrderedDict(
@@ -844,10 +843,10 @@ summary["traj_opt"] = OrderedDict{String, Any}(
 # The longest a new figure of eight took to compute, retries included: the
 # startup solve (which already contains its own retry seed) against every
 # re-optimization cycle from its first request to the verdict.
-opt_cycle_max_s, opt_cycle_max_where = if isempty(reopt_cycles)
+opt_cycle_max_s, opt_cycle_max_where = if isempty(st.reopt_cycles)
     opt_startup_solve_s, "the startup solve, the only solve of the run"
 else
-    c = reopt_cycles[argmax(getfield.(reopt_cycles, :wall_s))]
+    c = st.reopt_cycles[argmax(getfield.(st.reopt_cycles, :wall_s))]
     c.wall_s > opt_startup_solve_s ?
         (c.wall_s, @sprintf("the re-optimization at t = %.1f s (%s, L = %.0f m); \
                              the startup solve took %.1f s",
@@ -863,17 +862,17 @@ if t_sim > 0
     steps = round(Int, t_sim / s.dt)
     # Rates exclude the frozen time, as in the summary; the raw wall time is still
     # shown, and the gap between the two is `reopt_blocked_s`.
-    t_run = max(t_wall - reopt_blocked_s, eps())
+    t_run = max(t_wall - st.reopt_blocked_s, eps())
     # Everything the script spent waiting for the solver, wherever it fell: the
     # startup solve holds the script before the loop exists, the blocking
     # re-optimizations freeze the loop itself.
-    t_opt = opt_startup_solve_s + reopt_blocked_s
+    t_opt = opt_startup_solve_s + st.reopt_blocked_s
     t_total = time() - t_script_start
     @printf("  Performance: %.1f s sim in %.1f s wall%s = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
             t_sim, t_wall,
-            reopt_blocked_s > 0 ? @sprintf(" (%.1f s held for re-optimization)",
-                                           reopt_blocked_s) : "",
+            st.reopt_blocked_s > 0 ? @sprintf(" (%.1f s held for re-optimization)",
+                                           st.reopt_blocked_s) : "",
             t_sim / t_run, 1000 * t_run / steps,
             steps, s.dt, fcs.vsm_interval)
     @printf("               %.0f s from the first line of the script, %.0f s of it \
@@ -893,9 +892,9 @@ if t_sim > 0
              ($(round(opt_startup_solve_s; digits = 1)) s) plus every blocking \
              re-optimization (traj_opt.reopt.blocked) [s]"),
         "max_optimization_time" => (round(opt_cycle_max_s; digits = 1), opt_cycle_max_comment),
-        "realtime_factor" => (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
+        "realtime_factor" => (round(t_sim / max(t_wall - st.reopt_blocked_s, eps()); digits = 2),
             "sim_time / wall_time, excluding time frozen for re-optimization"),
-        "ms_per_step" => (round(1000 * (t_wall - reopt_blocked_s) / steps; digits = 1),
+        "ms_per_step" => (round(1000 * (t_wall - st.reopt_blocked_s) / steps; digits = 1),
             "wall time per step, excluding time frozen for re-optimization [ms]"),
         "steps" => (steps, "step count"),
         "dt" => (s.dt, "simulation timestep [s]"),
@@ -933,11 +932,11 @@ fig8m === nothing || (summary_block["cross_track_rms_deg"] = (round(fig8m.rms_d;
     "RMS cross-track error, settled window [deg]"))
 if t_sim > 0
     summary_block["total_wall_time"] = (round(t_total; digits = 1), "the whole script, start to this summary [s]")
-    summary_block["realtime_factor"] = (round(t_sim / max(t_wall - reopt_blocked_s, eps()); digits = 2),
+    summary_block["realtime_factor"] = (round(t_sim / max(t_wall - st.reopt_blocked_s, eps()); digits = 2),
         "sim_time / wall_time, excluding time frozen for re-optimization")
 end
-summary_block["optimization_requests"] = (reopt_n, "solves that completed, accepted or rejected")
-summary_block["optimizations_installed"] = (count(e -> e.status == "installed", reopt_events),
+summary_block["optimization_requests"] = (st.reopt_n, "solves that completed, accepted or rejected")
+summary_block["optimizations_installed"] = (count(e -> e.status == "installed", st.reopt_events),
     "new paths actually flown")
 isempty(laps_flown.dt) || (summary_block["fastest_fig8"] = (round(minimum(laps_flown.dt); digits = 1),
     "shortest time for flying one full figure of eight [s]"))
@@ -956,8 +955,8 @@ if have_phase4
     summary_block["av_depower_ro"] = (round(p4_depower_av; digits = 3), "mean KCU depower over phase four [-]")
     # The floor the limiter integrates above: depower_final, or the depower the
     # stop latched at when that is higher (simple_opt_reelout.jl's stop ramp).
-    dp_final_floor = isnan(stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, stop_dp_entry)
-    summary_block["max_depower_final"] = (round(min(dp_final_floor + dp_final_extra_peak,
+    dp_final_floor = isnan(st.stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, st.stop_dp_entry)
+    summary_block["max_depower_final"] = (round(min(dp_final_floor + st.dp_final_extra_peak,
                                                     max(fcs.depower_final_max, dp_final_floor)); digits = 3),
         "highest depower the force limiter asked for, from the stop latch through phase 5; \
          the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
@@ -965,7 +964,7 @@ if have_phase4
     # peak: what simple_opt_reelout.jl scaled heading_p by there, saturated at
     # the table's usable edge exactly as the run was.
     if isfinite(c1_setpoint) && isfinite(c1_depower_max)
-        dp5_peak = round(min(fcs.depower_final + dp_final_extra_peak,
+        dp5_peak = round(min(fcs.depower_final + st.dp_final_extra_peak,
                              fcs.depower_final_max, c1_depower_max); digits = 3)
         c1_5 = c1_at_depower(dp5_peak)
         summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_setpoint / c1_5 : 1.0; digits = 3),
@@ -989,13 +988,13 @@ end
 # Each carries the sim time and phase it was installed at, so the plot can leave
 # out what only phase 5 flew.
 opt_paths_file = joinpath(output_path, log_name * "_opt_paths.yaml")
-if @isdefined(opt_paths_raw) && !isempty(opt_paths_raw)
+if !isempty(st.opt_paths_raw)
     YAML.write_file(opt_paths_file, Dict(
         "paths" => [Dict("installed_t" => round(t_at; digits = 2),
                          "installed_phase" => ph_at,
                          "azimuth" => round.(Float64.(paz); digits = 3),
                          "elevation" => round.(Float64.(pel); digits = 3))
-                    for ((paz, pel), (t_at, ph_at)) in zip(opt_paths_raw, opt_paths_at)]))
+                    for ((paz, pel), (t_at, ph_at)) in zip(st.opt_paths_raw, st.opt_paths_at)]))
 elseif isfile(opt_paths_file)
     rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
 end

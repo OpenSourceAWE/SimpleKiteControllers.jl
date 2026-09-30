@@ -46,7 +46,7 @@ end
 # At the depower the pattern is FLOWN at (`pattern_depower`), not the setpoint:
 # with fly_opt_depower the kite flies the optimizer's u_d from phase 3 on.
 feas = check_reelout_feasibility(fec, fcs, tos; l_tether,
-                                 depower = pattern_depower(opt_result))
+                                 depower = pattern_depower(st.opt_result))
 
 # A refusal, not a warning: the optimizer knows nothing of the V3's turn-rate law,
 # so a path the kite cannot turn along is a plausible thing for it to return, and
