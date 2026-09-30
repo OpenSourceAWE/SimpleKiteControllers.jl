@@ -152,8 +152,8 @@ phase 5 the run flies `depower_final`, where c1 is ~23 % lower (0.2133 against
 0.2752), and a request made at the pattern's c1 is then ~23 % short of what the
 reply will be judged against — measured 2026-08-20, a reply of 12.15 m answering a
 10.37 m request and rejected at margin 0.61, which is exactly `0.74 * c1_final/c1`
-of the 0.79 it would have scored in phase 4. `c1_at(phase)` in
-`reelout_feasibility.jl` is that number.
+of the 0.79 it would have scored in phase 4. [`c1_at`](@ref)`(feas, phase, c1)`
+is that number.
 
 The table refuses to extrapolate off its grid. A `body_damping`/`depower_setpoint`
 it cannot serve therefore sends no constraint and warns, exactly as the feasibility

@@ -16,8 +16,8 @@ is gated against, as returned by [`check_reelout_feasibility`](@ref). Fields:
 * `feas_final` — what phase 5 flies: the starting path lifted by `el_offset_final`,
   scored at `reelout_l_max` with `c1_final`. `nothing` when unavailable.
 
-The example applies the abort/warn policy on top of these verdicts — which check
-refuses the run and which only warns is a script decision, not a library one.
+[`check_startup_path`](@ref) applies the abort policy on top of these verdicts:
+which check refuses the run and which only warns.
 """
 Base.@kwdef struct ReeloutFeasibility
     c1::Float64 = NaN
@@ -213,4 +213,71 @@ function check_reelout_feasibility(fec::FigureEightController,
 
     return ReeloutFeasibility(; c1, c2, delay, feas_start, feas_end,
                               c1_final, feas_final)
+end
+
+"""
+    c1_at(f, phase, c1) -> Float64
+
+The turn-rate gain to check a path against at flight phase `phase`, given `c1`, the
+table's gain at the depower asked about: with `fly_opt_depower` the depower a reply
+carries (a candidate's own, when scoring it) or the one currently flown (when sizing
+a request). From phase 5 that is `depower_final`'s, [`c1_at(f, phase)`](@ref c1_at);
+before that `c1`, falling back to the startup law `f.c1` when `c1` is `NaN`, a
+depower the table cannot serve.
+"""
+c1_at(f::ReeloutFeasibility, phase::Integer, c1::Real) =
+    phase >= 5 ? c1_at(f, phase) : (isnan(c1) ? f.c1 : Float64(c1))
+
+"""
+    check_startup_path(fec, fcs, tos; l_tether, depower = fcs.depower_setpoint)
+        -> ReeloutFeasibility
+
+The abort policy on the startup path installed in `fec`: the gates of
+[`check_reelout_feasibility`](@ref) that REFUSE a reel-out run rather than only warn,
+each an `error` that says why. Returns the verdicts when the path passes.
+
+* The ELEVATION floor, `fcs.min_elevation + tos.candidate_elevation_margin`: this
+  repo's own criterion is an angle and `fig8_metrics` fails a run that breaks it.
+  AWETrim constrains height and not elevation, so this is not something the solve
+  avoids on its own.
+* The clearance floor `tos.min_height` at `l_tether`, when set: the optimizer earns
+  part of its `min_height` by reeling out within the lap, which an installed
+  (azimuth, elevation) curve does not, so it must be told here rather than flown past.
+* The curvature margin at the STARTING length against `tos.min_feasibility_margin`,
+  at the depower the pattern is FLOWN at (`depower`): the optimizer knows nothing of
+  the V3's turn-rate law, so a path the kite cannot turn along is a plausible thing
+  for it to return, and flying it measures the steering clamp instead of the path.
+  Skipped when the table cannot serve `depower` (`feas_start` is `nothing`).
+"""
+function check_startup_path(fec::FigureEightController, fcs::FC_Settings,
+                            tos::TrajOptSettings; l_tether::Real,
+                            depower::Real = fcs.depower_setpoint)
+    el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+    minimum(fec.el_path) >= el_floor ||
+        error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
+                        %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
+                        constrains height and not elevation, so this is not something \
+                        the solve avoids on its own.",
+                       minimum(fec.el_path), fcs.min_elevation,
+                       tos.candidate_elevation_margin, el_floor))
+    if tos.min_height > 0
+        clr = check_pattern_height(fec, l_tether, tos.min_height)
+        clr.ok ||
+            error(@sprintf("The optimized path's lowest point is %.1f m above ground at \
+                            L = %.0f m (elevation %.1f°), below the min_height = %.0f m \
+                            of data/traj_opt.yaml. Raise the guess elevation, fly a \
+                            longer tether, or lower min_height.",
+                           clr.height, l_tether, clr.elevation, tos.min_height))
+    end
+    feas = check_reelout_feasibility(fec, fcs, tos; l_tether, depower)
+    isnothing(feas.feas_start) ||
+        feas.feas_start.margin >= tos.min_feasibility_margin ||
+        error(@sprintf("The optimized path asks for a turn radius of %.1f° where the \
+                        kite manages %.1f° at the STARTING length %.0f m: margin %.2f, \
+                        below min_feasibility_margin = %.2f. Lower body_damping, raise \
+                        max_steering, or lower the margin in data/traj_opt.yaml to fly \
+                        it anyway.",
+                       feas.feas_start.path_radius, feas.feas_start.kite_radius,
+                       l_tether, feas.feas_start.margin, tos.min_feasibility_margin))
+    return feas
 end

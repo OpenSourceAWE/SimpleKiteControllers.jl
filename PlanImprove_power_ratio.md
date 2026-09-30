@@ -138,7 +138,7 @@ could even begin.** Applying the de-rating to the startup solve reproduced
 the same coupling as the crest-factor attempt above, worse: the reply's
 curvature margin at the 150 m starting length came out 0.73 (path radius
 3.6° against the kite's 4.9°), below `min_feasibility_margin = 0.82`, and
-`examples/reelout_feasibility.jl`'s hard gate aborted the run — `feas_start`
+`check_startup_path`'s hard gate (then `examples/reelout_feasibility.jl`) aborted the run — `feas_start`
 scores the pattern flown for the whole reel-out (phases 3/4), not phase 5,
 which passed fine (margin 1.15) and was never the issue. The startup retry
 loop (`startup_retries_max = 4`, corrected re-solves at the same length)

@@ -52,7 +52,7 @@ export TrajOptSettings, turn_radius_lap_reelout
 
 # Reel-out feasibility gates (examples/simple_opt_reelout.jl)
 export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
-export check_reelout_feasibility
+export check_reelout_feasibility, check_startup_path
 
 # Simulated time of a reel-out run under a wind-speed override (examples/simple_opt_reelout.jl)
 export reelout_budget, sim_budget, BUDGET_HEIGHT

@@ -91,9 +91,9 @@ flown here; the pattern's centre and extent are measured off the installed path.
 # Globals
 
 The run keeps two: `setup` (see `setup_run`), everything it reads, and `st`, the
-`RunState` everything it writes. `reelout_feasibility.jl` (abort/warn policy on
-the gates of [`check_reelout_feasibility`](@ref), adding `feas`, `margin5`,
-`c1_at_phase` and `phase5_margin_at` to `setup`) and `reelout_results.jl`
+`RunState` everything it writes. `startup_feasibility` (the gates of
+[`check_startup_path`](@ref), adding `feas`, `margin5`, `c1_at_phase` and
+`phase5_margin_at` to `setup`) and `reelout_results.jl`
 (scoring, summary YAML, archive, plots, finished-run marker) are functions of
 both. Besides them only `REF_PATH` and `LOG_NAME` (for the plots) and the timers
 `t_script_start`, `run_script`, `t_wall` and `t_sim` are left in `Main`.
@@ -125,9 +125,8 @@ using SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_conver
 using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
     final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
     soft_stop_speed
-# For reelout_feasibility.jl, which reads the laws of its verdicts through these.
-using SimpleKiteControllers: c1_at, phase5_margin
-using SimpleKiteControllers: check_reelout_feasibility, ReeloutFeasibility, Phase5MarginState
+# The feasibility gates of the startup path and the laws the loop reads off their verdicts.
+using SimpleKiteControllers: check_startup_path, c1_at, phase5_margin, Phase5MarginState
 using SimpleKiteControllers: optimizer_conditions
 import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
@@ -173,7 +172,7 @@ plant `s`, the winch and its controllers, the optimizer's conditions and session
 (`c1_at_depower`, `c1_ctrl_at`) and the lobe lift. The script keeps the result in the one global
 `setup` and hands it to every function below; the loop destructures it (see `run_loop!`).
 Mutable members (`fcs`, `wc`, `s`, the `opt_*_log` vectors, ...) are still changed in place. The
-startup solve and `reelout_feasibility.jl` add their results with `merge`.
+startup solve and `startup_feasibility` add their results with `merge`.
 """
 function setup_run(inputs)
     (; show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance, steer_gain_factor,
@@ -344,7 +343,7 @@ function setup_run(inputs)
     pattern_depower(reply) =
         tos.fly_opt_depower && !isnothing(reply.depower) ?
             awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
-    # The elevation floor of every candidate path, the startup gates' and `reelout_feasibility.jl`'s.
+    # The elevation floor of every candidate path, the startup gates' and `check_startup_path`'s.
     el_floor = fcs.min_elevation + tos.candidate_elevation_margin
 
     return (; inputs, show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance,
@@ -435,7 +434,7 @@ setup = setup_run(script_inputs(@__FILE__, run_input_defaults()))
 
 Everything the startup functions and the simulation loop WRITE, in one place, so they take it as an
 argument (`st`) instead of rebinding script globals. Comments give the meaning and the unit; the
-loop-only bookkeeping is grouped as in the loop. `reelout_feasibility.jl` and `reelout_results.jl`
+loop-only bookkeeping is grouped as in the loop. `startup_feasibility` and `reelout_results.jl`
 read the fields as `st.<field>`, and so does `DelayedInjection` in `validate_margins.jl`, during the
 loop: `st` is the one global of the run's state.
 """
@@ -700,7 +699,7 @@ function log_lobe_lift(fcs, opt_result)
 end
 log_lobe_lift(setup.fcs, st.opt_result)
 
-# The turn-rate law the retry reads a path against; `reelout_feasibility.jl` looks it up again later.
+# The turn-rate law the retry reads a path against; `startup_feasibility` looks it up again later.
 st.c1_startup = setup.c1_at_depower(setup.fcs.depower_setpoint)
 # Resample but never upsample; the lobe lift is rationed to fit the curvature gate.
 function install_optimized_path!(setup, st::RunState, reply)
@@ -1024,9 +1023,31 @@ end
 capture_startup_geometry!(setup, st)
 
 
-# The three gates on the installed path; adds `feas`, `margin5`, `c1_at_phase` and `phase5_margin_at` for the loop.
-include(joinpath(@__DIR__, "reelout_feasibility.jl"))
-setup = merge(setup, reelout_feasibility(setup, st))
+"""
+    startup_feasibility(setup, st) -> (; feas, margin5, c1_at_phase, phase5_margin_at)
+
+The gates that refuse the run (`check_startup_path`) on the installed startup path, at
+the depower the pattern is FLOWN at (`pattern_depower`): with fly_opt_depower the kite
+flies the optimizer's u_d from phase 3 on. Returns the verdicts `feas`, `margin5`, the
+`Phase5MarginState` of the in-air phase-5 check, and the two laws the loop reads off
+`feas`: `c1_at_phase(phase, depower | st)`, the c1 to check a path against at time t,
+and `phase5_margin_at(az, el)`, what phase 5 will fly a candidate path with.
+"""
+function startup_feasibility(setup, st::RunState)
+    (; fec, fcs, tos, l_tether, c1_at_depower, pattern_depower) = setup
+    feas = check_startup_path(fec, fcs, tos; l_tether, depower = pattern_depower(st.opt_result))
+    # A cell the table cannot serve falls back to the startup law, see `c1_at`; `st` reads it
+    # at the depower currently flown (`st.depower_flown_opt`), when sizing a request.
+    c1_at_phase(phase::Integer, depower::Real) =
+        c1_at(feas, phase, phase >= 5 ? NaN : c1_at_depower(depower))
+    c1_at_phase(phase::Integer, st::RunState) =
+        c1_at_phase(phase, tos.fly_opt_depower ? st.depower_flown_opt : fcs.depower_setpoint)
+    # NaN when the table could not serve depower_final. See phase5_margin's docstring for
+    # why this is NOT comparable to the install's own margin early in the reel-out.
+    phase5_margin_at(az, el) = phase5_margin(feas, az, el, fcs.reelout_l_max, fcs.max_steering)
+    return (; feas, margin5 = Phase5MarginState(), c1_at_phase, phase5_margin_at)
+end
+setup = merge(setup, startup_feasibility(setup, st))
 
 
 # Every path the kite has flown, as installed (lobe lift included), with its phase-5 margin and the

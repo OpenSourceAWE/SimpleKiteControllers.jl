@@ -468,8 +468,8 @@ multi-modal, so the guess is a choice about the answer.
 
     Not the same thing as [`min_height`](@ref), and that is the point: AWETrim
     constrains HEIGHT, which a growing tether satisfies at ever lower angles (50 m
-    at 350 m of tether is 8.2°), while this repo's criterion — and `el_floor` in
-    `reelout_feasibility.jl` — is an ANGLE. Set it to `min_elevation +
+    at 350 m of tether is 8.2°), while this repo's criterion — and the elevation floor
+    of [`check_startup_path`](@ref) — is an ANGLE. Set it to `min_elevation +
     candidate_elevation_margin` to ask for what the gate will demand.
     """
     pattern_elevation_min = 0.0

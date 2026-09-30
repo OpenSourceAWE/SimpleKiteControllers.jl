@@ -1287,7 +1287,7 @@ end
 
     @testset "reelout_feasibility" begin
         using SimpleKiteControllers: ReeloutFeasibility, Phase5MarginState, c1_at,
-                                     phase5_margin
+                                     phase5_margin, check_startup_path
 
         # c1_at falls back to the pattern's c1 before phase 5 and when the final
         # lookup failed (NaN), and switches to depower_final's from phase 5 on.
@@ -1301,6 +1301,12 @@ end
         fallback = ReeloutFeasibility(; c1 = 0.25)   # c1_final = NaN
         @test isnan(fallback.c1_final)
         @test c1_at(fallback, 5) == 0.25
+        # With the table's gain at the depower asked about: that gain before phase 5,
+        # the startup law when the table could not serve it, depower_final's from 5 on.
+        @test c1_at(feas, 4, 0.23) == 0.23
+        @test c1_at(feas, 4, NaN) == 0.25
+        @test c1_at(feas, 5, 0.23) == 0.20
+        @test c1_at(fallback, 6, NaN) == 0.25
 
         # phase5_margin is NaN without a final coefficient, otherwise it is the
         # curvature margin at the given length.
@@ -1416,6 +1422,24 @@ end
             @test feas_nf.c1 == feas.c1
             @test isnan(feas_nf.c1_final) && isnothing(feas_nf.feas_final)
             @test c1_at(feas_nf, 5) == feas_nf.c1
+
+            # check_startup_path: the same verdicts when the path passes (a margin
+            # demand just below what this synthetic path reaches)...
+            tos_pass = TrajOptSettings(; candidate_elevation_margin = 2.0, min_height = 0.0,
+                                       min_feasibility_margin = feas.feas_start.margin - 0.1)
+            ok = check_startup_path(fec, fcs, tos_pass; l_tether)
+            @test ok.c1 == feas.c1 && ok.feas_start == feas.feas_start
+            # ...and a refusal for each of its three gates.
+            @test_throws r"below min_elevation" check_startup_path(
+                fec, FC_Settings(fcs; min_elevation = minimum(fec.el_path)), tos_pass; l_tether)
+            @test_throws r"min_height" check_startup_path(fec, fcs, tos_tight; l_tether)
+            tos_margin = TrajOptSettings(; candidate_elevation_margin = 2.0, min_height = 0.0,
+                                         min_feasibility_margin = feas.feas_start.margin + 0.1)
+            @test_throws r"min_feasibility_margin" check_startup_path(fec, fcs, tos_margin;
+                                                                      l_tether)
+            # A depower the table cannot serve leaves nothing to refuse on the turn margin.
+            @test isnothing(check_startup_path(fec, fcs, tos_margin; l_tether,
+                                               depower = 0.99).feas_start)
         finally
             SimpleKiteControllers._TURN_RATE_TABLE[] = old
         end
