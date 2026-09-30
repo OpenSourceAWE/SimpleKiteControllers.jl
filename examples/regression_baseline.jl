@@ -105,14 +105,14 @@ const LIVE_CASES = (
 )
 
 """
-    check_live(tag; ref = "pkg", cases = LIVE_CASES) -> Vector{String}
+    check_live(tag; ref = "d002", cases = LIVE_CASES) -> Vector{String}
 
 Fly each LIVE case (the optimizer server must be up, or `autostart_server` set) into
 `output/regression/<name>_<tag>_8.25` and compare it with `output/regression/<name>_<ref>_8.25`.
 The run is served from the solution cache where the reference was, so only the cache counters and
 `traj_opt.reopt.blocked` may differ; `compare_runs` prints those, and the line says `DIFFERENT`.
 """
-function check_live(tag; ref = "pkg", cases = LIVE_CASES)
+function check_live(tag; ref = "d002", cases = LIVE_CASES)
     root = normpath(joinpath(@__DIR__, "..", "output"))
     lines = String[]
     for (name, inputs) in cases
