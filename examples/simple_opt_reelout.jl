@@ -114,6 +114,16 @@ using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds, request_constraints
 using SimpleKiteControllers: with_elevation_max, with_azimuth_amplitude_min, with_size_box
+# The decisions of the startup retries (src/startup_retry.jl), the reopt gate and the loop.
+using SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
+    azimuth_amplitude, elevation_amplitude, gate_candidate, retried
+using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
+    final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
+    soft_stop_speed
+# For reelout_feasibility.jl: its thin wrappers ADD METHODS to the package's `c1_at`/`phase5_margin`,
+# so they must be imported, not merely used: `using` binds them read-only.
+import SimpleKiteControllers: c1_at, phase5_margin
+using SimpleKiteControllers: check_reelout_feasibility, ReeloutFeasibility, Phase5MarginState
 import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
@@ -591,17 +601,8 @@ function adopt_startup_path!()
 end
 adopt_startup_path!()
 
-
 # ---- Corrected retries of the STARTUP solve: one lever per attempt (ceiling, width, radius) ---- #
 # The decisions (which lever, what the answers imply) are `next_lever` & co. of src/startup_retry.jl.
-using SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
-    azimuth_amplitude, elevation_amplitude, gate_candidate, retried
-using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
-    final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
-    soft_stop_speed
-
-
-
 
 # Read at TOP level: the retry block defines `incumbent_score` only when it runs.
 margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
