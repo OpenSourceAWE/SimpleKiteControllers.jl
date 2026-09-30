@@ -93,6 +93,8 @@ include("reelout_budget.jl")
 include("startup_retry.jl")
 # After startup_retry.jl: with_size_box measures a path with elevation_amplitude.
 include("pattern_limits.jl")
+# After pattern_limits.jl: request_constraints builds the box with pattern_limits_from.
+include("opt_request.jl")
 # Pure accept gate of a re-optimized path of examples/simple_opt_reelout.jl.
 include("reopt_gate.jl")
 # Step-wise decisions of the reel-out loop of examples/simple_opt_reelout.jl.

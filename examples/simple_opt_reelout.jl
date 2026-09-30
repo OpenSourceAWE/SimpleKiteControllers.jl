@@ -112,7 +112,7 @@ using Timers; tic()
 using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
-using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds
+using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds, request_constraints
 using SimpleKiteControllers: with_elevation_max, with_azimuth_amplitude_min, with_size_box
 import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,

@@ -19,6 +19,7 @@ using Test
     include("test_reelout_budget.jl")
     include("test_reopt_gate.jl")
     include("test_pattern_limits.jl")
+    include("test_opt_request.jl")
     include("test_loop_decisions.jl")
     # V5 of oldplans/Plan_model_validation.md: course_loop_model.jl, no simulation.
     include("test_course_loop_model.jl")

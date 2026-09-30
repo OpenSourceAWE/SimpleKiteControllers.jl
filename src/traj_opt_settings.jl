@@ -106,7 +106,7 @@ multi-modal, so the guess is a choice about the answer.
     input_depower_per_wind = 0.0
     """
     Soft ceiling [m] on the ramped seed, below AWETrim's hard 2.3 m bound
-    (`DEPOWER_SEED_BOUNDS` in `examples/awetrim_client.jl`). `0.0` disables it —
+    ([`DEPOWER_SEED_BOUNDS`](@ref)). `0.0` disables it —
     the ramp then clamps to the hard bound alone.
 
     A seed AT the hard bound leaves the solver no room to move: measured

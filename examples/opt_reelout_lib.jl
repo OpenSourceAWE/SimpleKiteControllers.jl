@@ -253,59 +253,6 @@ function optimizer_session(tos, inflow, replay_paths, log_name)
     return (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain)
 end
 
-"""
-    request_constraints(tos, fcs, inflow, cap_wind, l_opt)
-        -> (; turn_radius_reel, opt_r_scale, depower_request, c1_request, opt_r_min, opt_r_on,
-             opt_r_sent, opt_box)
-
-The constraints the startup solve must respect, sized at the tether length `l_opt` that is
-sent to the optimizer: the minimum turn radius `opt_r_min` (with the anchor ratio `L/r` and
-the gate's headroom in `opt_r_scale`; `nothing` when off, for margin 0 or an off-grid
-turn-rate cell) and the pattern box `opt_box`. `opt_r_sent` starts as `opt_r_min`, the radius
-the startup solve actually CONVERGED at, which the retry ladder bisects toward.
-
-`depower_request` is the depower the reply will be FLOWN at, which is the c1 the request must
-be sized at, see `min_turn_radius_request`. Under `fly_opt_depower` that is the optimizer's
-own and so unknown before the solve; the seed it starts from is the only estimate there is,
-and the setpoint is NOT one: it is the depower the loop is tuned at, typically far more
-powered, and a request sized there comes back a third too tight and is then gated out for a
-curvature the kite never had.
-"""
-function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
-    turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
-    opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.turn_radius_headroom
-    depower_request = tos.fly_opt_depower ?
-                      awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed)) :
-                      fcs.depower_setpoint
-    c1_request = try
-        turn_rate_coeffs(fcs.body_damping, depower_request).c1
-    catch exc
-        exc isa ArgumentError || rethrow()
-        nothing       # off the grid: the request falls back to the setpoint and warns
-    end
-    opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale, c1 = c1_request)
-    opt_r_on = !isnothing(opt_r_min)   # off for margin 0, or an off-grid turn-rate cell
-    opt_r_sent = opt_r_min
-    opt_box = pattern_limits_from(tos;
-                                  elevation_min = elevation_min_request(fcs, tos, l_opt),
-                                  wind_speed = cap_wind)
-    isnothing(opt_r_min) && isnothing(opt_box) ||
-        @info @sprintf("Constraints sent with the request: min_turn_radius %s, \
-                        pattern box %s.",
-                       isnothing(opt_r_min) ? "unset" :
-                           @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
-                                    own at depower %.3f%s, x %.3f for %.0f m of assumed \
-                                    reel-out per lap and %.2f of headroom)",
-                                    opt_r_min, tos.min_feasibility_margin,
-                                    depower_request,
-                                    tos.fly_opt_depower ? " — the seed's, not the \
-                                        setpoint's, because the reply is flown at its own" : "",
-                                    opt_r_scale, turn_radius_reel,
-                                    tos.turn_radius_headroom),
-                       isnothing(opt_box) ? "unset" : string(opt_box))
-    return (; turn_radius_reel, opt_r_scale, depower_request, c1_request, opt_r_min, opt_r_on,
-            opt_r_sent, opt_box)
-end
 
 """
     solve_startup(tos, make_params, solve, start_params, el_center_seed_base, l_set, winch, inflow)
