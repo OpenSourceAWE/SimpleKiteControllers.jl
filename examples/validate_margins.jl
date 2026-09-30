@@ -7,7 +7,7 @@ rings, and compare the critical gain factor `k_crit` / extra delay `τ_crit`,
 and their ringing frequencies, against `course_loop_model.jl`'s gain margin,
 phase crossover, delay margin and gain crossover.
 
-Needs the STEER_GAIN_FACTOR / EXTRA_STEER_DELAY / HOOK_SETTLE hooks in
+Needs the steer_gain_factor / extra_steer_delay / hook_settle inputs of
 `simple_fig8.jl` and `simple_opt_reelout.jl` (added for V1, see either
 script's own comments next to them, or oldplans/Plan_model_validation.md#tests).
 
@@ -76,6 +76,7 @@ using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 # ==================== OPERATING POINTS ==================== #
@@ -106,11 +107,11 @@ const V1_POINTS = Dict(
 """
     DelayedInjection(m, settle)
 
-`t -> Δu` for `simple_opt_reelout.jl`'s `STEER_DISTURBANCE`, which is called
+`t -> Δu` for `simple_opt_reelout.jl`'s input `steer_disturbance`, which is called
 with the absolute time: zero until `settle` [s] after phase 4 is first reached
-(`st.t_phase4` of the script's `RunState`, read live during the loop), then `m(τ)`, τ the time since then. The same
-start as `STEER_INJECTION` in `simple_fig8.jl`, so `frf_injection` works on
-either script's runs.
+(`st.t_phase4` of the script's `RunState`, read live during the loop), then `m(τ)`,
+τ the time since then. The same start as `steer_injection` in `simple_fig8.jl`, so
+`frf_injection` works on either script's runs.
 """
 struct DelayedInjection{F}
     m::F
@@ -216,15 +217,15 @@ end
            label = "run", hook_settle = HOOK_SETTLE_V1, baseline = nothing,
            test::Symbol = :gain, injection = nothing, sim_time = nothing) -> NamedTuple
 
-Select `point`'s project/wind/sim_time, no turbulence, `SHOW_PLOTS = false`,
-set the V1 hooks and `include` its script; archive the log and `analyze` it.
+Select `point`'s project/wind/sim_time, no turbulence, and `run_example` its script
+with `show_plots = false` and the V1 hooks; archive the log and `analyze` it.
 `injection` (a function `τ -> Δu`, e.g. a `Multisine`) is added to the command
-as `STEER_INJECTION` (V2); `sim_time` [s] overrides the point's.
+as the input `steer_injection` (V2); `sim_time` [s] overrides the point's.
 Pass `baseline` (another `run_v1` result, with `gain_factor = 1`,
 `extra_delay = 0`) to also get the stable/unstable/rate-limited verdict — see
 `analyze`. `feedback_only = true` scales only the feedback part of the
 command, `rel_steering - u_ff`, and leaves the feed-forward alone (the
-`STEER_GAIN_FEEDBACK_ONLY` hook); it only differs from the default with
+`steer_gain_feedback_only` hook); it only differs from the default with
 `ff_gain > 0`.
 """
 function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only = false,
@@ -237,24 +238,19 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     set_selected_windspeed(p.wind)
     V3Kite.set_default_turbulence(0.0; data_path = skc_data_path())
 
-    Core.eval(Main, :(SHOW_PLOTS = false))
-    Core.eval(Main, :(STEER_GAIN_FACTOR = $gain_factor))
-    Core.eval(Main, :(STEER_GAIN_FEEDBACK_ONLY = $feedback_only))
-    Core.eval(Main, :(EXTRA_STEER_DELAY = $extra_delay))
-    Core.eval(Main, :(HOOK_SETTLE = $hook_settle))
-    if p.script == "simple_opt_reelout.jl"
-        # The reel-out script takes a test input as STEER_DISTURBANCE, called with the absolute time.
-        dist = isnothing(injection) ? nothing : DelayedInjection(injection, hook_settle)
-        Core.eval(Main, :(STEER_DISTURBANCE = $dist))
-    else
-        Core.eval(Main, :(STEER_INJECTION = $injection))
-    end
+    # The reel-out script takes a test input as `steer_disturbance`, called with the absolute time.
+    test_input = p.script == "simple_opt_reelout.jl" ?
+        (; steer_disturbance = isnothing(injection) ? nothing :
+                                   DelayedInjection(injection, hook_settle)) :
+        (; steer_injection = injection)
     @info @sprintf("V1 %s (%s): gain factor %.4g%s, extra delay %d samples%s, \
                     wind %.1f m/s, sim_time %.0f s.",
                    point, label, gain_factor, feedback_only ? " (feedback only)" : "",
                    extra_delay, isnothing(injection) ? "" : ", injection",
                    p.wind, sim_time)
-    Base.include(Main, joinpath(@__DIR__, p.script))
+    run_example(p.script; show_plots = false, steer_gain_factor = gain_factor,
+                steer_gain_feedback_only = feedback_only, extra_steer_delay = extra_delay,
+                hook_settle, test_input...)
 
     project = project_file(p.project)
     project_set = Settings(project)
@@ -889,8 +885,8 @@ end
 """
     sweep_delay(point, baseline; delays = nothing) -> Vector
 
-Same as `sweep_gain`, stepping `EXTRA_STEER_DELAY` [samples] around the
-model's predicted delay margin instead of `STEER_GAIN_FACTOR`, and bisecting
+Same as `sweep_gain`, stepping `extra_steer_delay` [samples] around the
+model's predicted delay margin instead of `steer_gain_factor`, and bisecting
 down to one sample; `bracket(runs, baseline, :extra_delay)` gives `τ_crit`.
 """
 function sweep_delay(point::Symbol, baseline; delays = nothing)

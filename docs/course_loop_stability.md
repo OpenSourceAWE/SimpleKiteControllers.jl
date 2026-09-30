@@ -186,7 +186,7 @@ measured margins are larger than the model's.
   (feed-forward on). With the tape's rate limit removed for the test: delay
   margin 0.315 s at 0.52 Hz, gain margin 4.44 at 1.13 Hz. With the flown rate
   limit the delay margin is 0.27 s: the rate limit costs ~0.045 s there.
-- **V2, injected multisines** (`STEER_INJECTION`), lines placed halfway
+- **V2, injected multisines** (`steer_injection`), lines placed halfway
   between the lap's harmonics (a figure-eight's heading carries mainly its odd
   harmonics, which otherwise swamp the injection), 0.2 – 4 Hz at 300 m, 0.2 –
   2.2 Hz at 200 m. The links of the loop, measured against the model:
@@ -582,6 +582,6 @@ list.
     include("examples/stability_fig8.jl")   # from the package root, examples env
     diskmargin(L)                                        # nominal pattern loop
 
-Set `SHOW_PLOTS = false` before the include to skip the Bode plot and the
+`run_example("stability_fig8.jl"; show_plots = false)` skips the Bode plot and the
 margin-vs-depower plot. The script needs `ControlSystemsBase` and
 `RobustAndOptimalControl`, which were added to `examples/Project.toml` for it.

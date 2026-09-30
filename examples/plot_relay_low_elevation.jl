@@ -21,14 +21,14 @@ start of the fit window:
 
 The channels are saved to `output/relay_low_elevation.csv` (time [s], heading,
 band_center, elevation [°], set_steering, steering, us_delayed [-], `NaN` outside
-the fit window), so the figure can be redrawn without flying (`TR_FROM_CSV`). The
+the fit window), so the figure can be redrawn without flying (`from_csv`). The
 PDF goes to LearningControl's `figures/`, as in `plot_c1_c2.jl`.
 
-About two to three minutes of flying. `DEPOWER` and `TR_FROM_CSV` are read and
-cleared like `SHOW_PLOTS`:
+About two to three minutes of flying. The inputs `depower` (default 0.275) and
+`from_csv` are passed with `run_example` (`examples/script_inputs.jl`):
 
-    include("plot_relay_low_elevation.jl")                        # fly, save, plot
-    TR_FROM_CSV = true; include("plot_relay_low_elevation.jl")    # plot the saved flight
+    include("plot_relay_low_elevation.jl")                          # fly, save, plot
+    run_example("plot_relay_low_elevation.jl"; from_csv = true)     # plot the saved flight
 """
 
 using Pkg
@@ -39,13 +39,12 @@ end
 using MakieControlPlots
 using LaTeXStrings
 using DelimitedFiles: readdlm, writedlm
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 # ==================== USER PARAMETERS ==================== #
 
-depower = @isdefined(DEPOWER) ? Float64(DEPOWER) : 0.275
-DEPOWER = 0.275
-from_csv = @isdefined(TR_FROM_CSV) ? TR_FROM_CSV : false
-TR_FROM_CSV = false
+(; depower, from_csv) = script_inputs(@__FILE__, (; depower = 0.275, from_csv = false))
+depower = Float64(depower)
 
 # The middle flight of `plot_turn_rate_identification.jl`'s `flight_settings`, which flies the
 # full time at every depower from 0.25 to 0.325 (2026-09-29).

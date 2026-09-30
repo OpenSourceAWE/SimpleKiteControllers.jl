@@ -21,7 +21,7 @@ from `output/turn_rate_low_flights.csv` (unpacked from
 
 The scenarios whose phase-4 `v_a` drops below `va_min` are left out; with the
 scenarios of 2026-09-29 these are Cabauw 3 m/s and Maasvlakte 3.5 and 4 m/s, and
-`SNC_INCLUDE_LOW_VA = true` before the include rates them too.
+`run_example("stability_new_coeffs.jl"; include_low_va = true)` rates them too.
 
 B is the model's own since 2026-09-29 (`plant_coeffs` in `course_loop_model.jl`),
 so B equals what `stability_global.jl` reports. The bins are collected once with
@@ -42,9 +42,9 @@ using Printf
 using DelimitedFiles: readdlm, writedlm
 
 va_min = 12.0             # [m/s] scenarios whose phase-4 v_a drops below this are left out
-# true: rate them anyway; read and cleared like SHOW_PLOTS (`SNC_INCLUDE_LOW_VA = true`)
-include_low_va = @isdefined(SNC_INCLUDE_LOW_VA) ? SNC_INCLUDE_LOW_VA : false
-SNC_INCLUDE_LOW_VA = false
+# The input `include_low_va = true` rates them anyway; read before anything else runs a script.
+include(joinpath(@__DIR__, "script_inputs.jl"))
+(; include_low_va) = script_inputs(@__FILE__, (; include_low_va = false))
 
 # collect_scenarios, scenario_margins, live_settings; and through it stability_opt_reelout.jl.
 include(joinpath(@__DIR__, "retune_guided.jl"))

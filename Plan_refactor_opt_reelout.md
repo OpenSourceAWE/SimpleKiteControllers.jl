@@ -32,7 +32,7 @@ Two things tie the code to globals:
 
 ## Stage 0: a regression check first
 
-- Record reference runs with `REPLAY_PATHS`, so the optimizer answers are fixed
+- Record reference runs with `replay_paths`, so the optimizer answers are fixed
   and no server is needed. A request that changes in any way misses the replay
   cache and fails loudly, which makes replay a sharp detector. Cover the risky
   code paths:
@@ -59,7 +59,7 @@ Two things tie the code to globals:
   `EFFECTIVE_SIM_TIME` and prints its own message.
 - `build_winch(project, project_set, fcs)` returns `wc` (which is also `rcs`),
   `wpc` and `guard_lfc`.
-- `init_model(...)` wraps the `init` call and the `SET_OVERRIDES`.
+- `init_model(...)` wraps the `init` call and the `set_overrides`.
 - `optimizer_setup(...)` returns `inflow`, `cap_wind`, `winch`,
   `winch_first_lap`, `winch_reopt`, `opt_r_*`, `opt_box` and `depower_request`.
 - Helpers that close over globals get explicit arguments: `power_gate_off`,

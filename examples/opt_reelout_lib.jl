@@ -8,59 +8,31 @@ the same module.
 """
 
 """
-    take_global!(name, default)
+    run_input_defaults() -> NamedTuple
 
-Value of the global `name` in the module this file is included into, or `default`
-if it is not defined; the global is then reset to (a copy of) `default`.
+Every input a caller of `simple_opt_reelout.jl` may pass with
+`run_example("simple_opt_reelout.jl"; ...)` (see `script_inputs.jl`), at its default:
 
-This is how a caller passes an input to `simple_opt_reelout.jl` without it
-surviving into the next run: `SHOW_PLOTS = false; include("simple_opt_reelout.jl")`.
-"""
-function take_global!(name::Symbol, default)
-    mod = @__MODULE__
-    value = isdefined(mod, name) ? getglobal(mod, name) : default
-    Core.eval(mod, :($name = $(deepcopy(default))))
-    return value
-end
-
-"""
-    read_run_inputs() -> NamedTuple
-
-Read and clear every global the caller of `simple_opt_reelout.jl` may set (see
-[`take_global!`](@ref)), and return them under the names the script uses:
-
-- `show_plots`: draw the figures (`SHOW_PLOTS`).
-- `path_tr_project`: a system project whose turn-rate table sizes the path
-  (`TR_PATH_PROJECT`), `nothing` for the run's own.
+- `show_plots`: draw the figures.
+- `run_archive`: copy the log and its inputs to `output/archives/<stamp>/`.
+- `path_tr_project`: a system project whose turn-rate table sizes the path,
+  `nothing` for the run's own.
 - `fcs_overrides`, `tos_overrides`, `wc_overrides`, `set_overrides`: sweep and
-  test overrides of the controller, optimizer, winch and plant settings
-  (`FCS_OVERRIDES`, `TOS_OVERRIDES`, `WC_OVERRIDES`, `SET_OVERRIDES`).
+  test overrides of the controller, optimizer, winch and plant settings.
 - `steer_disturbance`, `xtrack_offset`, `xtrack_phase`, `hold_compliance`: test
   inputs of the stability and cross-track analyses.
 - `steer_gain_factor`, `steer_gain_feedback_only`, `extra_steer_delay`,
   `hook_settle`: the V1 stability hook.
-- `replay_paths`: a scenario folder whose optimizer results are replayed
-  (`REPLAY_PATHS`).
-- `output_path_arg`: where the log goes instead of `output/` (`OUTPUT_PATH`).
+- `replay_paths`: a scenario folder whose optimizer results are replayed.
+- `output_path`: where the log goes instead of `output/`, `nothing` for `output/`.
 """
-function read_run_inputs()
-    return (; show_plots = take_global!(:SHOW_PLOTS, true),
-            path_tr_project = take_global!(:TR_PATH_PROJECT, nothing),
-            fcs_overrides = take_global!(:FCS_OVERRIDES, Dict{Symbol, Any}()),
-            tos_overrides = take_global!(:TOS_OVERRIDES, Dict{Symbol, Any}()),
-            wc_overrides = take_global!(:WC_OVERRIDES, Dict{Symbol, Any}()),
-            set_overrides = take_global!(:SET_OVERRIDES, Dict{Symbol, Any}()),
-            steer_disturbance = take_global!(:STEER_DISTURBANCE, nothing),
-            xtrack_offset = take_global!(:XTRACK_OFFSET, nothing),
-            xtrack_phase = take_global!(:XTRACK_PHASE, 5),
-            hold_compliance = take_global!(:HOLD_COMPLIANCE, nothing),
-            steer_gain_factor = take_global!(:STEER_GAIN_FACTOR, 1.0),
-            steer_gain_feedback_only = take_global!(:STEER_GAIN_FEEDBACK_ONLY, false),
-            extra_steer_delay = take_global!(:EXTRA_STEER_DELAY, 0),
-            hook_settle = take_global!(:HOOK_SETTLE, 15.0),
-            replay_paths = take_global!(:REPLAY_PATHS, nothing),
-            output_path_arg = take_global!(:OUTPUT_PATH, nothing))
-end
+run_input_defaults() =
+    (; show_plots = true, run_archive = true, path_tr_project = nothing,
+       fcs_overrides = Dict{Symbol, Any}(), tos_overrides = Dict{Symbol, Any}(),
+       wc_overrides = Dict{Symbol, Any}(), set_overrides = Dict{Symbol, Any}(),
+       steer_disturbance = nothing, xtrack_offset = nothing, xtrack_phase = 5,
+       hold_compliance = nothing, steer_gain_factor = 1.0, steer_gain_feedback_only = false,
+       extra_steer_delay = 0, hook_settle = 15.0, replay_paths = nothing, output_path = nothing)
 
 """
     sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind) -> Union{Float64, Nothing}
@@ -127,7 +99,7 @@ end
 
 The model, initialised and settled: `init` at the project's wind and tether length,
 `sim_time` plus a full phase 5 (`fcs.final_time`) long, with the winch loop `wpc`
-holding the length during the warm-up. `set_overrides` (`SET_OVERRIDES`) are applied to
+holding the length during the warm-up. `set_overrides` are applied to
 the model's own `Settings` afterwards, e.g. `v_steering`, the tape's rate limit.
 """
 function init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_mode,
@@ -145,7 +117,7 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_m
         # The warm-up relaxes at constant length, against the same loop the run uses.
         warmup_torque = (m, l) -> winch_torque!(wpc, m, l), remake_model = false)
     @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
-    apply_overrides!(s.kcu.set, set_overrides, "SET_OVERRIDES", "Settings", "plant")
+    apply_overrides!(s.kcu.set, set_overrides, "set_overrides", "Settings", "plant")
     return s
 end
 

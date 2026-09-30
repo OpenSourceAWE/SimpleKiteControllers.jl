@@ -188,7 +188,7 @@ Turn-rate VAF on each flight's window:
 
 ### Low $v_\mathrm{a}$ and the extended law (2026-09-29, depower 0.275)
 
-**Low $v_\mathrm{a}$ by lower wind.** `TR_V_WIND = 6.5` (m/s, against the table's
+**Low $v_\mathrm{a}$ by lower wind.** `v_wind = 6.5` (m/s, against the table's
 9.51): 0.10 and 0.125 fly the full 200 s at $v_\mathrm{a}$ 12.7 – 36 m/s, with 38 and
 15 % of the samples below 20 m/s. 0.075 sinks to the floor after 70 s, and its
 single fit is meaningless (negative $c_1$, dead time at the search limit). At
@@ -240,7 +240,7 @@ VAF per $v_\mathrm{a}$ bin:
 
 `_run_turn_rate_sweep(...; v_reelout)` reels out at a constant speed from `T_START`
 (ramped in over 2 s, fed forward to the length loop) up to `REELOUT_L_MAX` = 380 m;
-`TR_V_REELOUT` in the script. At 1.0 m/s the tether grows from 150 to 339 m in
+`v_reelout` in the script. At 1.0 m/s the tether grows from 150 to 339 m in
 the 200 s. The steady flights (0.10 and 0.125; at 9.51 m/s also 0.075; 0.075 sinks
 at 6.5 m/s):
 
@@ -485,7 +485,7 @@ reaches.
    `stability_opt_reelout.jl` (hence `stability_global.jl`, `retune_guided.jl`),
    `stability_fig8.jl`, `validate_margins.jl`, `plot_frf_validation.jl` and
    `xtrack_step_analysis.jl`; the gain schedule keeps the turn-rate table.
-   `C3_OVERRIDE` became `GRAVITY_SCALE` (a factor on the gravity term, 0 = none).
+   `C3_OVERRIDE` became `gravity_scale` (a factor on the gravity term, 0 = none).
    `C3` and `c2_at` stay for the comparisons. The stability overviews of both sites
    are regenerated with it. Still to do: the paper (Eq. (9), the $c_3$
    identification and Fig. 5, Table 6 and its paragraph), `docs/course_loop_stability*.md`,

@@ -28,13 +28,13 @@ The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
 :heading)`, and the joint model, which starts where the flight's fit window does.
 The elevation panel carries `max_elevation`.
 
-About two to three minutes per flight. `DEPOWER`, `TR_V_WIND` (the wind speed,
-default the table's `V_WIND`) and `TR_V_REELOUT` (the reel-out speed, default 0)
-are read and cleared like `SHOW_PLOTS`:
+About two to three minutes per flight. The inputs `depower`, `v_wind` (the wind speed,
+default the table's `V_WIND`) and `v_reelout` (the reel-out speed, default 0) are
+passed with `run_example` (`examples/script_inputs.jl`):
 
-    DEPOWER = 0.3; include("plot_turn_rate_identification.jl")   # default 0.275
-    TR_V_WIND = 6.5; include("plot_turn_rate_identification.jl") # low v_a
-    TR_V_REELOUT = 1.0; include("plot_turn_rate_identification.jl") # reeling out
+    run_example("plot_turn_rate_identification.jl"; depower = 0.3)    # default 0.275
+    run_example("plot_turn_rate_identification.jl"; v_wind = 6.5)     # low v_a
+    run_example("plot_turn_rate_identification.jl"; v_reelout = 1.0)  # reeling out
 """
 
 using Pkg
@@ -51,24 +51,21 @@ using DelimitedFiles: writedlm
 # `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay`, `lag_filter` and
 # `joint_delay_lag_fit`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 # ==================== USER PARAMETERS ==================== #
 
-depower = @isdefined(DEPOWER) ? Float64(DEPOWER) : 0.275
-DEPOWER = 0.275
-# [m/s] wind of the flights; V_WIND = 9.51 is the table's. At 6.5 the pattern flies v_a 13 – 36 m/s,
-# 39 % of it below 20 m/s where V3 found the law too fast; at 5.0 it drifts out of the window (2026-09-29).
-v_wind = @isdefined(TR_V_WIND) ? Float64(TR_V_WIND) : V_WIND
-TR_V_WIND = V_WIND
-# [m/s] reel-out speed of the flights from T_START on, up to REELOUT_L_MAX; 0 holds the length.
-v_reelout = @isdefined(TR_V_REELOUT) ? Float64(TR_V_REELOUT) : 0.0
-TR_V_REELOUT = 0.0
-# Plots, and the comparison of the current law with the extended law (~1 – 2 min); both on by
-# default, read and cleared like SHOW_PLOTS. `plot_turn_rate_vs_depower.jl` switches both off.
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
-fit_laws = @isdefined(TR_FIT_LAWS) ? TR_FIT_LAWS : true
-TR_FIT_LAWS = true
+# The caller's inputs (`run_example`); a plain `include` flies with these defaults.
+# `v_wind` [m/s]: wind of the flights; V_WIND = 9.51 is the table's. At 6.5 the pattern flies
+# v_a 13 – 36 m/s, 39 % of it below 20 m/s where V3 found the law too fast; at 5.0 it drifts out
+# of the window (2026-09-29). `v_reelout` [m/s]: reel-out speed of the flights from T_START on, up
+# to REELOUT_L_MAX; 0 holds the length. `show_plots`, `fit_laws`: plots, and the comparison of the
+# current law with the extended law (~1 – 2 min); `plot_turn_rate_vs_depower.jl` switches both
+# off. `windows_dir`: where the fit windows are saved, see below.
+(; depower, v_wind, v_reelout, show_plots, fit_laws, windows_dir) =
+    script_inputs(@__FILE__, (; depower = 0.275, v_wind = V_WIND, v_reelout = 0.0,
+                               show_plots = true, fit_laws = true, windows_dir = nothing))
+depower, v_wind, v_reelout = Float64(depower), Float64(v_wind), Float64(v_reelout)
 # One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
 # `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
 # `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
@@ -213,11 +210,10 @@ end
 joint = joint_delay_lag_fit([f.fit for f in joint_flights], DT)
 
 # The fit windows of the steady flights, one row per sample, for refitting without flying
-# (`plot_turn_rate_vs_depower.jl`, `TR_FROM_RAW`). Only when the caller sets `TR_WINDOWS_DIR`,
-# which is not cleared: it is set once for a whole series of includes.
-if @isdefined(TR_WINDOWS_DIR) && !isnothing(TR_WINDOWS_DIR)
-    mkpath(TR_WINDOWS_DIR)
-    let file = joinpath(TR_WINDOWS_DIR, @sprintf("depower_%.3f.csv", depower))
+# (`plot_turn_rate_vs_depower.jl`, `from_raw`). Only when the caller passes `windows_dir`.
+if !isnothing(windows_dir)
+    mkpath(windows_dir)
+    let file = joinpath(windows_dir, @sprintf("depower_%.3f.csv", depower))
         open(file, "w") do io
             writedlm(io, permutedims(["flight", "amplitude", "time", "us", "rate", "v_app", "psi", "beta"]), ',')
             for (i, f) in enumerate(joint_flights)

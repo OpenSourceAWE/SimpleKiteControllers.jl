@@ -704,7 +704,7 @@ end
 
 Set each `key => value` of `overrides` as a field of the settings struct `obj`,
 converted to the field's type, and log the ones in force as "`what` overrides in
-force". `label` is the name of the global that carried them and `typename` the
+force". `label` is the name of the input that carried them and `typename` the
 type's name, both for the error of a key that is not a field of `obj`.
 """
 function apply_overrides!(obj, overrides, label, typename, what)

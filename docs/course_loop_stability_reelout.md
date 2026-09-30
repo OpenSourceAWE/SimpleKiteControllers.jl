@@ -162,7 +162,7 @@ includes phase 5 (depower up to 0.35, 1356 samples).
 
 The analysis points to two levers: slow the guidance (`attractor_lead_time`,
 `attractor_dist`) and add phase lead in the PD (`heading_d`). Each candidate
-was flown with `simple_opt_reelout.jl` through `FCS_OVERRIDES`, with no
+was flown with `simple_opt_reelout.jl` through `fcs_overrides`, with no
 turbulence. The runs are deterministic: the baseline re-flown gave the same
 20 937 W to the watt. "Band" is the RMS of the regulated course error
 (`var_06`) in 0.18 – 0.30 Hz, the band of the predicted resonance, in settled
@@ -244,7 +244,7 @@ the baseline runs gives, in phase 4:
 (since 2026-09-27 once per log, see
 [One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)),
 from the same on-path samples it analyses (`fit_actuator_lag`), prints it as
-a column and uses it in the plant. `LOG_DIR` points the script at an archived
+a column and uses it in the plant. `log_dir` points the script at an archived
 run. Worst guided α over the length, with `ACTUATOR_LAG` → with the fitted
 lag:
 
@@ -342,7 +342,7 @@ Guided α with both time constants from the log (linear bins):
 
 ## Feed-forward gain 1.0 (2026-09-25)
 
-`ff_gain` 0.7 → 1.0 through `FCS_OVERRIDES`, against the archived baselines
+`ff_gain` 0.7 → 1.0 through `fcs_overrides`, against the archived baselines
 (the runs are deterministic):
 
 | Condition | Criteria | RMS d | Course-error std | Band | Min el. | Power | Rate-limited |
@@ -369,10 +369,10 @@ Guided α with both time constants from the log (linear bins):
 ## Measuring the margin in the simulation (2026-09-25)
 
 To test the model directly, `simple_opt_reelout.jl` now accepts a test input.
-`STEER_DISTURBANCE` is a function `t -> Δu`, read and cleared like
-`SHOW_PLOTS`, and added to `rel_steering` after the controller. When it is
-set, the run keeps the globals `dist_t`, `dist_d` (the disturbance) and
-`dist_u` (the steering sent to the model).
+The input `steer_disturbance` (`run_example`, `examples/script_inputs.jl`) is a
+function `t -> Δu`, added to `rel_steering` after the controller. When it is
+set, the run keeps `st.dist_t`, `st.dist_d` (the disturbance) and
+`st.dist_u` (the steering sent to the model).
 
 With `u = d + u_c`, the loop broken at the plant input is `L = −U_c/U`. This
 is measured from the simulation without any model. Its disk margin
@@ -494,18 +494,18 @@ Next step 1 below, dynamic part. The static guidance gain was already confirmed
 [The guidance term](#the-guidance-term-and-the-kites-dead-time)), so this tests
 only the ringing of d.
 
-**Test input.** `XTRACK_OFFSET = τ -> δ` [deg] in `simple_opt_reelout.jl`, τ
-the time since phase 5 began, read and cleared like `SHOW_PLOTS`. The attractor
+**Test input.** `xtrack_offset = τ -> δ` [deg], an input of `simple_opt_reelout.jl`, τ
+the time since phase 5 began. The attractor
 is moved δ along the path's right-hand normal, so the pursuit aims at the
 parallel curve δ to the right: a reference step for the guided loop alone. The
-run keeps `xt_t`, `xt_delta` and `xt_d`, the signed cross-track error to the
+run keeps `st.xt_t`, `st.xt_delta` and `st.xt_d`, the signed cross-track error to the
 unshifted path (right of travel > 0), the closest-point index `xt_q`, and the
-operating point `xt_phase`, `xt_L`, `xt_va`, `xt_vk`, `xt_dp`. `XTRACK_PHASE`
-(default 5) picks the phase τ counts from; `TOS_OVERRIDES`, like
-`FCS_OVERRIDES`, overrides `TrajOptSettings` fields, e.g. `reopt_enabled`.
+operating point `st.xt_phase`, `st.xt_L`, `st.xt_va`, `st.xt_vk`, `st.xt_dp`. `xtrack_phase`
+(default 5) picks the phase τ counts from; `tos_overrides`, like
+`fcs_overrides`, overrides `TrajOptSettings` fields, e.g. `reopt_enabled`.
 
 **Setup.** Cabauw at the default wind (5.324 m/s, no override so `sim_time`
-holds), `sim_time` 260 s, `FCS_OVERRIDES` `final_time = 150`,
+holds), `sim_time` 260 s, `fcs_overrides` `final_time = 150`,
 `reelout_l_max = 200`; δ a ±1° square wave with 11 s half-periods from
 τ = 10 s (12 steps). Held window: 200 m, v_a 27.8 m/s, v_k 24.5 m/s, depower
 0.35, D = 6.4°, tape lag 0.39 s and rate-limited 9 % of the time, kite dead
@@ -514,7 +514,7 @@ time 0.056 s identified on the held window (correlation 0.997). Lap period
 
 **The lap forcing hides the step.** With δ = 0 the signed d has a standard
 deviation of 3.1° in the held window. So the test is flown twice, with the
-offset and with `XTRACK_OFFSET = τ -> 0` (the runs are deterministic: the two
+offset and with `xtrack_offset = τ -> 0` (the runs are deterministic: the two
 are identical to the sample before the first step), and the difference
 Δd = d − d_ref is analysed. Data: `output/xtrack_step_test_200m.csv` (step run
 archive `2026-09-25_235333`, twin `2026-09-25_235723`); analysis:
@@ -627,9 +627,9 @@ the model's own response fitted the same way:
 length differs from the reel-out in the way that matters here: reel-out speed
 ≈ 0 instead of 2.7 m/s, tether force ≈ 4.0 instead of 5.3 kN, depower 0.35
 instead of 0.27, and the tape rate-limited 9 % of the time instead of 0 %. So
-the test was repeated in phase 4 (`XTRACK_PHASE = 4`): Cabauw at the default
+the test was repeated in phase 4 (`xtrack_phase = 4`): Cabauw at the default
 wind, reel-out 150 → 380 m in 75 s, `ff_gain` 0.7 as flown, re-optimization
-off (`TOS_OVERRIDES`, so every run flies the same path). One δ = 0 run and six
+off (`tos_overrides`, so every run flies the same path). One δ = 0 run and six
 step runs, the ±1° square wave started 10 – 21.5 s into phase 4 in steps of
 2.3 s (a sixth of a lap). Subtracted by time, which holds through the reel-out:
 the runs are identical before their first step, and the difference stays at
@@ -673,7 +673,7 @@ Standard error 0.01 – 0.08.
 one condition changed at a time, 300 s holds (`final_time = 300`, `sim_time`
 360 s), 26 steps each, subtracted by path position. All four runs pass all 10
 criteria. Data: `data/steptest/xtrack_step_test_200m_300s_{tape08,dp027}.csv`.
-The fast tape is set through a new hook, `SET_OVERRIDES`, which changes fields
+The fast tape is set through a new hook, `set_overrides`, which changes fields
 of the model's `Settings` after `init`; the KCU reads `v_steering` from them
 every step. It does not persist: the next run's `init` builds fresh settings.
 
@@ -704,7 +704,7 @@ rate limit. With `depower_final` 0.27 the force rose to the phase-5 limiter's
 
 **Reel-out speed (2026-09-26): the damping barely depends on it.** The
 reel-out step test repeated at two more reel-out speeds, with the winch
-changed through a new hook, `WC_OVERRIDES`. It applies just before the
+changed through a new hook, `wc_overrides`. It applies just before the
 simulation loop, after the startup solve, so the optimizer plans the same
 path as the baseline and only the flown winch differs. (A first attempt
 applied it before the solve: AWETrim returned 422 for a winch capped at
@@ -734,7 +734,7 @@ criteria). Data: `data/steptest/xtrack_step_test_phase4_{slow,fast}.csv`.
    rigidly.
 
 **A compliant hold does not help either (2026-09-26).** A new test input,
-`HOLD_COMPLIANCE = (gain, τF, τpos)`, keeps integrating the length setpoint in
+`hold_compliance = (gain, τF, τpos)`, keeps integrating the length setpoint in
 phase 5 instead of freezing it: v_set = gain · kv/(2√F̄) · (F − F̄) −
 (l_set − l_hold)/τpos, with F̄ the force low-passed over τF. That is the
 reel-out law's force slope with zero mean speed, plus a slow pull back to the
@@ -997,7 +997,7 @@ modelled margin too and made tracking worse; this step is much smaller: the
 lead +9 % and `heading_d` +8 %, against lead ×1.8 and `heading_d` ×2.4.
 
 **Flown A/B (2026-09-28, commit `195ddcf`).** Each case twice on the same code,
-no turbulence: "old" with `FCS_OVERRIDES` lead 0.88 s, `heading_d` 0.126 s,
+no turbulence: "old" with `fcs_overrides` lead 0.88 s, `heading_d` 0.126 s,
 "new" with the live file. All 10 runs pass all 10 criteria.
 
 | Case | RMS d [°] old → new | Mean d [°] | Min el., settled [°] | Power [W] |
@@ -1020,7 +1020,7 @@ The settings stay live. Archives in `output/archives/`: old `2026-09-28_215150`,
 `_215728`, `_220032`, `_220322`; new `_215322`, `_215609`, `_215847`, `_220210`,
 `_220405`, in the table's order. **The old archives hold the live
 `fc_settings_reelout.yaml` (0.96 s, 0.136 s):** the run summary does not record
-`FCS_OVERRIDES`; the pairs differ, which shows the overrides were in force.
+`fcs_overrides`; the pairs differ, which shows the overrides were in force.
 
 ## Retune for α guided 0.305 – 0.314 with the least RMS d (2026-09-29)
 
@@ -1053,7 +1053,7 @@ The lead time was what cost tracking in the last A/B. So the candidates raise
 In all of them the worst case stays Cabauw 10 m/s.
 
 **Flown A/B (2026-09-29).** B, C and D against live, the five cases of the
-last A/B, no turbulence, candidates via `FCS_OVERRIDES`. All 20 runs pass all
+last A/B, no turbulence, candidates via `fcs_overrides`. All 20 runs pass all
 10 criteria. The live runs reproduce the live column of 28 Sep.
 
 | Case | RMS d [°] live / B / C / D | Min el., settled [°] live / B / C / D | Power [W] live / D |
@@ -1083,7 +1083,7 @@ B, C, D: Cabauw 3 m/s `055156`, `055346`, `055511`, `055635`; Cabauw 5 m/s
 `060459`, `060607`; Maasvlakte 7 m/s `060706`, `060836`, `061003`, `061120`;
 Maasvlakte 11 m/s `061203`, `061325`, `061440`, `061606`. As before, their
 settings file is the live one of the time; the summary does not record
-`FCS_OVERRIDES`.
+`fcs_overrides`.
 
 ## Caveats
 
@@ -1201,7 +1201,7 @@ settings file is the live one of the time; the summary does not record
 
 The script is also in the example menu (`menu.jl`). It needs a finished
 `simple_opt_reelout.jl` run for the selected project (cabauw or maasvlakte).
-Set `SHOW_PLOTS = false` before the include to skip the Bode plot of the worst
+`run_example("stability_opt_reelout.jl"; show_plots = false)` skips the Bode plot of the worst
 guided loop and the plot of the margins over tether length.
 
 To retune the loop on the archived scenarios in small steps (see

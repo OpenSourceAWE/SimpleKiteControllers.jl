@@ -14,15 +14,15 @@ depower, so a crash later on costs only the rest:
 
 - `output/turn_rate_low_flights.csv`, one row per depower: the fit, its standard
   errors, and the table's 73° row for comparison (`rms` in °/s, speeds in m/s,
-  times in s). Enough to redraw or restyle the plot (`TR_FROM_CSV`).
+  times in s). Enough to redraw or restyle the plot (`from_csv`).
 - `output/turn_rate_low_flights/depower_<u_d>.csv`: the fit windows of the steady
   flights, one row per sample (`flight`, `amplitude`, `time` [s], `us`, `rate`
   [rad/s], `v_app` [m/s], `psi`, `beta` [rad]). Enough to refit and recompute the
-  error bars, e.g. with another `block_length` (`TR_FROM_RAW`).
+  error bars, e.g. with another `block_length` (`from_raw`).
 
 A fresh run first renames both, with the time of their last change appended, so
 it never overwrites an earlier result. The results of 2026-09-29 are archived in
-`data/turn_rate_low_flights.tar.gz`; `TR_FROM_CSV` and `TR_FROM_RAW` unpack it into
+`data/turn_rate_low_flights.tar.gz`; `from_csv` and `from_raw` unpack it into
 `output/` when the files are missing there.
 
 The error bars are `±k_sigma` standard errors from blocks: every steady flight's
@@ -33,12 +33,12 @@ own standard errors, which assume independent residuals: the residuals of a flow
 path are strongly autocorrelated, so those come out far too small. The dead time
 and lag trade against each other within a block, so their bars also carry that.
 
-About 5 – 10 minutes per depower. `TR_FROM_CSV` and `TR_FROM_RAW` (read and
-cleared like `SHOW_PLOTS`) do without flying:
+About 5 – 10 minutes per depower. The inputs `from_csv` and `from_raw` do without flying
+(`examples/script_inputs.jl`):
 
-    include("plot_turn_rate_vs_depower.jl")                        # fly, save, plot
-    TR_FROM_CSV = true; include("plot_turn_rate_vs_depower.jl")    # plot the saved rows
-    TR_FROM_RAW = true; include("plot_turn_rate_vs_depower.jl")    # refit the saved windows, plot
+    include("plot_turn_rate_vs_depower.jl")                          # fly, save, plot
+    run_example("plot_turn_rate_vs_depower.jl"; from_csv = true)     # plot the saved rows
+    run_example("plot_turn_rate_vs_depower.jl"; from_raw = true)     # refit the saved windows, plot
 """
 
 using Pkg
@@ -53,11 +53,9 @@ using DelimitedFiles: readdlm, writedlm
 using Statistics: std
 using Base.CoreLogging: with_logger, NullLogger
 import Dates
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
-from_csv = @isdefined(TR_FROM_CSV) ? TR_FROM_CSV : false
-TR_FROM_CSV = false
-from_raw = @isdefined(TR_FROM_RAW) ? TR_FROM_RAW : false
-TR_FROM_RAW = false
+(; from_csv, from_raw) = script_inputs(@__FILE__, (; from_csv = false, from_raw = false))
 
 "The depowers of the table's rows [-]"
 table_depowers = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40]
@@ -118,7 +116,7 @@ end
     read_raw(dp) -> Vector{NamedTuple}
 
 The fit windows `plot_turn_rate_identification.jl` saved for depower `dp`
-(`TR_WINDOWS_DIR`), one per flight, with the
+(its input `windows_dir`), one per flight, with the
 fields `joint_delay_lag_fit` and `block_standard_errors` read.
 """
 function read_raw(dp)
@@ -167,15 +165,12 @@ if from_raw
 elseif !from_csv
     keep_old(csv_file)
     keep_old(raw_dir)
-    # `plot_turn_rate_identification.jl` saves each depower's fit windows there.
-    global TR_WINDOWS_DIR = raw_dir
     rows = Vector{Vector{Float64}}()
     for dp in table_depowers
-        global DEPOWER = dp
-        global SHOW_PLOTS = false
-        global TR_FIT_LAWS = false
         try
-            include(joinpath(@__DIR__, "plot_turn_rate_identification.jl"))
+            # It saves each depower's fit windows to `raw_dir`.
+            run_example("plot_turn_rate_identification.jl"; depower = dp, show_plots = false,
+                        fit_laws = false, windows_dir = raw_dir)
         catch e
             @warn "Depower $dp: the identification failed; no row." exception = e
             continue
@@ -197,7 +192,6 @@ elseif !from_csv
             writedlm(io, permutedims(reduce(hcat, rows)), ',')
         end
     end
-    global TR_WINDOWS_DIR = nothing
 end
 
 data, header = readdlm(csv_file, ','; header = true)

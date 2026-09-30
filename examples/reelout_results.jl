@@ -687,7 +687,7 @@ summary["traj_opt"] = OrderedDict{String, Any}(
             "server sessions rebuilt from the cache before a miss"),
         "replayed_from" => (isnothing(replay_paths) ? "" : String(replay_paths),
             "scenario whose optimizer results were flown instead of asking the \
-             optimizer (REPLAY_PATHS); empty for a normal run"),
+             optimizer (`replay_paths`); empty for a normal run"),
         "installed" => (count(e -> e.status == "installed", st.reopt_events),
             "new paths actually flown"),
         "cycle_wall" => let seen = Dict{String, Int}(), cw = OrderedDict{String, Any}()
@@ -1003,12 +1003,10 @@ end
 
 # One timestamped folder per run under output/archives/, so the exact config
 # that produced a log survives even after the next run overwrites output/*.
-# RUN_ARCHIVE = false skips it, read and cleared like SHOW_PLOTS: a sweep writes
+# The input `run_archive = false` skips it: a sweep writes
 # one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
 # and its own results table already records what distinguished the runs.
-run_archive = @isdefined(RUN_ARCHIVE) ? RUN_ARCHIVE : true
-RUN_ARCHIVE = true
-if run_archive
+if inputs.run_archive
     archive_dir = joinpath(output_path, "archives",
                            Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
     mkpath(archive_dir)
@@ -1043,7 +1041,7 @@ if run_archive
     end
     @info "Archived run inputs and outputs to $archive_dir"
 else
-    @info "Archiving suppressed by RUN_ARCHIVE = false; it is back to true for the next run."
+    @info "Archiving suppressed by run_archive = false."
 end
 
 plots_failed = nothing
@@ -1064,7 +1062,7 @@ if show_plots
             (exc, catch_backtrace())
     end
 else
-    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+    @info "Plots suppressed by show_plots = false."
 end
 
 isnothing(opt_power_meas) || @info power_summary

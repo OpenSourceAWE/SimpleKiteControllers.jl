@@ -45,6 +45,7 @@ end
 using Printf
 using Statistics: median
 using Base.CoreLogging: with_logger, NullLogger
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 "Sites and their projects, as `stability_opt_reelout.jl` supports them"
 const RETUNE_SITES = ("cabauw" => "system_reelout_cabauw.yaml",
@@ -76,8 +77,7 @@ Run `stability_opt_reelout.jl` for `project` on the scenario folder `dir` and
 keep its linear bins: `(; bins, lag, Ts)`, each bin with its log `samples`.
 """
 function collect_scenario(project, dir)
-    Core.eval(Main, :(SHOW_PLOTS = false; LOG_DIR = $dir; PROJECT_OVERRIDE = $project))
-    muted(() -> Base.include(Main, joinpath(@__DIR__, "stability_opt_reelout.jl")))
+    muted(() -> run_example("stability_opt_reelout.jl"; show_plots = false, log_dir = dir, project))
     return (; bins = [r.samples for r in latest(:lin_rows)], lag = latest(:tape_lag).T,
             Ts = latest(:Ts))
 end

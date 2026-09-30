@@ -101,13 +101,14 @@ reel-out is done.
 
 `fcs` works exactly as in `simple_fig8.jl`: rebuilt from `data/fc_settings_reelout.yaml`
 unconditionally on every `include`, so a value is overridden by editing that file,
-not by pre-defining or mutating `fcs` in the REPL. The one exception is
-`FCS_OVERRIDES`, a `Dict{Symbol, Any}` of field => value applied on top of the file
-and then CLEARED, which is how the shape sweep (`examples/optimize_fig8.jl`) flies
-one `f8_a`/`f8_b` pair per `include`; `OUTPUT_PATH` and `RUN_ARCHIVE` are read and
-cleared the same way, and let those parallel runs keep their logs apart and skip
-the per-run archive. All three are `SHOW_PLOTS`'s convention, for its reason: a
-value left over from a sweep must never change an interactive run. The
+not by pre-defining or mutating `fcs` in the REPL. The one exception is the input
+`fcs_overrides`, a `Dict{Symbol, Any}` of field => value applied on top of the file,
+which is how the shape sweep (`examples/optimize_fig8.jl`) flies one `f8_a`/`f8_b`
+pair per run: `run_example("simple_reelout.jl"; fcs_overrides, output_path,
+run_archive = false, show_plots = false)` (`examples/script_inputs.jl`).
+`output_path` and `run_archive` let those parallel runs keep their logs apart and
+skip the per-run archive. The inputs hold for that one run: a plain `include` flies
+with the defaults, so a value from a sweep never changes an interactive run. The
 REEL_OUT-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
 the second, independent stop criterion counted in laps (`0` disables it, its
 own docstring in `src/fc_settings.jl` has the counting details), `reelout_delay`,
@@ -173,9 +174,12 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-# Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# The caller's inputs, `run_example("simple_reelout.jl"; show_plots = false, ...)`, see the
+# docstring; a plain `include` flies with these defaults.
+(; show_plots, fcs_overrides, output_path, run_archive) =
+    script_inputs(@__FILE__, (; show_plots = true, fcs_overrides = Dict{Symbol, Any}(),
+                               output_path = nothing, run_archive = true))
 # Cleared for the same reason: a lemniscate run must not plot the optimized
 # reference, or load the `_opt` log, that a simple_opt_reelout.jl run left behind.
 REF_PATH = nothing
@@ -193,14 +197,11 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 
-# Per-run overrides of the settings just loaded, for a SWEEP: read and cleared
-# here like SHOW_PLOTS above, so a leftover value can never silently change the
-# next interactive run. `examples/optimize_fig8.jl` sets it before each include.
-fcs_overrides = @isdefined(FCS_OVERRIDES) ? FCS_OVERRIDES : Dict{Symbol, Any}()
-FCS_OVERRIDES = Dict{Symbol, Any}()
+# Per-run overrides of the settings just loaded, for a SWEEP (the input `fcs_overrides`);
+# `examples/optimize_fig8.jl` passes them per run.
 for (key, value) in fcs_overrides
     hasfield(FC_Settings, key) ||
-        error("FCS_OVERRIDES: \"$key\" is not a field of FC_Settings.")
+        error("fcs_overrides: \"$key\" is not a field of FC_Settings.")
     setfield!(fcs, key, convert(fieldtype(FC_Settings, key), value))
 end
 isempty(fcs_overrides) ||
@@ -211,12 +212,9 @@ apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
-# OUTPUT_PATH redirects them, so that parallel runs of this script (the sweep)
-# cannot overwrite each other's log, summary and archive. Read and cleared like
-# SHOW_PLOTS; `nothing` is the default output/.
-output_path = (@isdefined(OUTPUT_PATH) && !isnothing(OUTPUT_PATH)) ? OUTPUT_PATH :
-              normpath(joinpath(@__DIR__, "..", "output"))
-OUTPUT_PATH = nothing
+# The input `output_path` redirects them, so that parallel runs of this script (the sweep)
+# cannot overwrite each other's log, summary and archive; `nothing` is the default output/.
+output_path = something(output_path, normpath(joinpath(@__DIR__, "..", "output")))
 mkpath(output_path)
 log_name = basename(project_set.log_file)
 
@@ -867,11 +865,9 @@ end
 
 # One timestamped folder per run under output/archives/, so the exact config
 # that produced a log survives even after the next run overwrites output/*.
-# RUN_ARCHIVE = false skips it, read and cleared like SHOW_PLOTS: a sweep writes
+# The input `run_archive = false` skips it: a sweep writes
 # one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
 # and its own results table already records what distinguished the runs.
-run_archive = @isdefined(RUN_ARCHIVE) ? RUN_ARCHIVE : true
-RUN_ARCHIVE = true
 if run_archive
     archive_dir = joinpath(output_path, "archives",
                            Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
@@ -898,13 +894,13 @@ if run_archive
     end
     @info "Archived run inputs and outputs to $archive_dir"
 else
-    @info "Archiving suppressed by RUN_ARCHIVE = false; it is back to true for the next run."
+    @info "Archiving suppressed by run_archive = false."
 end
 
 if show_plots
     include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
 else
-    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+    @info "Plots suppressed by show_plots = false."
 end
 
 nothing

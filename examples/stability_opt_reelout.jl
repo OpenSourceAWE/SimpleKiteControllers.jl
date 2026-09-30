@@ -61,8 +61,8 @@ differ in the reel-out:
 
 `L`, `v_a`, the kite speed, the depower and the pattern's centre elevation (the
 gravity pole) are read from the last log of `simple_opt_reelout.jl` for the
-selected project, `output/<log_file>_opt.arrow` (or the folder `LOG_DIR`, e.g.
-an archive): phases 3-5 while the kite is within `attractor_dist` of the path
+selected project, `output/<log_file>_opt.arrow` (or the folder given as the input
+`log_dir`, e.g. an archive): phases 3-5 while the kite is within `attractor_dist` of the path
 (where `atan(d/D) ≈ d/D` holds; the approach from far off is not linear),
 binned on tether length. Each bin is checked at its lowest, median and highest
 `v_a`, each with the highest `ω_g` its samples within `WG_VA_BAND` of that
@@ -97,14 +97,17 @@ using Base.CoreLogging: with_logger, NullLogger
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# The caller's inputs, `run_example("stability_opt_reelout.jl"; show_plots = false, ...)`; a plain
+# `include` runs with these defaults. `project` replaces the menu's selection (used by
+# `retune_guided.jl`), `log_dir` the folder the log is read from, and `gravity_scale` scales the
+# plant's gravity term (0 leaves it out).
+inputs = script_inputs(@__FILE__, (; show_plots = true, project = nothing, log_dir = nothing,
+                                    gravity_scale = 1.0))
+show_plots = inputs.show_plots
 
-# system_reelout_*.yaml; a fig8 selection falls back to the default. `PROJECT_OVERRIDE` replaces the
-# menu's selection, read and cleared like SHOW_PLOTS (used by `retune_guided.jl`).
-PROJECT = (@isdefined(PROJECT_OVERRIDE) && !isnothing(PROJECT_OVERRIDE)) ? PROJECT_OVERRIDE :
-          selected_reelout_project()
-PROJECT_OVERRIDE = nothing
+# system_reelout_*.yaml; a fig8 selection falls back to the default.
+PROJECT = something(inputs.project, selected_reelout_project())
 @assert PROJECT in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml") "stability_opt_reelout.jl \
     supports only system_reelout_cabauw.yaml and system_reelout_maasvlakte.yaml, got $PROJECT"
 project = project_file(PROJECT)
@@ -139,14 +142,12 @@ const DP_LO, DP_HI = turn_rate_depower_range(fcs.body_damping)
 const C1_SETPOINT = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
 # The plant's turn-rate law is `c1(u_d)·v_a·u_s + c2(u_d)/v_a·sin(ψ)·cos(β)`, identified in the low
 # crosswind pattern (`plant_coeffs`, course_loop_model.jl); the controller keeps the table's c1, as
-# flown. Set `GRAVITY_SCALE` before the include to scale the gravity term, 0 to leave it out.
-const GRAVITY_EVAL = @isdefined(GRAVITY_SCALE) ? Float64(GRAVITY_SCALE) : 1.0
+# flown. The input `gravity_scale` scales the gravity term, 0 leaves it out.
+const GRAVITY_EVAL = Float64(inputs.gravity_scale)
 
 # ---- The flown operating points ------------------------------------------ #
-# LOG_DIR (e.g. an `output/archives/<stamp>` folder) replaces `output/`, read and cleared like SHOW_PLOTS.
-output_path = (@isdefined(LOG_DIR) && !isnothing(LOG_DIR)) ? LOG_DIR :
-              normpath(joinpath(@__DIR__, "..", "output"))
-LOG_DIR = nothing
+# The input `log_dir` (e.g. an `output/archives/<stamp>` folder) replaces `output/`.
+output_path = something(inputs.log_dir, normpath(joinpath(@__DIR__, "..", "output")))
 log_name = basename(SET.log_file) * "_opt"
 isfile(joinpath(output_path, log_name * ".arrow")) ||
     error("No $log_name.arrow in $output_path; run simple_opt_reelout.jl for $PROJECT first.")

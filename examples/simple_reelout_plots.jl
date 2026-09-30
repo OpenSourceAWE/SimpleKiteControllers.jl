@@ -74,8 +74,8 @@ simple_reelout.jl:
 
     include("simple_reelout_plots.jl")
 
-Set `SCENARIO_PATH` to an `output/scenarios/<name>` folder first to replot an
-archived run instead — `fcs`/`project_set`/the log are all reloaded from that
+`run_example("simple_reelout_plots.jl"; scenario_path = "output/scenarios/<name>")`
+(`examples/script_inputs.jl`) replots an archived run instead — `fcs`/`project_set`/the log are all reloaded from that
 folder's own copies rather than the live `data/` directory. `plot_scenario.jl`
 is the menu-driven front end for that.
 """
@@ -105,11 +105,11 @@ set_data_path(skc_data_path())
 include(joinpath(@__DIR__, "gui_state.jl"))
 project = project_file(selected_reelout_project())
 
-# A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`,
-# set by `plot_scenario.jl`. Read and cleared here, like `SHOW_PLOTS`: a stale
-# value must not silently redirect a LATER live run's plots at an old archive.
-scenario_path = @isdefined(SCENARIO_PATH) ? SCENARIO_PATH : nothing
-SCENARIO_PATH = nothing
+# A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`, the input
+# `scenario_path` (`plot_scenario.jl` passes it). It holds for that one run: a stale value
+# must not silently redirect a LATER live run's plots at an old archive.
+include(joinpath(@__DIR__, "script_inputs.jl"))
+(; scenario_path) = script_inputs(@__FILE__, (; scenario_path = nothing))
 
 if !isnothing(scenario_path)
     # Every setting comes from ITS OWN copies inside the folder, not the live

@@ -15,10 +15,11 @@ Run from the repo root or anywhere:
 
     include("examples/plot_trajectory.jl")
 
-Pass a file explicitly to plot a specific one instead of the newest:
+Pass a file explicitly to plot a specific one instead of the newest
+(`examples/script_inputs.jl`):
 
-    TRAJ_FILE = "trajectories/startup_incumbent_20260827_114530.yaml"
-    include("examples/plot_trajectory.jl")
+    include("examples/script_inputs.jl")
+    run_example("plot_trajectory.jl"; traj_file = "startup_incumbent_20260827_114530.yaml")
 """
 
 using Pkg
@@ -32,13 +33,15 @@ using LaTeXStrings
 
 const TRAJ_DIR = joinpath(@__DIR__, "..", "trajectories")
 
-# TRAJ_FILE = "startup_retry3_2026-08-27_1700.yaml"
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# A file in TRAJ_DIR, e.g. "startup_retry3_2026-08-27_1700.yaml"; `nothing` for the newest.
+(; traj_file) = script_inputs(@__FILE__, (; traj_file = nothing))
 
 isdir(TRAJ_DIR) || error("No trajectories folder at $TRAJ_DIR — nothing has been saved yet.")
 
 # The newest saved trajectory, unless the caller pinned one.
-traj_file = if @isdefined(TRAJ_FILE)
-    joinpath(TRAJ_DIR, TRAJ_FILE)
+traj_file = if !isnothing(traj_file)
+    joinpath(TRAJ_DIR, traj_file)
 else
     files = filter(f -> endswith(f, ".yaml"), readdir(TRAJ_DIR; join = true))
     isempty(files) && error("No .yaml files in $TRAJ_DIR.")

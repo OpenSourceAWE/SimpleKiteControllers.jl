@@ -34,9 +34,11 @@ The example is run by `include`, not from the shell — it activates `examples/`
 include("examples/simple_fig8.jl")     # cached: ~2x realtime, 150 s sim = ~75 s wall
 ```
 
-`SHOW_PLOTS = false` before the `include` suppresses the figures at the end. It is
-one-shot — the script resets it to `true` at startup, so a sweep sets it inside its
-loop and a leftover `false` never silently swallows a later run's plots. `fcs` is NOT
+A script's caller inputs are keywords, not globals (`examples/script_inputs.jl`):
+`run_example("simple_fig8.jl"; show_plots = false)` suppresses the figures at the end.
+They hold for that one run — a plain `include` runs with the defaults, so a sweep
+passes them per run and a leftover value never silently changes a later run. A
+keyword the script does not take is an error. `fcs` is NOT
 sticky: every `include` reloads it fresh from `fc_settings.yaml` via
 `fcs = FC_Settings(fc_settings(project))`, unconditionally and with no `@isdefined`
 guard, so a pre-defined or hand-mutated `fcs` left in the REPL is discarded the moment

@@ -16,15 +16,15 @@ import SimpleKiteControllers: BUDGET_KNOT, BUDGET_F_COEF, BUDGET_REEL_MARGIN, BU
     @testset "apply_overrides!" begin
         fcs = FC_Settings()
         @test apply_overrides!(fcs, Dict(:reelout_l_max => 300, :compliance => 0),
-                               "FCS_OVERRIDES", "FC_Settings", "fcs") === fcs
+                               "fcs_overrides", "FC_Settings", "fcs") === fcs
         # Converted to the field's type, not stored as the Int that was passed.
         @test fcs.reelout_l_max === 300.0
         @test fcs.compliance == 0
         # No overrides leave the struct as it was.
-        @test apply_overrides!(fcs, Dict{Symbol, Any}(), "FCS_OVERRIDES", "FC_Settings",
+        @test apply_overrides!(fcs, Dict{Symbol, Any}(), "fcs_overrides", "FC_Settings",
                                "fcs").reelout_l_max == 300.0
         @test_throws ErrorException apply_overrides!(fcs, Dict(:no_such_field => 1),
-                                                     "FCS_OVERRIDES", "FC_Settings", "fcs")
+                                                     "fcs_overrides", "FC_Settings", "fcs")
     end
 
     # A wind factor of 1.25 puts the knot at 6.16 m/s of ground wind.

@@ -28,6 +28,7 @@ using Downloads
 
 # `scenario_site`: the site of the active reel-out project.
 include(joinpath(@__DIR__, "..", "examples", "gui_state.jl"))
+include(joinpath(@__DIR__, "..", "examples", "script_inputs.jl"))
 
 SIMRESULTS_REPO = get(ENV, "SIMRESULTS_REPO",
                       normpath(joinpath(@__DIR__, "..", "..", "SimulationResults")))
@@ -124,12 +125,8 @@ occursin("\"src_stale\":true", state) &&
     error("Notebook `$notebook` is stale relative to $notebook.jl on disk — close and " *
           "reopen it so it re-parses the file, then run it before publishing.")
 
-# Set explicitly: export_html.jl keeps any of these already defined in Main, e.g. from
-# publishing the other site earlier in this session.
-NOTEBOOK = notebook
-HUB_URL = hub_url
-EXPORT_OUTPUT_PATH = nothing
-include(joinpath(@__DIR__, "export_html.jl"))   # produces EXPORT_OUTPUT_PATH
+# Produces EXPORT_OUTPUT_PATH and PATH3D_FILES.
+run_example(joinpath(@__DIR__, "export_html.jl"); notebook, hub_url, site = SITE)
 
 git(args) = Cmd(`git $args`; dir = SIMRESULTS_REPO)
 

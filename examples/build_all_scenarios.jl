@@ -31,6 +31,7 @@ end
 
 import YAML
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 "Project flown at each site, see `scenario_site`"
 const SITE_PROJECTS = ("maasvlakte" => "system_reelout_maasvlakte.yaml",
@@ -71,8 +72,7 @@ try
             rm(run_done_file; force = true)
             t0 = time()
             try
-                global SHOW_PLOTS = false
-                include(joinpath(@__DIR__, "simple_opt_reelout.jl"))
+                run_example("simple_opt_reelout.jl"; show_plots = false)
             catch e
                 log_line("$site $wind m/s: the run threw $(first_line(e))")
             end
@@ -82,8 +82,7 @@ try
             summary = replace(strip(done), '\n' => "; ")
             if occursin("status: ok", done) && !isnothing(criteria) && !isnothing(archive) &&
                occursin(r"^all \d+ passed$", strip(criteria.captures[1]))
-                global SCENARIO_ARCHIVE = strip(archive.captures[1])
-                include(joinpath(@__DIR__, "move_scenario.jl"))
+                run_example("move_scenario.jl"; scenario_archive = strip(archive.captures[1]))
                 log_line("$site $wind m/s: moved in after $(round(Int, time() - t0)) s; $summary")
             else
                 log_line("$site $wind m/s: NOT moved, the old scenario is kept; $summary")

@@ -7,7 +7,7 @@ scenario of the active project's site (`output/scenarios/<site>/vNN`, see
 `selected_scenarios_dir` in `gui_state.jl`).
 
 For each non-empty scenario folder this runs `stability_opt_reelout.jl` with
-`LOG_DIR` set to that folder: the operating points (tether length, `v_a`, kite
+the input `log_dir` set to that folder: the operating points (tether length, `v_a`, kite
 speed, depower, centre elevation, the tape's lag and the kite's dead time) come
 from the scenario's log, the controller from the LIVE `data/` settings. So the
 table answers "is the current tuning stable at every operating point flown so
@@ -21,7 +21,8 @@ margin is the one rated. Then re-runs the worst scenario with plots on, which
 shows its Bode plot and the margins over tether length, and leaves its `L` in
 `Main` for `diskmargin(L)`.
 
-About 35 s per scenario. Set `VERBOSE = true` first to see each scenario's full per-bin output.
+About 35 s per scenario. `run_example("stability_global.jl"; verbose = true)` shows each
+scenario's full per-bin output (`examples/script_inputs.jl`).
 
     include("stability_global.jl")
 """
@@ -36,8 +37,8 @@ using Base.CoreLogging: with_logger, NullLogger
 import YAML
 
 include(joinpath(@__DIR__, "gui_state.jl"))
-verbose = @isdefined(VERBOSE) ? VERBOSE : false
-VERBOSE = false
+include(joinpath(@__DIR__, "script_inputs.jl"))
+(; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
 scenarios_dir = selected_scenarios_dir()
 isdir(scenarios_dir) || error("No scenarios: $scenarios_dir does not exist.")
@@ -76,10 +77,7 @@ end
 
 "Run `stability_opt_reelout.jl` on the scenario folder `dir`, muted unless `verbose`"
 function analyse_scenario(dir; plots = false, quiet = true)
-    # Evaluated in Main: from a function, `Main.X = ...` needs X to exist already, which it
-    # does not in a fresh session.
-    Core.eval(Main, :(SHOW_PLOTS = $plots; LOG_DIR = $dir))
-    analyse() = Base.include(Main, joinpath(@__DIR__, "stability_opt_reelout.jl"))
+    analyse() = run_example("stability_opt_reelout.jl"; show_plots = plots, log_dir = dir)
     quiet ? muted(analyse) : analyse()
     # Globals the include just (re)defined: read them at the latest world age.
     latest(name) = Base.invokelatest(getglobal, Main, name)

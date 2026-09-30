@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 # Cross-track step test of the guided course loop: the measured response of the signed
-# cross-track error d to an attractor offset δ (`XTRACK_OFFSET` in simple_opt_reelout.jl),
+# cross-track error d to an attractor offset δ (the input `xtrack_offset` of simple_opt_reelout.jl),
 # against the model T = (1 - 1/G)·L/(1 + L) of stability_opt_reelout.jl.
 # WORK IN PROGRESS, see docs/course_loop_stability_reelout.md, "Cross-track step test".
 #

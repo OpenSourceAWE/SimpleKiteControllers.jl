@@ -104,7 +104,7 @@ Every tuning parameter of the run is a field of `FC_Settings`
 (`src/fc_settings.jl`), loaded from this package's `data/fc_settings.yaml` into
 the global `fcs`; each field is documented there. `fcs = FC_Settings(fc_settings(project))`
 runs unconditionally near the top of this script, with no `@isdefined` guard —
-unlike `SHOW_PLOTS`, a pre-defined or hand-mutated `fcs` left in `Main` does NOT
+a pre-defined or hand-mutated `fcs` left in `Main` does NOT
 survive the next `include`: it is discarded and rebuilt from the YAML file before
 the run that was meant to use it even starts. There is no REPL-side override; a
 run with different values means editing `data/fc_settings.yaml` itself (or, for a
@@ -143,10 +143,10 @@ feasibility margin built from it — was identified without tether damping and i
 only an estimate here. Both are diagnostic, so this costs the diagnosis, not the
 run.
 
-`SHOW_PLOTS = false` before the include suppresses the figures at the end,
-which is what makes a sweep bearable. It is ONE-SHOT: the script resets it to
-`true` while it starts up, so a leftover `false` can never silently swallow the
-plots of a later run. Because `fcs` is rebuilt from the YAML file on every
+`run_example("simple_fig8.jl"; show_plots = false)` (`examples/script_inputs.jl`)
+suppresses the figures at the end, which is what makes a sweep bearable. The
+inputs hold for that one run: a plain `include` flies with the defaults, so a
+sweep can never silently swallow the plots of a later run. Because `fcs` is rebuilt from the YAML file on every
 `include` (see above), a sweep over an `FC_Settings` field cannot mutate `fcs` in
 the loop — it must rewrite the YAML file itself between iterations, e.g. with
 KiteUtils' `update_yaml_scalar` (`examples/gui_state.jl` uses it the same way for
@@ -193,9 +193,14 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-# Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# The caller's inputs, `run_example("simple_fig8.jl"; show_plots = false, ...)`; a plain `include`
+# flies with these defaults. The V1 hooks and `steer_injection` are explained where they act, below.
+(; show_plots, steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle,
+   steer_injection) =
+    script_inputs(@__FILE__, (; show_plots = true, steer_gain_factor = 1.0,
+                               steer_gain_feedback_only = false, extra_steer_delay = 0,
+                               hook_settle = 15.0, steer_injection = nothing))
 # Cleared for the same reason: a lemniscate run must not plot the optimized
 # reference a previous simple_opt_fig8.jl left behind.
 REF_PATH = nothing
@@ -337,30 +342,22 @@ if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
            flying WITHOUT steering feed-forward."
 end
 
-# V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1): read and
-# cleared like SHOW_PLOTS. STEER_GAIN_FACTOR multiplies rel_steering, and
-# EXTRA_STEER_DELAY adds a FIFO delay to it, in samples. Both act only from
-# HOOK_SETTLE seconds after phase 4 is first reached, so the entry and phase 3
+# V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1), read at the top:
+# `steer_gain_factor` multiplies rel_steering, and
+# `extra_steer_delay` adds a FIFO delay to it, in samples. Both act only from
+# `hook_settle` seconds after phase 4 is first reached, so the entry and phase 3
 # fly identically in every run of a sweep. With ff_gain = 0 (as V1 requires),
 # scaling rel_steering is the same as scaling heading_p, except at the
 # max_steering clamp.
-steer_gain_factor = @isdefined(STEER_GAIN_FACTOR) ? STEER_GAIN_FACTOR : 1.0
-STEER_GAIN_FACTOR = 1.0
-# true: scale only the feedback part, rel_steering - u_ff. The feed-forward lies
-# outside the loop, so this scales the loop gain alone; it differs from the
+# `steer_gain_feedback_only` true: scale only the feedback part, rel_steering - u_ff. The
+# feed-forward lies outside the loop, so this scales the loop gain alone; it differs from the
 # default only with ff_gain > 0.
-steer_gain_feedback_only = @isdefined(STEER_GAIN_FEEDBACK_ONLY) ? STEER_GAIN_FEEDBACK_ONLY : false
-STEER_GAIN_FEEDBACK_ONLY = false
-extra_steer_delay = @isdefined(EXTRA_STEER_DELAY) ? EXTRA_STEER_DELAY : 0
-EXTRA_STEER_DELAY = 0
-hook_settle = @isdefined(HOOK_SETTLE) ? HOOK_SETTLE : 15.0
-HOOK_SETTLE = 15.0
 (steer_gain_factor == 1.0 && extra_steer_delay == 0) ||
     @info @sprintf("V1 stability hook in force: gain factor %.3g%s, extra delay %d \
                     samples (%.3f s), active %.1f s after phase 4 begins.",
                    steer_gain_factor, steer_gain_feedback_only ? " (feedback only)" : "",
                    extra_steer_delay, extra_steer_delay * s.dt, hook_settle)
-# Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
+# Kept full of the last `extra_steer_delay` raw commands from the start of the run,
 # so it is already primed with real history by the time the hook switches on
 # (extra_steer_delay * s.dt is well under hook_settle at every V1 point). The
 # feed-forward goes through a FIFO of its own, so the two stay aligned.
@@ -368,11 +365,9 @@ steer_delay_buf = Float64[]
 ff_delay_buf = Float64[]
 t_phase4 = Ref(NaN)    # [s] time phase 4 was first reached this run; NaN before that
 # Test input for V2 (oldplans/Plan_model_validation.md): a function τ -> Δu added to
-# rel_steering, τ the time since the V1 hooks switched on (t_phase4 + HOOK_SETTLE),
-# read and cleared like SHOW_PLOTS. It is not logged: it is a function of time, so
+# rel_steering, τ the time since the V1 hooks switched on (t_phase4 + hook_settle), the
+# input `steer_injection`. It is not logged: it is a function of time, so
 # the analysis recomputes it from the log's phase-4 start (validate_margins.jl).
-steer_injection = @isdefined(STEER_INJECTION) ? STEER_INJECTION : nothing
-STEER_INJECTION = nothing
 isnothing(steer_injection) || @info "Steering injection in force (test input)."
 
 toc("Start simulation loop...")
@@ -447,7 +442,7 @@ try
             end
         end
 
-        # V1 stability hooks: see the STEER_GAIN_FACTOR/EXTRA_STEER_DELAY setup above.
+        # V1 stability hooks: see the steer_gain_factor/extra_steer_delay setup above.
         push!(steer_delay_buf, rel_steering)
         push!(ff_delay_buf, u_ff)
         local delayed_u = length(steer_delay_buf) > extra_steer_delay ?
@@ -556,7 +551,7 @@ end
 if show_plots
     include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
 else
-    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+    @info "Plots suppressed by show_plots = false."
 end
 
 nothing

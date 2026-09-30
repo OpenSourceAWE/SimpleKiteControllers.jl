@@ -40,15 +40,15 @@ runs — the replay is an `@async` task driven by the button, so a second click
 never starts a second, overlapping playback.
 
 `record_video()` writes that replay to `output/<log_file>.mp4` instead of pacing
-it, and `RECORD_VIDEO = true` before the include does it automatically once the
-run is scored. It records what is on the window, buttons and all, and runs
+it, and `run_example("simple_fig8_live.jl"; record_video = true)` does it
+automatically once the run is scored. It records what is on the window, buttons and all, and runs
 unpaced — the encoded frame rate is what carries `REPLAY_TIME_LAPSE`, so the file
 plays at the same speed the button would, in a fraction of the wall time. Above
 `VIDEO_MAX_FPS` the frames are thinned by an integer factor, which keeps that
 speed exact rather than encoding a 150 fps file. Recording a run therefore costs
 no second simulation: any saved log can be filmed again by loading it into `sl`
-and calling `record_video()` a second time. `RECORD_VIDEO` is one-shot like
-`SHOW_PLOTS`.
+and calling `record_video()` a second time. Like `show_plots`, the input holds
+for that one run only.
 
 The frame is the window's framebuffer, so `VIDEO_SIZE` gives the file a fixed
 resolution independently of how the window has been dragged: the window is
@@ -150,7 +150,7 @@ Every tuning parameter of the run is a field of `FC_Settings`
 (`src/fc_settings.jl`), loaded from this package's `data/fc_settings.yaml` into
 the global `fcs`; each field is documented there. `fcs = FC_Settings(fc_settings(project))`
 runs unconditionally near the top of this script, with no `@isdefined` guard —
-unlike `SHOW_PLOTS`, a pre-defined or hand-mutated `fcs` left in `Main` does NOT
+a pre-defined or hand-mutated `fcs` left in `Main` does NOT
 survive the next `include`: it is discarded and rebuilt from the YAML file before
 the run that was meant to use it even starts. There is no REPL-side override; a
 run with different values means editing `data/fc_settings.yaml` itself (or, for a
@@ -189,10 +189,10 @@ feasibility margin built from it — was identified without tether damping and i
 only an estimate here. Both are diagnostic, so this costs the diagnosis, not the
 run.
 
-`SHOW_PLOTS = false` before the include suppresses the figures at the end,
-which is what makes a sweep bearable. It is ONE-SHOT: the script resets it to
-`true` while it starts up, so a leftover `false` can never silently swallow the
-plots of a later run. Because `fcs` is rebuilt from the YAML file on every
+`run_example("simple_fig8_live.jl"; show_plots = false)` (`examples/script_inputs.jl`)
+suppresses the figures at the end, which is what makes a sweep bearable. The
+inputs hold for that one run: a plain `include` flies with the defaults, so a
+sweep can never silently swallow the plots of a later run. Because `fcs` is rebuilt from the YAML file on every
 `include` (see above), a sweep over an `FC_Settings` field cannot mutate `fcs` in
 the loop — it must rewrite the YAML file itself between iterations, e.g. with
 KiteUtils' `update_yaml_scalar` (`examples/gui_state.jl` uses it the same way for
@@ -245,15 +245,15 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
-# Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# The caller's inputs, `run_example("simple_fig8_live.jl"; show_plots = false, record_video = true)`;
+# a plain `include` flies with these defaults.
+inputs = script_inputs(@__FILE__, (; show_plots = true, record_video = false))
+show_plots = inputs.show_plots
+record_video_ = inputs.record_video   # `record_video` is the function below
 VIEWER_INTERVAL = 3     # draw every n-th step
 VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
 REPLAY_TIME_LAPSE = 2.0 # speed of the post-run replay on RUN: 1 = realtime
-# Read and cleared like SHOW_PLOTS, so a sweep cannot go on writing videos unnoticed.
-record_video_ = @isdefined(RECORD_VIDEO) ? RECORD_VIDEO : false
-RECORD_VIDEO = false    # true: write output/<log_file>.mp4 once the run is scored
 VIDEO_MAX_FPS = 60      # frames above this are dropped, at the same playback speed
 VIDEO_SIZE = (1260, 1350) # window size to record at, restored after; `nothing` = as it is
 VIEWER_SCALE = 0.08     # world -> scene units, as in KiteViewers' park_v3.jl
@@ -651,7 +651,7 @@ records it as it currently is, whatever the user has dragged it to. Sizes are
 rounded UP to even numbers, which h264 requires. A display that scales (HiDPI)
 gives a file that many times larger, since the framebuffer is what is read.
 
-`RECORD_VIDEO = true` before the include does this automatically at the end of
+The input `record_video = true` does this automatically at the end of
 the run. The first call in a session also pays for compiling Makie's video path,
 which is tens of seconds and is not repeated.
 """
@@ -690,7 +690,7 @@ record_video_ && record_video()
 if show_plots
     include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
 else
-    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+    @info "Plots suppressed by show_plots = false."
 end
 
 nothing

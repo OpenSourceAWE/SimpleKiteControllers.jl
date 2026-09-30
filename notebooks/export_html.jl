@@ -8,7 +8,9 @@ Hits the same `GET /api/<id>/export.html` route as the notebook's own **☰ → 
 entry, so it needs the notebook already open and served — start it first (Kaimon Slate, or
 `KaimonSlate.serve_notebook("notebooks/results.jl")`). The notebook id and hub URL default to
 `results` and `http://127.0.0.1:8765`; override with the `SLATE_NOTEBOOK`/`SLATE_HUB_URL`
-environment variables.
+environment variables, or with the inputs `notebook`/`hub_url` of
+`run_example(joinpath("..", "notebooks", "export_html.jl"); ...)` (`examples/script_inputs.jl`),
+as `publish.jl` does.
 
 The export inlines every image, but not the interactive 3D-path pages
 (`notebooks/images/<site>/path_webgl_*.html`): the notebook's `path3d_plot` cell loads them
@@ -16,28 +18,30 @@ into an iframe by bare file name, so they are copied next to the export here, an
 copies them next to `index.html` (their list is left in `PATH3D_FILES` for it). That keeps the
 page itself at ~8 MB instead of ~50, and only the selected wind speed's WebGL page ever loads.
 `SITE` names the site folder the notebook's images live in: `cabauw` for the `results_cabauw`
-notebook, `maasvlakte` (shown by `results`) otherwise; override with `SLATE_SITE`. The export
-goes to `output/export_<site>/`, since both sites' 3D-path pages share the same file names.
+notebook, `maasvlakte` (shown by `results`) otherwise; override with `SLATE_SITE` or the input
+`site`. The export goes to `output/export_<site>/` (the input `export_path` replaces the file),
+since both sites' 3D-path pages share the same file names; `EXPORT_OUTPUT_PATH` names it after
+the run.
 """
 
 using Downloads
 
-# Plain globals instead of consts so this file can be included repeatedly into
-# Main (e.g. by publish.jl after a direct include) without "already declared"
-# constant errors. EXPORT_OUTPUT_PATH is deliberately its own name, distinct from
-# OUTPUT_PATH: simple_reelout.jl and simple_opt_reelout.jl read-and-clear
-# OUTPUT_PATH as a sweep-output-directory override, and this script's export
-# file path left behind under that same name was picked up by the next
-# simple_opt_reelout.jl run as its output directory and crashed mkpath().
-isdefined(Main, :NOTEBOOK) && NOTEBOOK !== nothing ||
-    (NOTEBOOK = get(ENV, "SLATE_NOTEBOOK", "results"))
-isdefined(Main, :HUB_URL) && HUB_URL !== nothing ||
-    (HUB_URL = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"))
-isdefined(Main, :SITE) && SITE !== nothing ||
-    (SITE = get(ENV, "SLATE_SITE", NOTEBOOK == "results_cabauw" ? "cabauw" : "maasvlakte"))
+include(joinpath(@__DIR__, "..", "examples", "script_inputs.jl"))
+
+# The caller's inputs, see the docstring; a plain `include` takes the environment's. Plain globals
+# instead of consts so this file can be included repeatedly into Main without "already declared"
+# constant errors.
+inputs = script_inputs(@__FILE__, (; notebook = get(ENV, "SLATE_NOTEBOOK", "results"),
+                                    hub_url = get(ENV, "SLATE_HUB_URL", "http://127.0.0.1:8765"),
+                                    site = nothing, export_path = nothing))
+NOTEBOOK = inputs.notebook
+HUB_URL = inputs.hub_url
+SITE = something(inputs.site,
+                 get(ENV, "SLATE_SITE", NOTEBOOK == "results_cabauw" ? "cabauw" : "maasvlakte"))
 # One folder per site: both sites' 3D-path pages share the same file names.
-isdefined(Main, :EXPORT_OUTPUT_PATH) && EXPORT_OUTPUT_PATH !== nothing ||
-    (EXPORT_OUTPUT_PATH = joinpath(@__DIR__, "..", "output", "export_$SITE", "$(NOTEBOOK)_export.html"))
+EXPORT_OUTPUT_PATH = something(inputs.export_path,
+                               joinpath(@__DIR__, "..", "output", "export_$SITE",
+                                        "$(NOTEBOOK)_export.html"))
 
 url = "$HUB_URL/api/$NOTEBOOK/export.html?dl=1"
 mkpath(dirname(EXPORT_OUTPUT_PATH))

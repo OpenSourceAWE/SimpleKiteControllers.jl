@@ -6,7 +6,7 @@ Baselines for refactors of `simple_opt_reelout.jl` (see `Plan_refactor_opt_reelo
 
 `fly_replay(site, wind, scenario, out)` flies `simple_opt_reelout.jl` at the
 site and wind speed with the optimizer's answers replayed from the scenario
-folder `scenario` (`REPLAY_PATHS`, so no optimizer server is needed and any
+folder `scenario` (the input `replay_paths`, so no optimizer server is needed and any
 change of a request fails loudly), writes the log and summary to `out` and
 leaves the archive and the plots alone. The `gui.yaml` selection is restored
 afterwards, also after an error.
@@ -26,6 +26,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 include(joinpath(@__DIR__, "compare_runs.jl"))
 
 const SITE_PROJECT = Dict("maasvlakte" => "system_reelout_maasvlakte.yaml",
@@ -37,7 +38,7 @@ const SITE_PROJECT = Dict("maasvlakte" => "system_reelout_maasvlakte.yaml",
 Fly one replayed run, see the file's docstring. Relative `scenario` and `out`
 are taken from the package root. With `scenario = nothing` the optimizer is asked (a LIVE
 run, which needs the server; how a scenario that replays optimizer answers is recorded), and
-`tos_overrides` are the `TOS_OVERRIDES` of the run, e.g. to force a code path. Returns `out`.
+`tos_overrides` are the run's input of that name, e.g. to force a code path. Returns `out`.
 """
 function fly_replay(site::AbstractString, wind::Real, scenario::Union{AbstractString, Nothing},
                     out::AbstractString; tos_overrides = Dict{Symbol, Any}())
@@ -51,10 +52,9 @@ function fly_replay(site::AbstractString, wind::Real, scenario::Union{AbstractSt
     try
         set_selected_project(SITE_PROJECT[site])
         write_gui_field("wind_speed", Float64(wind))
-        Core.eval(Main, :(SHOW_PLOTS = false; RUN_ARCHIVE = false;
-                          REPLAY_PATHS = $scenario; OUTPUT_PATH = $out;
-                          TOS_OVERRIDES = $(Dict{Symbol, Any}(tos_overrides))))
-        Base.include(Main, joinpath(@__DIR__, "simple_opt_reelout.jl"))
+        run_example("simple_opt_reelout.jl"; show_plots = false, run_archive = false,
+                    replay_paths = scenario, output_path = out,
+                    tos_overrides = Dict{Symbol, Any}(tos_overrides))
     finally
         set_selected_project(project0)
         write_gui_field("wind_speed", something(wind0, "default") == "default" ? "default" :

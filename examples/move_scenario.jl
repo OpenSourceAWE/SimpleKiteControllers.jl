@@ -17,9 +17,11 @@ project's `v_wind` default a `WIND_SPEED` override may have replaced, nor
 whatever `gui.yaml` selects by now. `move_scenario` itself
 refuses to overwrite a non-empty scenario folder unless `overwrite = true`,
 but running this file always passes `overwrite = true` — a later run at the
-same wind speed is meant to replace the one before it. Set `UNIQUE_SCENARIO =
-true` before the include (one-shot, like `SHOW_PLOTS`) to keep both instead:
-the run then lands in `v08_2`, `v08_3`, ... rather than replacing `v08`.
+same wind speed is meant to replace the one before it. The input
+`unique_scenario = true` keeps both instead (`copy_scenario.jl`, or
+`run_example("move_scenario.jl"; unique_scenario = true)`, see `script_inputs.jl`):
+the run then lands in `v08_2`, `v08_3`, ... rather than replacing `v08`. The input
+`scenario_archive = "output/archives/<stamp>"` moves that run instead of the last one.
 
 The log is compressed on the way in (`examples/compress.jl`): the VSM panel
 corners, ~78 % of an `.arrow` file and pure visualisation data, are dropped,
@@ -40,6 +42,7 @@ using YAML
 # `compress_scenario`, run on the folder once the files have landed in it; it
 # pulls in `gui_state.jl`, the home of `scenario_site`.
 include(joinpath(@__DIR__, "compress.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 const OUTPUT_DIR = normpath(joinpath(@__DIR__, "..", "output"))
 const RUN_DONE_FILE = joinpath(OUTPUT_DIR, "last_run_done.txt")
@@ -180,11 +183,7 @@ function move_scenario(; archive_dir::Union{AbstractString, Nothing} = nothing,
     return target_dir
 end
 
-# One-shot override, like `SHOW_PLOTS`: set `UNIQUE_SCENARIO = true` before the
-# include to archive alongside the existing scenario instead of replacing it.
-unique_scenario = @isdefined(UNIQUE_SCENARIO) ? UNIQUE_SCENARIO : false
-UNIQUE_SCENARIO = false
-# Same for `SCENARIO_ARCHIVE = "output/archives/<stamp>"`: move that run instead of the last one.
-scenario_archive = @isdefined(SCENARIO_ARCHIVE) ? SCENARIO_ARCHIVE : nothing
-SCENARIO_ARCHIVE = nothing
+# The caller's inputs, see the docstring; a plain `include` moves the last run, replacing.
+(; unique_scenario, scenario_archive) =
+    script_inputs(@__FILE__, (; unique_scenario = false, scenario_archive = nothing))
 move_scenario(archive_dir = scenario_archive, overwrite = true, unique = unique_scenario)

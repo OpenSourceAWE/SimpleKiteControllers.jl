@@ -10,7 +10,7 @@ Each subfolder there (`v08`, `v09`, ...) is a self-contained copy of one
 `simple_opt_reelout.jl` run — its log plus every settings file that produced
 it — moved out of a timestamped `output/archives/` folder by hand so it
 survives past the next run. This lists the non-empty ones, and on a choice
-sets `SCENARIO_PATH` and `include`s `simple_reelout_plots.jl`, which reloads
+runs `simple_reelout_plots.jl` with the input `scenario_path`, which reloads
 `fcs`/`project_set`/the log from THAT folder's own copies rather than the
 live `data/` directory or whatever a prior run left in `Main`.
 
@@ -20,6 +20,7 @@ live `data/` directory or whatever a prior run left in `Main`.
 using REPL.TerminalMenus
 # `selected_scenarios_dir`: the site folder of the active project.
 include(joinpath(@__DIR__, "gui_state.jl"))
+include(joinpath(@__DIR__, "script_inputs.jl"))
 
 """
     write_yaml_commented(io, indent, node; comment_col = 36, color = false)
@@ -96,8 +97,7 @@ function plot_scenario()
     if choice != -1 && choice != length(options)
         selected = options[choice]
         @info "Plotting scenario: $selected"
-        global SCENARIO_PATH = joinpath(scenarios_dir, selected)
-        include(joinpath(@__DIR__, "simple_reelout_plots.jl"))
+        run_example("simple_reelout_plots.jl"; scenario_path = joinpath(scenarios_dir, selected))
         # run_summary is a fresh global from the include above; look it up at the
         # latest world age or a first-time call throws a world age error.
         Base.invokelatest() do

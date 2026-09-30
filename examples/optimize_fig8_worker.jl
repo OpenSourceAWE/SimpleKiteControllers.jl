@@ -9,7 +9,7 @@ sweep is documented.
     julia --project=examples examples/optimize_fig8_worker.jl <worker_id>
 
 The worker pulls one (`f8_a`, `f8_b`) grid point at a time from the shared claim
-file, flies it by `include`ing `simple_reelout.jl` with `FCS_OVERRIDES` set, and
+file, flies it by `run_example("simple_reelout.jl"; fcs_overrides, ...)`, and
 appends the run's metrics to the results table. Both the claim and the append go
 through the file lock in `SimpleKiteControllers.with_file_lock`, so any number of
 workers can share one table.
@@ -21,7 +21,7 @@ startup. `max_runs_per_process` in `data/optimization.yaml` bounds how long a
 worker lives anyway; the driver restarts it.
 
 Each worker writes its log, run summary and any archive into its OWN
-`output/optimization/w<id>/` directory (via `OUTPUT_PATH`), because
+`output/optimization/w<id>/` directory (via the input `output_path`), because
 `simple_reelout.jl`'s output file names come from the project and would otherwise
 be the same file for all of them.
 """
@@ -33,6 +33,7 @@ end
 
 using SimpleKiteControllers
 using Printf
+include(joinpath(@__DIR__, "script_inputs.jl"))
 import Dates
 
 const WORKER_ID = isempty(ARGS) ? 1 : parse(Int, ARGS[1])
@@ -94,12 +95,9 @@ while true
     t_run = time()
     status = "ok"
     try
-        # simple_reelout.jl reads and clears all four, so they are set per run.
-        global FCS_OVERRIDES = Dict{Symbol, Any}(:f8_a => task.f8_a, :f8_b => task.f8_b)
-        global OUTPUT_PATH = WORK_PATH
-        global SHOW_PLOTS = false
-        global RUN_ARCHIVE = false
-        include(joinpath(@__DIR__, "simple_reelout.jl"))
+        run_example("simple_reelout.jl";
+                    fcs_overrides = Dict{Symbol, Any}(:f8_a => task.f8_a, :f8_b => task.f8_b),
+                    output_path = WORK_PATH, show_plots = false, run_archive = false)
         # `simple_reelout.jl` catches a diverging solve itself, logs what it has
         # and returns normally, so "no exception" is not "flew the whole run".
         flown = Float64(s.sys_state.time)

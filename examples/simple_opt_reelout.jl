@@ -124,7 +124,7 @@ using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower,
 # so they must be imported, not merely used: `using` binds them read-only.
 import SimpleKiteControllers: c1_at, phase5_margin
 using SimpleKiteControllers: check_reelout_feasibility, ReeloutFeasibility, Phase5MarginState
-import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
+import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
@@ -151,13 +151,14 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "awetrim_client.jl"))
 # The functions moved out of this script, see Plan_refactor_opt_reelout.md.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
-# The caller's inputs (SHOW_PLOTS, the *_OVERRIDES, the test inputs, REPLAY_PATHS, OUTPUT_PATH), read and
-# cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run; see `read_run_inputs`.
-# The setup-only ones (the *_OVERRIDES, TR_PATH_PROJECT, OUTPUT_PATH) are read as `inputs.<name>`.
-inputs = read_run_inputs()
+# The caller's inputs, passed as `run_example("simple_opt_reelout.jl"; show_plots = false, ...)`
+# (script_inputs.jl); a plain `include` runs with the defaults, see `run_input_defaults`.
+# The setup-only ones (the *_overrides, path_tr_project, output_path, run_archive) are read as `inputs.<name>`.
+include(joinpath(@__DIR__, "script_inputs.jl"))
+inputs = script_inputs(@__FILE__, run_input_defaults())
 (; show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance, steer_gain_factor,
    steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths) = inputs
-# Reference curve and log name for simple_reelout_plots.jl; set below, cleared here like SHOW_PLOTS.
+# Reference curve and log name for simple_reelout_plots.jl; set below, cleared here.
 REF_PATH = nothing
 LOG_NAME = nothing
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
@@ -177,25 +178,25 @@ fcs = FC_Settings(fc_settings(project))
 # through system_fig8_200m.yaml. Two consumers: the CONTROLLER (gain schedule, curvature
 # feed-forward) reads `ctrl_tr_table`; the PATH side (turn-radius requests to the planner, the
 # startup gates, the feasibility checks) reads the session's table. Both are the project's unless
-# `TR_PATH_PROJECT` (`inputs.path_tr_project`) names another system project, whose table
+# the input `path_tr_project` names another system project, whose table
 # then sizes the path: an A/B of the controller's table with the planned path held fixed.
 # Session-wide: a later script that does not reload keeps the path side's table.
 ctrl_tr_table = SimpleKiteControllers._load_turn_rate_table(project)
 reload_turn_rate_table!(isnothing(inputs.path_tr_project) ? project : project_file(inputs.path_tr_project))
 isnothing(inputs.path_tr_project) ||
     @info "Turn-rate tables: controller $(turn_rate_coeffs_file(project)), path side \
-           $(turn_rate_coeffs_file(project_file(inputs.path_tr_project))) (TR_PATH_PROJECT)."
+           $(turn_rate_coeffs_file(project_file(inputs.path_tr_project))) (path_tr_project)."
 # The optimizer's own settings: server, initial guess, solver knobs, margin.
 tos = TrajOptSettings(traj_opt_settings_file(project))
 
-# Sweep overrides (examples/optimize_fig8.jl: FCS_OVERRIDES), and the same for the optimizer's settings
-# (TOS_OVERRIDES), e.g. `reopt_enabled = false` for a test run.
-apply_overrides!(fcs, inputs.fcs_overrides, "FCS_OVERRIDES", "FC_Settings", "fcs")
-apply_overrides!(tos, inputs.tos_overrides, "TOS_OVERRIDES", "TrajOptSettings", "tos")
-# Test input: a steering disturbance `t -> Δu` added after the controller (STEER_DISTURBANCE);
+# Sweep overrides (the input `fcs_overrides`), and the same for the optimizer's settings
+# (`tos_overrides`), e.g. `reopt_enabled = false` for a test run.
+apply_overrides!(fcs, inputs.fcs_overrides, "fcs_overrides", "FC_Settings", "fcs")
+apply_overrides!(tos, inputs.tos_overrides, "tos_overrides", "TrajOptSettings", "tos")
+# Test input: a steering disturbance `t -> Δu` added after the controller (`steer_disturbance`);
 # `stability_opt_reelout.jl`'s model is validated against the loop's response to it.
 isnothing(steer_disturbance) || @info "Steering disturbance in force (test input)."
-# Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase `XTRACK_PHASE` (default 5)
+# Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase `xtrack_phase` (default 5)
 # began (`xtrack_offset`, `xtrack_phase`). The attractor is moved δ along the path's right-hand normal, so the pursuit
 # aims at the parallel curve δ to the right: a reference step for the guided loop alone. The run
 # keeps (in `RunState`) `xt_t`, `xt_delta`, `xt_d`, the signed cross-track error to the UNSHIFTED path, and `xt_q`,
@@ -206,11 +207,11 @@ isnothing(steer_disturbance) || @info "Steering disturbance in force (test input
 # pull back to the length the hold began at. `nothing` holds the length rigidly, as flown.
 isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $hold_compliance"
 # V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1, point C):
-# STEER_GAIN_FACTOR (`steer_gain_factor`) multiplies rel_steering, and
-# EXTRA_STEER_DELAY (`extra_steer_delay`) adds a FIFO delay to it, in samples. Both act only from
-# HOOK_SETTLE (`hook_settle`) seconds after phase 4 is first reached, so entry, phase 3 and the
+# `steer_gain_factor` multiplies rel_steering, and
+# `extra_steer_delay` adds a FIFO delay to it, in samples. Both act only from
+# `hook_settle` seconds after phase 4 is first reached, so entry, phase 3 and the
 # early part of phase 4 fly identically in every run of a sweep.
-# STEER_GAIN_FEEDBACK_ONLY (`steer_gain_feedback_only`) true: scale only the feedback part,
+# `steer_gain_feedback_only` true: scale only the feedback part,
 # rel_steering - u_ff. The feed-forward lies outside the loop, so this scales the loop gain
 # alone; it differs from the default only with ff_gain > 0.
 (steer_gain_factor == 1.0 && extra_steer_delay == 0) ||
@@ -239,8 +240,8 @@ power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 # Simulated time to ask `init` for: the reel-out budget under a wind-speed override, see `sim_budget`.
 EFFECTIVE_SIM_TIME = sim_budget(project, project_set, fcs, SIM_TIME, WIND_SPEED, default_v_wind)
 
-# Arrow log files named after the project's `log_file`; OUTPUT_PATH redirects them for parallel sweep runs.
-output_path = something(inputs.output_path_arg, normpath(joinpath(@__DIR__, "..", "output")))
+# Arrow log files named after the project's `log_file`; `output_path` redirects them for parallel sweep runs.
+output_path = something(inputs.output_path, normpath(joinpath(@__DIR__, "..", "output")))
 mkpath(output_path)
 
 # Finished-run marker for outside watchers: removed here, written last, so its presence means "this run is over".
@@ -287,11 +288,11 @@ log_name = basename(project_set.log_file) * "_opt"
 
 # ONE WCSettings for BOTH winch loops: the POSITION-mode torque gains (`wpc`) and the speed-controller tuning (`rc`).
 (; wc, wpc, dt0) = build_winch(project, project_set, fcs)
-# Winch overrides for a test run, e.g. `v_sat` or `kv` (WC_OVERRIDES, `inputs.wc_overrides`): applied
+# Winch overrides for a test run, e.g. `v_sat` or `kv` (`inputs.wc_overrides`): applied
 # just before the simulation loop, so the optimizer plans the path with the unchanged winch.
 rcs = wc                                 # same object, two controllers read it
 
-# Plant overrides for a diagnostic run (SET_OVERRIDES, `inputs.set_overrides`) are applied inside.
+# Plant overrides for a diagnostic run (`inputs.set_overrides`) are applied inside.
 s = init_model(project, project_set, fcs, wpc, EFFECTIVE_SIM_TIME; turbulence = TURBULENCE,
                aero_mode = AERO_MODE, damping_per_stiffness = DAMPING_PER_STIFFNESS,
                set_overrides = inputs.set_overrides)
@@ -474,7 +475,7 @@ Base.@kwdef mutable struct RunState
     dist_t::Vector{Float64} = Float64[]     # [s] time of each disturbed step
     dist_d::Vector{Float64} = Float64[]     # [-] disturbance added
     dist_u::Vector{Float64} = Float64[]     # [-] steering sent to the model, controller plus disturbance
-    # Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
+    # Kept full of the last `extra_steer_delay` raw commands from the start of the run,
     # so it is already primed with real history by the time the hook switches on. The
     # feed-forward goes through a FIFO of its own, so the two stay aligned.
     steer_delay_buf::Vector{Float64} = Float64[]
@@ -1020,7 +1021,7 @@ toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
 
-apply_overrides!(wc, inputs.wc_overrides, "WC_OVERRIDES", string(typeof(wc)), "winch (simulation only)")
+apply_overrides!(wc, inputs.wc_overrides, "wc_overrides", string(typeof(wc)), "winch (simulation only)")
 # The upper force controller's switching speed was derived from kv when `rc` was built.
 isempty(inputs.wc_overrides) ||
     WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
@@ -1804,7 +1805,7 @@ function run_loop!(st::RunState, setup::NamedTuple)
             push!(st.dist_t, t); push!(st.dist_d, du); push!(st.dist_u, rel_steering)
         end
 
-        # V1 stability hooks: see the STEER_GAIN_FACTOR/EXTRA_STEER_DELAY setup above.
+        # V1 stability hooks: see the steer_gain_factor/extra_steer_delay setup above.
         push!(st.steer_delay_buf, rel_steering)
         push!(st.ff_delay_buf, u_ff)
         local delayed_u = length(st.steer_delay_buf) > extra_steer_delay ?

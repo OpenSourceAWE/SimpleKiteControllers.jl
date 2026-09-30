@@ -95,9 +95,9 @@ include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.
 include(joinpath(@__DIR__, "awetrim_client.jl"))
-# Read and cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run.
-show_plots = @isdefined(SHOW_PLOTS) ? SHOW_PLOTS : true
-SHOW_PLOTS = true
+include(joinpath(@__DIR__, "script_inputs.jl"))
+# The caller's input, `run_example("simple_opt_fig8.jl"; show_plots = false)`; a plain `include` plots.
+(; show_plots) = script_inputs(@__FILE__, (; show_plots = true))
 # The reference curve simple_fig8_plots.jl draws; set below, once it is known.
 REF_PATH = nothing
 AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
@@ -549,7 +549,7 @@ REF_PATH = (fec.az_path, fec.el_path)
 if show_plots
     include(joinpath(@__DIR__, "simple_fig8_plots.jl"))
 else
-    @info "Plots suppressed by SHOW_PLOTS = false; it is back to true for the next run."
+    @info "Plots suppressed by show_plots = false."
 end
 
 nothing
