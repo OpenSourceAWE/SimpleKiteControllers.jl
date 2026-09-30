@@ -124,6 +124,7 @@ using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower,
 # so they must be imported, not merely used: `using` binds them read-only.
 import SimpleKiteControllers: c1_at, phase5_margin
 using SimpleKiteControllers: check_reelout_feasibility, ReeloutFeasibility, Phase5MarginState
+using SimpleKiteControllers: optimizer_conditions
 import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,

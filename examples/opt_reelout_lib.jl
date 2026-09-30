@@ -36,43 +36,6 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_m
 end
 
 """
-    optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
-        -> (; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt)
-
-What the optimizer is SENT about THIS run, decoupled from the local winch law (the solve
-must converge at a force the kite can pull): the `inflow`, the wind the elevation-cap step
-reads (`cap_wind`), the AWETrim setting and mode, and the winch of the three kinds of solve:
-`winch` for the STARTUP solve, the plain runtime ceiling `f_high_nominal`, never
-`rcs.f_high_awe_trim`; `winch_first_lap` under `first_lap_force_frac`, so the startup path is
-solved against the ceiling lap 1 flies under; and `winch_reopt` for the re-optimizations (lap 2
-on), the one caller that may fly `rcs.f_high_awe_trim`.
-"""
-function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
-    inflow = inflow_from_settings(project_set)
-    cap_wind = cap_wind_speed(tos, project_set, inflow.wind_speed)
-    opt_awe_trim = tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim
-    opt_winch_mode = isempty(tos.opt_winch_mode) ? nothing : tos.opt_winch_mode
-    winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                          winch_mode = opt_winch_mode, f_max = f_high_nominal)
-    winch_first_lap = fcs.first_lap_force_frac < 1 ?
-        winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                      winch_mode = opt_winch_mode,
-                      f_max = f_high_nominal * fcs.first_lap_force_frac) : winch
-    winch_reopt = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                                winch_mode = opt_winch_mode)
-    @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
-                    z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N | \
-                    depower seed %.3f m%s.",
-                   inflow.wind_speed, inflow.wind_direction, inflow.profile_law, inflow.z0,
-                   winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max,
-                   depower_seed(tos, inflow.wind_speed),
-                   inflow.wind_speed > tos.input_depower_wind_ref ?
-                       @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.input_depower,
-                                tos.input_depower_per_wind, tos.input_depower_wind_ref) : "")
-    return (; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt)
-end
-
-"""
     optimizer_session(tos, inflow, replay_paths, log_name)
         -> (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain)
 

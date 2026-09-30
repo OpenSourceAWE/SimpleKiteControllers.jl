@@ -108,6 +108,8 @@ include("startup_retry.jl")
 include("pattern_limits.jl")
 # After pattern_limits.jl: request_constraints builds the box with pattern_limits_from.
 include("opt_request.jl")
+# After opt_request.jl: optimizer_conditions logs the depower_seed.
+include("opt_conditions.jl")
 # Pure accept gate of a re-optimized path of examples/simple_opt_reelout.jl.
 include("reopt_gate.jl")
 # Step-wise decisions of the reel-out loop of examples/simple_opt_reelout.jl.
