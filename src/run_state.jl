@@ -3,6 +3,19 @@
 
 # The state of one reel-out run of examples/simple_opt_reelout.jl.
 
+# The value types of `RunState`'s fields, named where a field's type would otherwise hide what it holds.
+"An (azimuth, elevation) path [deg], as the optimizer sent it or as it is flown"
+const AzElPath = Tuple{Vector{Float64}, Vector{Float64}}
+"`score_installed`'s verdict on a startup path"
+const StartupScore = @NamedTuple{margin::Float64, el_ok::Bool, clr_ok::Bool, height::Float64, ok::Bool}
+"One entry of `pred_timeline`: the predicted power [W] of the path flown from time `t` [s] on"
+const PowerMark = @NamedTuple{t::Float64, power::Float64}
+"One entry of `p5_history`: a path flown from `t` [s], its raw form and its phase-5 margin"
+const P5Record = @NamedTuple{t::Float64, az::Vector{Float64}, el::Vector{Float64}, raw::AzElPath,
+                             margin::Float64, el_applied::Float64}
+"The phase-5 fallback that was blended in"
+const P5Fallback = @NamedTuple{t::Float64, from_margin::Float64, to_margin::Float64, to_t::Float64}
+
 """
     RunState
 
@@ -15,36 +28,36 @@ state. Plain data: no model type, so the package can define it without depending
 """
 Base.@kwdef mutable struct RunState
     # ---- the optimizer's answer and what the retries make of it ----
-    opt_result::Any = nothing               # the reply the run flies (startup, or the retry that took over)
-    opt_table::Any = nothing                # its /trajectory table
-    opt_downloops::Any = nothing
+    opt_result::Union{Nothing, StepReply} = nothing  # the reply the run flies (startup, or the retry that took over)
+    opt_table::Union{Nothing, Dict{String, Any}} = nothing  # its /trajectory table
+    opt_downloops::Union{Nothing, Bool} = nothing
     opt_power_pred::Float64 = NaN           # [W] predicted mean reel-out power of the installed path
-    opt_paths_raw::Vector{Any} = Any[]      # every optimizer answer as it arrived, before any lift
-    opt_paths_at::Vector{Any} = Any[]       # (sim time [s], phase) each of those was installed at
-    opt_r_scale::Any = nothing              # anchor ratio x headroom of the turn-radius request
-    opt_r_min::Any = nothing                # [m] turn-radius request, or nothing
-    opt_box_now::Any = nothing              # pattern limits sent with the last re-optimization request
-    incumbent_score::Any = nothing          # score of the best startup path so far
-    inc_result::Any = nothing
-    inc_table::Any = nothing
-    inc_raw::Any = nothing
+    opt_paths_raw::Vector{AzElPath} = AzElPath[]  # every optimizer answer as it arrived, before any lift
+    opt_paths_at::Vector{Tuple{Float64, Int}} = Tuple{Float64, Int}[]  # (sim time [s], phase) each of those was installed at
+    opt_r_scale::Union{Nothing, Float64} = nothing  # anchor ratio x headroom of the turn-radius request
+    opt_r_min::Union{Nothing, Float64} = nothing  # [m] turn-radius request, or nothing
+    opt_box_now::Union{Nothing, PatternLimits} = nothing  # pattern limits sent with the last re-optimization request
+    incumbent_score::Union{Nothing, StartupScore} = nothing  # score of the best startup path so far
+    inc_result::Union{Nothing, StepReply} = nothing
+    inc_table::Union{Nothing, Dict{String, Any}} = nothing
+    inc_raw::Union{Nothing, AzElPath} = nothing
     startup_wing_frac::Float64 = 1.0        # share of the lobe lift the startup path could carry
     c1_startup::Float64 = NaN               # [-] turn-rate gain the startup path is checked against
     depower_flown_opt::Float64 = NaN        # [-] rel_depower the optimizer asked for
     # ---- the startup pattern's geometry ----
     n_path_initial::Int = 0
-    path_min_h_start::Any = NaN
-    az_c_path::Any = NaN
-    el_c_path::Any = NaN
-    az_amp_path::Any = NaN
-    el_height_path::Any = NaN
-    pred_timeline::Vector{Any} = Any[]      # (; t, power): which path was flown when
-    p5_history::Vector{Any} = Any[]         # every path flown, for the phase-5 fallback
+    path_min_h_start::Float64 = NaN
+    az_c_path::Float64 = NaN
+    el_c_path::Float64 = NaN
+    az_amp_path::Float64 = NaN
+    el_height_path::Float64 = NaN
+    pred_timeline::Vector{PowerMark} = PowerMark[]  # (; t, power): which path was flown when
+    p5_history::Vector{P5Record} = P5Record[]  # every path flown, for the phase-5 fallback
     p5_fallback_done::Bool = false          # checked once, from the stop latch on, at the next crossing
     p5_q_az_prev::Float64 = NaN             # [deg] Q's azimuth from the path centre, last step
-    p5_fallback::Any = nothing              # (; t, from_margin, to_margin, to_t) when a fallback was blended in
-    ccs::Any = nothing                      # course controller settings
-    cc::Any = nothing                       # course controller
+    p5_fallback::Union{Nothing, P5Fallback} = nothing  # (; t, from_margin, to_margin, to_t) when a fallback was blended in
+    ccs::Union{Nothing, CourseControllerSettings} = nothing  # course controller settings
+    cc::Union{Nothing, CourseController} = nothing  # course controller
     # ---- winch and reel-out ----
     l_set::Float64 = NaN                    # [m] tether length setpoint
     transition_start::Float64 = NaN         # [s] time phase 3 began; `reelout_delay` counts from it
@@ -77,8 +90,8 @@ Base.@kwdef mutable struct RunState
     fig8_idx_prev::Int = 0
     fig8_idx_progress::Float64 = 0.0
     n_path::Int = 0
-    raw_az::Any = nothing                   # the reference TRACKING is scored against
-    raw_el::Any = nothing
+    raw_az::Union{Nothing, Vector{Float64}} = nothing  # the reference TRACKING is scored against
+    raw_el::Union{Nothing, Vector{Float64}} = nothing
     chk_points::Int = 0                     # resolution the path in the air is checked at
     # ---- elevation lift ----
     el_applied::Float64 = 0.0               # [deg] lift the path in the air actually carries
@@ -113,11 +126,11 @@ Base.@kwdef mutable struct RunState
     reopt_cycles::Vector{NamedTuple} = NamedTuple[]  # (; t, l, status, wall_s) per completed cycle
     blend_retries_total::Int = 0            # cold-restart attempts spent on a rejected reply
     el_min_extra::Float64 = 0.0             # [deg] shortfall of the last reply gated out; carried across cycles
-    blend_from::Any = nothing               # the blend in progress; fold-free across w in [0, 1]
-    blend_to::Any = nothing
+    blend_from::Union{Nothing, AzElPath} = nothing  # the blend in progress; fold-free across w in [0, 1]
+    blend_to::Union{Nothing, AzElPath} = nothing
     blend_t0::Float64 = NaN
-    raw_from::Any = nothing                 # the scored reference's endpoints of the SAME blend
-    raw_to::Any = nothing
+    raw_from::Union{Nothing, AzElPath} = nothing  # the scored reference's endpoints of the SAME blend
+    raw_to::Union{Nothing, AzElPath} = nothing
     # ---- test inputs ----
     t_phase4::Float64 = NaN                 # [s] time phase 4 was first reached this run; NaN before that
     xt_start::Float64 = NaN                 # [s] first step of phase `xtrack_phase`; τ counts from here
@@ -141,7 +154,7 @@ Base.@kwdef mutable struct RunState
     xt_vk::Vector{Float64} = Float64[]      # [m/s] kite speed normal to the tether
     xt_dp::Vector{Float64} = Float64[]      # [-] depower
     # ---- results, for the finished-run marker (`write_run_done`) ----
-    fig8m::Any = nothing                    # the scored verdict, once `reelout_results` has it
-    opt_power_meas::Any = nothing           # [W] measured mean reel-out power, or nothing
+    fig8m::Union{Nothing, NamedTuple} = nothing  # the scored verdict, once `reelout_results` has it
+    opt_power_meas::Union{Nothing, Float64} = nothing  # [W] measured mean reel-out power, or nothing
     archive_dir::String = "none"            # the run's archive folder, "none" until (or unless) it exists
 end

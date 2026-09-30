@@ -156,11 +156,11 @@ The user-facing rule is that **only applied results count as successes**. A conv
 reply that a gate rejects is not stored as a result. The script calls
 `record_opt_success!` at the three places a path is applied:
 
-| Place in `simple_opt_reelout.jl` | Applied result |
+| Place in the run of `simple_opt_reelout.jl` | Applied result |
 |---|---|
-| [after the startup install](../examples/simple_opt_reelout.jl#L713) | the startup solve |
-| [a startup retry that takes over](../examples/simple_opt_reelout.jl#L1026) | the corrected startup path |
-| [the re-optimization accept gate](../examples/simple_opt_reelout.jl#L1797) | an installed re-optimization |
+| [after the startup install](../src/startup_path.jl#L170) (`adopt_startup_path!`) | the startup solve |
+| [a startup retry that takes over](../src/startup_path.jl#L351) (`retry_startup!`) | the corrected startup path |
+| [the re-optimization accept gate](../src/reelout_loop.jl#L701) (`install_candidate!`) | an installed re-optimization |
 
 `record_opt_success!` writes every converged entry in `pending`, not only the applied
 one. Those are the replies the applied result was warm-started from, and a replay
@@ -195,7 +195,7 @@ worker never reads half an entry. An unreadable entry is a miss, with a warning.
 
 ## Integration in the script
 
-- [`opt_chain`](../examples/simple_opt_reelout.jl#L414) is created right after
+- [`opt_chain`](../src/awetrim_client.jl#L1185) is created (in `optimizer_session`) right after
   `ensure_server`, from `tos.opt_success_cache` and `tos.opt_failure_cache`.
 - Every `opt_init`, `opt_step`, `opt_status` and `opt_trajectory` of the startup solve,
   the startup retries, the re-optimizations and the blend retries goes through the

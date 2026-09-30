@@ -151,6 +151,9 @@ include("awetrim_client.jl")
 # The state of a reel-out run, and one step of its loop, which uses everything above.
 include("run_state.jl")
 include("reelout_loop.jl")
+# Its setup and startup, before the loop; the model comes in as the caller's `init_model`.
+include("run_setup.jl")
+include("startup_path.jl")
 
 function __init__()
     reload_turn_rate_table!()

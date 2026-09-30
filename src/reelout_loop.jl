@@ -3,7 +3,7 @@
 
 # One step of the reel-out loop of examples/simple_opt_reelout.jl, one function per block, in the
 # order `step_commands!` calls them. Each takes the run's state `st` (`RunState`) and the fixed
-# `setup` (the NamedTuple of the script's `setup_run`), plus the step's time `t` and whatever the
+# `setup` (the NamedTuple of `setup_run`, src/run_setup.jl), plus the step's time `t` and whatever the
 # earlier blocks of the same step produced, and returns what the later blocks read. The pure
 # decisions they call are in loop_decisions.jl and reopt_gate.jl.
 #
