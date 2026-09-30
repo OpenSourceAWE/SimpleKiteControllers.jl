@@ -130,7 +130,7 @@ using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
     set_tracking, set_force, get_v_set_out, calc_vro
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
-using AtmosphericModels: AtmosphericModel, calc_wind_factor
+using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm
 using Statistics: mean
 using Printf

@@ -4,6 +4,7 @@
 module SimpleKiteControllers
 
 using DiscretePIDs, Parameters, KiteUtils, YAML
+using AtmosphericModels: AtmosphericModel, calc_wind_factor
 using LinearAlgebra: dot, cross, norm
 using StaticArrays: SVector
 using Statistics: mean, std
@@ -47,7 +48,7 @@ export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
 export check_reelout_feasibility
 
 # Simulated time of a reel-out run under a wind-speed override (examples/simple_opt_reelout.jl)
-export reelout_budget, BUDGET_HEIGHT
+export reelout_budget, sim_budget, BUDGET_HEIGHT
 
 # Parallel shape optimization (examples/optimize_fig8.jl)
 export OptSettings, opt_grid, task_key, pattern_margin, filter_grid

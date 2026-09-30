@@ -35,39 +35,6 @@ run_input_defaults() =
        extra_steer_delay = 0, hook_settle = 15.0, replay_paths = nothing, output_path = nothing)
 
 """
-    sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind) -> Union{Float64, Nothing}
-
-Simulated time [s] to ask `init` for, and the message that says how it was chosen.
-
-With no wind-speed override it is `sim_time` (`nothing`: the project's own). With one, it
-is [`reelout_budget`](@ref), fed with the drum's `v_sat`, the winch's `kv` and the wind
-factor at `BUDGET_HEIGHT` of the project's own profile law. `default_v_wind` is the
-project's wind before the override.
-"""
-function sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind)
-    isnothing(wind_speed) && return sim_time
-    # The drum's own v_sat, read from the file so the budget follows a retune.
-    v_cap = load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq).v_sat
-    # Ratio of the wind at BUDGET_HEIGHT to the one at h_ref, from the project's own profile law.
-    wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
-                                   BUDGET_HEIGHT)
-    l_reel = fcs.reelout_l_max - project_set.l_tether
-    # `winch_kv` stays keyed by the ground wind, which is what its table lists.
-    b = reelout_budget(wind_speed, default_v_wind, something(sim_time, project_set.sim_time);
-                       l_reel, kv = winch_kv(wind_speed; project), v_cap, wind_factor)
-    w_budget = wind_speed * wind_factor
-    @info "simple_opt_reelout.jl: wind-speed override active, " * (b.below_knot ?
-        @sprintf("sim_time scaled to %.1f s (%.1f m/s at %.0f m, below the %.1f m/s knot).",
-                 b.time, w_budget, BUDGET_HEIGHT, SimpleKiteControllers.BUDGET_KNOT) :
-        @sprintf("reel-out budget %.1f s (%.0f s entry + %.0f m at %.2f m/s of %.2f nominal \
-                  + %.0f s tail; %.1f m/s at %.0f m)",
-                 b.time, SimpleKiteControllers.BUDGET_ENTRY, l_reel,
-                 b.v_nominal * SimpleKiteControllers.BUDGET_REEL_MARGIN, b.v_nominal,
-                 SimpleKiteControllers.BUDGET_TAIL, w_budget, BUDGET_HEIGHT))
-    return b.time
-end
-
-"""
     build_winch(project, project_set, fcs) -> (; wc, wpc, dt0)
 
 The winch settings and the length loop of the run. ONE `WCSettings` (`wc`) serves BOTH

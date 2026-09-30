@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 # The simulated time a reel-out run of `examples/simple_opt_reelout.jl` asks for under a
-# wind-speed override. No model, winch file or wind profile is read here: the caller passes the
-# drum's speed limit, the winch's kv and the profile's wind factor, so every branch can be tested
-# with hand-made numbers.
+# wind-speed override. `reelout_budget` reads no model, winch file or wind profile: the caller
+# passes the drum's speed limit, the winch's kv and the profile's wind factor, so every branch can
+# be tested with hand-made numbers. `sim_budget` reads those three from the project's files.
 
 const BUDGET_HEIGHT = 100.0            # height the budget's wind is taken at            [m]
 const BUDGET_KNOT = 7.7                # wind at BUDGET_HEIGHT, sqrt-law valid at/above  [m/s]
@@ -44,4 +44,51 @@ function reelout_budget(wind_speed, default_v_wind, sim_time; l_reel, kv, v_cap,
         BUDGET_ENTRY + l_reel / (BUDGET_REEL_MARGIN * v_nominal) + BUDGET_TAIL
     end
     return (; time, below_knot, v_nominal)
+end
+
+"""
+    _drum_speed_limit(project) -> Float64
+
+The drum's reel-out speed limit `v_sat` [m/s] from the project's winch-controller file
+(`wc_settings`, relative to the data path), read so the budget follows a retune.
+"""
+function _drum_speed_limit(project)
+    file = KiteUtils.wc_settings(project)
+    path = isabspath(file) ? file : joinpath(KiteUtils.get_data_path(), file)
+    wcs = YAML.load_file(path)["wc_settings"]
+    haskey(wcs, "v_sat") || error("No v_sat in the wc_settings of $path.")
+    return Float64(wcs["v_sat"])
+end
+
+"""
+    sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind) -> Union{Float64, Nothing}
+
+Simulated time [s] to ask `init` for, and the message that says how it was chosen.
+
+With no wind-speed override (`wind_speed` `nothing`) it is `sim_time` (`nothing`: the
+project's own). With one, it is [`reelout_budget`](@ref), fed with the drum's `v_sat` from the
+project's winch file, the winch's `kv` at `wind_speed` ([`winch_kv`](@ref)) and the wind factor
+at `BUDGET_HEIGHT` of the project's own profile law. `project_set` is the project's `Settings`,
+`fcs` its `FC_Settings` (for `reelout_l_max`) and `default_v_wind` the project's wind before
+the override.
+"""
+function sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind)
+    isnothing(wind_speed) && return sim_time
+    v_cap = _drum_speed_limit(project)
+    # Ratio of the wind at BUDGET_HEIGHT to the one at h_ref, from the project's own profile law.
+    wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
+                                   BUDGET_HEIGHT)
+    l_reel = fcs.reelout_l_max - project_set.l_tether
+    # `winch_kv` stays keyed by the ground wind, which is what its table lists.
+    b = reelout_budget(wind_speed, default_v_wind, something(sim_time, project_set.sim_time);
+                       l_reel, kv = winch_kv(wind_speed; project), v_cap, wind_factor)
+    w_budget = wind_speed * wind_factor
+    @info "Wind-speed override active, " * (b.below_knot ?
+        @sprintf("sim_time scaled to %.1f s (%.1f m/s at %.0f m, below the %.1f m/s knot).",
+                 b.time, w_budget, BUDGET_HEIGHT, BUDGET_KNOT) :
+        @sprintf("reel-out budget %.1f s (%.0f s entry + %.0f m at %.2f m/s of %.2f nominal \
+                  + %.0f s tail; %.1f m/s at %.0f m)",
+                 b.time, BUDGET_ENTRY, l_reel, b.v_nominal * BUDGET_REEL_MARGIN, b.v_nominal,
+                 BUDGET_TAIL, w_budget, BUDGET_HEIGHT))
+    return b.time
 end

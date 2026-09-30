@@ -3,14 +3,15 @@
 
 """
 Unit tests for the settings overrides (`apply_overrides!`, `src/fc_settings.jl`) and the reel-out
-time budget under a wind-speed override (`reelout_budget`, `src/reelout_budget.jl`). Pure
-numbers, no model, winch file or wind profile.
+time budget under a wind-speed override (`reelout_budget`, `src/reelout_budget.jl`), pure
+numbers, and of `sim_budget`, which reads its inputs from the Maasvlakte project's files.
 """
 
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: BUDGET_KNOT, BUDGET_F_COEF, BUDGET_REEL_MARGIN, BUDGET_ENTRY,
-    BUDGET_TAIL, BUDGET_BELOW_KNOT_EXPONENT
+    BUDGET_TAIL, BUDGET_BELOW_KNOT_EXPONENT, AtmosphericModel, calc_wind_factor, _drum_speed_limit
+import KiteUtils
 
 @testset verbose = true "reelout_budget" begin
     @testset "apply_overrides!" begin
@@ -57,5 +58,32 @@ import SimpleKiteControllers: BUDGET_KNOT, BUDGET_F_COEF, BUDGET_REEL_MARGIN, BU
         @test b.time ≈ 60.0 * 1.5^BUDGET_BELOW_KNOT_EXPONENT
         # At the default wind the project's own sim_time.
         @test reelout_budget(5.0, 5.0, 60.0; args...).time ≈ 60.0
+    end
+
+    @testset "sim_budget" begin
+        data_path = KiteUtils.get_data_path()
+        try
+            KiteUtils.set_data_path(skc_data_path())   # where the project's wc_settings file lives
+            project = project_file("system_reelout_maasvlakte.yaml")
+            set = KiteUtils.Settings(project)
+            fcs = FC_Settings(fc_settings(project))
+            # No override: the sim_time asked for, `nothing` included.
+            @test sim_budget(project, set, fcs, 123.0, nothing, set.v_wind) === 123.0
+            @test isnothing(sim_budget(project, set, fcs, nothing, nothing, set.v_wind))
+            @test _drum_speed_limit(project) > 0
+            wind_factor = calc_wind_factor(AtmosphericModel(set; nowindfield = true), BUDGET_HEIGHT)
+            # An override above and one below the knot: the budget of THIS project's drum limit,
+            # kv, wind factor and reel-out length, from its own sim_time when none is asked for.
+            for wind in (8.25, 3.5)
+                b = reelout_budget(wind, set.v_wind, set.sim_time;
+                                   l_reel = fcs.reelout_l_max - set.l_tether,
+                                   kv = winch_kv(wind; project),
+                                   v_cap = _drum_speed_limit(project), wind_factor)
+                @test sim_budget(project, set, fcs, nothing, wind, set.v_wind) ≈ b.time
+            end
+            @test (8.25 * wind_factor >= BUDGET_KNOT, 3.5 * wind_factor < BUDGET_KNOT) == (true, true)
+        finally
+            KiteUtils.set_data_path(data_path)
+        end
     end
 end
