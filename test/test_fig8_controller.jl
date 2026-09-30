@@ -538,6 +538,8 @@ end
         # assertions. See docs/fig8_tuning_log.md for what the coefficients are
         # and why. Only one number below is pinned, as a canary against an
         # accidental edit of the YAML.
+        # The DEFAULT table, whatever a run of an example script left loaded in this session.
+        reload_turn_rate_table!()
         entries = SimpleKiteControllers._TURN_RATE_TABLE[].entries
 
         # A row that claims to have passed never leaves its numbers unusable:

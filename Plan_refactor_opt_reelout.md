@@ -152,3 +152,40 @@ Julia 1.12, which can redefine structs in `Main`.
     `margin5`.
   - `write_run_done` must stay defined before anything that can throw.
   - The replay comparison after every stage guards against both.
+
+## Status (2026-09-30)
+
+Done, each step checked against the replay baselines (`examples/regression_baseline.jl`,
+`check_regression(tag)`; IDENTICAL log and summary):
+
+- **Stage 0.** `examples/compare_runs.jl` (`compare_runs(a, b)`), and two replay baselines,
+  Maasvlakte 8.25 m/s and 3.5 m/s, in `output/regression/maasvlakte_*` (gitignored: record them
+  again with `fly_replay` from a scenario folder before starting a new refactor).
+- **Stage 1.** `read_run_inputs()`, `apply_overrides!` in `examples/opt_reelout_lib.jl`.
+- **Stage 2.** The setup blocks are functions (`sim_budget`, `build_winch`, `init_model`,
+  `build_controllers`, `optimizer_conditions`, `optimizer_session`, `request_constraints`), each
+  returning a NamedTuple that the script destructures into the same global names. The `ctx` bundle
+  was not needed and was not built.
+- **Stage 3.** `solve_startup`; the ladder's decisions are pure and unit-tested
+  (`src/startup_retry.jl`: `next_lever`, `record_422!`, `record_converged!`, checked against the old
+  inline code on 110,000 random steps); the ladder body is `retry_startup!()`.
+- **Stage 4.** The reject gate is pure (`src/reopt_gate.jl`: `gate_candidate`, checked against the
+  old chain on 100,000 random candidates) and the step-wise decisions of the loop are pure
+  (`src/loop_decisions.jl`). The simulation loop is `run_loop!()`, moved unchanged: it still reads
+  and writes the script's globals, each written one declared `global` where assigned. The run's state
+  is set up by `init_loop_state!()` under the names the results file reads.
+- About 82 % of the script's code lines are now inside functions (1170 of 1436 non-blank,
+  non-comment lines by a rough count; 8 % at the start).
+
+Not done:
+
+- `LoopState` / `RunLogs` structs with concrete field types, so the loop stops reading untyped
+  globals. Speed did not change with the move into functions (about 3.9 ms/step before and after,
+  the physics dominates); the structs are for clarity, not for the share.
+- The blocks that still mix decisions with model calls: the re-optimization request and install,
+  the in-air elevation shift, the phase-5 fallback. They have no replayable baseline (a replay only
+  holds installed optimizer results, not rejected ones), so they moved only as far as above.
+- Stage 5 and 6 (`reelout_results.jl`, 1079 lines at top level).
+
+A first `runtests.jl` after a flown script used to fail once (`turn_rate_coeffs`, expected the
+default table but the script had left the project's loaded); the test now resets it.

@@ -15,6 +15,9 @@ using Test
     include("test_course_controller.jl")
     include("test_optimization.jl")
     include("test_reelout_metrics.jl")
+    include("test_startup_retry.jl")
+    include("test_reopt_gate.jl")
+    include("test_loop_decisions.jl")
     # V5 of oldplans/Plan_model_validation.md: course_loop_model.jl, no simulation.
     include("test_course_loop_model.jl")
 end

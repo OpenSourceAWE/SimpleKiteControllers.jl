@@ -82,6 +82,12 @@ include("optimization.jl")
 include("traj_opt_settings.jl")
 # After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.
 include("reelout_feasibility.jl")
+# Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
+include("startup_retry.jl")
+# Pure accept gate of a re-optimized path of examples/simple_opt_reelout.jl.
+include("reopt_gate.jl")
+# Step-wise decisions of the reel-out loop of examples/simple_opt_reelout.jl.
+include("loop_decisions.jl")
 
 function __init__()
     reload_turn_rate_table!()
