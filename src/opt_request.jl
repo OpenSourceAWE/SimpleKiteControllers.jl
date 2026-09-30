@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-# What a request of `examples/awetrim_client.jl` asks the optimizer for, beside the pattern box of
+# What a request of `awetrim_client.jl` asks the optimizer for, beside the pattern box of
 # `pattern_limits.jl`: the depower it starts from and how its reply converts to V3Kite's, and the
 # minimum turn radius. Pure: settings in, numbers out; only the client talks to the server.
 

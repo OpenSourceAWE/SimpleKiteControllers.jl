@@ -14,7 +14,7 @@ defined by a file, not by editing a script.
 The conditions are NOT here: the wind comes from the system project's settings
 file and the winch law from its `wc_settings`, both read off the same files the
 plant is built from (`inflow_from_settings`, `winch_from_wc` in
-`examples/awetrim_client.jl`). A path optimized for a wind the kite does not fly
+`awetrim_client.jl`). A path optimized for a wind the kite does not fly
 in is not the path for the run.
 
 The **initial guess is not a formality**, which is why it has its own fields here
@@ -87,7 +87,7 @@ multi-modal, so the guess is a choice about the answer.
     """
     Tape length [m] added to the seed per m/s of wind ABOVE
     `input_depower_wind_ref`, i.e. `depower_seed` in
-    `examples/awetrim_client.jl`. `0.0` sends `input_depower` whatever the wind.
+    `awetrim_client.jl`. `0.0` sends `input_depower` whatever the wind.
 
     The solve is against an `angle_of_attack <= 14°` cap that is already BINDING
     at 6 m/s (measured 2026-08-20 at 150 m: stage 1 of `/step` solved in 0.85 s
@@ -153,7 +153,7 @@ multi-modal, so the guess is a choice about the answer.
     A failing solve is the expensive one — it runs to IPOPT's iteration cap,
     measured at 81 s against 1.5 s for a converged solve — and in blocking mode
     the simulation is held for all of it. The failures are reproducible and
-    isolated in tether length, so `examples/awetrim_client.jl` records each one
+    isolated in tether length, so `awetrim_client.jl` records each one
     and refuses to send it again; see `OPT_FAILURE_CACHE` there for the file, and
     `clear_opt_failures()` to forget them.
 
@@ -166,7 +166,7 @@ multi-modal, so the guess is a choice about the answer.
     again.
 
     A rerun of a scenario sends the same requests and gets the same answers, so
-    `examples/awetrim_client.jl` stores every installed result. It also stores
+    `awetrim_client.jl` stores every installed result. It also stores
     the replies that result was warm-started from, rejected ones included. The
     key is the whole chain of requests since the `/init`, because a warm `/step`
     depends on the state the server holds. After a hit the server no longer
@@ -240,7 +240,7 @@ multi-modal, so the guess is a choice about the answer.
     continuation axis.
 
     So this is the same split `AWETRIM_SOFTMINUS_BETA` makes for the other beta
-    (`examples/awetrim_client.jl`) — the run flies the law it can fly, and asks the
+    (`awetrim_client.jl`) — the run flies the law it can fly, and asks the
     optimizer the question it can answer.
 
     It does NOT make the two laws agree; it makes each side usable. The predicted

@@ -9,6 +9,9 @@ using LinearAlgebra: dot, cross, norm
 using StaticArrays: SVector
 using Statistics: mean, std
 using Printf: @printf, @sprintf
+using HTTP, JSON3, StructTypes
+using SHA: sha256
+using Dates: now, format
 using WinchControllers: WCSettings, WinchPosController, WinchController, LowerForceController
 
 # Figure-of-eight inner-loop (course) controller
@@ -114,6 +117,8 @@ include("opt_conditions.jl")
 include("reopt_gate.jl")
 # Step-wise decisions of the reel-out loop of examples/simple_opt_reelout.jl.
 include("loop_decisions.jl")
+# Last: the AWETrim REST client of the example scripts, which uses the request helpers above.
+include("awetrim_client.jl")
 
 function __init__()
     reload_turn_rate_table!()

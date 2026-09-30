@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-# The box an optimized pattern must stay in, as sent with every request of `examples/awetrim_client.jl`,
+# The box an optimized pattern must stay in, as sent with every request of `awetrim_client.jl`,
 # and the edits the startup retries and re-optimizations of `examples/simple_opt_reelout.jl` make to
 # it. Pure: settings and paths in, a box out. The client keeps only its JSON form.
 
@@ -72,13 +72,13 @@ end
     elevation_amplitude_max_at(tos, wind_speed) -> Float64
 
 The elevation half-span cap [deg] sent at `wind_speed`, the wind AT
-`tos.pattern_elevation_amplitude_max_wind_height` (see `cap_wind_speed` in `examples/awetrim_client.jl`):
+`tos.pattern_elevation_amplitude_max_wind_height` (see `cap_wind_speed` in `awetrim_client.jl`):
 `tos.pattern_elevation_amplitude_max_high` at and above
 `tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_elevation_amplitude_max`
 below it. `tos.pattern_elevation_amplitude_max_high == 0.0` disables the step;
 `wind_speed = nothing` means the wind is not known and returns the base cap.
 
-A STEP like `guess_el_center_seed`'s (`examples/awetrim_client.jl`), and for the same reason: the cap
+A STEP like `guess_el_center_seed`'s (`awetrim_client.jl`), and for the same reason: the cap
 decides which basin the startup solve can reach.
 """
 function elevation_amplitude_max_at(tos, wind_speed)

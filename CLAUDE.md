@@ -105,7 +105,7 @@ tuning — `output/` itself is not.
 
 A failing solve runs to IPOPT's iteration cap (~81 s, against ~1.5 s for one that
 converges) and in `reopt_blocking` mode the simulation is frozen for all of it, so
-`examples/awetrim_client.jl` records every failed request in
+`src/awetrim_client.jl` records every failed request in
 `output/opt_failure_cache.yaml` and does not send it again. Worth ~88 s a run on the
 150 -> 380 m reel-out, whose first guess seed fails at two lengths and is silently
 recovered by `reopt_retry_el_offset`.
@@ -123,7 +123,7 @@ only hits the cache when a run repeats it exactly.
 ### The optimizer's solution cache
 
 `simple_opt_reelout.jl` sends every request through an `OptChain`
-(`examples/awetrim_client.jl`). It stores each APPLIED result (an installed path) in
+(`src/awetrim_client.jl`). It stores each APPLIED result (an installed path) in
 `output/opt_chain_cache/`, one JSON file per key, so a rerun that sends the same
 requests replays those results without solving. A warm `/step` depends on the state
 the server holds, so the key is the whole request chain since the `/init`. The

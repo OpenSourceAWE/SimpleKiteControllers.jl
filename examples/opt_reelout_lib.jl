@@ -36,37 +36,6 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_m
 end
 
 """
-    optimizer_session(tos, inflow, replay_paths, log_name)
-        -> (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain)
-
-The connection to the optimizer and the seed of the startup solve. The seed is the guess
-lemniscate of `data/traj_opt.yaml`, centred at `el_center_seed` (`el_center_seed_base` until
-the startup solve converges from another; `startup_seed_offset` is how far). Every request
-of the run goes through `opt_chain`, which replays applied results and known failures (see
-`OptChain`); `replay_paths`, a scenario folder, flies that run's optimizer results
-instead of asking the optimizer, see `replay_entries`.
-"""
-function optimizer_session(tos, inflow, replay_paths, log_name)
-    el_center_seed_base = guess_el_center_seed(tos, inflow.wind_speed)
-    el_center_seed = el_center_seed_base
-    startup_seed_offset = 0.0
-    guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
-                                           0.0, el_center_seed,
-                                           0.0, tos.guess_points)
-    @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-                   tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
-    ensure_server(tos.base_url; autostart = tos.autostart_server)
-    opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
-                         failures = tos.opt_failure_cache,
-                         replay = isnothing(replay_paths) ? nothing :
-                                  replay_entries(replay_paths, log_name))
-    isnothing(replay_paths) ||
-        @info "Replaying the $(length(opt_chain.replay)) optimizer results of $replay_paths; the optimizer is not asked."
-    return (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain)
-end
-
-
-"""
     solve_startup(tos, make_params, solve, start_params, el_center_seed_base, l_set, winch, inflow)
         -> (; opt_result, opt_seed_trajectory, start_params, el_center_seed, startup_seed_offset,
              guess_az, guess_el)

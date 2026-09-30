@@ -3,8 +3,7 @@
 
 # The conditions of a run, as the AWETrim optimizer wants them: the wind (`InflowConditions`)
 # and winch (`WinchParams`) of a request, read off the run's settings. Pure: settings in,
-# structs out; their JSON form (`StructTypes`) and the HTTP calls stay in
-# `examples/awetrim_client.jl`.
+# structs out; their JSON form (`StructTypes`) and the HTTP calls are in `awetrim_client.jl`.
 
 Base.@kwdef struct InflowConditions
     wind_speed::Float64      # in m/s at 6 m height
