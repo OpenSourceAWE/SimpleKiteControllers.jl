@@ -595,32 +595,7 @@ save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
 
 # ==================== RESULTS ==================== #
 
-"""
-    write_yaml_commented(io, indent, node)
-
-Serialize a nested `OrderedDict` as YAML, recursing into `OrderedDict` values
-and appending a trailing `# comment` for leaves given as `(value, comment)`
-pairs, aligned to `comment_col` where the line is short enough.
-`YAML.write_file` has no concept of comments, hence this by hand.
-"""
-function write_yaml_commented(io, indent, node; comment_col = 36)
-    pad = "  "^indent
-    for (k, v) in node
-        if v isa AbstractDict
-            println(io, pad, k, ":")
-            write_yaml_commented(io, indent + 1, v; comment_col)
-        else
-            value, comment = v isa Tuple ? v : (v, "")
-            val = value isa AbstractString ? "\"$value\"" : string(value)
-            prefix = string(pad, k, ": ", val)
-            if isempty(comment)
-                println(io, prefix)
-            else
-                println(io, prefix, " "^max(1, comment_col - length(prefix)), "# ", comment)
-            end
-        end
-    end
-end
+# `write_yaml_commented` is the package's.
 
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog

@@ -644,3 +644,68 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
     # Returned as well as printed, so a headless sweep need not scrape the log line.
     return merge(m, (; criteria = length(checks), criteria_failed = failed))
 end
+
+"""
+    lap_durations(sl) -> (; t_start::Vector{Float64}, dt::Vector{Float64})
+
+Sim time each FULL figure of eight took, from the logged `fig_8` lap counter:
+lap `k` runs from the first sample at which `fig_8` REACHES `k` to the first at
+which it reaches `k + 1`, so the lap still in progress when the run ends is left
+out. First arrival, not every upward step: in logs flown before the counter was
+made monotone it can dip back for a step or two at a lap boundary (a path install
+re-indexing the kite), and counting the second crossing as a lap start gave a
+0.0 s "fastest lap". `fig_8` counts full traversals of the reference path in
+the air (phases 4 and 5 alike), so a lap here is one whole pattern regardless
+of the path's shape.
+"""
+function lap_durations(sl)
+    f8 = Int.(sl.fig_8)
+    t = Float64.(sl.time)
+    starts = [t[findfirst(>=(k), f8)] for k in 1:maximum(f8; init = 0)]
+    (; t_start = starts[1:max(0, end - 1)], dt = diff(starts))
+end
+
+"""
+    on_log(t_log, t_src, v_src) -> Vector{Float64}
+
+Per-log-sample view of a per-step series, taking the last value recorded at or
+before each log timestamp (the first value for a sample before the series
+starts). Both time vectors must be ascending. Used to hand [`fig8_metrics`](@ref)
+the geometry that was COMMANDED at each sample rather than one number for the
+run, without depending on the logger writing exactly one row per step.
+"""
+function on_log(t_log, t_src, v_src)
+    out = zeros(Float64, length(t_log))
+    j = 1
+    for (k, t) in enumerate(t_log)
+        while j < length(t_src) && t_src[j + 1] <= t
+            j += 1
+        end
+        out[k] = v_src[j]
+    end
+    return out
+end
+
+"""
+    weighted_prediction(pred_timeline, t_samples) -> (; shares, power)
+
+The optimizer's predicted mean power for a run that flew several paths, weighted
+by how much of the scored window each was in the air for. `pred_timeline` holds
+one `(; t, power)` per installed path, ascending in `t` (the install time [s]);
+`t_samples` are the times of the window's samples, e.g. the reeling window's of
+[`reelout_power`](@ref). `shares` lists `(; from_s, power, share)` for every path
+flown during the window, `power` [W] is `sum(power * share)`.
+
+Scoring a window against the FIRST path's number alone compares the measurement
+with a path that was not in the air for some of it.
+"""
+function weighted_prediction(pred_timeline, t_samples)
+    # Which timeline entry was current at each sample.
+    which = [findlast(e -> e.t <= tq, pred_timeline) for tq in t_samples]
+    shares = NamedTuple[]
+    for (k, e) in enumerate(pred_timeline)
+        share = count(==(k), which) / length(which)
+        share > 0 && push!(shares, (; from_s = e.t, power = e.power, share))
+    end
+    return (; shares, power = sum(p.power * p.share for p in shares))
+end

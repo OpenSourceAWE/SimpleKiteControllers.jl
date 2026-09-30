@@ -1282,3 +1282,69 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
     return (; opt_result, opt_seed_trajectory, start_params, el_center_seed, startup_seed_offset,
             guess_az, guess_el)
 end
+
+"""
+    free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
+                         min_turn_radius = nothing, pattern_limits = nothing)
+        -> (; points, weighted) | nothing
+
+Mean reel-out power an OPTIMAL path could harvest with any winch inside
+`[f_min, f_max]`, solved at `tos.free_speed_reference_points` lengths spanning
+`lengths` and weighted by how much of the reeling window was spent at each: every
+entry of `lengths` is one sample, scored at its own length, linearly interpolated
+between the probes and held flat outside them. `wc` is the run's `WCSettings`
+([`winch_from_wc`](@ref)), `guess_az`/`guess_el` [deg] the guess each probe is
+seeded with, `min_turn_radius` and `pattern_limits` the run's constraints.
+
+An upper bound, not a prediction of the run's `k_v` law: `winch_mode =
+"free_speed"` drops the winch law entirely. Meant to be solved AFTER a run so it
+cannot disturb it, and never flown — a free-speed path does not sustain the force
+the winch needs. A solve that fails is skipped; `nothing` when none succeed.
+
+Every probe goes through an [`OptChain`](@ref) of its own, not the run's, so a
+rerun of the same run is served from the solution cache and the run's hit/miss
+counts stay its own. A converged probe is stored as if applied: each is a cold
+chain of one step, and it IS the result the caller uses.
+"""
+function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
+                              min_turn_radius = nothing, pattern_limits = nothing)
+    n = tos.free_speed_reference_points
+    (n < 2 || isempty(lengths)) && return nothing
+    lo, hi = extrema(lengths)
+    hi - lo < 1.0 && (hi = lo + 1.0)
+    probes = collect(range(lo, hi; length = n))
+    # use_awe_trim 1.0: the free_speed NLP never reads the tension curve, but the
+    # node-0 forward march does, and 1.0 is the value it converges at cold.
+    ref_winch = winch_from_wc(wc; optimize_k_v = false, use_awe_trim = 1.0,
+                              winch_mode = "free_speed")
+    ref_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
+                         failures = tos.opt_failure_cache)
+    solved = NamedTuple[]
+    for l in probes
+        try
+            params = InitParams(; name = tos.name * "-fsref", length = l,
+                                winch_params = ref_winch, inflow_conditions = inflow,
+                                trajectory = Trajectory(collect(guess_az), collect(guess_el)),
+                                input_depower = depower_seed(tos, inflow.wind_speed),
+                                reg_weight = tos.reg_weight,
+                                detect_simple_bounds = tos.detect_simple_bounds,
+                                min_turn_radius, pattern_limits)
+            reply = chain_init(ref_chain, params)
+            result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))
+            if !isnothing(result.metrics)
+                record_opt_success!(ref_chain)
+                push!(solved, (; l, power = result.metrics.avg_power_W))
+            end
+        catch exc
+            @debug "free_speed reference failed at L = $l m" exception = exc
+        end
+    end
+    isempty(solved) && return nothing
+    ls = [p.l for p in solved]
+    ps = [p.power for p in solved]
+    at(l) = l <= ls[1] ? ps[1] : l >= ls[end] ? ps[end] : begin
+        k = findlast(<=(l), ls)
+        ps[k] + (ps[k + 1] - ps[k]) * (l - ls[k]) / (ls[k + 1] - ls[k])
+    end
+    return (; points = solved, weighted = sum(at(l) for l in lengths) / length(lengths))
+end

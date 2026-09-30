@@ -19,88 +19,8 @@ leaves no globals behind but `REF_PATH` and `LOG_NAME`, the plots' hand-over.
 
 # ==================== RESULTS ==================== #
 
-"""
-    write_yaml_commented(io, indent, node; comment_col = 36, color = false)
-
-Serialize a nested `OrderedDict` as YAML, recursing into `OrderedDict` values
-and appending a trailing `# comment` for leaves given as `(value, comment)`
-pairs, aligned to `comment_col` where the line is short enough.
-`YAML.write_file` has no concept of comments, hence this by hand. `color = true`
-adds ANSI syntax highlighting (keys, string/number values, comments); leave it
-off when `io` is a file, so no escape codes end up on disk.
-"""
-function write_yaml_commented(io, indent, node; comment_col = 36, color = false)
-    pad = "  "^indent
-    for (k, v) in node
-        if v isa AbstractDict
-            print(io, pad)
-            color ? printstyled(io, k; color = :cyan, bold = true) : print(io, k)
-            println(io, ":")
-            write_yaml_commented(io, indent + 1, v; comment_col, color)
-        else
-            value, comment = v isa Tuple ? v : (v, "")
-            val = value isa AbstractString ? "\"$value\"" : string(value)
-            prefix = string(pad, k, ": ", val)
-            print(io, pad)
-            if color
-                printstyled(io, k; color = :cyan)
-                print(io, ": ")
-                printstyled(io, val; color = value isa AbstractString ? :green : :yellow)
-            else
-                print(io, k, ": ", val)
-            end
-            if isempty(comment)
-                println(io)
-            else
-                print(io, " "^max(1, comment_col - length(prefix)))
-                color ? printstyled(io, "# ", comment; color = :light_black) :
-                    print(io, "# ", comment)
-                println(io)
-            end
-        end
-    end
-end
-
-"""
-    lap_durations(sl) -> (; t_start::Vector{Float64}, dt::Vector{Float64})
-
-Sim time each FULL figure of eight took, from the logged `fig_8` lap counter:
-lap `k` runs from the first sample at which `fig_8` REACHES `k` to the first at
-which it reaches `k + 1`, so the lap still in progress when the run ends is left
-out. First arrival, not every upward step: in logs flown before the counter was
-made monotone it can dip back for a step or two at a lap boundary (a path install
-re-indexing the kite), and counting the second crossing as a lap start gave a
-0.0 s "fastest lap". `fig_8` counts full traversals of the reference path in
-the air (phases 4 and 5 alike), so a lap here is one whole pattern regardless
-of the path's shape.
-"""
-function lap_durations(sl)
-    f8 = Int.(sl.fig_8)
-    t = Float64.(sl.time)
-    starts = [t[findfirst(>=(k), f8)] for k in 1:maximum(f8; init = 0)]
-    (; t_start = starts[1:max(0, end - 1)], dt = diff(starts))
-end
-
-"""
-    on_log(t_log, t_src, v_src) -> Vector{Float64}
-
-Per-log-sample view of a per-step series, taking the last value recorded at or
-before each log timestamp. Both time vectors must be ascending. Used to hand
-`fig8_metrics` the geometry that was COMMANDED at each sample rather than one
-number for the run, without depending on the logger writing exactly one row per
-step.
-"""
-function on_log(t_log, t_src, v_src)
-    out = zeros(Float64, length(t_log))
-    j = 1
-    for (k, t) in enumerate(t_log)
-        while j < length(t_src) && t_src[j + 1] <= t
-            j += 1
-        end
-        out[k] = v_src[j]
-    end
-    return out
-end
+# The log helpers (`lap_durations`, `on_log`, `weighted_prediction`), the summary writer
+# (`write_yaml_commented`, `time_keyed`) and `free_speed_reference` are the package's.
 
 """
     score_log(setup, st) -> NamedTuple
@@ -418,68 +338,6 @@ function reelout_block(setup, st::RunState, sl)
     return (; block = reelout_summary, rp, p4)
 end
 
-"""
-    free_speed_reference(setup, st, lengths) -> (points, weighted) | nothing
-
-Mean reel-out power an OPTIMAL path could harvest with any winch inside
-`[f_min, f_max]`, solved at `tos.free_speed_reference_points` lengths spanning
-`lengths` and weighted by how much of the reeling window was spent at each.
-
-An upper bound, not a prediction of this `k_v` law: `winch_mode = "free_speed"`
-drops the winch law entirely. Solved AFTER the run so it cannot disturb it, and
-never flown — a free-speed path does not sustain the force this winch needs. A
-solve that fails is skipped; `nothing` when none succeed.
-
-Every probe goes through an `OptChain` of its own, not `opt_chain`, so a rerun
-of the same run is served from the solution cache and the run's hit/miss counts
-stay its own. A converged probe is stored as if applied: each is a cold chain
-of one step, and it IS the result this summary uses.
-"""
-function free_speed_reference(setup, st::RunState, lengths)
-    (; tos, rcs, inflow, guess_az, guess_el, opt_box) = setup
-    n = tos.free_speed_reference_points
-    (n < 2 || isempty(lengths)) && return nothing
-    lo, hi = extrema(lengths)
-    hi - lo < 1.0 && (hi = lo + 1.0)
-    probes = collect(range(lo, hi; length = n))
-    # use_awe_trim 1.0: the free_speed NLP never reads the tension curve, but the
-    # node-0 forward march does, and 1.0 is the value it converges at cold.
-    ref_winch = winch_from_wc(rcs; optimize_k_v = false, use_awe_trim = 1.0,
-                              winch_mode = "free_speed")
-    ref_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
-                         failures = tos.opt_failure_cache)
-    solved = NamedTuple[]
-    for l in probes
-        try
-            params = InitParams(; name = tos.name * "-fsref", length = l,
-                                winch_params = ref_winch, inflow_conditions = inflow,
-                                trajectory = Trajectory(collect(guess_az), collect(guess_el)),
-                                input_depower = depower_seed(tos, inflow.wind_speed),
-                                reg_weight = tos.reg_weight,
-                                detect_simple_bounds = tos.detect_simple_bounds,
-                                min_turn_radius = st.opt_r_min, pattern_limits = opt_box)
-            reply = chain_init(ref_chain, params)
-            result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))
-            if !isnothing(result.metrics)
-                record_opt_success!(ref_chain)
-                push!(solved, (; l, power = result.metrics.avg_power_W))
-            end
-        catch exc
-            @debug "free_speed reference failed at L = $l m" exception = exc
-        end
-    end
-    isempty(solved) && return nothing
-    # Time-weighted: every reeling sample scored at its own length, linearly
-    # interpolated between the probes and held flat outside them.
-    ls = [p.l for p in solved]
-    ps = [p.power for p in solved]
-    at(l) = l <= ls[1] ? ps[1] : l >= ls[end] ? ps[end] : begin
-        k = findlast(<=(l), ls)
-        ps[k] + (ps[k + 1] - ps[k]) * (l - ls[k]) / (ls[k + 1] - ls[k])
-    end
-    return (; points = solved, weighted = sum(at(l) for l in lengths) / length(lengths))
-end
-
 # Only meaningful where k_v's soft floor bites (low force) AND the run either fell
 # short of its own prediction or beat it by more than FREE_SPEED_RATIO_MIN_HIGH;
 # a ratio in between needs no upper bound.
@@ -497,8 +355,8 @@ The prediction is a WEIGHTED one whenever a re-optimization installed a path. Ea
 path carries its own `avg_power_W`, and the run flies each for part of the reeling
 window, so scoring the whole window against the FIRST path's number compares the
 measurement to a path that was not in the air for some of it. `rp.idx` is that
-window's samples, so every share below is measured over exactly the samples
-`measured_W` averages. Adds the free-speed upper bound (`free_speed_reference`)
+window's samples, so every share (`weighted_prediction`) is measured over exactly
+the samples `measured_W` averages. Adds the free-speed upper bound (`free_speed_reference`)
 where the ratio is notable and the force low. The measured power goes to
 `st.opt_power_meas` for the finished-run marker.
 """
@@ -509,14 +367,8 @@ function power_comparison(setup, st::RunState, sl, rp, p4)
     pred_shares = NamedTuple[]
     opt_power_pred_eff = st.opt_power_pred
     if !isnothing(rp)
-        t_ro = Float64.(sl.time[rp.idx])
-        # Which timeline entry was current at each reeling sample.
-        which = [findlast(e -> e.t <= tq, st.pred_timeline) for tq in t_ro]
-        for (k, e) in enumerate(st.pred_timeline)
-            share = count(==(k), which) / length(which)
-            share > 0 && push!(pred_shares, (; from_s = e.t, power = e.power, share))
-        end
-        opt_power_pred_eff = sum(p.power * p.share for p in pred_shares)
+        (; shares, power) = weighted_prediction(st.pred_timeline, Float64.(sl.time[rp.idx]))
+        pred_shares, opt_power_pred_eff = shares, power
     end
     power_summary = nothing
     if !isnothing(opt_power_meas)
@@ -561,7 +413,9 @@ function power_comparison(setup, st::RunState, sl, rp, p4)
     if !isnothing(rp) && tos.free_speed_reference_points >= 2 && !isnothing(p4) &&
        p4.force.min < 1000 && power_ratio_notable
         lengths_ro = Float64.(sl.var_10[rp.idx])
-        fs_ref = free_speed_reference(setup, st, lengths_ro)
+        fs_ref = free_speed_reference(tos, setup.rcs, setup.inflow, setup.guess_az, setup.guess_el,
+                                      lengths_ro; min_turn_radius = st.opt_r_min,
+                                      pattern_limits = setup.opt_box)
         if isnothing(fs_ref)
             @warn "free_speed reference: no solve succeeded, omitting it from the summary."
         else
@@ -646,28 +500,6 @@ function feasibility_block(setup, st::RunState)
 end
 
 """
-    time_keyed(row, rows) -> OrderedDict
-
-Summary rows keyed by time, `t_<time>_s`, where `row(e)` gives `(time, value)`. Two
-rows CAN share a time — a blocking solve is requested and collected on the same step,
-so a seed skipped from the failure cache carries the same `t` as the install that
-follows it — and a plain comprehension silently keeps the last of them (which hid the
-cache's own skips the first time it ran), so a repeated key gets a suffix `_2`, `_3`, ...
-"""
-function time_keyed(row, rows)
-    seen = Dict{String, Int}()
-    out = OrderedDict{String, Any}()
-    for e in rows
-        t, value = row(e)
-        k = @sprintf("t_%05.1f_s", t)
-        n = get(seen, k, 0) + 1
-        seen[k] = n
-        out[n == 1 ? k : "$(k)_$n"] = value
-    end
-    return out
-end
-
-"""
     traj_opt_block(setup, st, power_block, feasibility, scored) -> OrderedDict
 
 The summary's `traj_opt` section: the power comparison, the guess and what the
@@ -700,26 +532,26 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                 "power-tape length the solve started from, input_depower ramped with \
                  the wind above input_depower_wind_ref; only a seed, the server \
                  optimizes it [m]"),
-            "depower_optimized" => time_keyed(opt_depower_log) do e
+            "depower_optimized" => OrderedDict(time_keyed(opt_depower_log) do e
                 (e.t, (round(e.l_dp; digits = 3),
                        @sprintf("optimizer's l_dp [m]; rel_depower equivalent %.3f \
                                  (awetrim_depower_to_v3kite), against the flown \
                                  depower_setpoint = %.3f",
                                 e.u_p_equiv, fcs.depower_setpoint)))
-            end,
-            "depower_optimized_rel" => time_keyed(opt_depower_log) do e
+            end),
+            "depower_optimized_rel" => OrderedDict(time_keyed(opt_depower_log) do e
                 (e.t, (round(e.u_p_equiv; digits = 4),
                        "the same reply as V3Kite rel_depower, converted with the \
                         AWETRIM_V3KITE_DEPOWER_OFFSET in force at run time; what a \
                         replot's u_d panel draws [-]"))
-            end,
-            "k_v_optimized" => time_keyed(opt_kv_log) do e
+            end),
+            "k_v_optimized" => OrderedDict(time_keyed(opt_kv_log) do e
                 (e.t, (round(e.k_v; digits = 5),
                        @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
                                  seed winch_kv(v_wind) supplied%s",
                                 e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
                                 e.at_bound ? "; AT ITS BRACKET EDGE" : "")))
-            end),
+            end)),
         "path" => OrderedDict(
             "points" => (st.n_path_initial, "points of the path installed before the run"),
             "points_final" => (length(fec.az_path),
@@ -757,19 +589,19 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                  optimizer (`replay_paths`); empty for a normal run"),
             "installed" => (count(e -> e.status == "installed", st.reopt_events),
                 "new paths actually flown"),
-            "cycle_wall" => time_keyed(st.reopt_cycles) do c
+            "cycle_wall" => OrderedDict(time_keyed(st.reopt_cycles) do c
                 (c.t, (round(c.wall_s; digits = 1),
                        @sprintf("wall time from the first request to the verdict (%s), \
                                  every retry included, at L = %.0f m [s]", c.status, c.l)))
-            end,
+            end),
             "blend_retries" => (st.blend_retries_total,
                 "cold-restart attempts spent on a rejected reply — a folded blend, a \
                  collapsed prediction, or a clearance/elevation shortfall re-asked at \
                  a raised floor — across every install this run"),
-            "events" => time_keyed(st.reopt_events) do e
+            "events" => OrderedDict(time_keyed(st.reopt_events) do e
                 (e.t, (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
                        @sprintf("at L = %.0f m", e.l)))
-            end),
+            end)),
         "el_lift" => OrderedDict(
             "lift_deg" => (fcs.el_offset_final,
                 "el_offset_final, the fixed lift of the path once reel-out ends [deg]"),

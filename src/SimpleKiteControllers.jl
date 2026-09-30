@@ -36,7 +36,10 @@ export winch_kv, winch_f_low, winch_force_limit, winch_table_lookup, winch_table
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
-export winch_state_pct
+export winch_state_pct, lap_durations, on_log, weighted_prediction
+
+# Commented run summaries (examples/simple_opt_reelout.jl, examples/simple_reelout.jl)
+export write_yaml_commented, time_keyed
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
@@ -88,6 +91,7 @@ include("turn_rate_table.jl")
 include("winch_kv_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")
+include("summary_yaml.jl")
 include("fc_settings.jl")
 # After fc_settings.jl: the FC_Settings constructor is defined with the type it constructs.
 include("course_controller.jl")

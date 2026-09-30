@@ -173,4 +173,42 @@ import SimpleKiteControllers: _longest_run
                      v_reelout = [Float32[vro_glitch[i], 0, 0, 0] for i in 1:n2])
         @test reelout_ringing(sl_glitch) == rr
     end
+
+    @testset "lap_durations" begin
+        # Laps start at t = 2, 5 and 9 s; lap 3 is still in progress at the end, so
+        # two full laps are counted.
+        laps = lap_durations((; time = Float32.(0:10),
+                               fig_8 = Int16[0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3]))
+        @test laps.t_start == [2.0, 5.0]
+        @test laps.dt == [3.0, 4.0]
+        # A dip back at a lap boundary (a path install re-indexing the kite) does not
+        # start lap 1 a second time: first arrival counts.
+        @test lap_durations((; time = Float32.(0:10),
+                              fig_8 = Int16[0, 0, 1, 0, 1, 2, 2, 2, 2, 3, 3])) == laps
+        # No lap reached: nothing, not an error.
+        none = lap_durations((; time = Float32.(0:3), fig_8 = zeros(Int16, 4)))
+        @test isempty(none.t_start) && isempty(none.dt)
+    end
+
+    @testset "on_log" begin
+        t_src = [0.0, 1.0, 2.5]
+        v_src = [10.0, 20.0, 30.0]
+        # The last value recorded at or before each log time; before the first, the first.
+        @test on_log([-1.0, 0.0, 0.5, 1.0, 2.4, 2.5, 9.0], t_src, v_src) ==
+              [10.0, 10.0, 10.0, 20.0, 20.0, 30.0, 30.0]
+        @test on_log(Float64[], t_src, v_src) == Float64[]
+    end
+
+    @testset "weighted_prediction" begin
+        timeline = [(t = 0.0, power = 1000.0), (t = 10.0, power = 2000.0),
+                    (t = 20.0, power = 4000.0)]
+        # Samples at 5..14 s: 5 before the second install, 5 after; the third path
+        # is never in the air during the window and gets no share.
+        w = weighted_prediction(timeline, 5.0:14.0)
+        @test [s.from_s for s in w.shares] == [0.0, 10.0]
+        @test [s.share for s in w.shares] == [0.5, 0.5]
+        @test w.power ≈ 1500.0
+        # One path only: its own prediction.
+        @test weighted_prediction(timeline[1:1], 0.0:3.0).power == 1000.0
+    end
 end

@@ -21,48 +21,7 @@ using REPL.TerminalMenus
 # `selected_scenarios_dir`: the site folder of the active project.
 include(joinpath(@__DIR__, "gui_state.jl"))
 include(joinpath(@__DIR__, "script_inputs.jl"))
-
-"""
-    write_yaml_commented(io, indent, node; comment_col = 36, color = false)
-
-Serialize a nested `OrderedDict` as YAML, recursing into `OrderedDict` values
-and appending a trailing `# comment` for leaves given as `(value, comment)`
-pairs, aligned to `comment_col` where the line is short enough. `color = true`
-adds ANSI syntax highlighting (keys, string/number values, comments); copied
-from `reelout_results.jl` so the console summary here matches the one printed
-at the end of a live run.
-"""
-function write_yaml_commented(io, indent, node; comment_col = 36, color = false)
-    pad = "  "^indent
-    for (k, v) in node
-        if v isa AbstractDict
-            print(io, pad)
-            color ? printstyled(io, k; color = :cyan, bold = true) : print(io, k)
-            println(io, ":")
-            write_yaml_commented(io, indent + 1, v; comment_col, color)
-        else
-            value, comment = v isa Tuple ? v : (v, "")
-            val = value isa AbstractString ? "\"$value\"" : string(value)
-            prefix = string(pad, k, ": ", val)
-            print(io, pad)
-            if color
-                printstyled(io, k; color = :cyan)
-                print(io, ": ")
-                printstyled(io, val; color = value isa AbstractString ? :green : :yellow)
-            else
-                print(io, k, ": ", val)
-            end
-            if isempty(comment)
-                println(io)
-            else
-                print(io, " "^max(1, comment_col - length(prefix)))
-                color ? printstyled(io, "# ", comment; color = :light_black) :
-                    print(io, "# ", comment)
-                println(io)
-            end
-        end
-    end
-end
+using SimpleKiteControllers: write_yaml_commented
 
 """
     plot_scenario()

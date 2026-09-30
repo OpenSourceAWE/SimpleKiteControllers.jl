@@ -38,4 +38,4 @@ using SimpleKiteControllers: OPT_CHAIN_CACHE, OptChain, chain_key, chain_init, c
     chain_status, chain_trajectory, record_opt_success!, rebuild_session!, replay_entries,
     clear_opt_chain_cache
 using SimpleKiteControllers: guess_el_center_seed, reelout_anchor_ratio, optimizer_session,
-    solve_startup
+    solve_startup, free_speed_reference
