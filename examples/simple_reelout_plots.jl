@@ -75,9 +75,12 @@ simple_reelout.jl:
     include("simple_reelout_plots.jl")
 
 `run_example("simple_reelout_plots.jl"; scenario_path = "output/scenarios/<name>")`
-(`examples/script_inputs.jl`) replots an archived run instead — `fcs`/`project_set`/the log are all reloaded from that
+(`examples/script_inputs.jl`) replots an archived run instead — `project_set` and the log are reloaded from that
 folder's own copies rather than the live `data/` directory. `plot_scenario.jl`
 is the menu-driven front end for that.
+
+Everything happens in [`draw_reelout_plots`](@ref) and the one function per
+figure it calls, so an include leaves no globals behind but its functions.
 """
 
 using Pkg
@@ -90,26 +93,22 @@ using MakieControlPlots
 using LaTeXStrings
 using V3Kite                  # the log, its data path, wrap_to_pi
 using OrderedCollections: OrderedDict
-using SimpleKiteControllers   # FC_Settings, figure_eight_path
+using SimpleKiteControllers   # reelout_power, apply_windspeed_override!
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 
-@info "Loading simulation results..."
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
 set_data_path(skc_data_path())
 
 # Read fresh from data/gui.yaml on every include, same as simple_reelout.jl (a
 # fig8 selection falls back to the reel-out default there and here alike), so a
-# manual re-include never plots against a stale project or fcs.
+# manual re-include never plots against a stale project.
 include(joinpath(@__DIR__, "gui_state.jl"))
-project = project_file(selected_reelout_project())
-
 # A scenario folder (`output/scenarios/<name>`) to replot instead of `output/`, the input
 # `scenario_path` (`plot_scenario.jl` passes it). It holds for that one run: a stale value
 # must not silently redirect a LATER live run's plots at an old archive.
 include(joinpath(@__DIR__, "script_inputs.jl"))
-(; scenario_path) = script_inputs(@__FILE__, (; scenario_path = nothing))
 
 """
     live_global(name) -> value or nothing
@@ -126,53 +125,55 @@ function live_global(name::Symbol)
     return isdefined(@__MODULE__, name) ? getfield(@__MODULE__, name) : nothing
 end
 
-if !isnothing(scenario_path)
-    # Every setting comes from ITS OWN copies inside the folder, not the live
-    # data/ directory or whatever a prior run left in `Main` — a scenario exists
-    # to freeze exactly the conditions it was flown under. The file's own name
-    # varies by project family (`system_reelout_maasvlakte.yaml` at maasvlakte,
-    # `system_reelout_cabauw.yaml` at cabauw), so it is read off the run summary's
-    # `simulation.project`, which is what was FLOWN. A folder can hold more than
-    # one — a project renamed between runs left the old copy behind wherever the
-    # scenario was overwritten in place — and only the summary says which is right.
-    project_files = filter(f -> startswith(f, "system_reelout_") && endswith(f, ".yaml"),
-                           readdir(scenario_path))
-    isempty(project_files) && error("No system_reelout_*.yaml in $scenario_path")
+
+"The system project a scenario folder was FLOWN with, as its run summary names it, or `nothing`"
+function flown_project(dir)
     # The run summary is the one YAML in the folder with a `simulation` section.
-    function flown_project(dir)
-        for f in filter(f -> endswith(f, ".yaml") && !startswith(f, "system_"),
-                        readdir(dir))
-            y = V3Kite.YAML.load_file(joinpath(dir, f))
-            y isa AbstractDict && haskey(y, "simulation") &&
-                haskey(y["simulation"], "project") || continue
-            return y["simulation"]["project"]
-        end
-        return nothing
+    for f in filter(f -> endswith(f, ".yaml") && !startswith(f, "system_"),
+                    readdir(dir))
+        y = V3Kite.YAML.load_file(joinpath(dir, f))
+        y isa AbstractDict && haskey(y, "simulation") &&
+            haskey(y["simulation"], "project") || continue
+        return y["simulation"]["project"]
     end
-    flown = flown_project(scenario_path)
-    scenario_project = joinpath(scenario_path,
-        if !isnothing(flown) && flown in project_files
-            flown
-        elseif length(project_files) == 1
-            only(project_files)
-        else
-            error("$scenario_path holds $(length(project_files)) project files                    ($(join(project_files, ", "))) and the run summary does not                    name one of them; remove the stale copy.")
-        end)
-    project_set = Settings(scenario_project)
-    fcs = FC_Settings(fc_settings(scenario_project); path = scenario_path)
-    pattern_project = scenario_project
-else
-    # Same rule as simple_reelout.jl: the live run's `fcs` wins (`live_global`). Included at
-    # the end of a run that is the fcs actually FLOWN, so rebuilding it from the
-    # YAML here would both draw the wrong reference path and throw away the
-    # caller's assignments; only a standalone re-include with no `fcs` around
-    # reads the file.
-    fcs = let f = live_global(:fcs)
-        f isa FC_Settings ? f : FC_Settings(fc_settings(project))
+    return nothing
+end
+
+"""
+    plot_settings(scenario_path) -> (; project_set, pattern_project)
+
+The settings the plots are drawn against. For a scenario folder every setting
+comes from ITS OWN copies inside the folder, not the live data/ directory or
+whatever a prior run left in `Main` — a scenario exists to freeze exactly the
+conditions it was flown under. Otherwise the live run's (`live_global`), and only
+a standalone include with no live run around reads the files of the project
+selected in `data/gui.yaml`.
+"""
+function plot_settings(scenario_path)
+    if !isnothing(scenario_path)
+        # The file's own name varies by project family (`system_reelout_maasvlakte.yaml` at
+        # maasvlakte, `system_reelout_cabauw.yaml` at cabauw), so it is read off the run
+        # summary's `simulation.project`, which is what was FLOWN. A folder can hold more than
+        # one — a project renamed between runs left the old copy behind wherever the
+        # scenario was overwritten in place — and only the summary says which is right.
+        project_files = filter(f -> startswith(f, "system_reelout_") && endswith(f, ".yaml"),
+                               readdir(scenario_path))
+        isempty(project_files) && error("No system_reelout_*.yaml in $scenario_path")
+        flown = flown_project(scenario_path)
+        scenario_project = joinpath(scenario_path,
+            if !isnothing(flown) && flown in project_files
+                flown
+            elseif length(project_files) == 1
+                only(project_files)
+            else
+                error("$scenario_path holds $(length(project_files)) project files                    ($(join(project_files, ", "))) and the run summary does not                    name one of them; remove the stale copy.")
+            end)
+        return (; project_set = Settings(scenario_project), pattern_project = scenario_project)
     end
-    # Same rule again, for the wind speed actually flown: a live run's
-    # `project_set` (with any override already applied by
-    # `apply_windspeed_override!`) wins.
+    project = project_file(selected_reelout_project())
+    # The wind speed actually flown: a live run's `project_set` (with any override
+    # already applied by `apply_windspeed_override!`) wins (`live_global`); only a
+    # standalone re-include with no live run around reads the file.
     project_set = let p = live_global(:project_set)
         p isa Settings ? p : begin
             p = Settings(project)
@@ -180,28 +181,29 @@ else
             p
         end
     end
-    pattern_project = project
+    return (; project_set, pattern_project = project)
 end
-plots = selected_plots()
-output_path = isnothing(scenario_path) ?
-              normpath(joinpath(@__DIR__, "..", "output")) : scenario_path
-# A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
-# `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
-# project keep separate logs and can be plotted against each other. A scenario
-# archive is identified by its one `.arrow` file instead, since it was moved out
-# of `output/archives/` by hand and may hold any project's log. A standalone
-# re-include with no `LOG_NAME` around (a fresh session, or the plots having
-# failed at the end of the run that set it) takes whichever of the project's two
-# logs was written last — a project only ever flown by simple_opt_reelout.jl
-# (system_reelout_cabauw.yaml) has no plain `<log_file>.arrow` at all.
-log_name = if !isnothing(scenario_path)
-    arrow_files = filter(f -> endswith(f, ".arrow"), readdir(scenario_path))
-    isempty(arrow_files) &&
-        error("No .arrow log found in scenario folder $scenario_path")
-    replace(only(arrow_files), ".arrow" => "")
-elseif @isdefined(LOG_NAME) && LOG_NAME isa AbstractString
-    LOG_NAME
-else
+
+"The log of a scenario folder: its one `.arrow` file, without the extension"
+function scenario_log_name(dir)
+    arrow_files = filter(f -> endswith(f, ".arrow"), readdir(dir))
+    isempty(arrow_files) && error("No .arrow log found in scenario folder $dir")
+    return replace(only(arrow_files), ".arrow" => "")
+end
+
+"""
+    live_log_name(project_set, output_path) -> String
+
+A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
+`<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
+project keep separate logs and can be plotted against each other. A standalone
+re-include with no `LOG_NAME` around (a fresh session, or the plots having
+failed at the end of the run that set it) takes whichever of the project's two
+logs was written last — a project only ever flown by simple_opt_reelout.jl
+(system_reelout_cabauw.yaml) has no plain `<log_file>.arrow` at all.
+"""
+function live_log_name(project_set, output_path)
+    @isdefined(LOG_NAME) && LOG_NAME isa AbstractString && return LOG_NAME
     base = basename(project_set.log_file)
     candidates = filter([base, base * "_opt"]) do name
         isfile(joinpath(output_path, name * ".arrow"))
@@ -209,28 +211,21 @@ else
     isempty(candidates) &&
         error("No $base.arrow or $(base)_opt.arrow in $output_path; run \
                simple_reelout.jl or simple_opt_reelout.jl first.")
-    argmax(name -> mtime(joinpath(output_path, name * ".arrow")), candidates)
+    return argmax(name -> mtime(joinpath(output_path, name * ".arrow")), candidates)
 end
-syslog = load_log(log_name; path = output_path)
-sl = syslog.syslog
 
-created_at = log_created_at(log_name; path = output_path)
-# The run summary, written by `reelout_results.jl` BEFORE the plots and copied
-# into every archive. It is the durable home of everything the Arrow cannot hold:
-# all sixteen `var_` slots are taken, so `k_v` and the optimizer's depower are not
-# columns and a replot has to read them from here.
-summary_file = joinpath(output_path, log_name * ".yaml")
-run_summary = isfile(summary_file) ?
-    V3Kite.YAML.load_file(summary_file; dicttype = OrderedDict{String, Any}) : nothing
-# `project_set.v_wind` is the PROJECT's base value, not necessarily what was
-# actually flown if a WIND_SPEED override was in effect — a scenario's own run
-# summary is the only place the true value survives.
-flown_wind = if isnothing(scenario_path)
-    project_set.v_wind
-elseif isnothing(run_summary)
-    error("No run summary at $summary_file; the flown wind speed only survives there.")
-else
-    run_summary["simulation"]["wind_speed"]
+"""
+    load_run_summary(dir, log_name) -> OrderedDict | nothing
+
+The run summary, written by `reelout_results.jl` BEFORE the plots and copied
+into every archive. It is the durable home of everything the Arrow cannot hold:
+all sixteen `var_` slots are taken, so `k_v` and the optimizer's depower are not
+columns and a replot has to read them from here.
+"""
+function load_run_summary(dir, log_name)
+    summary_file = joinpath(dir, log_name * ".yaml")
+    return isfile(summary_file) ?
+        V3Kite.YAML.load_file(summary_file; dicttype = OrderedDict{String, Any}) : nothing
 end
 
 """
@@ -324,54 +319,51 @@ function depower_series(summary, times; live::Bool)
     idx = searchsortedlast.(Ref(t_dp), times)
     [i == 0 ? u_dp[1] : u_dp[i] for i in idx]
 end
-fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
-if !isnothing(created_at)
-    fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
+
+"""
+    reelout_plot_data(scenario_path) -> NamedTuple
+
+Everything the figures share: the settings (`plot_settings`), the log and its run
+summary, the flown wind speed, the figure-name stem, the plotted sample range
+`rng` and the series more than one figure draws.
+"""
+function reelout_plot_data(scenario_path)
+    (; project_set, pattern_project) = plot_settings(scenario_path)
+    output_path = isnothing(scenario_path) ?
+                  normpath(joinpath(@__DIR__, "..", "output")) : scenario_path
+    # A scenario archive is identified by its one `.arrow` file, since it was moved out
+    # of `output/archives/` by hand and may hold any project's log.
+    log_name = isnothing(scenario_path) ? live_log_name(project_set, output_path) :
+                                          scenario_log_name(scenario_path)
+    sl = load_log(log_name; path = output_path).syslog
+    created_at = log_created_at(log_name; path = output_path)
+    run_summary = load_run_summary(output_path, log_name)
+    # `project_set.v_wind` is the PROJECT's base value, not necessarily what was
+    # actually flown if a WIND_SPEED override was in effect — a scenario's own run
+    # summary is the only place the true value survives.
+    flown_wind = if isnothing(scenario_path)
+        project_set.v_wind
+    elseif isnothing(run_summary)
+        error("No run summary at $(joinpath(output_path, log_name * ".yaml")); the flown \
+               wind speed only survives there.")
+    else
+        run_summary["simulation"]["wind_speed"]
+    end
+    fig_name = "Reel-out – $(round(flown_wind; digits = 1)) m/s"
+    if !isnothing(created_at)
+        fig_name *= " – " * replace(first(split(created_at, '.')), "T" => "_")
+    end
+    # Skip t=0: the guidance slots are filled from the first `step!` onward.
+    rng = 2:length(sl.time)
+    # Phase 5 (final descent after the winch stops) is masked out so it does not
+    # distort the elevation panel.
+    el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
+    return (; scenario_path, pattern_project, output_path, log_name, sl, run_summary,
+            flown_wind, fig_name, rng, el_deg)
 end
 
-# Skip t=0: the guidance slots are filled from the first `step!` onward.
-rng = 2:length(sl.time)
-
-# Phase 5 (final descent after the winch stops) is masked out so it does not
-# distort the pattern plot.
-az_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
-el_deg = [sl.sys_state[i] == 5 ? NaN : rad2deg(sl.elevation[i]) for i in rng]
-
-# Written out rather than `norm.` so this script needs no LinearAlgebra import.
-v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
-
-# The reference as it was actually steered at: the logged attractor point, which
-# walks every path the run flew. A static curve is the LAST path only, and under
-# re-optimization a run flies several. From phase 3 on, where the guidance is what
-# steers — before that Q is still switching lobes under a kite that is parked, and
-# the first step's slots are zero because they are written after `step!` runs.
-# `REF_PATH`/`fcs.f8_*` stay as the fallback for a log without those slots.
-live = [i for i in rng if sl.sys_state[i] >= 3 &&
-        !(iszero(sl.var_02[i]) && iszero(sl.var_03[i]))]
-ref_az, ref_el = if !isempty(live)
-    Float64.(sl.var_02[live]), Float64.(sl.var_03[live])
-elseif @isdefined(REF_PATH) && REF_PATH isa Tuple
-    REF_PATH
-else
-    figure_eight_path(fcs.f8_a, fcs.f8_b, 0.0,
-                      Float64(sl.var_04[end]), 0.0, 361)
-end
-
-# --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
-unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
-onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
-
-psi    = Float64.(sl.heading[rng])
-# +π puts the logged course into the same convention as heading (0 = zenith).
-chi    = wrap_to_pi.(Float64.(sl.course[rng]) .+ pi)
-chiset = Float64.(sl.bearing[rng])   # chi_cmd, the course actually tracked
-chi_u  = unwrap_angle(chi)
-
-# Both wrapped to ±180°; the offset between them is the kite's drift angle.
-err_course  = rad2deg.(wrap_to_pi.(chi .- chiset))
-err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
-
-if "pattern" in plots
+"The flown pattern against every path the optimizer returned for it (`plot_pattern_scenario`)"
+function plot_pattern(d)
     @info "Plotting the pattern..."
     # Every path the optimizer returned that the run went on to fly, BEFORE
     # `el_offset_final` and `el_offset_wing` were added to it, is drawn
@@ -382,34 +374,35 @@ if "pattern" in plots
     # reelout_results.jl writes next to the log, so the paths installed only in the
     # window it hides from the flown curve are left out too; the attractor is the
     # fallback for a lemniscate run or a log from before it was written.
-    p1 = plot_pattern_scenario(output_path; disp = true,
-                               project = pattern_project, log_name = log_name)
+    p1 = plot_pattern_scenario(d.output_path; disp = true,
+                               project = d.pattern_project, log_name = d.log_name)
     display(p1)
     sleep(0.1)
 end
 
-if "path_3d" in plots
+"The 3D flight path in a GLMakie window of its own, see the file's docstring"
+function plot_path_3d(d)
     @info "Plotting the 3D flight path..."
-    fig3, _ = build_path3d_figure(sl, rng)
+    fig3, _ = build_path3d_figure(d.sl, d.rng)
     # Same window handling as MakieControlPlots' figures: a named GLMakie
     # screen, so this plot does not steal or reuse one of theirs.
-    screen3 = GLMakie.Screen(title = fig_name * " – 3D path")
+    screen3 = GLMakie.Screen(title = d.fig_name * " – 3D path")
     display(screen3, fig3)
     sleep(0.1)
 end
 
-if "path_webgl" in plots
+"The same 3D flight path in the browser (WGLMakie), also saved as an interactive HTML file"
+function plot_path_webgl(d)
     @info "Plotting the 3D flight path (WGLMakie, opens in the browser)..."
-    # WGLMakie is imported (not `using`d) because it exports names that clash
-    # with GLMakie's; `Figure`/`Axis3`/`lines!`/... stay the GLMakie ones from
-    # the top of this file, and only WHICH BACKEND RENDERS THEM is switched by
+    # WGLMakie is imported (not `using`d, at the bottom of this file) because it exports
+    # names that clash with GLMakie's; `Figure`/`Axis3`/`lines!`/... stay the GLMakie ones
+    # from the top of this file, and only WHICH BACKEND RENDERS THEM is switched by
     # `activate!`, Makie's normal multi-backend mechanism. Switched back to
     # GLMakie right after so the plots below (time_series, power,
     # aerodynamics) keep rendering in their own windows rather than the
     # browser.
-    import WGLMakie
     WGLMakie.activate!()
-    fig4, _ = build_path3d_figure(sl, rng)
+    fig4, _ = build_path3d_figure(d.sl, d.rng)
     display(fig4)
     # Also saved as a self-contained interactive HTML file into
     # notebooks/images/, alongside the PNGs create_plots.jl generates for the
@@ -417,20 +410,34 @@ if "path_webgl" in plots
     # archive (matching create_plots.jl's own `<plottype>_<scenario>` naming),
     # or after the flown wind speed for a live run in output/, which has no
     # scenario folder of its own.
-    html_tag = isnothing(scenario_path) ? wind_tag(flown_wind) : basename(scenario_path)
+    html_tag = isnothing(d.scenario_path) ? wind_tag(d.flown_wind) : basename(d.scenario_path)
     html_file = normpath(joinpath(@__DIR__, "..", "notebooks", "images",
                                   "path_webgl_$(html_tag).html"))
     # Built a second time with `static_export`: the Axis3 shown above cannot be
     # turned once no Julia session is behind the page.
-    fig5, _ = build_path3d_figure(sl, rng; static_export = true)
+    fig5, _ = build_path3d_figure(d.sl, d.rng; static_export = true)
     save_path3d_html(html_file, fig5)
     @info "Saved interactive 3D plot" html_file
     GLMakie.activate!()
     sleep(0.1)
 end
 
-if "time_series" in plots
+# --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
+unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
+onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
+
+"The time series: guidance, course, steering, tether, reel-out, depower and the entry state machine"
+function plot_time_series(d)
+    (; sl, rng, el_deg) = d
     @info "Plotting the time series..."
+    psi    = Float64.(sl.heading[rng])
+    # +π puts the logged course into the same convention as heading (0 = zenith).
+    chi    = wrap_to_pi.(Float64.(sl.course[rng]) .+ pi)
+    chiset = Float64.(sl.bearing[rng])   # chi_cmd, the course actually tracked
+    chi_u  = unwrap_angle(chi)
+    # Both wrapped to ±180°; the offset between them is the kite's drift angle.
+    err_course  = rad2deg.(wrap_to_pi.(chi .- chiset))
+    err_heading = rad2deg.(wrap_to_pi.(psi .- chiset))
     # `getindex` because l_tether/v_reelout are one entry per tether and the V3 has one.
     l_tether = getindex.(sl.l_tether[rng], 1)
     v_reelout = getindex.(sl.v_reelout[rng], 1)
@@ -491,13 +498,21 @@ if "time_series" in plots
             # A bare label, not a vector: plotx only reads a scalar one for a plain vector.
             L"0=\mathrm{park},~1=\mathrm{dive},~2=\mathrm{hold},~3=\mathrm{transition},~4=\mathrm{fig8},~5=\mathrm{final}",
         ],
-        fig = fig_name * " – time series",
+        fig = d.fig_name * " – time series",
     )
     display(p2)
     sleep(0.1)
 end
 
-if "power" in plots
+"""
+    plot_power(d)
+
+The winch triple `F_tether`, `v_reelout`, `P_mech` and the running `E_mech`, plus
+the optimizer's depower (`depower_series`) when the run has one and the winch gain
+it flew (`kv_series`).
+"""
+function plot_power(d)
+    (; sl, rng, run_summary, scenario_path) = d
     @info "Plotting the winch power..."
     f_tether = getindex.(sl.winch_force[rng], 1)
     v_ro = getindex.(sl.v_reelout[rng], 1)
@@ -562,13 +577,17 @@ if "power" in plots
         legendsize = 16,
         ylabels = ylabels,
         labels = labels,
-        fig = fig_name * " – power",
+        fig = d.fig_name * " – power",
     )
     display(p4)
     sleep(0.1)
 end
 
-if "aerodynamics" in plots
+"The aerodynamics: angle of attack, lift-to-drag ratio and speeds"
+function plot_aerodynamics(d)
+    (; sl, rng) = d
+    # Written out rather than `norm.` so this script needs no LinearAlgebra import.
+    v_kite = [sqrt(sum(abs2, v)) for v in sl.vel_kite[rng]]
     @info "Plotting the aerodynamics..."
     p3 = plotx(
         sl.time[rng],
@@ -588,10 +607,33 @@ if "aerodynamics" in plots
             [L"\mathrm{wing}", L"\mathrm{effective}"],
             [L"v_{\mathrm{app}}", L"|v_{\mathrm{kite}}|"],
         ],
-        fig = fig_name * " – aerodynamics",
+        fig = d.fig_name * " – aerodynamics",
     )
     display(p3)
     sleep(0.1)
 end
 
-nothing
+"""
+    draw_reelout_plots(scenario_path = nothing)
+
+Draw every figure `selected_plots()` asks for, of the live run or, with
+`scenario_path`, of the archived one in that folder.
+"""
+function draw_reelout_plots(scenario_path = nothing)
+    @info "Loading simulation results..."
+    d = reelout_plot_data(scenario_path)
+    plots = selected_plots()
+    "pattern" in plots && plot_pattern(d)
+    "path_3d" in plots && plot_path_3d(d)
+    "path_webgl" in plots && plot_path_webgl(d)
+    "time_series" in plots && plot_time_series(d)
+    "power" in plots && plot_power(d)
+    "aerodynamics" in plots && plot_aerodynamics(d)
+    return nothing
+end
+
+# At top level, where an `import` must be, and only when it is needed: see `plot_path_webgl`.
+if "path_webgl" in selected_plots()
+    import WGLMakie
+end
+draw_reelout_plots(script_inputs(@__FILE__, (; scenario_path = nothing)).scenario_path)

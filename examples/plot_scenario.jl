@@ -11,7 +11,7 @@ Each subfolder there (`v08`, `v09`, ...) is a self-contained copy of one
 it — moved out of a timestamped `output/archives/` folder by hand so it
 survives past the next run. This lists the non-empty ones, and on a choice
 runs `simple_reelout_plots.jl` with the input `scenario_path`, which reloads
-`fcs`/`project_set`/the log from THAT folder's own copies rather than the
+`project_set` and the log from THAT folder's own copies rather than the
 live `data/` directory or whatever a prior run left in `Main`.
 
     include("plot_scenario.jl")
@@ -97,11 +97,13 @@ function plot_scenario()
     if choice != -1 && choice != length(options)
         selected = options[choice]
         @info "Plotting scenario: $selected"
-        run_example("simple_reelout_plots.jl"; scenario_path = joinpath(scenarios_dir, selected))
-        # run_summary is a fresh global from the include above; look it up at the
-        # latest world age or a first-time call throws a world age error.
+        dir = joinpath(scenarios_dir, selected)
+        run_example("simple_reelout_plots.jl"; scenario_path = dir)
+        # `load_run_summary` and `scenario_log_name` are fresh from the include above; call
+        # them at the latest world age or a first-time call throws a world age error.
         Base.invokelatest() do
-            if haskey(run_summary, "summary")
+            run_summary = load_run_summary(dir, scenario_log_name(dir))
+            if !isnothing(run_summary) && haskey(run_summary, "summary")
                 printstyled("\nSummary:\n"; bold = true)
                 write_yaml_commented(stdout, 1, run_summary["summary"]; color = true)
             else
