@@ -92,8 +92,13 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-# The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.
-include(joinpath(@__DIR__, "awetrim_client.jl"))
+# The optimizer client, part of the package but not exported (src/awetrim_client.jl), and
+# `HTTP.StatusError` for a 422.
+using HTTP
+using SimpleKiteControllers: Trajectory, InitParams, StepParams, ensure_server, opt_init,
+    opt_step, opt_trajectory, inflow_from_settings, winch_from_wc, cap_wind_speed,
+    depower_seed, elevation_min_request, min_turn_radius_request, pattern_limits_from,
+    guess_el_center_seed
 # The caller's input, `run_example("simple_opt_fig8.jl"; show_plots = false)`; a plain `include` plots.
 (; show_plots) = script_inputs(@__FILE__, (; show_plots = true))
 # The reference curve simple_fig8_plots.jl draws; set below, once it is known.

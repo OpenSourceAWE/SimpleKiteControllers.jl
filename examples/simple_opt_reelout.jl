@@ -151,8 +151,14 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-# The optimizer client: opt_init/opt_step/opt_trajectory and ensure_server.
-include(joinpath(@__DIR__, "awetrim_client.jl"))
+# The optimizer client, part of the package but not exported (src/awetrim_client.jl),
+# `HTTP.StatusError` for a 422, and YAML for the saved trajectories and optimizer paths.
+using HTTP, YAML
+using SimpleKiteControllers: Trajectory, InitParams, StepParams, opt_float, chain_init,
+    chain_step, chain_status, chain_trajectory, record_opt_success!, optimizer_session,
+    solve_startup, reelout_anchor_ratio, free_speed_reference, winch_from_wc, depower_seed,
+    awetrim_depower_to_v3kite, elevation_min_request, min_turn_radius_request,
+    pattern_limits_from
 # The functions moved out of this script, see Plan_refactor_opt_reelout.md.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
 # Reference curve and log name for simple_reelout_plots.jl; set by reelout_results.jl, cleared here.

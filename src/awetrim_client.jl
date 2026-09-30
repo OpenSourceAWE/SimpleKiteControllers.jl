@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 # Julia client for the AWETrim reelout flight-path optimizer (REST). Part of the
-# package, not exported: the example scripts reach it through
-# `include("examples/awetrim_client.jl")`, which imports its names. It leaves no
+# package, not exported: the example scripts import the names they use
+# (`using SimpleKiteControllers: InitParams, opt_init, ...`). It leaves no
 # state of its own behind; loading it neither starts nor contacts a server.
 #
 #     ensure_server()
@@ -333,7 +333,7 @@ function record_opt_failure!(p::InitParams, reason::AbstractString;
             "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
         open(file, "w") do io
             println(io, "# Optimizer requests known to fail, written by \
-                         examples/awetrim_client.jl.")
+                         src/awetrim_client.jl.")
             println(io, "# They are NOT retried while they are listed here — \
                          delete this file to retry them all,")
             println(io, "# or drop a single entry to retry just that one. \

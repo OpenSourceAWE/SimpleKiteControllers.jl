@@ -3,7 +3,7 @@
 
 # Demo of the AWETrim reelout flight-path optimizer: ask for one optimized path
 # and plot it against the initial guess. The client itself — the structs, the
-# transport and the server process helpers — is `awetrim_client.jl`, which
+# transport and the server process helpers — is `src/awetrim_client.jl`, which
 # documents the contract; this file is only the walk-through.
 #
 #     include("examples/optimize_path.jl")
@@ -20,7 +20,9 @@ end
 using Timers; tic()
 using MakieControlPlots   # for the pattern plot at the end
 
-include(joinpath(@__DIR__, "awetrim_client.jl"))
+# The optimizer client, part of the package but not exported (src/awetrim_client.jl).
+using SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
+    ensure_server, opt_init, opt_step
 
 ensure_server()
 

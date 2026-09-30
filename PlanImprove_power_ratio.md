@@ -130,7 +130,7 @@ set through this package's own `data/wc_settings.yaml`: a single force
 ceiling [N] sent to AWETrim in place of `wc.f_high`, never into `wc.f_high`
 itself (the runtime plant ceiling is untouched). `0.0` (the default) disables
 it and leaves the request at the plain `f_high`, so existing runs are
-unaffected until it is set. `winch_from_wc` (`examples/awetrim_client.jl`)
+unaffected until it is set. `winch_from_wc` (`src/awetrim_client.jl`)
 resolves it into `f_max`'s default.
 
 **Tried 2026-08-30 at 7600 N — REFUSED at the STARTUP gate before the run

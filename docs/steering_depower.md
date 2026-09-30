@@ -158,7 +158,7 @@ $\alpha_\mathrm{depower} = 100\,(u_p - 0.01\,z)\cdot d$ in rad, with $z$ =
 ## A third scale: the AWETrim optimizer
 
 The trajectory optimizer ([docs/TrajectoryOptimization.md](TrajectoryOptimization.md),
-driven by `examples/awetrim_client.jl`) does not take a relative command at all. Its
+driven by `src/awetrim_client.jl`) does not take a relative command at all. Its
 `input_depower` **is** $l_\mathrm{dp}$, an absolute power-tape length in metres,
 bounded to `(1.1, 2.3)` m in AWETrim's `src/awetrim/utils/defaults.py`. So the number
 in `data/traj_opt.yaml` is already in the unit the server wants — but it is on a
@@ -168,14 +168,14 @@ actually sent.
 ### `input_depower` is a seed, not the value flown
 
 By default the server **optimizes** `input_depower` itself and reports what it
-landed on (`DepowerSpec(mode = "optimize")`, `examples/awetrim_client.jl`); the
+landed on (`DepowerSpec(mode = "optimize")`, `src/awetrim_client.jl`); the
 YAML value is only where that search starts. `DepowerSpec` has two other modes:
 `"fixed"` pins the solve to one value — the setting the run actually flies, at the
 cost of a much smaller feasible set (§ below) — and `"profile"` optimizes one
 value per path node, returning a depower schedule instead of a scalar.
 
 The seed itself is no longer the raw `input_depower` above a reference wind speed.
-`depower_seed(tos, wind_speed)` (`examples/awetrim_client.jl`) adds
+`depower_seed(tos, wind_speed)` (`src/awetrim_client.jl`) adds
 `tos.input_depower_per_wind` metres per m/s of wind above
 `tos.input_depower_wind_ref` (7 m/s), clamped to AWETrim's own `(1.1, 2.3)` m
 bound and, below that, to `tos.input_depower_seed_max` when set — because a seed
@@ -255,7 +255,7 @@ const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.107   # rel_depower units
 awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5.0 + AWETRIM_V3KITE_DEPOWER_OFFSET
 ```
 
-(`examples/awetrim_client.jl`). With the numbers in:
+(`src/awetrim_client.jl`). With the numbers in:
 
 $$
 u_p = \frac{l_\mathrm{dp} - 0.6}{5.0} + 0.107 \ \ [\mathrm{rel\_depower}]
@@ -292,7 +292,7 @@ applies. See [fig8_tuning_log.md](fig8_tuning_log.md).
 tether) and again on 2026-08-29 (`kite.mass` raised from 6.2 kg to 10.9926 kg to
 match AWETrim's own wing), each time by re-measuring `power_ratio` at 6 m/s
 rather than by re-deriving the worked numbers above. Current value: **0.1010**.
-Treat the `AWETRIM_V3KITE_DEPOWER_OFFSET` docstring in `examples/awetrim_client.jl`
+Treat the `AWETRIM_V3KITE_DEPOWER_OFFSET` docstring in `src/awetrim_client.jl`
 as the source of truth, not the number in this file.
 
 

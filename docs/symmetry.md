@@ -51,7 +51,7 @@ M/2. The condition is therefore M linear equality rows:
   - Odd M is rejected with an error.
 - **SimpleKiteControllers**
   - `TrajOptSettings.pattern_symmetric` (default `false`), sent through
-    `pattern_limits_from` in `examples/awetrim_client.jl`.
+    `pattern_limits_from` in `src/awetrim_client.jl`.
   - `with_elevation_max`, `with_azimuth_amplitude_min` and `with_size_box` in
     `simple_opt_reelout.jl` carry the flag through when they rebuild the box.
   - While the flag is off, the solution-cache keys are unchanged.
