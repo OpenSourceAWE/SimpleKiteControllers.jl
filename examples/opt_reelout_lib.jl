@@ -9,7 +9,7 @@ the script, into the same module; `init_model` is handed to `setup_run`.
 
 """
     init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_overrides,
-               aero_mode = ContinuousAero(), damping_per_stiffness = 0.001)
+               aero_mode = ContinuousAero(), damping_per_stiffness = 0.002)
 
 The model, initialized and settled: `init` at the project's wind and tether length,
 `sim_time` plus a full phase 5 (`fcs.final_time`) long, with the winch loop `wpc`
@@ -19,7 +19,7 @@ the model's own `Settings` afterwards, e.g. `v_steering`, the tape's rate limit.
 tether/bridle structural damping as a ratio of stiffness, see simple_fig8.jl's docstring.
 """
 function init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_overrides,
-                    aero_mode = ContinuousAero(), damping_per_stiffness = 0.001)
+                    aero_mode = ContinuousAero(), damping_per_stiffness = 0.002)
     # dt, sim_time and wind come from the project settings (overridden above); the default cache_path avoids a re-JIT.
     s = init(project_set.v_wind, project_set.l_tether; body_start_damping = fcs.body_damping,
         body_sim_damping = 0.8 .* fcs.body_damping,

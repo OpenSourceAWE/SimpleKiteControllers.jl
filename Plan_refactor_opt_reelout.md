@@ -59,6 +59,8 @@ each step are in `output/regression/` (gitignored: `preglobals_*`,
 `poststartup_*`, all at Maasvlakte 3.5 and 8.25 m/s). Before a new refactor,
 run `check_regression` on the unchanged tree first; if it is no longer
 IDENTICAL, record the baselines again with `fly_replay` from a scenario folder.
+All baselines above were flown at `damping_per_stiffness = 0.001`; since the
+default is 0.002 (see `CHANGELOG.md`), they have to be recorded again first.
 
 Branches the replays cannot reach are checked by flying the old and the new
 code LIVE (optimizer server up) with the same inputs. The second run is served
