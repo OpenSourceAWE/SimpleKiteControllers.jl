@@ -1,0 +1,58 @@
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MPL-2.0
+
+# The winch settings and length loop of a run: `WCSettings` loaded from the project's
+# `wc_settings:` file and set to the wind-dependent tables of `winch_kv_table.jl`.
+
+"""
+    load_wc_settings(filename; dt) -> WCSettings
+
+Load winch-controller settings from the YAML file `filename`, looked up under
+the active data path (`joinpath(get_data_path(), filename)`) unless absolute.
+The file must have a top-level `wc_settings:` mapping whose keys are fields of
+`WCSettings`; a missing key keeps the struct default, an unknown key errors.
+
+This used to be V3Kite's own `WC_Settings(filename)`. It lives in SimpleKiteControllers now because
+the struct belongs to WinchControllers.jl and the *file* belongs to the run —
+V3Kite itself no longer reads winch gains at all. `dt` always wins over the
+file's placeholder value: it is the plant's timestep, not a tuning choice.
+"""
+function load_wc_settings(filename::AbstractString; dt)
+    path = isabspath(filename) ? filename : joinpath(KiteUtils.get_data_path(), filename)
+    dict = YAML.load_file(path)["wc_settings"]
+    wcs = WCSettings(; dt)
+    for (key, value) in dict
+        sym = Symbol(key)
+        hasfield(WCSettings, sym) ||
+            error("Unknown key \"$key\" in $path — not a field of WCSettings.")
+        setfield!(wcs, sym, convert(fieldtype(WCSettings, sym), value))
+    end
+    wcs.dt = dt
+    return wcs
+end
+
+"""
+    build_winch(project, project_set, fcs) -> (; wc, wpc, dt0)
+
+The winch settings and the length loop of the run. ONE `WCSettings` (`wc`) serves BOTH
+winch loops, the POSITION-mode torque gains (`wpc`) and the speed-controller tuning of the
+reel-out controller, so the wind-dependent `kv`, force floor and force-limit law of the
+project's tables are set on it here. Refuses a `compliance` other than 0: REEL_OUT and
+V3Kite's own FORCE mode both drive the winch, and only one can hold the drum at a time.
+"""
+function build_winch(project, project_set, fcs)
+    fcs.compliance >= 0 ||
+        error("compliance must be >= 0, got $(fcs.compliance)")
+    fcs.compliance == 0 ||
+        error("REEL_OUT needs compliance = 0 (POSITION mode) — REEL_OUT and V3Kite's own \
+               FORCE mode both drive the winch and only one can hold the drum at a time.")
+    dt0 = 1 / project_set.sample_freq
+    wc = load_wc_settings(KiteUtils.wc_settings(project); dt = dt0)
+    wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, see data/winch_kv_table.yaml
+    # Wind-dependent floor too; NOT the entry guard's floor, that is fcs.entry_f_min.
+    wc.f_low = winch_f_low(project_set.v_wind; project)
+    # The soft law's floor cannot go below ~700 N, so it is off at low wind; see `winch_force_limit`'s docstring.
+    wc.force_limit = winch_force_limit(project_set.v_wind; project)
+    wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
+    return (; wc, wpc, dt0)
+end

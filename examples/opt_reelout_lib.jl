@@ -8,36 +8,10 @@ the same module.
 """
 
 """
-    build_winch(project, project_set, fcs) -> (; wc, wpc, dt0)
-
-The winch settings and the length loop of the run. ONE `WCSettings` (`wc`) serves BOTH
-winch loops, the POSITION-mode torque gains (`wpc`) and the speed-controller tuning of the
-reel-out controller, so the wind-dependent `kv`, force floor and force-limit law of the
-project's tables are set on it here. Refuses a `compliance` other than 0: REEL_OUT and
-V3Kite's own FORCE mode both drive the winch, and only one can hold the drum at a time.
-"""
-function build_winch(project, project_set, fcs)
-    fcs.compliance >= 0 ||
-        error("compliance must be >= 0, got $(fcs.compliance)")
-    fcs.compliance == 0 ||
-        error("REEL_OUT needs compliance = 0 (POSITION mode) — REEL_OUT and V3Kite's own \
-               FORCE mode both drive the winch and only one can hold the drum at a time.")
-    dt0 = 1 / project_set.sample_freq
-    wc = load_wc_settings(wc_settings(project); dt = dt0)
-    wc.kv = winch_kv(project_set.v_wind; project) # overrides the file's flat kv, see data/winch_kv_table.yaml
-    # Wind-dependent floor too; NOT the entry guard's floor, that is fcs.entry_f_min.
-    wc.f_low = winch_f_low(project_set.v_wind; project)
-    # The soft law's floor cannot go below ~700 N, so it is off at low wind; see `winch_force_limit`'s docstring.
-    wc.force_limit = winch_force_limit(project_set.v_wind; project)
-    wpc = WinchPosController(wc; dt = dt0)   # the length loop `step!` used to own
-    return (; wc, wpc, dt0)
-end
-
-"""
     init_model(project, project_set, fcs, wpc, sim_time; turbulence, aero_mode,
                damping_per_stiffness, set_overrides)
 
-The model, initialised and settled: `init` at the project's wind and tether length,
+The model, initialized and settled: `init` at the project's wind and tether length,
 `sim_time` plus a full phase 5 (`fcs.final_time`) long, with the winch loop `wpc`
 holding the length during the warm-up. `set_overrides` are applied to
 the model's own `Settings` afterwards, e.g. `v_steering`, the tape's rate limit.

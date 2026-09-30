@@ -15,6 +15,9 @@
 # A copy of V3Kite's `examples/winch_adapter.jl` — the adapter belongs to the
 # APPLICATION, and this repo is one. Keep the two in step if either changes.
 #
+# Unlike V3Kite's copy it has no `load_wc_settings`: that is SimpleKiteControllers'
+# own now (`src/winch_setup.jl`), next to `build_winch`, which uses it.
+#
 # `include` it and construct a controller once per run:
 #
 #     wcs = WCSettings(dt = s.dt)          # or WC_Settings("wc_settings.yaml")
@@ -23,33 +26,6 @@
 
 using WinchControllers: WCSettings, WinchPosController, WinchForceController,
     winch_position_torque!, winch_force_torque!, winch_acc_limit
-
-"""
-    load_wc_settings(filename; dt) -> WCSettings
-
-Load winch-controller settings from the YAML file `filename`, looked up under
-the active data path (`joinpath(get_data_path(), filename)`) unless absolute.
-The file must have a top-level `wc_settings:` mapping whose keys are fields of
-`WCSettings`; a missing key keeps the struct default, an unknown key errors.
-
-This used to be V3Kite's own `WC_Settings(filename)`. It lives here now because
-the struct belongs to WinchControllers.jl and the *file* belongs to the run —
-V3Kite itself no longer reads winch gains at all. `dt` always wins over the
-file's placeholder value: it is the plant's timestep, not a tuning choice.
-"""
-function load_wc_settings(filename::AbstractString; dt)
-    path = isabspath(filename) ? filename : joinpath(get_data_path(), filename)
-    dict = V3Kite.YAML.load_file(path)["wc_settings"]
-    wcs = WCSettings(; dt)
-    for (key, value) in dict
-        sym = Symbol(key)
-        hasfield(WCSettings, sym) ||
-            error("Unknown key \"$key\" in $path — not a field of WCSettings.")
-        setfield!(wcs, sym, convert(fieldtype(WCSettings, sym), value))
-    end
-    wcs.dt = dt
-    return wcs
-end
 
 """
     winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
