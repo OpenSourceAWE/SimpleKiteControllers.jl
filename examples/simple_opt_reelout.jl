@@ -155,9 +155,9 @@ toc("Loaded packages in: ")
 
 # ==================== USER PARAMETERS ==================== #
 
-# This package's data/ is the default for config file lookups; the model's is asked for by name.
+# This package's data/ is the default for config file lookups.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-# V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
+# V3Kite is torque-only; the winch adapter uses WinchControllers.jl to implement the force dependent speed control.
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The model, which the package cannot build: `init_model`, passed to `setup_run`.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
