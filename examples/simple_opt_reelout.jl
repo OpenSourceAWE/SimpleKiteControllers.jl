@@ -153,10 +153,10 @@ include(joinpath(@__DIR__, "awetrim_client.jl"))
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
 # The caller's inputs (SHOW_PLOTS, the *_OVERRIDES, the test inputs, REPLAY_PATHS, OUTPUT_PATH), read and
 # cleared HERE, so a `SHOW_PLOTS = false` never survives into the next run; see `read_run_inputs`.
-(; show_plots, path_tr_project, fcs_overrides, tos_overrides, wc_overrides, set_overrides,
-   steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance, steer_gain_factor,
-   steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths, output_path_arg) =
-    read_run_inputs()
+# The setup-only ones (the *_OVERRIDES, TR_PATH_PROJECT, OUTPUT_PATH) are read as `inputs.<name>`.
+inputs = read_run_inputs()
+(; show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance, steer_gain_factor,
+   steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths) = inputs
 # Reference curve and log name for simple_reelout_plots.jl; set below, cleared here like SHOW_PLOTS.
 REF_PATH = nothing
 LOG_NAME = nothing
@@ -177,31 +177,28 @@ fcs = FC_Settings(fc_settings(project))
 # through system_fig8_200m.yaml. Two consumers: the CONTROLLER (gain schedule, curvature
 # feed-forward) reads `ctrl_tr_table`; the PATH side (turn-radius requests to the planner, the
 # startup gates, the feasibility checks) reads the session's table. Both are the project's unless
-# `TR_PATH_PROJECT` (`path_tr_project`) names another system project, whose table
+# `TR_PATH_PROJECT` (`inputs.path_tr_project`) names another system project, whose table
 # then sizes the path: an A/B of the controller's table with the planned path held fixed.
 # Session-wide: a later script that does not reload keeps the path side's table.
 ctrl_tr_table = SimpleKiteControllers._load_turn_rate_table(project)
-reload_turn_rate_table!(isnothing(path_tr_project) ? project : project_file(path_tr_project))
-isnothing(path_tr_project) ||
+reload_turn_rate_table!(isnothing(inputs.path_tr_project) ? project : project_file(inputs.path_tr_project))
+isnothing(inputs.path_tr_project) ||
     @info "Turn-rate tables: controller $(turn_rate_coeffs_file(project)), path side \
-           $(turn_rate_coeffs_file(project_file(path_tr_project))) (TR_PATH_PROJECT)."
+           $(turn_rate_coeffs_file(project_file(inputs.path_tr_project))) (TR_PATH_PROJECT)."
 # The optimizer's own settings: server, initial guess, solver knobs, margin.
 tos = TrajOptSettings(traj_opt_settings_file(project))
 
 # Sweep overrides (examples/optimize_fig8.jl: FCS_OVERRIDES), and the same for the optimizer's settings
 # (TOS_OVERRIDES), e.g. `reopt_enabled = false` for a test run.
-apply_overrides!(fcs, fcs_overrides, "FCS_OVERRIDES", "FC_Settings", "fcs")
-apply_overrides!(tos, tos_overrides, "TOS_OVERRIDES", "TrajOptSettings", "tos")
+apply_overrides!(fcs, inputs.fcs_overrides, "FCS_OVERRIDES", "FC_Settings", "fcs")
+apply_overrides!(tos, inputs.tos_overrides, "TOS_OVERRIDES", "TrajOptSettings", "tos")
 # Test input: a steering disturbance `t -> Δu` added after the controller (STEER_DISTURBANCE);
 # `stability_opt_reelout.jl`'s model is validated against the loop's response to it.
 isnothing(steer_disturbance) || @info "Steering disturbance in force (test input)."
-dist_t = Float64[]      # [s] time of each disturbed step
-dist_d = Float64[]      # [-] disturbance added
-dist_u = Float64[]      # [-] steering sent to the model, controller plus disturbance
 # Test input: a cross-track offset `τ -> δ` [deg], τ the time since phase `XTRACK_PHASE` (default 5)
 # began (`xtrack_offset`, `xtrack_phase`). The attractor is moved δ along the path's right-hand normal, so the pursuit
 # aims at the parallel curve δ to the right: a reference step for the guided loop alone. The run
-# keeps `xt_t`, `xt_delta`, `xt_d`, the signed cross-track error to the UNSHIFTED path, and `xt_q`,
+# keeps (in `RunState`) `xt_t`, `xt_delta`, `xt_d`, the signed cross-track error to the UNSHIFTED path, and `xt_q`,
 # the index of its closest point Q: a reference run's d as a function of Q removes the lap forcing.
 # Test input: a COMPLIANT hold in phase 5, `(gain, τF, τpos)` (`hold_compliance`). Instead
 # of freezing l_set, the length setpoint moves at gain·kv/(2√F̄)·(F − F̄) − (l_set − l_hold)/τpos: the
@@ -221,21 +218,7 @@ isnothing(hold_compliance) || @info "Compliant hold in phase 5 (test input): $ho
                     samples, active %.1f s after phase 4 begins.",
                    steer_gain_factor, steer_gain_feedback_only ? " (feedback only)" : "",
                    extra_steer_delay, hook_settle)
-# Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
-# so it is already primed with real history by the time the hook switches on. The
-# feed-forward goes through a FIFO of its own, so the two stay aligned.
-steer_delay_buf = Float64[]
-ff_delay_buf = Float64[]
 isnothing(xtrack_offset) || @info "Cross-track offset in force (test input)."
-xt_t = Float64[]        # [s] time of each phase-5 step
-xt_delta = Float64[]    # [deg] offset commanded
-xt_d = Float64[]        # [deg] signed cross-track error to the unshifted path, right of travel > 0
-xt_q = Int[]            # [-] index of the closest path point Q
-xt_phase = Int[]        # [-] flight phase, and the operating point for the model:
-xt_L = Float64[]        # [m] tether length
-xt_va = Float64[]       # [m/s] apparent wind speed
-xt_vk = Float64[]       # [m/s] kite speed normal to the tether
-xt_dp = Float64[]       # [-] depower
 
 project_set = Settings(project)
 default_v_wind = project_set.v_wind
@@ -257,7 +240,7 @@ power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 EFFECTIVE_SIM_TIME = sim_budget(project, project_set, fcs, SIM_TIME, WIND_SPEED, default_v_wind)
 
 # Arrow log files named after the project's `log_file`; OUTPUT_PATH redirects them for parallel sweep runs.
-output_path = something(output_path_arg, normpath(joinpath(@__DIR__, "..", "output")))
+output_path = something(inputs.output_path_arg, normpath(joinpath(@__DIR__, "..", "output")))
 mkpath(output_path)
 
 # Finished-run marker for outside watchers: removed here, written last, so its presence means "this run is over".
@@ -304,23 +287,23 @@ log_name = basename(project_set.log_file) * "_opt"
 
 # ONE WCSettings for BOTH winch loops: the POSITION-mode torque gains (`wpc`) and the speed-controller tuning (`rc`).
 (; wc, wpc, dt0) = build_winch(project, project_set, fcs)
-# Winch overrides for a test run, e.g. `v_sat` or `kv` (WC_OVERRIDES, `wc_overrides`): applied
+# Winch overrides for a test run, e.g. `v_sat` or `kv` (WC_OVERRIDES, `inputs.wc_overrides`): applied
 # just before the simulation loop, so the optimizer plans the path with the unchanged winch.
 rcs = wc                                 # same object, two controllers read it
 
-# Plant overrides for a diagnostic run (SET_OVERRIDES, `set_overrides`) are applied inside.
+# Plant overrides for a diagnostic run (SET_OVERRIDES, `inputs.set_overrides`) are applied inside.
 s = init_model(project, project_set, fcs, wpc, EFFECTIVE_SIM_TIME; turbulence = TURBULENCE,
                aero_mode = AERO_MODE, damping_per_stiffness = DAMPING_PER_STIFFNESS,
-               set_overrides)
+               set_overrides = inputs.set_overrides)
 
 # The controllers, built after `init` so the soft-start ramp begins when reel-out starts; see `build_controllers`.
-(; rc, f_high_nominal, stop_criteria, guard_lfc, l_set, fec) = build_controllers(fcs, rcs, s)
+(; rc, f_high_nominal, guard_lfc, l_set, fec) = build_controllers(fcs, rcs, s)
 const F_HIGH_NOMINAL = f_high_nominal
 
 # ================= OPTIMIZED REFERENCE PATH ================== #
 
 # The conditions of THIS run and the winches the optimizer is sent, see `optimizer_conditions`.
-(; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt) =
+(; inflow, cap_wind, winch, winch_first_lap, winch_reopt) =
     optimizer_conditions(tos, fcs, project_set, rcs, F_HIGH_NOMINAL)
 # Every reply's optimized gain, so the summary reports what was flown, not only what was sent.
 opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]
@@ -363,7 +346,7 @@ end
 (; el_center_seed_base, el_center_seed, startup_seed_offset, guess_az, guess_el, opt_chain) =
     optimizer_session(tos, inflow, replay_paths, log_name)
 # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
-(; turn_radius_reel, opt_r_scale, depower_request, c1_request, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
+(; opt_r_scale, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
     request_constraints(tos, fcs, inflow, cap_wind, opt_length(tos, l_set))
 
 # One row per depower value the optimizer reports back (startup, each ACCEPTED reopt), for summary and plot.
@@ -488,6 +471,23 @@ Base.@kwdef mutable struct RunState
     xt_start::Float64 = NaN                 # [s] first step of phase `xtrack_phase`; τ counts from here
     hold_f_lp::Float64 = NaN                # [N] low-passed force of the compliant hold
     hold_l0::Float64 = NaN                  # [m] length the compliant hold began at
+    dist_t::Vector{Float64} = Float64[]     # [s] time of each disturbed step
+    dist_d::Vector{Float64} = Float64[]     # [-] disturbance added
+    dist_u::Vector{Float64} = Float64[]     # [-] steering sent to the model, controller plus disturbance
+    # Kept full of the last EXTRA_STEER_DELAY raw commands from the start of the run,
+    # so it is already primed with real history by the time the hook switches on. The
+    # feed-forward goes through a FIFO of its own, so the two stay aligned.
+    steer_delay_buf::Vector{Float64} = Float64[]
+    ff_delay_buf::Vector{Float64} = Float64[]
+    xt_t::Vector{Float64} = Float64[]       # [s] time of each phase-5 step
+    xt_delta::Vector{Float64} = Float64[]   # [deg] offset commanded
+    xt_d::Vector{Float64} = Float64[]       # [deg] signed cross-track error to the unshifted path, right of travel > 0
+    xt_q::Vector{Int} = Int[]               # [-] index of the closest path point Q
+    xt_phase::Vector{Int} = Int[]           # [-] flight phase, and the operating point for the model:
+    xt_L::Vector{Float64} = Float64[]       # [m] tether length
+    xt_va::Vector{Float64} = Float64[]      # [m/s] apparent wind speed
+    xt_vk::Vector{Float64} = Float64[]      # [m/s] kite speed normal to the tether
+    xt_dp::Vector{Float64} = Float64[]      # [-] depower
 end
 
 """
@@ -551,13 +551,11 @@ function startup_solve(params)
     return result, seed_trajectory
 end
 
-start_params = startup_params(el_center_seed)
 t_solve_start = time()
 # A 422 is retried from `startup_retry_el_offsets` in order, see `solve_startup`.
-(; opt_result, opt_seed_trajectory, start_params, el_center_seed, startup_seed_offset,
-   guess_az, guess_el) =
-    solve_startup(tos, startup_params, startup_solve, start_params, el_center_seed_base, l_set,
-                  winch, inflow)
+(; opt_result, el_center_seed, startup_seed_offset, guess_az, guess_el) =
+    solve_startup(tos, startup_params, startup_solve, startup_params(el_center_seed),
+                  el_center_seed_base, l_set, winch, inflow)
 st.opt_result = opt_result
 startup_seed_offset == 0 ||
     @warn @sprintf("Startup path solved from a RETRY seed centred at %.0f° \
@@ -1039,10 +1037,9 @@ toc("Start simulation loop...")
 
 # ==================== SIMULATION LOOP ==================== #
 
-# Assigned OUTSIDE the try: the loop's wall time must survive an early break.
-apply_overrides!(wc, wc_overrides, "WC_OVERRIDES", string(typeof(wc)), "winch (simulation only)")
+apply_overrides!(wc, inputs.wc_overrides, "WC_OVERRIDES", string(typeof(wc)), "winch (simulation only)")
 # The upper force controller's switching speed was derived from kv when `rc` was built.
-isempty(wc_overrides) ||
+isempty(inputs.wc_overrides) ||
     WinchControllers.set_v_sw(rc.ufc, WinchControllers.calc_vro(wc, rc.ufc.f_set))
 
 """
@@ -1077,13 +1074,13 @@ function run_loop!(st::RunState)
                                                          Float64(s.sys_state.elevation),
                                                          deg2rad(az_attr), deg2rad(el_attr))
             end
-            push!(xt_t, t); push!(xt_delta, δ)
-            push!(xt_d, signed_cross_track(fec, rad2deg(Float64(s.sys_state.azimuth)),
+            push!(st.xt_t, t); push!(st.xt_delta, δ)
+            push!(st.xt_d, signed_cross_track(fec, rad2deg(Float64(s.sys_state.azimuth)),
                                            rad2deg(Float64(s.sys_state.elevation))))
-            push!(xt_q, fec.last_idx)
-            push!(xt_phase, st.cc.phase); push!(xt_L, Float64(s.sys_state.l_tether[1]))
-            push!(xt_va, Float64(s.sys_state.v_app)); push!(xt_dp, st.rel_depower_prev)
-            push!(xt_vk, sqrt(max(norm(s.sys_state.vel_kite)^2 - Float64(s.sys_state.v_reelout[1])^2, 0.0)))
+            push!(st.xt_q, fec.last_idx)
+            push!(st.xt_phase, st.cc.phase); push!(st.xt_L, Float64(s.sys_state.l_tether[1]))
+            push!(st.xt_va, Float64(s.sys_state.v_app)); push!(st.xt_dp, st.rel_depower_prev)
+            push!(st.xt_vk, sqrt(max(norm(s.sys_state.vel_kite)^2 - Float64(s.sys_state.v_reelout[1])^2, 0.0)))
         end
 
         # Entry state machine, descent limiter, feedback fusion, PID and rel_depower: see CourseController.
@@ -1815,16 +1812,16 @@ function run_loop!(st::RunState)
         if !isnothing(steer_disturbance)
             local du = steer_disturbance(t)
             rel_steering += du
-            push!(dist_t, t); push!(dist_d, du); push!(dist_u, rel_steering)
+            push!(st.dist_t, t); push!(st.dist_d, du); push!(st.dist_u, rel_steering)
         end
 
         # V1 stability hooks: see the STEER_GAIN_FACTOR/EXTRA_STEER_DELAY setup above.
-        push!(steer_delay_buf, rel_steering)
-        push!(ff_delay_buf, u_ff)
-        local delayed_u = length(steer_delay_buf) > extra_steer_delay ?
-            popfirst!(steer_delay_buf) : rel_steering
-        local delayed_ff = length(ff_delay_buf) > extra_steer_delay ?
-            popfirst!(ff_delay_buf) : u_ff
+        push!(st.steer_delay_buf, rel_steering)
+        push!(st.ff_delay_buf, u_ff)
+        local delayed_u = length(st.steer_delay_buf) > extra_steer_delay ?
+            popfirst!(st.steer_delay_buf) : rel_steering
+        local delayed_ff = length(st.ff_delay_buf) > extra_steer_delay ?
+            popfirst!(st.ff_delay_buf) : u_ff
         if !isnan(st.t_phase4) && t - st.t_phase4 >= hook_settle
             local u_scaled = steer_gain_feedback_only ?
                 delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
@@ -1889,9 +1886,9 @@ function run_loop!(st::RunState)
     end
     return nothing
 end
-# Assigned OUTSIDE the try: the loop's wall time must survive an early break.
-t_wall_start = time()
-try
+# The loop ALONE: saving the log and scoring it below are not simulation. The `try` is inside
+# `@elapsed`, so the loop's wall time survives an early break.
+t_wall = @elapsed try
     run_loop!(st)
 catch exc
     # `exc`, not `e`: a stray global `e` in the REPL makes the catch binding warn.
@@ -1899,8 +1896,6 @@ catch exc
 end
 # The results file and the plots read the run's state by name; an early break or a throw is published too.
 publish_run_state!(@__MODULE__, st)
-# The loop ALONE: saving the log and scoring it below are not simulation.
-t_wall = time() - t_wall_start
 t_sim = Float64(s.sys_state.time)
 
 @info "Save the log"
