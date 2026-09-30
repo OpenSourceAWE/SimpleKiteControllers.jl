@@ -113,6 +113,7 @@ using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using SimpleKiteControllers: startup_seed_offsets, opt_length, blend_folds
+using SimpleKiteControllers: with_elevation_max, with_azimuth_amplitude_min, with_size_box
 import WinchControllers   # module name, for the WC_OVERRIDES refresh (calc_vro)
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
@@ -599,65 +600,8 @@ using SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower,
     final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
     soft_stop_speed
 
-"""
-    with_elevation_max(box, el_max) -> PatternLimits
 
-`box` (a `PatternLimits` or `nothing`) with its `elevation_max` replaced by
-`el_max` [deg]; every other side is kept.
-"""
-with_elevation_max(box, el_max) = isnothing(box) ?
-    PatternLimits(; elevation_max = el_max) :
-    PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
-                  elevation_max = el_max,
-                  azimuth_amplitude_min = box.azimuth_amplitude_min,
-                  elevation_amplitude_max = box.elevation_amplitude_max,
-                  symmetric = box.symmetric)
 
-"""
-    with_azimuth_amplitude_min(box, a_min) -> PatternLimits
-
-`box` (a `PatternLimits` or `nothing`) with its `azimuth_amplitude_min` replaced
-by `a_min` [deg]; every other side is kept.
-"""
-with_azimuth_amplitude_min(box, a_min) = isnothing(box) ?
-    PatternLimits(; azimuth_amplitude_min = a_min) :
-    PatternLimits(; azimuth_max = box.azimuth_max, elevation_min = box.elevation_min,
-                  elevation_max = box.elevation_max,
-                  azimuth_amplitude_min = a_min,
-                  elevation_amplitude_max = box.elevation_amplitude_max,
-                  symmetric = box.symmetric)
-
-"""
-    with_size_box(box, az_prev, el_prev, growth) -> Union{PatternLimits, Nothing}
-
-`box` (a `PatternLimits` or `nothing`) tightened to `growth` times the size of
-the path `(az_prev, el_prev)` [deg]: `azimuth_max` to `growth * max|az_prev|`,
-`elevation_amplitude_max` to `growth * elevation_amplitude(el_prev)`, and the
-elevation range `[elevation_min, elevation_max]` to the path's own, each end let
-out by `(growth - 1)/2` of its span — every side only where that is TIGHTER
-than what the box already holds, the rest kept. `growth <= 0` returns `box`
-unchanged. See `TrajOptSettings.size_box_growth`.
-"""
-function with_size_box(box, az_prev, el_prev, growth)
-    growth > 0 || return box
-    az_lim = growth * maximum(abs, az_prev)
-    el_lim = growth * elevation_amplitude(el_prev)
-    # The RMS half-span does not bound the peak-to-peak span the gate reads, so the elevation RANGE is boxed too.
-    el_lo, el_hi = extrema(el_prev)
-    slack = 0.5 * (growth - 1) * (el_hi - el_lo)
-    tighter(old, new) = isnothing(old) ? new : min(old, new)
-    higher(old, new) = isnothing(old) ? new : max(old, new)
-    isnothing(box) && return PatternLimits(; azimuth_max = az_lim,
-                                           elevation_min = el_lo - slack,
-                                           elevation_max = el_hi + slack,
-                                           elevation_amplitude_max = el_lim)
-    return PatternLimits(; azimuth_max = tighter(box.azimuth_max, az_lim),
-                         elevation_min = higher(box.elevation_min, el_lo - slack),
-                         elevation_max = tighter(box.elevation_max, el_hi + slack),
-                         azimuth_amplitude_min = box.azimuth_amplitude_min,
-                         elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim),
-                         symmetric = box.symmetric)
-end
 
 # Read at TOP level: the retry block defines `incumbent_score` only when it runs.
 margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;

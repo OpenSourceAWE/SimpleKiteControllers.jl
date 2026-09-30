@@ -60,6 +60,9 @@ using Printf: @sprintf
 using YAML
 using AtmosphericModels: AtmosphericModel, calc_wind_factor
 using SimpleKiteControllers: with_file_lock, turn_rate_coeffs
+# The pattern box and the request floors are pure, so they live in the package; only their JSON form is here.
+using SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_request,
+    elevation_amplitude_max_at
 
 const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
 "Default server address; every function below takes `url` to override it."
@@ -218,35 +221,6 @@ the original 0.12 split (0.08 tape zero + 0.04 aero).
 """
 awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
 
-"""
-    PatternLimits(; azimuth_max, elevation_min, elevation_max,
-                  azimuth_amplitude_min, elevation_amplitude_max, symmetric)
-
-A box, in DEGREES, on where the optimized pattern may go. The server bounds the
-B-spline's control coefficients, so by the convex-hull property the limits hold
-along the whole curve and not merely at its nodes.
-
-Every field is optional and `nothing` keeps the optimizer's own default for it
-(|azimuth| <= 45.8°, 0.6° <= elevation <= 51.6°, no amplitude floor).
-`azimuth_amplitude_min` is the figure's half-width and guards the degenerate
-zero-width collapse; `elevation_max` guards the run-away-to-zenith basin — the
-two bad basins a failed re-optimization falls into. `elevation_amplitude_max`
-caps the figure's elevation HALF-SPAN with one smooth row (mean squared
-deviation from the mean elevation <= value²/2) — where `elevation_max` only
-caps where the path may sit, this caps how TALL it is. `symmetric = true`
-forces a figure mirror-symmetric about azimuth 0 (half a period later the kite
-is at the mirrored point). On `/step` the struct
-replaces the session's limits as a whole, so an all-`nothing` `PatternLimits()`
-CLEARS them.
-"""
-Base.@kwdef struct PatternLimits
-    azimuth_max::Union{Float64, Nothing} = nothing           # |azimuth| <= this [deg]
-    elevation_min::Union{Float64, Nothing} = nothing         # elevation >= this [deg]
-    elevation_max::Union{Float64, Nothing} = nothing         # elevation <= this [deg]
-    azimuth_amplitude_min::Union{Float64, Nothing} = nothing # half-width >= this [deg]
-    elevation_amplitude_max::Union{Float64, Nothing} = nothing # half-span <= this [deg]
-    symmetric::Union{Bool, Nothing} = nothing                # mirror-symmetric figure
-end
 
 "Metrics of one solve; `turn_radius_min_m` is the tightest PHYSICAL turn radius
 of the returned path [m] and is `nothing` when it could not be evaluated."
@@ -1516,38 +1490,6 @@ function reelout_anchor_ratio(table)
     return max(1.0, maximum(r) / minimum(r))
 end
 
-"""
-    elevation_min_request(fcs, tos, l_tether; extra = 0.0) -> Union{Float64, Nothing}
-
-The elevation floor [deg] to send with a request made for tether length
-`l_tether`: the highest of what the gates will demand there —
-`asind(tos.min_height/l_tether)` for the clearance one and `fcs.min_elevation +
-tos.candidate_elevation_margin` for the elevation one — and
-`tos.pattern_elevation_min`, plus `extra`. `nothing` asks for nothing and leaves
-the optimizer's own 0.6°; `tos.elevation_min_from_gates = false` sends
-`tos.pattern_elevation_min` alone.
-
-Inverting [`path_min_height`](@ref) at the length being asked for is what makes
-the request and the gate the same question: AWETrim constrains HEIGHT and reaches
-its floor at the END of the lap's reel-out, while the reply is installed as angles
-at the anchor and judged there. The floor FALLS as the tether grows, so it belongs
-with every request and not in the session — see the analogous argument for
-`min_turn_radius` at the request site.
-
-`extra` is what a retry raises the floor by after a reply was gated out, measured
-off that reply and carried forward: the shortfall is structural and the next
-length has it too.
-"""
-function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
-    el_min = Float64(tos.pattern_elevation_min)
-    if tos.elevation_min_from_gates
-        el_min = max(el_min, fcs.min_elevation + tos.candidate_elevation_margin)
-        tos.min_height > 0 && l_tether > tos.min_height &&
-            (el_min = max(el_min, asind(tos.min_height / l_tether)))
-    end
-    el_min += extra
-    return el_min > 0 ? el_min : nothing
-end
 
 """
     cap_wind_speed(tos, project_set, v_wind_gnd) -> Float64
@@ -1564,55 +1506,7 @@ function cap_wind_speed(tos, project_set, v_wind_gnd)
            v_wind_gnd
 end
 
-"""
-    elevation_amplitude_max_at(tos, wind_speed) -> Float64
 
-The elevation half-span cap [deg] sent at `wind_speed`, the wind AT
-`tos.pattern_elevation_amplitude_max_wind_height` (see [`cap_wind_speed`](@ref)):
-`tos.pattern_elevation_amplitude_max_high` at and above
-`tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_elevation_amplitude_max`
-below it. `tos.pattern_elevation_amplitude_max_high == 0.0` disables the step;
-`wind_speed = nothing` means the wind is not known and returns the base cap.
-
-A STEP like [`guess_el_center_seed`](@ref)'s, and for the same reason: the cap
-decides which basin the startup solve can reach.
-"""
-function elevation_amplitude_max_at(tos, wind_speed)
-    tos.pattern_elevation_amplitude_max_high > 0 && !isnothing(wind_speed) &&
-        wind_speed >= tos.pattern_elevation_amplitude_max_wind_ref ?
-        tos.pattern_elevation_amplitude_max_high : tos.pattern_elevation_amplitude_max
-end
-
-"""
-    pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
-        -> Union{PatternLimits, Nothing}
-
-The box the optimized pattern must stay in, from the `pattern_*` fields of
-`data/traj_opt.yaml`; each is in degrees and each is off at `0.0`, and
-`tos.pattern_symmetric` adds the mirror-symmetry rows. `nothing` when all six are
-off, which leaves the optimizer's own defaults alone.
-
-`elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
-of [`elevation_min_request`](@ref), which depends on the length being asked for and
-so cannot come from the file alone. `wind_speed` picks the elevation half-span cap
-through [`elevation_amplitude_max_at`](@ref).
-"""
-function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
-    on(x) = !isnothing(x) && x > 0 ? Float64(x) : nothing
-    limits = PatternLimits(; azimuth_max = on(tos.pattern_azimuth_max),
-                           elevation_min = on(something(elevation_min,
-                                                        tos.pattern_elevation_min)),
-                           elevation_max = on(tos.pattern_elevation_max),
-                           azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min),
-                           elevation_amplitude_max =
-                               on(elevation_amplitude_max_at(tos, wind_speed)),
-                           symmetric = tos.pattern_symmetric ? true : nothing)
-    all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
-                    limits.azimuth_amplitude_min, limits.elevation_amplitude_max,
-                    limits.symmetric)) &&
-        return nothing
-    return limits
-end
 
 # ---------------------------------------------------------------------------
 # The server process

@@ -477,7 +477,7 @@ multi-modal, so the guess is a choice about the answer.
     Raise the floor above to whatever the GATES will demand at the length being
     asked for, per request: `asind(min_height/L)` for the clearance gate and
     `min_elevation + candidate_elevation_margin` for the elevation one
-    (`elevation_min_request` in `examples/awetrim_client.jl`). `false` sends
+    ([`elevation_min_request`](@ref)). `false` sends
     `pattern_elevation_min` alone.
 
     A height floor is not something the optimizer can meet on this run's behalf.

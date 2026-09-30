@@ -91,6 +91,8 @@ include("reelout_feasibility.jl")
 include("reelout_budget.jl")
 # Pure decisions of the startup retry ladder of examples/simple_opt_reelout.jl.
 include("startup_retry.jl")
+# After startup_retry.jl: with_size_box measures a path with elevation_amplitude.
+include("pattern_limits.jl")
 # Pure accept gate of a re-optimized path of examples/simple_opt_reelout.jl.
 include("reopt_gate.jl")
 # Step-wise decisions of the reel-out loop of examples/simple_opt_reelout.jl.
