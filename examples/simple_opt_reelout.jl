@@ -128,8 +128,6 @@ end
 
 # Wall clock of the whole script, packages included; `tic`/`toc` time the phases inside it.
 t_script_start = time()
-# Named here, not in `reelout_results.jl` where the summary is built and `@__FILE__` is that file.
-run_script = basename(@__FILE__)
 
 using Timers; tic()
 using V3Kite
@@ -146,6 +144,11 @@ using Statistics: mean   # for reelout_results.jl
 using Printf
 import Dates
 using OrderedCollections: OrderedDict
+using YAML   # for reelout_results.jl: the optimizer paths
+# The optimizer client's helpers (src/awetrim_client.jl), used by reelout_results.jl, not exported.
+using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite
+
+run_script = basename(@__FILE__)
 
 @info "simple_opt_reelout.jl: reeling out along an externally optimized path."
 toc("Loaded packages in: ")
@@ -156,19 +159,13 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-# For reelout_results.jl: YAML for the optimizer paths, and the optimizer client's helpers
-# (src/awetrim_client.jl), part of the package but not exported.
-using YAML
-using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite
 # The model, which the package cannot build: `init_model`, passed to `setup_run`.
 include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
 # Reference curve and log name for simple_reelout_plots.jl; set by reelout_results.jl, cleared here.
 REF_PATH = nothing
 LOG_NAME = nothing
 
-# The caller's inputs, passed as `run_example("simple_opt_reelout.jl"; show_plots = false, ...)`
-# (src/script_inputs.jl); a plain `include` runs with the defaults, see `run_input_defaults`.
-# The setup-only ones (the *_overrides, path_tr_project, output_path, run_archive) are read as `inputs.<name>`.
+# `run_example(file; kwargs)` includes this script; `script_inputs` reads its kwargs, else the defaults.
 setup = setup_run(script_inputs(@__FILE__, run_input_defaults()); init_model)
 
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
