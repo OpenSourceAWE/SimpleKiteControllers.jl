@@ -249,7 +249,7 @@ below plus regression runs against the full nonlinear model.
    saturation the integrator unwinds five times slower than it wound up. Untested, and the most
    likely source of overshoot after a long saturation.
 4. **The adapter is a hand-kept copy, and it had drifted** (fixed).
-   [`winch_adapter.jl`](../examples/winch_adapter.jl#L71) defaulted `acceleration_limit` to
+   [`winch_adapter.jl`](../examples/winch_adapter.jl#L48) defaulted `acceleration_limit` to
    `winch_acc_limit(s.set)`, passing the whole `Settings` struct where
    `winch_acc_limit(max_acc) = max_acc > 0 ? … : Inf` wants a number, so every caller relying on
    the default raised `MethodError: no method matching isless(::Int64, ::Settings)` —
