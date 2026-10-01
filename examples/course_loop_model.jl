@@ -142,7 +142,7 @@ The turn-rate law of the PLANT in the stability analysis,
     ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β),
 
 over depower: `(depower, c1 [1/m], c2 [-])`, identified in the low crosswind pattern
-(`PlanIdentifyTurnRateLaw.md`, 2026-09-29; `examples/plot_turn_rate_vs_depower.jl`,
+(`oldplans/PlanIdentifyTurnRateLaw.md`, 2026-09-29; `examples/plot_turn_rate_vs_depower.jl`,
 the data in `data/turn_rate_low_flights.tar.gz`): relay flights at fixed steering
 amplitudes, reversing in azimuth, elevation held near 30°, 150 m at constant length,
 9.51 m/s of wind, `v_a` ≈ 13 – 55 m/s. Standard errors from 20 s blocks: `c1` ±0.0003

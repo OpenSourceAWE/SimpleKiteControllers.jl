@@ -44,14 +44,25 @@ worse and was not adopted.**
   [One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)). Until
   2026-09-27 it was fitted per tether-length bin; the first version used
   `ACTUATOR_LAG` = 0.43 s, the fig8's rate-limited equivalent.
-- Kite: the turn-rate law of `data/turn_rate_coeffs.yaml`, with the kite's
+- Kite: the turn-rate law with the plant's `c1` and `c2` from the low crosswind
+  flights, `plant_coeffs(depower)` (`PLANT_COEFFS` in `course_loop_model.jl`,
+  since 2026-09-29, see `oldplans/PlanIdentifyTurnRateLaw.md`), with the kite's
   dead time and first-order lag scaled over the apparent wind speed
-  (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The first
-  version had a single dead time (`kite_delay`, exponent 1.24).
-- Gravity: both signs of the gravity pole `±C3·cos(β)` are checked, with the
-  gravity term `C3·sin(ψ)·cos(β)`, `C3` = 0.23 1/s identified on the flown figures
-  of eight (2026-09-28, `course_loop_model.jl`). β is the pattern's centre
-  elevation, read from the log (`var_04`).
+  (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The controller
+  keeps the gain schedule with `c1` of `data/turn_rate_coeffs.yaml`, as flown.
+  Before 2026-09-29 the plant used the table's `c1` too; the first version had a
+  single dead time (`kite_delay`, exponent 1.24).
+- Gravity: both signs of the gravity pole `±(c2/v_a)·cos(β)` are checked, with
+  the gravity term `(c2/v_a)·sin(ψ)·cos(β)`, ≈ 0.10 – 0.18 1/s at the worst bins'
+  `v_a`; `gravity_scale` is a factor on it (0 = none). β is the pattern's centre
+  elevation, read from the log (`var_04`). From 2026-09-28 until the switch it
+  was a constant `C3` = 0.23 1/s identified on the flown figures of eight
+  (`identify_c3.jl`); `C3` and `c2_at` stay in `course_loop_model.jl` for
+  comparisons.
+
+The results and retunes below are dated; those before the switch to
+`PLANT_COEFFS` on 2026-09-29 were computed with the table's `c1` and the
+gravity term of their time.
 - Controller: the exact discrete PD of `CourseController`, at the project's
   `1/sample_freq`.
 

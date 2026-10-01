@@ -487,11 +487,24 @@ reaches.
    `xtrack_step_analysis.jl`; the gain schedule keeps the turn-rate table.
    `C3_OVERRIDE` became `gravity_scale` (a factor on the gravity term, 0 = none).
    `C3` and `c2_at` stay for the comparisons. The stability overviews of both sites
-   are regenerated with it. Still to do: the paper (Eq. (9), the $c_3$
-   identification and Fig. 5, Table 6 and its paragraph), `docs/course_loop_stability*.md`,
-   and why `identify_c3.jl` gives 0.23 1/s where the low flights give ≈ 0.10
-   (likely its table delays, too long in pattern flight; not verified).
-2. **$c_1$ below depower 0.325.** 6 – 14 % above the table in the low pattern.
+   are regenerated with it. The paper was switched too (LearningControl
+   `2c6f67c`, `9c7172a`: the low-flight $c_1$, $c_2$, the gravity pole
+   $(c_2/v_\mathrm{a})\cos\beta$, no constant $c_3$), and the model section of
+   `docs/course_loop_stability_reelout.md` describes the new plant (2026-10-01).
+
+## Closed (2026-10-01), with known limitations
+
+The plan is done. Left as known limitations, not pursued:
+
+1. **Why `identify_c3.jl` gives 0.23 1/s** where the low flights give ≈ 0.10
+   (likely its table delays, too long in pattern flight; not verified). The paper
+   no longer uses $c_3$.
+2. **No held-out validation** of the plant coefficients (Step 3); they are
+   compared only on the flights they were fitted on.
+3. **$c_1$ below depower 0.325** is 6 – 14 % above the table in the low pattern;
+   the gain schedule keeps the table's $c_1$. The paper states this.
+4. **Below $v_\mathrm{a}$ = 10 m/s while reeling out** neither law describes the
+   kite; only Maasvlakte 3.5 m/s reaches it.
 
 ## Out of scope
 

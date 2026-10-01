@@ -3,7 +3,7 @@
 
 """
 Two checks of the turn-rate coefficients identified in the low crosswind pattern
-(`PlanIdentifyTurnRateLaw.md`), both on saved data, without flying.
+(`oldplans/PlanIdentifyTurnRateLaw.md`), both on saved data, without flying.
 
 1. **The form of the gravity term.** The heading rate is fitted as
 
@@ -27,7 +27,7 @@ Two checks of the turn-rate coefficients identified in the low crosswind pattern
 
 The fit windows and the low-flight coefficients come from
 `output/turn_rate_low_flights*`, unpacked from `data/turn_rate_low_flights.tar.gz`
-when missing. Results 2026-09-29 are in `PlanIdentifyTurnRateLaw.md`.
+when missing. Results 2026-09-29 are in `oldplans/PlanIdentifyTurnRateLaw.md`.
 
     include("gravity_term_form.jl")
 """

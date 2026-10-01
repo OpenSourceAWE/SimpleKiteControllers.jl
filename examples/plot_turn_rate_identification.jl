@@ -6,7 +6,7 @@ Identify the turn-rate law at a LOW elevation, from several relay flights at one
 depower, and plot each flight: turn rate, apparent wind speed, kite speed and
 elevation over time.
 
-The first step of `PlanIdentifyTurnRateLaw.md`. The table's sweeps start at 73°
+The first step of `oldplans/PlanIdentifyTurnRateLaw.md`. The table's sweeps start at 73°
 and relay about heading 0 (straight up), so the kite hovers near the zenith at
 `v_a` ≈ 11 – 16 m/s. Here every flight relays about a crosswind heading (`±90°`),
 reverses at `±az_reverse` of azimuth and tilts the band to hold `el_hold`, see
@@ -118,7 +118,7 @@ end
 
 Fit the extended turn-rate law, the current one plus the mass term `k4·m·v_τ` in the
 denominator, in V3Kite's sign convention
-and with `k2 = 1` (`PlanIdentifyTurnRateLaw.md`),
+and with `k2 = 1` (`oldplans/PlanIdentifyTurnRateLaw.md`),
 
     rate = (c1·v_a²·u_s + c2·sin(angle)·cos(β)) / (v_a + e·v_τ),
 
