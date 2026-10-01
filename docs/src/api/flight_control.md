@@ -7,6 +7,13 @@ CurrentModule = SimpleKiteControllers
 The two loops that steer the kite: the figure-of-eight guidance turns the kite's position
 into a commanded course, the course controller turns that course into steering and depower.
 
+```@docs
+FC_Settings
+fc_settings
+wind_schedule
+apply_wind_schedule!
+```
+
 ## Course controller
 
 The inner loop, with the entry state machine (park, dive, hold, transition, figure-of-eight).

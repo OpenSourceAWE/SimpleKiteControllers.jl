@@ -4,15 +4,6 @@ CurrentModule = SimpleKiteControllers
 
 # Settings and data files
 
-## Flight-controller settings
-
-```@docs
-FC_Settings
-fc_settings
-wind_schedule
-apply_wind_schedule!
-```
-
 ## Externally optimized flight path
 
 ```@docs
