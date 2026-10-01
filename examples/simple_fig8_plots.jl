@@ -69,7 +69,7 @@ set_data_path(skc_data_path())
 
 # Read fresh from data/gui.yaml on every include, same as simple_fig8.jl,
 # so a manual re-include never plots against a stale project or fcs.
-project = project_file(selected_project())
+project = project_file(selected_fig8_project())
 # Same rule as simple_fig8.jl: an `fcs` already in `Main` wins. Included at the
 # end of a run that is the fcs actually FLOWN, so rebuilding it from the YAML
 # here would both draw the wrong reference path and throw away the caller's
