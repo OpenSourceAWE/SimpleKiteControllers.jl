@@ -235,9 +235,15 @@ check, as before.
    length, the stop after the laps, with and without a soft-stop),
    `entry_force_guard!` (reel-in only, on a force sag) and the compliant hold
    through `winch_setpoint!`; the winch controllers are the real ones, from
-   `build_controllers` on a stand-in plant. Not yet: the re-optimization chain
-   (`reoptimize!` … `install_candidate!`, which talks to `opt_chain`),
-   `deliver_lift_in_air!`, the steering blocks, and `src/startup_path.jl`.
+   `build_controllers` on a stand-in plant. Also `deliver_lift_in_air!` (the
+   whole shift, once per lap and target, held back and warned once),
+   `update_lift_target!`, `depower_command!` (the 2 -> 3 ramp, phase 5 when the
+   reel-out is done, the soft-stop ramp, the force limiter) and
+   `steering_hooks!` (disturbance, gain factor, feedback only, delay). Not
+   yet: the rationed rungs of `deliver_lift_in_air!`, `steering_command!` and
+   `xtrack_input!` (they need a full `SysState` and a tracking `fec`), the
+   re-optimization chain (`reoptimize!` … `install_candidate!`, which talks to
+   `opt_chain`), and `src/startup_path.jl`.
 3. **A typed `setup`.** The block functions read about 40 fields of the
    `setup` NamedTuple that `setup_run` builds. A documented struct would make
    that interface explicit. `setup_run` being in the package makes this

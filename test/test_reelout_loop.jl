@@ -3,8 +3,8 @@
 
 """
 Unit tests for blocks of one step of the reel-out loop (`src/reelout_loop.jl`): the lap counter,
-the path blend, the phase-5 fallback, the reel-out release, speed and stop, the entry force guard
-and the compliant hold. Each takes a hand-made `RunState`, `setup` and `plant`: no model, no
+the path blend, the in-air lift, the phase-5 fallback, the lift target, the depower, the steering
+hooks, the reel-out release, speed and stop, the entry force guard and the compliant hold. Each takes a hand-made `RunState`, `setup` and `plant`: no model, no
 optimizer. The winch controllers are the real ones, from `build_controllers` on a stand-in plant.
 """
 
@@ -12,7 +12,7 @@ using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: count_laps!, advance_blend!, phase5_fallback!, release_reelout!,
     winch_setpoint!, compliant_hold!, reelout_speed!, entry_force_guard!, build_controllers,
-    WCSettings
+    WCSettings, deliver_lift_in_air!, update_lift_target!, depower_command!, steering_hooks!
 
 # `rcs.f_high` is written by `count_laps!`; a WCSettings stand-in with only that field.
 mutable struct ForceLimits
@@ -76,6 +76,51 @@ end
         @test fec.el_path == el_before
     end
 
+    @testset "deliver_lift_in_air" begin
+        tos = (; min_feasibility_margin = 0.82, blend_fold_margin = 0.5, blend_probe_points = 21)
+        function lift_case(; c1 = NaN, margin_min = 0.82)
+            fec = new_fec(path_a)
+            setup = (; tos = merge(tos, (; min_feasibility_margin = margin_min)),
+                     fcs = (; up_loops, max_steering = fcs0.max_steering), fec,
+                     feas = (; c1), c1_at_phase = (phase, st) -> c1)
+            st = RunState(; chk_points = 60, fig8_n = 3)
+            return st, setup, fec
+        end
+        plant = (; ss = (; l_tether = [200.0]))
+
+        st, setup, fec = lift_case()                 # no turn-rate law: no margin to fail
+        deliver_lift_in_air!(st, setup, plant, 50.0, 4, 1.0)
+        @test st.blend_from == (fec.az_path, fec.el_path)
+        @test st.blend_to[1] == fec.az_path && st.blend_to[2] ≈ fec.el_path .+ 1.0
+        @test st.blend_t0 == 50.0 && st.el_applied == 1.0
+        @test st.el_shift_events[end].status == "blended in"
+        # Once per lap and target: the same lap again queues nothing, the next lap does.
+        st.blend_to = nothing; st.el_applied = 0.0
+        deliver_lift_in_air!(st, setup, plant, 51.0, 4, 1.0)
+        @test isnothing(st.blend_to)
+        st.fig8_n = 4
+        deliver_lift_in_air!(st, setup, plant, 52.0, 4, 1.0)
+        @test !isnothing(st.blend_to) && st.el_applied == 1.0
+        # Nothing while a re-optimization is pending, or when the path already carries the lift.
+        st, setup, _ = lift_case()
+        st.reopt_pending = true
+        deliver_lift_in_air!(st, setup, plant, 50.0, 4, 1.0)
+        @test isnothing(st.blend_to) && isempty(st.el_shift_events)
+        st, setup, _ = lift_case()
+        st.el_applied = 1.0
+        deliver_lift_in_air!(st, setup, plant, 50.0, 4, 1.0)
+        @test isnothing(st.blend_to)
+
+        # No rung clears the gate: held back, warned once, retried on a later lap.
+        st, setup, _ = lift_case(; c1 = 0.28, margin_min = 1e6)
+        @test_logs (:warn, r"held back") deliver_lift_in_air!(st, setup, plant, 50.0, 4, 1.0)
+        @test isnothing(st.blend_to) && st.el_applied == 0.0
+        @test st.el_shift_events[end].status == "held back" && st.el_shift_warned
+        st.fig8_n = 4
+        @test_logs deliver_lift_in_air!(st, setup, plant, 60.0, 4, 1.0)   # no second warning
+        @test length(st.el_shift_events) == 1
+    end
+
     @testset "phase5_fallback" begin
         path_c = eight(16.0, 5.0, 25.0)    # the path in the air: narrower, tighter turns
         record(t, p, margin) = (; t, az = p[1], el = p[2], raw = p, margin, el_applied = 0.0)
@@ -122,6 +167,76 @@ end
         st, setup, _ = fallback_case(; final_margin_min = 0.0)   # off
         phase5_fallback!(st, setup, 91.0, 5)
         @test !st.p5_fallback_done
+    end
+
+    @testset "update_lift_target" begin
+        setup = (; fcs = (; el_offset_final = 1.0, el_offset_lead = 4.0, reelout_l_max = 380.0))
+        plant = (; ss = (; v_reelout = [3.0]))
+        st = RunState(; l_set = 370.0)
+        @test update_lift_target!(st, setup, plant, 80.0, 3) == 0.0   # phase 4 on only
+        st.l_set = 300.0
+        @test update_lift_target!(st, setup, plant, 81.0, 4) == 0.0   # 80 m left: 27 s away
+        st.l_set = 370.0                                              # 10 m left: within 4 s
+        @test (@test_logs (:info, r"Elevation lift") update_lift_target!(st, setup, plant, 82.0, 4)) == 1.0
+        @test st.lift_on && st.lift_t == 82.0 && st.lift_remaining == 10.0
+        @test update_lift_target!(st, setup, plant, 90.0, 4) == 1.0 && st.lift_t == 82.0   # latched
+    end
+
+    @testset "depower_command" begin
+        lim = (; depower_final = 0.35, depower_final_max = 0.35, depower_final_f_gain = 1e-5,
+               depower_final_f_gain_stop = 4e-5, depower_final_f_target = 6000.0)
+        cc() = CourseController(CourseControllerSettings(; dt = 0.01))
+        plant(force = 5000.0) = (; force, dt = 0.01, ss = (; v_app = 25.0, v_reelout = [0.0]))
+        # Under fly_opt_depower the 2 -> 3 hand-over ramps from the entry's depower to the optimizer's.
+        setup = (; tos = (; fly_opt_depower = true, path_blend_time = 6.0), fcs = lim)
+        st = RunState(; cc = cc(), depower_flown_opt = 0.28)
+        @test depower_command!(st, setup, plant(), 10.0, 2, 3, 0.25) == (0.25, 3)
+        @test depower_command!(st, setup, plant(), 13.0, 3, 3, 0.30)[1] ≈ 0.265
+        @test depower_command!(st, setup, plant(), 16.0, 3, 4, 0.30)[1] ≈ 0.28
+        @test isnothing(st.depower_blend_to)
+        @test depower_command!(st, setup, plant(), 20.0, 4, 4, 0.30)[1] == 0.28
+        # The reel-out done: phase 5 the same step, at depower_final.
+        setup = (; tos = (; fly_opt_depower = false), fcs = lim)
+        st = RunState(; cc = cc(), reelout_done = true)
+        @test depower_command!(st, setup, plant(), 30.0, 4, 4, 0.27) == (0.35, 5)
+        @test st.cc.phase == 5 && st.final_start == 30.0
+        # The soft-stop ramps toward depower_final from the depower it latched at.
+        st = RunState(; cc = cc(), stop_start = 100.0, stop_T = 4.0, stop_dp_entry = 0.28)
+        dp, phase = depower_command!(st, setup, plant(), 102.0, 4, 4, 0.27)
+        @test dp ≈ 0.28 + 0.07 / 2 && phase == 4
+        # The force limiter from phase 5 on: depower above depower_final, at most depower_final_max.
+        setup = (; tos = (; fly_opt_depower = false), fcs = merge(lim, (; depower_final_max = 0.42)))
+        st = RunState(; cc = cc(), final_start = 0.0)
+        dp, _ = depower_command!(st, setup, plant(8000.0), 30.0, 5, 5, 0.3)
+        @test st.dp_final_extra ≈ 1e-5 * 2000.0 * 0.01 && dp ≈ 0.35 + st.dp_final_extra
+        @test st.dp_final_extra_peak == st.dp_final_extra
+        st.dp_final_extra = 0.1
+        @test depower_command!(st, setup, plant(8000.0), 30.0, 5, 5, 0.3)[1] == 0.42   # capped
+    end
+
+    @testset "steering_hooks" begin
+        hooks = (; steer_disturbance = nothing, extra_steer_delay = 0, hook_settle = 5.0,
+                 steer_gain_feedback_only = false, steer_gain_factor = 1.0,
+                 fcs = (; max_steering = 0.32))
+        st = RunState()
+        @test steering_hooks!(st, hooks, 1.0, 0.2, 0.0) == 0.2       # no hook set
+        setup = merge(hooks, (; steer_disturbance = t -> 0.01))
+        @test steering_hooks!(st, setup, 1.0, 0.2, 0.0) ≈ 0.21
+        @test st.dist_t == [1.0] && st.dist_d == [0.01] && st.dist_u ≈ [0.21]
+        # The gain factor, from hook_settle after phase 4, clamped to max_steering.
+        setup = merge(hooks, (; steer_gain_factor = 1.1))
+        st = RunState(; t_phase4 = 10.0)
+        @test steering_hooks!(st, setup, 14.0, 0.2, 0.0) == 0.2       # still settling
+        @test steering_hooks!(st, setup, 15.0, 0.2, 0.0) ≈ 0.22
+        @test steering_hooks!(st, setup, 16.0, 0.3, 0.0) == 0.32
+        # On the feedback part only: the feed-forward passes unscaled.
+        setup = merge(hooks, (; steer_gain_factor = 1.5, steer_gain_feedback_only = true))
+        @test steering_hooks!(RunState(; t_phase4 = 0.0), setup, 10.0, 0.2, 0.1) ≈ 0.25
+        # A delay of two steps, once the buffer is full.
+        setup = merge(hooks, (; extra_steer_delay = 2, hook_settle = 0.0))
+        st = RunState(; t_phase4 = 0.0)
+        @test [steering_hooks!(st, setup, 1.0, u, 0.0) for u in (0.1, 0.2, 0.3, 0.4, 0.5)] ≈
+              [0.1, 0.2, 0.1, 0.2, 0.3]
     end
 
     @testset "release_reelout" begin
