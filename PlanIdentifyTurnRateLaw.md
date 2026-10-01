@@ -328,7 +328,7 @@ plots the joint fit of the steady flights over the depower next to the 73° rows
 - **For question 1:** the current law's gravity term is $c_2/v_\mathrm{a}$, so with
   $c_2$ ≈ 3.7 (depower 0.275 – 0.35) the coefficient of Eq. (9) of the paper, $c_3 = c_2/v_\mathrm{a}$, is
   0.23 1/s at $v_\mathrm{a}$ ≈ 16 m/s and 0.11 1/s at 35 m/s, while the paper
-  uses a constant 0.23 1/s from `identify_c3.jl`. Which form holds is the next
+  uses a constant 0.23 1/s from `identify_c3.jl` (removed on 2026-10-01). Which form holds is the next
   thing to check.
 
 ### The low-flight coefficients in the stability analysis (2026-09-29)
@@ -348,7 +348,7 @@ depower 0.275 ($n = 0$: the constant $c_3$ of Eq. (9); $n = 1$: $c_2/v_\mathrm{a
 - **The data do not decide the form.** The two differ by 0.1 – 2.5 % in rms, and
   the best exponent lies between them, over $v_\mathrm{a}$ 6 – 51 m/s.
 - **They do decide the size:** about 0.10 1/s in the operating range, in either
-  form, less than half the 0.23 1/s of Eq. (9) (`identify_c3.jl`, fitted on the
+  form, less than half the 0.23 1/s of Eq. (9) (`identify_c3.jl`, removed on 2026-10-01, fitted on the
   flown figures of eight). Why that fit gives twice the value is not yet known.
 - The $1/v_\mathrm{a}$ form follows from the force balance (gravity against the
   aerodynamic damping $\propto v_\mathrm{a}$); a constant $c_3$ is empirical. So

@@ -81,7 +81,7 @@ V3Kite's `estimate_delay_fit` for the turn-rate law of Eq. (9) of the paper,
     ψ̇ = c1·v_a·u_s(t − τ) + c3·sin(ψ)·cos(β)
 
 with the gravity coefficient `c3` [1/s] held fixed (`C3` = 0.23 1/s, identified on
-the flown figures of eight by `identify_c3.jl`). The gravity term is subtracted
+the flown figures of eight by `identify_c3.jl`, removed on 2026-10-01). The gravity term is subtracted
 from `rate` and only `c1` is fitted at each shift. Same search, parabola refinement
 and return values as `estimate_delay_fit`.
 

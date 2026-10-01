@@ -34,7 +34,7 @@ different arguments rather than once with fixed ones. Call it yourself:
 With `c3` given, the sweep is fitted with the turn-rate law of Eq. (9) of the paper,
 `ψ̇ = c1·v_a·u_s + c3·sin(ψ)·cos(β)`, with the gravity coefficient held at `c3`
 (`SWEEP_C3` = 0.23 1/s, identified on the flown figures of eight by
-`identify_c3.jl`), so only `c1` and the delay are fitted. The relay sweep cannot
+`identify_c3.jl`, removed on 2026-10-01), so only `c1` and the delay are fitted. The relay sweep cannot
 identify the gravity term itself: a shorter delay trades against a larger free
 `c2`. These rows go to their own table, `turn_rate_coeffs_c3.yaml` by default,
 created from the conditions of `turn_rate_coeffs.yaml` plus `c3` on first use, and
@@ -138,7 +138,7 @@ const OUT_FILE = "turn_rate_coeffs.yaml"
 const OUT_FILE_C3 = "turn_rate_coeffs_c3.yaml"
 
 # Gravity coefficient [1/s] of Eq. (9), `c3·sin(ψ)·cos(β)`, identified separately on
-# the 25 flown reel-out runs (`identify_c3.jl`, 2026-09-28); `C3` of
+# the 25 flown reel-out runs (`identify_c3.jl`, 2026-09-28, removed on 2026-10-01); `C3` of
 # `course_loop_model.jl`. Only used when a caller passes `c3 = SWEEP_C3`.
 const SWEEP_C3 = 0.23
 

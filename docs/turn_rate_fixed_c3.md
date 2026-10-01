@@ -6,7 +6,7 @@ with the turn-rate law of Eq. (9) of the paper,
     ψ̇ = c1·v_a·u_s(t − τ) + c3·sin(ψ)·cos(β)
 
 with the gravity coefficient held at `c3` = 0.23 1/s. That value was identified
-separately on the 25 flown reel-out figures of eight (`examples/identify_c3.jl`,
+separately on the 25 flown reel-out figures of eight (`examples/identify_c3.jl`, removed on 2026-10-01,
 2026-09-28). Only `c1` and the delay are fitted. The free-`c2` fit in
 `data/turn_rate_coeffs.yaml` is the reference.
 
