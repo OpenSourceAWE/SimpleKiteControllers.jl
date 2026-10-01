@@ -41,3 +41,6 @@
   simulation is faster: 2.77 → 2.19 ms per step at 8.25 m/s (1.26 x) and
   2.87 → 1.75 ms per step at 3.5 m/s (1.64 x), from 3 interleaved replays of
   each setting, spread within 3 %.
+- `DAMPING_PER_STIFFNESS` raised from 0.001 s to 0.002 s in `simple_fig8.jl`,
+  `simple_fig8_live.jl`, `simple_reelout.jl`, `simple_auto_parking.jl` and
+  `simple_opt_fig8.jl`, matching `simple_opt_reelout.jl`.
