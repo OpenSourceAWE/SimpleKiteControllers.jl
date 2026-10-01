@@ -40,7 +40,7 @@ Planned:
 
 The examples are described on four pages: [general](examples_general.md), [identification](examples_identification.md),
 [figure-of-eight](examples_fig8.md) and [reel-out](examples_reelout.md);
-and the docstrings of all exported types and functions are on the [API](api.md) page.
+and the docstrings of all exported types and functions are on the [API](api/index.md) page.
 
 ## Further documentation
 
