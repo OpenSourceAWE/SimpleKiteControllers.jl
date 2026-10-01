@@ -110,7 +110,7 @@ global of that name; `nothing` when neither has one.
 """
 function live_global(name::Symbol)
     if @isdefined(LOG_NAME) && LOG_NAME isa AbstractString && @isdefined(setup) &&
-       setup isa NamedTuple && haskey(setup, name)
+       hasproperty(setup, name)
         return getproperty(setup, name)
     end
     return isdefined(@__MODULE__, name) ? getfield(@__MODULE__, name) : nothing

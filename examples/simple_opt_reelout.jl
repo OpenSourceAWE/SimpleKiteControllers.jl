@@ -136,7 +136,7 @@ using SimpleKiteControllers: project_file   # V3Kite exports a project_file(proj
 # The run's setup and startup (src/run_setup.jl, src/startup_path.jl), not exported.
 using SimpleKiteControllers: setup_run, write_run_done, solve_startup_path!, log_startup_reply,
     log_lobe_lift, adopt_startup_path!, finish_startup!, capture_startup_geometry!,
-    startup_feasibility, init_phase5_and_controller!, init_loop_state!
+    startup_feasibility, init_phase5_and_controller!, init_loop_state!, merge_into!
 import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
@@ -172,7 +172,7 @@ setup = setup_run(script_inputs(@__FILE__, run_input_defaults()); init_model)
 st = RunState(; l_set = setup.l_set, opt_r_scale = setup.opt_r_scale, opt_r_min = setup.opt_r_min,
               depower_flown_opt = setup.fcs.depower_setpoint)
 
-setup = merge(setup, solve_startup_path!(setup, st))
+merge_into!(setup, solve_startup_path!(setup, st))
 toc("Received the optimized path in: ")
 log_startup_reply(setup.fcs, st.opt_result, setup.opt_r_min)
 log_lobe_lift(setup.fcs, st.opt_result)
@@ -181,7 +181,7 @@ st.c1_startup = setup.c1_at_depower(setup.fcs.depower_setpoint)
 adopt_startup_path!(setup, st)
 finish_startup!(setup, st)
 capture_startup_geometry!(setup, st)
-setup = merge(setup, startup_feasibility(setup, st))
+merge_into!(setup, startup_feasibility(setup, st))
 init_phase5_and_controller!(setup, st)
 init_loop_state!(setup, st)
 
@@ -206,7 +206,7 @@ types. `reelout_results.jl` reads `st` afterwards. The `try` stays at the call, 
 an early `break` or a throw. What happens before and after `step!` is the package's
 (`step_commands!`, `record_step!`, src/reelout_loop.jl); only the model calls are here.
 """
-function run_loop!(st::RunState, setup::NamedTuple)
+function run_loop!(st::RunState, setup::RunSetup)
     (; effective_sim_time, fcs, rcs, wpc) = setup
     model = setup.s
     for _ in 1:model.steps

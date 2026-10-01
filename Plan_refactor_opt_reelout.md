@@ -256,10 +256,32 @@ check, as before.
    (`solve_startup_path!`, `startup_solve`), `adopt_startup_path!` and
    `finish_startup!`, which talk to `opt_chain`; `retry_startup!` is covered
    by the live `ladder` case.
-3. **A typed `setup`.** The block functions read about 40 fields of the
-   `setup` NamedTuple that `setup_run` builds. A documented struct would make
-   that interface explicit. `setup_run` being in the package makes this
-   easier: the struct can live next to it.
+3. **A typed `setup`.** Done (2026-10-01): `setup_run` returns a
+   `RunSetup` (`src/run_setup.jl`, exported), a mutable struct with every
+   field documented. Its type parameters are the plant's type and the two
+   turn-rate laws (`c1_at_depower`, `c1_ctrl_at`), read every step; the other
+   closures are `Function` fields. The fields the startup solve and the
+   startup gates add (`startup_seed_offset`, `guess_az`, `guess_el`,
+   `opt_startup_solve_s`; `feas`, `margin5`, `c1_at_phase`,
+   `phase5_margin_at`) have defaults and are filled by
+   `merge_into!(setup, results)`, which replaces the two `setup = merge(...)`
+   of the script. `l_set` stays `Real`: it is the plant's `Float32`, and with
+   `opt_length_round = 0` the startup request sends it unconverted, so a
+   `Float64` field would change the request. The block functions still read
+   fields by name only, so the unit tests keep passing NamedTuples.
+   `simple_reelout_plots.jl` finds a finished run with `hasproperty` instead
+   of `setup isa NamedTuple`.
+
+   Checked against baselines recorded on this machine the same day: the
+   replays `maasvlakte_3.5` and `maasvlakte_8.25` (flown from the scenarios
+   of the full build, reproduced IDENTICAL by `presetup_*`), IDENTICAL as
+   `typedsetup_*` on the run and the startup log, and the live `ladder` case
+   IDENTICAL to `ladder_d002_8.25` on the startup log. Speed unchanged:
+   2.9 ms/step at 8.25 m/s before and after (one run in between read 3.4,
+   noise), 2.2-2.3 at 3.5 m/s. The old 0.001
+   baselines are `maasvlakte_*_d0.001`. `startup_log_lines` now also masks
+   the `SimpleKiteControllers.` prefix of printed types, which depends on
+   what `Main` imports.
 
 A first `runtests.jl` after a flown script used to fail once
 (`turn_rate_coeffs` expected the default table, but the script had left the

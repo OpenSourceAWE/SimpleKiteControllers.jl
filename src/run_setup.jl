@@ -4,15 +4,118 @@
 # The setup of one reel-out run of examples/simple_opt_reelout.jl, and its finished-run marker.
 
 """
-    setup_run(inputs; init_model) -> NamedTuple
+    RunSetup
+
+Everything one reel-out run of `examples/simple_opt_reelout.jl` READS, built once by
+[`setup_run`](@ref): the settings, the plant `s`, the winch and its controllers, the optimizer's
+conditions and session, and the laws the gates and the loop read. Every function of the run takes it
+as `setup` and reads `setup.<field>` or destructures it. The script never rebinds it; mutable members
+(`fcs`, `wc`, `s`, `fec`, the `opt_*_log` vectors, ...) are changed in place.
+
+The last block of fields is filled later, by the startup solve ([`solve_startup_path!`](@ref)) and
+the startup gates ([`startup_feasibility`](@ref)), through [`merge_into!`](@ref); until then they
+hold their defaults. The type parameters are the plant's type `S`, which the package does not know,
+and the two turn-rate laws, read every step, so that the loop compiles against their concrete types.
+
+The block functions of the run read their fields by name only, so a `NamedTuple` with the fields a
+function reads serves as well (the unit tests build them that way).
+"""
+Base.@kwdef mutable struct RunSetup{S, CD, CC}
+    # ---- the inputs of the run (`run_input_defaults`, `script_inputs`) ----
+    inputs::NamedTuple                       # the caller's inputs, merged over the defaults
+    show_plots::Bool
+    steer_disturbance::Union{Nothing, Function}  # test input: t -> Δu added to the steering
+    xtrack_offset::Union{Nothing, Function}  # test input: τ -> δ [deg], the attractor moved along the path normal
+    xtrack_phase::Int                        # the phase `xtrack_offset` starts in
+    hold_compliance::Union{Nothing, NamedTuple}  # test input: (; gain, τF, τpos) of a compliant hold in phase 5
+    steer_gain_factor::Float64               # V1 hook: factor on the steering
+    steer_gain_feedback_only::Bool           # the factor on the feedback part only
+    extra_steer_delay::Int                   # V1 hook: extra steering delay [samples]
+    hook_settle::Float64                     # [s] after phase 4 began, when the V1 hooks start
+    replay_paths::Union{Nothing, String}     # scenario folder whose optimizer answers are replayed
+    # ---- project and settings ----
+    project_name::String                     # system_reelout_*.yaml
+    turbulence::Union{Float64, String}       # level in [0, 1], or "default"
+    project::String                          # its file
+    fcs::FC_Settings                         # the controller's settings, overrides applied
+    tos::TrajOptSettings                     # the optimizer's settings, overrides applied
+    project_set::Settings                    # the kite's settings, the wind override applied
+    l_tether::Float64                        # [m] the starting tether length of the settings
+    effective_sim_time::Float64              # [s] asked of `init`, see `sim_budget`
+    output_path::String                      # where the log, the summary and the marker go
+    run_done_file::String                    # the finished-run marker, see `write_run_done`
+    log_name::String                         # the log's name, `<log_file>_opt`
+    # ---- the plant, the winch and the controllers ----
+    wc::WCSettings                           # the ONE winch settings of both winch loops
+    wpc::WinchPosController                  # the length loop of the plant's winch
+    dt0::Float64                             # [s] 1 / sample_freq
+    rcs::WCSettings                          # the same object as `wc`, as the reel-out controller reads it
+    s::S                                     # the plant, built by the caller's `init_model`
+    rc::WinchController                      # the reel-out winch controller
+    f_high_nominal::Float64                  # [N] the force ceiling before the first-lap reduction
+    guard_lfc::LowerForceController          # the force floor before the reel-out
+    l_set::Real                              # [m] the settled length, as the plant reports it
+                                             # (Float32 for V3Kite); the startup request sends it unconverted
+    fec::FigureEightController               # the path in the air and the guidance on it
+    # ---- the optimizer ----
+    inflow::InflowConditions                 # the wind sent with every request
+    cap_wind::Float64                        # [m/s] the wind the pattern box is sized at
+    winch::WinchParams                       # the winch sent with the startup solve
+    winch_first_lap::WinchParams             # the same under the first-lap force limit
+    winch_reopt::WinchParams                 # the winch sent with the re-optimizations
+    el_center_seed_base::Float64             # [deg] centre elevation of the shipped guess
+    el_center_seed::Float64                  # [deg] the seed's centre, after `solve_startup_path!` the one it converged from
+    opt_chain::OptChain                      # the session with the optimizer, and its caches
+    opt_r_scale::Float64                     # [-] anchor ratio and headroom of the turn-radius request
+    opt_r_min::Union{Nothing, Float64}       # [m] the startup turn-radius request; nothing when off
+    opt_r_on::Bool                           # whether a turn radius is requested
+    opt_r_sent::Union{Nothing, Float64}      # [m] the radius the startup solve was sent
+    opt_box::Union{Nothing, PatternLimits}   # the pattern box sent; nothing when off
+    opt_kv_log::Vector{@NamedTuple{t::Float64, l::Float64, k_v::Float64, at_bound::Bool}}  # every reply's winch gain
+    opt_depower_log::Vector{NamedTuple}      # every reply's depower
+    # ---- the laws the gates and the loop read ----
+    power_gate_off::Function                 # pred -> whether the power gates are bypassed for a prediction [W]
+    wing_lift::Function                      # (az, el) -> the lobe lift [deg] of an installed path
+    c1_at_depower::CD                        # depower -> turn-rate gain c1 [1/m] of the path side; NaN off the table
+    c1_ctrl_at::CC                           # depower -> c1 [1/m] of the controller's table; NaN off it
+    c1_setpoint::Float64                     # [1/m] c1 at the depower setpoint, the loop's tuning point
+    c1_depower_max::Float64                  # [-] the highest depower of the controller's table
+    pattern_depower::Function                # reply -> the depower its path is flown at
+    el_floor::Float64                        # [deg] the elevation floor of every candidate path
+    # ---- filled by `solve_startup_path!` (via `merge_into!`) ----
+    startup_seed_offset::Float64 = NaN       # [deg] offset of the seed the startup solve converged from
+    guess_az::Vector{Float64} = Float64[]    # [deg] that seed's guess
+    guess_el::Vector{Float64} = Float64[]
+    opt_startup_solve_s::Float64 = NaN       # [s] wall time of the startup solve
+    # ---- filled by `startup_feasibility` (via `merge_into!`) ----
+    feas::Union{Nothing, ReeloutFeasibility} = nothing   # the startup gates' verdict
+    margin5::Union{Nothing, Phase5MarginState} = nothing # the in-air phase-5 check
+    c1_at_phase::Union{Nothing, Function} = nothing      # (phase, depower | st) -> c1 [1/m] to check a path against
+    phase5_margin_at::Union{Nothing, Function} = nothing # (az, el) -> the margin phase 5 flies a path with
+end
+
+"""
+    merge_into!(setup::RunSetup, results::NamedTuple) -> setup
+
+Store `results` in the fields of the same names, e.g. what [`solve_startup_path!`](@ref) and
+[`startup_feasibility`](@ref) return. A name that is not a field of `RunSetup` is an error.
+"""
+function merge_into!(setup::RunSetup, results::NamedTuple)
+    for (name, value) in pairs(results)
+        setproperty!(setup, name, value)
+    end
+    return setup
+end
+
+"""
+    setup_run(inputs; init_model) -> RunSetup
 
 Everything the run READS and never rebinds, built in order: the settings and their overrides, the
 plant `s` (built by the caller's `init_model(project, project_set, fcs, wpc, sim_time; turbulence,
 set_overrides)`, since the package does not depend on the model), the winch and its controllers, the optimizer's conditions and session, the turn-rate laws
 (`c1_at_depower`, `c1_ctrl_at`) and the lobe lift. The script keeps the result in the one global
 `setup` and hands it to every function of the run; the loop destructures it (see `run_loop!`).
-Mutable members (`fcs`, `wc`, `s`, the `opt_*_log` vectors, ...) are still changed in place. The
-startup solve and `startup_feasibility` add their results with `merge`.
+The fields are documented at [`RunSetup`](@ref).
 """
 function setup_run(inputs; init_model)
     (; show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance, steer_gain_factor,
@@ -184,7 +287,7 @@ function setup_run(inputs; init_model)
     # The elevation floor of every candidate path, the startup gates' and `check_startup_path`'s.
     el_floor = fcs.min_elevation + tos.candidate_elevation_margin
 
-    return (; inputs, show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance,
+    return RunSetup(; inputs, show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance,
             steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths,
             project_name, turbulence, project, fcs, tos, project_set, l_tether, effective_sim_time,
             output_path, run_done_file, log_name, wc, wpc, dt0, rcs, s, rc, f_high_nominal, guard_lfc,

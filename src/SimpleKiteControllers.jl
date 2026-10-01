@@ -91,6 +91,7 @@ export run_example, script_inputs
 
 # One reel-out run of examples/simple_opt_reelout.jl: its state, and its loop around the model's step!.
 export RunState, step_commands!, record_step!, check_overspeed, apply_optimized_kv!
+export RunSetup
 
 # A run's log messages written to a file, and what they say about its startup retries.
 export with_run_log, startup_ladder_report, ladder_line, startup_log_lines
