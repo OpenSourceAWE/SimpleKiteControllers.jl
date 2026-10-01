@@ -65,6 +65,31 @@ const EXAMPLES = [
     "plot_powercurve.jl           - plot mean reel-out power vs wind speed across archived scenarios" => "plot_powercurve.jl",
 ]
 
+const DOCS_URL = "https://opensourceawe.github.io/SimpleKiteControllers.jl/dev/"
+
+"""
+    open_documentation(url=DOCS_URL)
+
+Open `url` in the default browser on Linux, Windows or macOS; print the URL if
+that fails.
+"""
+function open_documentation(url=DOCS_URL)
+    cmd = if Sys.iswindows()
+        `cmd /c start "" $url`
+    elseif Sys.isapple()
+        `open $url`
+    else
+        `xdg-open $url`
+    end
+    try
+        run(pipeline(cmd, stdout=devnull, stderr=devnull); wait=false)
+        println("Opening documentation: $url")
+    catch
+        println("Could not open a browser. Please open manually: $url")
+    end
+    nothing
+end
+
 """
     example_menu()
 
@@ -72,6 +97,7 @@ Ask which example to run, `include` it, and ask again until `quit` or `q`.
 """
 function example_menu()
     options = [first(e) for e in EXAMPLES]
+    push!(options, "documentation                - open the online documentation in the browser")
     push!(options, "quit")
     while true
         choice = TerminalMenus.request("\nChoose example to run or `q` to quit: ",
@@ -79,6 +105,10 @@ function example_menu()
         if choice == -1 || choice == length(options)
             println("Left menu. Press <ctrl><d> to quit Julia!")
             return nothing
+        end
+        if choice == length(options) - 1
+            open_documentation()
+            continue
         end
         include(joinpath(EXAMPLES_DIR, last(EXAMPLES[choice])))
     end
