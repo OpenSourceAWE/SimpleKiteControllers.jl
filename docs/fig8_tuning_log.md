@@ -6209,3 +6209,67 @@ The whole-run minimum now equals `min_settled` in every project: the entry dip i
 gone (entry minimum 22.5° at 300 m, 16.9° at 150 m), and what remains is the pattern's
 own bottom, `el_center - f8_b/2` minus the tracking error. 19° at 200 m would need the
 pattern raised, not the entry. Only 7 m/s was flown.
+
+## 2026-10-01 — `chi_dive` -85 -> -145 for 4 m/s; ground-contact abort in `simple_fig8.jl`
+
+At 4 m/s (200 m) `simple_fig8.jl` stopped with a solver error at t = 67 s. The dive at
+`chi_dive` -85 and v_app 9-10 m/s drifted 91° out in azimuth in 28 s; the transition
+then turned back at `max_steering` from 34 s on, too slowly to hold the kite up, and it
+sank through 0° at ~43 s to -20° before the solver gave up. The settings of the
+morning (`dive_el_margin` 7, `attractor_dist` 8, old table) crash the same way, at
+48.6 s. `simple_fig8.jl` now stops on elevation < 0 with an `@error` naming the phase,
+like the overspeed check.
+
+Screening at 200 m, `dive_el_margin` 15, entry minimum:
+
+| `chi_dive` | 4 m/s | 7 m/s |
+|--:|--:|--:|
+| -85 | ground | 21.5° |
+| -100 | -6.5°, no phase 4 | |
+| -115 | 5.3° | 20.4° |
+| -130 | 9.8° | 19.5° |
+| **-145** | **12.8°** | **18.4°** |
+| -160 | 15.3° | 17.2° |
+
+4 m/s needs -145 or steeper to clear the 10° floor, 7 m/s keeps 19° only at -130 or
+shallower: one shared value cannot serve both. -145 is set (both settings files),
+trading 0.3° at 7 m/s for a 4 m/s that flies.
+
+Full-length runs, shipped files:
+
+| wind | project | RMS d | laps | min whole run | min settled | criteria |
+|--:|---|--:|--:|--:|--:|---|
+| 4 | 150 m | 0.89° | 3.5 | **7.4°** | 13.1° | fails `min elevation > 10°` |
+| 4 | 200 m | 0.82° | 2.5 | 12.8° | 15.7° | all 8 pass |
+| 4 | 300 m | 0.83° | 2.5 | 16.3° | 16.5° | all 8 pass |
+| 7 | 150 m | 0.82° | 7.5 | 13.0° | 14.7° | all 8 pass |
+| 7 | 200 m | 0.68° | 5.0 | 18.4° | 18.4° | all 8 pass |
+| 7 | 300 m | 0.54° | 5.0 | 19.2° | 19.2° | all 8 pass |
+
+150 m at 4 m/s no longer crashes but still dips to 7.4° in phase 3 (t = 26.5 s);
+screening there: -85 ground contact, -160 9.5°. 150 m at 7 m/s loses 3.5° of entry
+height to the steeper dive (16.5° -> 13.0°). Both are open.
+
+## 2026-10-01 — 150 m entry for 4 m/s: `chi_dive` -160, `dive_el_margin` 25 (`fc_settings_fig8_150m.yaml`)
+
+Screening, 60 s runs, entry minimum / phase-4 minimum:
+
+| `dive_el_margin` | `chi_dive` | 4 m/s | 7 m/s |
+|--:|--:|--|--|
+| 15 | -145 | 7.4 / 13.1° | 13.0 / 14.7° (full runs) |
+| 17 | -145 | 8.9 / 13.2° | 14.6 / 15.2° |
+| 17 | -160 | 10.8 / 13.4° | 13.0 / 14.1° |
+| 19 | -145 | 10.3 / 13.3° | 15.7 / 15.8° |
+| 19 | -160 | 12.1 / 13.6° | 14.5 / 14.7° |
+| 21 | -145 | 11.6 / 13.5° | 17.0 / 16.6° |
+| 21 | -160 | 13.2 / 14.0° | 15.8 / 15.8° |
+| 23 | -145 | 12.8 / 13.8° | 18.6 / 16.6° |
+| 23 | -160 | 14.3 / 14.5° | 17.5 / 16.5° |
+| 25 | -145 | 13.9 / 14.2° | 21.3 / 14.6° |
+| **25** | **-160** | **15.1 / 15.1°** | **19.6 / 16.6°** |
+
+At 150 m the dive must end far higher than at 200 m (26 + 25 = 51°) for the 4 m/s
+transition to keep its height. Full-length runs with the shipped file: 4 m/s RMS d
+0.90°, 4.0 laps, whole-run minimum 15.1° (was 7.4°); 7 m/s 0.82°, 8.0 laps, 16.5°
+(was 13.0°). Both pass all 8 criteria, and in both the whole-run minimum is the
+settled one: no entry dip left. 200 and 300 m keep -145 / 15.

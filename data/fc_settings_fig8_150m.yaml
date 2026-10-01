@@ -1,6 +1,6 @@
 # Settings of the figure-of-eight flight controller flown by
 # examples/simple_fig8.jl on the 150 m tether (system_fig8_150m.yaml). A copy of
-# fc_settings.yaml that differs only in the pattern geometry and attractor below:
+# fc_settings.yaml that differs only in the pattern geometry, attractor and entry below:
 # the minimum angular turn radius 1/(L*c1*u_s) grows as the tether shortens, so
 # the 200 m lemniscate is curvature-limited here (2026-10-01,
 # docs/fig8_tuning_log.md). Keep every other value in step with fc_settings.yaml.
@@ -38,9 +38,9 @@ fc_settings:
   winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
   # --- entry state machine: park -> dive -> hold -> transition --------------
-  chi_dive:           -85.0    # Dive course; >90 descends, <90 climbs, 90 flat    [deg]
+  chi_dive:           -160.0   # Dive course; >90 descends, <90 climbs, 90 flat; -145 at 200 m [deg]
   chi_hold:           -90.0    # Course commanded during the hold                 [deg]
-  dive_el_margin:     15.0     # Margin above el_center where the dive ends       [deg]
+  dive_el_margin:     25.0     # Margin above el_center where the dive ends; 15 at 200 m [deg]
   hold_time:          0.8      # Duration of the hold                               [s]
   fig8_d_gate:        5.0      # Cross-track error, transition -> fig8            [deg]
 

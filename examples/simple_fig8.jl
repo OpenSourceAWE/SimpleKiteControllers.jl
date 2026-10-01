@@ -478,6 +478,15 @@ try
                             rad2deg(s.sys_state.elevation), rad2deg(s.sys_state.AoA))
             break
         end
+        # Same for a kite that flies into the ground: nothing stops it there, and the
+        # solver only gives up tens of seconds later, well underground.
+        if s.sys_state.elevation < 0
+            @error @sprintf("Ground contact at t=%.2fs: elevation %.1f° (phase %d, azimuth %.1f°, \
+                             v_app %.1f m/s). Stopping.",
+                            s.sys_state.time, rad2deg(s.sys_state.elevation), cc.phase,
+                            rad2deg(s.sys_state.azimuth), s.sys_state.v_app)
+            break
+        end
 
         # After step!, which overwrites parts of sys_state.
         s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 transition, 4 fig8

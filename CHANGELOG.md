@@ -16,15 +16,30 @@
 - Turn-rate identification in a low crosswind pattern, while reeling out and over
   depower.
 - Zenodo DOI badge.
+- `data/fc_settings_fig8_150m.yaml`: the 150 m fig8 project's own controller settings,
+  a copy of `fc_settings.yaml` with a taller pattern (`f8_b` 16°). The 200 m lemniscate
+  is curvature-limited on the shorter tether; RMS cross-track error 4.36° → 0.82°.
 
 ### Removed
 
 - `ParkingController`, `linearize` and `navigate`.
 - Example helpers now in the package (`awetrim_client.jl`, `gui_state.jl`, `script_inputs.jl`, ...).
+- `examples/fig8_log_meta.jl`, which nothing in the package used.
 
 ### Fixed
 
 - `DelayedInjection` in `validate_margins.jl` never switched on in `simple_opt_reelout.jl`.
+- `simple_fig8.jl` flew whatever turn-rate table the session held, so a run after a
+  reel-out script silently used the reel-out table; it now reloads its project's.
+- `settings_fig8_150m.yaml`: `sample_freq` 90 → 100 Hz; at 90 Hz the run developed a
+  growing 8 Hz oscillation in AoA, bridle pulley and tether force.
+- `settings_fig8_300m.yaml`: `sim_time` 90 → 130 s; the run flew only 2.0 laps and
+  failed `laps >= 2.5`.
+- `simple_fig8.jl` crashed at 4 m/s: the kite flew into the ground during the entry
+  and the solver failed later. `chi_dive` -85 → -145° (both fig8 settings files) lets
+  4 m/s reach the pattern at 200 and 300 m, and the script now stops with an error on
+  ground contact instead of a solver error. At 150 m the entry needs `chi_dive` -160°
+  and `dive_el_margin` 25° (`fc_settings_fig8_150m.yaml`) to stay above 10°.
 
 ### Changed
 
@@ -44,3 +59,10 @@
 - `DAMPING_PER_STIFFNESS` raised from 0.001 s to 0.002 s in `simple_fig8.jl`,
   `simple_fig8_live.jl`, `simple_reelout.jl`, `simple_auto_parking.jl` and
   `simple_opt_fig8.jl`, matching `simple_opt_reelout.jl`.
+- The fig8 projects (`system_fig8_{150,200,300}m.yaml`) use `turn_rate_coeffs_low.yaml`,
+  like the reel-out projects; it is now also the table loaded at package start.
+- Fig8 guidance retuned (`fc_settings.yaml`, 7 m/s): `attractor_dist` 8 → 5.5°, RMS
+  cross-track error at 200 m 0.85° → 0.68°, at 300 m 0.84° → 0.71°.
+- Fig8 entry: `dive_el_margin` 7 → 15° (also in `fc_settings_fig8_150m.yaml`). The dip
+  below the pattern during the entry is gone; whole-run minimum elevation 15.8° → 18.7°
+  at 200 m, 17.9° → 19.2° at 300 m, 11.0° → 16.5° at 150 m.
