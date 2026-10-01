@@ -3926,7 +3926,7 @@ version = "1.29.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkit", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "REPL", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "SymbolicIndexingInterface", "UnPack", "VortexStepMethod", "YAML"]
-git-tree-sha1 = "6ab0bc3a4831e822f7b41526d9b2271d091b34ba"
+git-tree-sha1 = "4d214a7580e4f8586bf9899a14d819ad76ac31c6"
 repo-rev = "delay-lag-fit"
 repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
