@@ -247,9 +247,11 @@ check, as before.
    … `install_candidate!`) with an `OptChain` in replay mode, so without a
    server: the request on a lap boundary (none while a blend runs or past
    `max_reopt`), the poll, an install, a rejection on power, a failed solve and
-   a request that could not be sent. Not reached: the blocking requests and the
-   cold retries of a rejected reply (`cold_retry!`), which send `/init`;
-   `test/test_awetrim_server.jl`'s fake server could serve them.
+   a request that could not be sent; and, against the fake server of
+   `test/fake_awetrim_server.jl`, a blocking request collected on the same
+   step, a blocking warm step that fails and is retried cold from the guess,
+   and a reply rejected on power that `cold_retry!` re-asks from the guess
+   moved by `reopt_retry_el_offset` and then installs.
 
    `test/test_startup_path.jl` covers `src/startup_path.jl` where no optimizer
    answers: `score_installed` (the three gates, clearance off),

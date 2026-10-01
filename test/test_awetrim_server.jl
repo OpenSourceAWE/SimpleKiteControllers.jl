@@ -16,61 +16,13 @@ import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitPar
     chain_init, chain_step, chain_status, chain_trajectory, record_opt_success!,
     stale_conn_error, server_running, ensure_server, HTTP, JSON3
 
+include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
+const AZ, EL = FAKE_AZ, FAKE_EL
 const INFLOW = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0, profile_law = 3)
 const WINCH = WinchParams("reelout", 0.04, 700.0, 7200.0)
-const AZ = [0.0, 10.0, 0.0, -10.0]
-const EL = [25.0, 30.0, 25.0, 20.0]
 params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH,
                              inflow_conditions = INFLOW, trajectory = Trajectory(AZ, EL), kw...)
 
-json(status, d) = HTTP.Response(status, ["Content-Type" => "application/json"], JSON3.write(d))
-step_reply(length, power) = Dict(
-    "length" => length, "trajectory" => Dict("azimuth" => AZ, "elevation" => EL .+ 1),
-    "state" => "converged", "step_index" => 1,
-    "metrics" => Dict("energy_J" => 1e5, "total_time_s" => 100.0, "avg_power_W" => power))
-# The `/trajectory` table, in RADIANS as the server serves it.
-table(power) = Dict(
-    "table" => Dict("azimuth" => deg2rad.(AZ), "elevation" => deg2rad.(EL .+ 1),
-                    "distance_radial" => [150.0, 165.0]),
-    "spline" => Dict("downloops" => true), "metrics" => Dict("avg_power_W" => power),
-    "optimized_parameters" => Dict("input_depower" => 1.42))
-
-"""
-A fake server: `log` holds `(path, body)` of every request; a `/step` whose length is in `fail`
-answers 422 with `detail`, or a validation 422 when `validation` is set; `state` is what
-`/status` reports. Power grows with every converged step, so replies can be told apart.
-"""
-function fake_server(; fail = Float64[], detail = "optimization did not converge",
-                     validation = false)
-    log = Tuple{String, Any}[]
-    state = Ref("ready")
-    power = Ref(0.0)
-    function handle(req)
-        path = first(split(req.target, '?'))
-        # HTTP.jl 2 wraps the bytes of a POST in a `BytesBody`; a GET has an `EmptyBody`.
-        raw = req.body isa HTTP.BytesBody ? String(copy(req.body.data)) : ""
-        body = isempty(raw) ? nothing : JSON3.read(raw, Dict{String, Any})
-        push!(log, (path, body))
-        path == "/health" && return json(200, Dict("status" => "ok"))
-        path == "/status" && return json(200, Dict("state" => state[]))
-        path == "/trajectory" && return json(200, table(power[]))
-        path == "/init" &&
-            return json(200, Dict("name" => body["name"], "length" => body["length"],
-                                  "trajectory" => body["trajectory"], "state" => "ready"))
-        if path == "/step"
-            validation && return json(422, Dict("detail" => [Dict("loc" => ["body", "bogus"],
-                                                                   "msg" => "extra field")]))
-            body["length"] in fail && return json(422, Dict("detail" => detail))
-            power[] += 1000.0
-            body["wait"] || (state[] = "solving"; return json(200, Dict("step_index" => 7)))
-            return json(200, step_reply(body["length"], power[]))
-        end
-        return json(404, Dict("detail" => "no route"))
-    end
-    server = HTTP.serve!(handle, "127.0.0.1", 0)
-    return (; server, url = "http://127.0.0.1:$(HTTP.port(server))", log, state)
-end
-paths(fs) = first.(fs.log)
 
 @testset verbose = true "awetrim_server" begin
     @testset "post_and_endpoints" begin
