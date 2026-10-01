@@ -135,10 +135,11 @@ end
         @test st.el_applied == fm * 40.0 && st.blend_to[2] ≈ el0 .+ fm * 40.0
         @test st.el_shift_events[end].status == "blended in ($(round(Int, 100fm)) %)"
         @test st.el_shift_events[end].margin == margin_at(fm)
-        # A shift of a hundredth of a degree or less is no delivery: no blend.
+        # A shift of a hundredth of a degree or less is no delivery, and nothing held it back.
         st, setup, _ = lift_case()
-        deliver_lift_in_air!(st, setup, plant, 50.0, 4, 0.005)
-        @test isnothing(st.blend_to) && st.el_applied == 0.0
+        @test_logs deliver_lift_in_air!(st, setup, plant, 50.0, 4, 0.005)
+        @test isnothing(st.blend_to) && st.el_applied == 0.0 && isempty(st.el_shift_events)
+        @test !st.el_shift_warned
     end
 
     @testset "phase5_fallback" begin

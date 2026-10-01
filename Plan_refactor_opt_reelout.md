@@ -241,10 +241,11 @@ check, as before.
    reel-out is done, the soft-stop ramp, the force limiter) and
    `steering_hooks!` (disturbance, gain factor, feedback only, delay). Not
    also the rationed rungs of `deliver_lift_in_air!` (a 40° shift that fails the
-   gate whole goes in at the first rung that clears it). A shift of 0.01° or
-   less is not delivered, but warns that it was "held back: the curvature
-   margin would be Inf even rationed to a quarter", which blames the wrong
-   gate; the test checks only that no blend is queued.
+   gate whole goes in at the first rung that clears it, and a shift of 0.01° or
+   less is not delivered). The latter used to warn that it was "held back: the
+   curvature margin would be Inf even rationed to a quarter", which blamed the
+   wrong gate; since 2026-10-01 it returns without an event or a warning. No
+   recorded run reached it (no run log of the full build carries the warning).
 
    `test/test_steering_blocks.jl` covers `steering_command!` (the hand-over to
    phase 3 sets `transition_start`, the feed-forward log, and the gain scale and

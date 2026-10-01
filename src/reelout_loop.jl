@@ -814,10 +814,9 @@ function deliver_lift_in_air!(st::RunState, setup, plant, t, phase, el_target)
             break
         end
     end
-    # A rung that moves the path by no more than a hundredth of a degree is not a delivery.
-    if !isnothing(hit) && abs(hit[1] * el_delta) <= 0.01
-        hit = nothing
-    end
+    # A rung that moves the path by no more than a hundredth of a degree is not a delivery, and
+    # nothing held it back either: no event, no warning.
+    !isnothing(hit) && abs(hit[1] * el_delta) <= 0.01 && return nothing
     if !isnothing(hit)
         fm, shifted, hit_margin = hit
         st.blend_from = (copy(fec.az_path), copy(fec.el_path))
