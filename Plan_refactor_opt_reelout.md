@@ -228,7 +228,14 @@ check, as before.
    take hand-made `st`, `setup` and `plant`, so blends, the phase-5 fallback,
    the lap counter and the winch setpoint could be tested without a model,
    like `test_loop_decisions.jl`. The same now holds for most of
-   `src/startup_path.jl`. Not written yet.
+   `src/startup_path.jl`. Partly done (2026-10-01): `test/test_reelout_loop.jl`
+   covers `count_laps!` (lap 1 force limit, the wrap, no counting down),
+   `advance_blend!`, `phase5_fallback!` (the crossing, once only, no better
+   path, off), `release_reelout!` and the compliant hold through
+   `winch_setpoint!`. Not yet: `reelout_speed!` and `entry_force_guard!`
+   (they need a real `WinchController`), the re-optimization chain
+   (`reoptimize!` … `install_candidate!`, which talks to `opt_chain`),
+   `deliver_lift_in_air!`, the steering blocks, and `src/startup_path.jl`.
 3. **A typed `setup`.** The block functions read about 40 fields of the
    `setup` NamedTuple that `setup_run` builds. A documented struct would make
    that interface explicit. `setup_run` being in the package makes this
