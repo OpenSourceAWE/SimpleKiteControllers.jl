@@ -1466,4 +1466,23 @@ end
         @test arc >= fec.fes.attractor_distance
         @test arc - fec.seg_len[mod1(ia - 1, n)] < fec.fes.attractor_distance
     end
+
+    @testset "path_distance_and_tangent" begin
+        fec = _make_test_controller()
+        az, el = fec.az_path, fec.el_path
+        # A plain nearest-point distance in the guidance's metric: zero on a path point.
+        @test path_distance(az, el, az[17], el[17]) == 0
+        @test path_distance(az, el, az[17], el[17] + 2.0) <= 2.0
+        @test path_distance(az, el, az[17], el[17] + 2.0) ≈
+              minimum(_skc_dist(az[17], el[17] + 2.0, az[i], el[i]) for i in eachindex(az))
+        # Azimuth counts less at high elevation: cos(elevation) compresses it.
+        @test path_distance([0.0], [60.0], 2.0, 60.0) ≈ 2.0 * cosd(60.0)
+        # The tangent at Q is the path's own direction there.
+        calc_attractor(fec, az[30], el[30])
+        @test path_tangent(fec) == fec.tangent[fec.last_idx]
+        q = fec.last_idx
+        nxt = mod1(q + 1, length(az))
+        chi_chord = atan((az[nxt] - az[q]) * cosd(el[q]), el[nxt] - el[q])   # (sin, cos) = (east, north)
+        @test abs(wrap2pi(path_tangent(fec) - chi_chord)) < deg2rad(10)
+    end
 end

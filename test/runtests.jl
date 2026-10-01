@@ -29,6 +29,7 @@ using Test
     include("test_startup_path.jl")
     include("test_awetrim_client.jl")
     include("test_opt_conditions.jl")
+    include("test_settings_files.jl")
     include("test_run_log.jl")
     # V5 of oldplans/Plan_model_validation.md: course_loop_model.jl, no simulation.
     include("test_course_loop_model.jl")

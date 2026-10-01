@@ -22,8 +22,15 @@
 using KiteUtils: readfile, writefile, update_yaml_scalar, insert_yaml_scalar_in_section,
                  wind_vec_from_angles
 
-"The menu's state file, `data/gui.yaml` of this package"
-gui_state_file() = joinpath(skc_data_path(), "gui.yaml")
+"""
+Where [`gui_state_file`](@ref) points instead of `data/gui.yaml`; `nothing` (the default) is
+that file. Set it only around a block that must not touch the user's menu state, e.g. a unit
+test, and reset it in a `finally`.
+"""
+const GUI_STATE_FILE_OVERRIDE = Ref{Union{Nothing, String}}(nothing)
+
+"The menu's state file, `data/gui.yaml` of this package (see `GUI_STATE_FILE_OVERRIDE`)"
+gui_state_file() = something(GUI_STATE_FILE_OVERRIDE[], joinpath(skc_data_path(), "gui.yaml"))
 "The system project the figure-of-eight scripts fly without a selection"
 default_project() = "system_fig8_200m.yaml"
 "The system project the reel-out scripts fly without a reel-out selection"
