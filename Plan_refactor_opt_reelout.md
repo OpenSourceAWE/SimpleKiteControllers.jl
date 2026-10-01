@@ -243,7 +243,19 @@ check, as before.
    yet: the rationed rungs of `deliver_lift_in_air!`, `steering_command!` and
    `xtrack_input!` (they need a full `SysState` and a tracking `fec`), the
    re-optimization chain (`reoptimize!` … `install_candidate!`, which talks to
-   `opt_chain`), and `src/startup_path.jl`.
+   `opt_chain`).
+
+   `test/test_startup_path.jl` covers `src/startup_path.jl` where no optimizer
+   answers: `score_installed` (the three gates, clearance off),
+   `install_optimized_path!` (the lobe lift rationed to the first rung that
+   clears the gate, not rationed without a turn-rate law),
+   `capture_startup_geometry!` (and the refusal of a reversed path),
+   `startup_feasibility` (the gate, and the `c1_at_phase` and
+   `phase5_margin_at` laws), `init_phase5_and_controller!` and
+   `init_loop_state!`. Not covered: the solve and its seed retries
+   (`solve_startup_path!`, `startup_solve`), `adopt_startup_path!` and
+   `finish_startup!`, which talk to `opt_chain`; `retry_startup!` is covered
+   by the live `ladder` case.
 3. **A typed `setup`.** The block functions read about 40 fields of the
    `setup` NamedTuple that `setup_run` builds. A documented struct would make
    that interface explicit. `setup_run` being in the package makes this

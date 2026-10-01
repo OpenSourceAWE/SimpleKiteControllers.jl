@@ -26,6 +26,7 @@ using Test
     include("test_opt_request.jl")
     include("test_loop_decisions.jl")
     include("test_reelout_loop.jl")
+    include("test_startup_path.jl")
     include("test_run_log.jl")
     # V5 of oldplans/Plan_model_validation.md: course_loop_model.jl, no simulation.
     include("test_course_loop_model.jl")
