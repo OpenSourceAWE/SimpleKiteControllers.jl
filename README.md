@@ -150,6 +150,18 @@ re-plots that log without re-simulating.
 - [docs/TrajectoryOptimization.md](docs/TrajectoryOptimization.md) — notes on the trajectory
   optimization test cases
 
+## License
+
+This project is licensed under the MIT License. Please see the below `Copyright notice` in association with the license that can be found in the file [LICENSE](LICENSE).
+
+## Copyright notice
+
+Technische Universiteit Delft hereby disclaims all copyright interest in the package “SimpleKiteControllers.jl” (controllers for airborne wind energy systems) written by the Author(s).
+
+Prof.dr. H.G.C. (Henri) Werij, Dean of Aerospace Engineering, Technische Universiteit Delft.
+
+See the copyright notices in the source files.
+
 ## Acknowledgements
 
 This work has been supported by the MERIDIONAL project, which receives funding from the European Union’s Horizon Europe Program under the grant agreement no. [101084216](https://doi.org/10.3030/101084216). The opinions expressed in this document reflect only the author’s view and reflects in no way the European Commission’s opinions. The European Commission is not responsible for any use that may be made of the information it contains.
