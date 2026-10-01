@@ -2,7 +2,7 @@
 
 `power_ratio` (measured / predicted mean reel-out power, against the weighted
 prediction) is 1.00 up to 8 m/s and then falls away: **0.91 at 9, 0.82 at 10,
-0.83 at 11 m/s**. This is not a 10 m/s problem; the pattern across 9/10/11 is
+0.83 at 11 m/s** (August 2026; for today's values see "Status 2026-10-01"). This is not a 10 m/s problem; the pattern across 9/10/11 is
 the evidence.
 
 **Acceptance:** `power_ratio` in 0.98 .. 1.02 at 9, 10 and 11 m/s, with all
@@ -12,6 +12,49 @@ band is the one used in `oldplans/PlanTunePowerRatio.md`.
 Measured power must not be traded away to close the ratio. If the ratio closes
 because the PREDICTION comes down to what the plant can fly, that is the
 intended outcome — see the hypothesis below.
+
+## Status 2026-10-01
+
+**Not met at 9, 10 and 11 m/s.** Maasvlakte scenarios of 2026-10-01, 07:23 – 07:39
+(`output/scenarios/maasvlakte/overview.md`), all 10 success
+criteria passed in every run:
+
+| v_wind [m/s] | 6 | 7 | 8 | 8.25 | 8.5 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|
+| power_ratio | 1.00 | 1.00 | 0.99 | 0.98 | 0.96 | **0.94** | **0.83** | **0.84** |
+| av_power [W] | 7213 | 12004 | 18008 | 19836 | 21109 | 22503 | 19840 | 19121 |
+| av_force [N] | 3193 | 4477 | 5780 | 6134 | 6386 | 6694 | 6135 | 6005 |
+| max_force [N] | 4083 | 5268 | 6715 | 6784 | 7136 | 7902 | 6914 | 6838 |
+| av_depower [-] | 0.27 | 0.267 | 0.266 | 0.266 | 0.268 | 0.271 | 0.297 | 0.316 |
+
+(Whole-run means and extremes as printed by the summary, not the phase-4 window
+of the table below; 3.5 – 5 m/s: 1.05, 1.07, 1.02.)
+
+- Against August: 9 m/s improved (0.91 -> 0.94), 10 and 11 m/s did not (0.82 ->
+  0.83, 0.83 -> 0.84). The ratio now leaves the band already at 8.5 m/s (0.96).
+- The pattern is unchanged: measured power peaks at 9 m/s and falls above it,
+  with the mean force, while the flown depower climbs (0.271 -> 0.297 -> 0.316).
+- At 10 and 11 m/s the peak force (6914, 6838 N) stays 4 – 5 % below the 7200 N
+  ceiling, while at 9 m/s it exceeds it (7902 N).
+
+**Force ceilings since the plan was last updated (2026-08-30).** None of these
+changes was swept against `power_ratio`:
+
+| commit | date | `f_high` [N] | `f_high_awe_trim` [N] |
+|---|---|---|---|
+| `3486b1e` | 2026-08-30 | 8000 | 8000 (= no de-rating) |
+| `cc2f04e` | 2026-09-18 | 8000 | 7700 |
+| `f01143c` | 2026-09-21 | 8000 | 7500 |
+| `5364faa` | 2026-09-21 | 7900 | 7500 |
+| `8492804` | 2026-09-23 | **7200** | **7200** |
+
+So since 2026-09-23 the value sent with the re-optimizations equals the runtime
+ceiling: there is no de-rating in effect, the ceiling itself was lowered. The
+startup solve and lap 1 fly under `f_high · first_lap_force_frac` = 7200 · 0.93
+= 6696 N (`6ce0abe`, 2026-09-24). The sections below were written in the
+8000 N era (August 2026).
+
+**Not done:** Step 1, Step 2b, and the depower confound (see the sections below).
 
 ## What is already known
 
@@ -56,6 +99,9 @@ observed.
 
 ## Working hypothesis
 
+*(As formulated in August 2026, when `f_high` was 8000 N; see the note at the end
+of this section for today's 7200 N.)*
+
 **The plant's 8400 N rating binds on the PEAK force, while AWETrim optimizes the
 mean against `f_max = f_high = 8000 N` with no knowledge of the ~1.2 crest
 factor of real figure-eight flight.** Its optimum is therefore not flyable
@@ -69,6 +115,19 @@ three runs.
 If this holds, the fix is to send a de-rated `f_max` so the predicted optimum
 is one the plant can fly. The ratio then closes and measured power barely
 moves.
+
+**Note 2026-10-01: today's runs contradict the hypothesis in this form.** With
+`f_max = f_high = 7200 N`, AWETrim's optimum has 1200 N, i.e. a crest factor
+of 1.17, of headroom below the 8400 N rating. That is the de-rating proposed here,
+reached by lowering `f_high` instead. Yet at 10 and 11 m/s the peak force is only
+6914 and 6838 N, 18 – 19 % below 8400 N, and the ratio is still 0.83 and 0.84
+("Status 2026-10-01"). The peak force does not bind. Nor is the run "detuned by
+depower": it flies the optimizer's own depower (`fly_opt_depower`, see "Confound
+to control"), so the higher depower at 10 – 11 m/s is the optimizer's choice, not
+a correction by the run to keep peaks legal. This agrees with the
+Step 2a result below (de-rating did not move the ratio), and points to the
+depower confound: the run flies the optimizer's depower, so an error in its
+conversion, calibrated at 6 m/s only, would show up here ("Confound to control").
 
 ## Step 1 — decisive, no simulation
 
@@ -148,8 +207,9 @@ and the code's own history already has a case where four retries topped out
 short of the gate (2026-08-27, best 0.794 against 0.82).
 
 **Fix — scope the de-rating to re-optimization only.** `winch`/`winch_first_lap`
-(the STARTUP solve, `examples/simple_opt_reelout.jl`) now explicitly pin
-`f_max = F_HIGH_NOMINAL`, never `wc.f_high_awe_trim`: the curvature margin is
+(the STARTUP solve, now `optimizer_conditions` in `src/opt_conditions.jl`) pin
+`f_max` to the plain runtime ceiling (times `first_lap_force_frac` for
+`winch_first_lap`), never `wc.f_high_awe_trim`: the curvature margin is
 tightest at the untested starting length, before the run has flown a single
 lap to prove the pattern out, so this is not a value to fly blind. A new
 `winch_reopt`, built off `winch_from_wc`'s plain default (so it DOES pick up
@@ -157,13 +217,13 @@ lap to prove the pattern out, so this is not a value to fly blind. A new
 on — by then the run has an installed, flying pattern that already cleared
 the startup gates, so a re-optimization reply landing tighter is a measured
 outcome to react to, not an unflown path the run aborts on before it starts.
-Still untested at any nonzero value — the 9/10/11 m/s rows remain unswept.
+Not swept: it was later set to 7700 and 7500 N, and is now equal to `f_high`
+(7200 N), see "Status 2026-10-01".
 
 Unlike the reverted per-wind-speed attempt, this value does not scale with
 crest factor or wind speed at all — the same number is sent at every wind
-speed, sidestepping the "moved the wrong way" coupling above. It has NOT yet
-been swept: the 10/9/11 m/s rows above should NOT be treated as tuned, and
-this needs its own sweep before drawing a conclusion — do not tune it and the
+speed, sidestepping the "moved the wrong way" coupling above. It has NOT been
+swept against `power_ratio`, so no conclusion on it can be drawn yet — do not tune it and the
 depower offset in the same run (see "Confound to control" below).
 
 ## Step 2b — match the upper saturation
@@ -181,10 +241,14 @@ and degrades monotonically away from it, which a wind-dependent offset error of
 attributing the whole gap to either — do not tune the offset and `f_max` in the
 same run.
 
-Related: v10's reply asks for `rel_depower` 0.295 .. 0.301 while the run flies
-`depower_setpoint = 0.274`. `DepowerReply`'s docstring is explicit — "FLY THIS,
-or the reported metrics are not achievable". Establish whether that gap is
-intended before reading any ratio at 10 m/s as a model-vs-plant statement.
+Not a gap (corrected 2026-10-01): v10's reply asks for `rel_depower` 0.295 ..
+0.301, and the run flies it. With `fly_opt_depower: true` (`data/traj_opt.yaml`,
+since 2026-08-20, phase 3 included since 2026-08-27) phases 3 and 4 fly the
+reply's depower, converted with `awetrim_depower_to_v3kite`
+(`depower_command!` in `src/reelout_loop.jl`), not `depower_setpoint`; the flown
+depower at 10 m/s, 0.299 in August and 0.297 today, is the reply's. An earlier
+version of this paragraph said the run flies `depower_setpoint = 0.274`; that was
+wrong. What remains open is the conversion itself, i.e. the offset above.
 
 ## Prior art — read before starting
 
