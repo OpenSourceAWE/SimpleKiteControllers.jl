@@ -54,7 +54,8 @@ startup solve and lap 1 fly under `f_high · first_lap_force_frac` = 7200 · 0.9
 = 6696 N (`6ce0abe`, 2026-09-24). The sections below were written in the
 8000 N era (August 2026).
 
-**Not done:** Step 1, Step 2b, and the depower confound (see the sections below).
+**Step 1 done (2026-10-01):** the winch laws agree, the gap is a 13 % force gap
+that opens with the depower; see Step 1. **Not done:** the depower confound.
 
 ## What is already known
 
@@ -134,12 +135,56 @@ conversion, calibrated at 6 m/s only, would show up here ("Confound to control")
 Ask the server for the mean force and reel-out speed its reply predicts, at 8
 and at 10 m/s.
 
-- Predicted force approximately 7350 N at 10 m/s, consistent with
-  `v = 0.039*sqrt(F)` -> the two winch laws agree, the cause is the force
-  rating. Go to Step 2a.
+- Predicted speed consistent with `v = kv*sqrt(F)` at the shipped kv (0.0408
+  at 10 m/s since 2026-09-22; 0.039 when this was written, with a predicted
+  force of about 7350 N then) -> the two winch laws agree, the cause is the
+  force rating. Go to Step 2a.
 - Predicted speed NOT consistent with that relation -> the original suspect is
   live after all, but in the UPPER saturation (`softplus_beta`, `f_max`,
   `v_max = v_sat` 3.5 m/s), not `kv`. Go to Step 2b.
+
+**Done 2026-10-01, on the Maasvlakte runs of that morning, without a new
+solve.** `replay_entries` finds every path the 8 – 11 m/s runs installed in the
+solution cache (`output/opt_chain_cache`); each entry holds the server's full
+`/trajectory` table. Predicted: time-weighted means over the pattern of
+`tension_tether_ground` and `speed_radial`, laps 2 on (path 1 is the startup
+solve at `f_max` 6696 N, 150 m). Measured: `reelout_power` over the reel-out
+window of the log. `kv` sent is 0.0408 at every wind speed, `f_max` 7200 N.
+
+| v_wind | predicted F mean / max [N] | predicted v [m/s] | predicted P [W] | measured F mean / peak [N] | measured v [m/s] | measured P [W] | F meas / pred |
+|---|---|---|---|---|---|---|---|
+| 8 | 5749 – 5921 / 6395 – 6755 | 3.16 – 3.22 | 18198 – 19072 | 5777 / 6715 | 3.08 | 17850 | 0.99 |
+| 9 | 6971 – 7003 / 7189 – 7198 | 3.49 | 24314 – 24455 | 6674 / 7902 | 3.32 | 22257 | 0.95 |
+| 10 | 6965 – 7137 / 7174 – 7198 | 3.49 – 3.50 | 24313 – 24974 | 6128 / 6914 | 3.20 | 19663 | 0.87 |
+| 11 | 6648 – 6942 / 7184 – 7199 | 3.42 – 3.48 | 22755 – 24187 | 6005 / 6837 | 3.15 | 18968 | 0.88 |
+
+The predicted power is the table's own `mean(F·v)` and equals the reply's
+`avg_power_W` to within 10 W.
+
+- **The two winch laws agree.** The plant flies `kv·sqrt(F)` exactly (10 m/s:
+  0.0408 · sqrt(6128) = 3.19 m/s, flown 3.20). The prediction runs 2 – 3 %
+  faster than its own `kv` (mean v / mean sqrt(F) = 0.0414 – 0.0418) at every wind
+  speed, 8 m/s included, where the ratio is 0.99: a constant offset, not the gap.
+- **From 9 m/s up the prediction sits in the upper saturation corner:** force
+  pinned at `f_max` (max 7174 – 7199 N against 7200; crest factor ≈ 1.02 – 1.08)
+  and speed at `v_sat` 3.5 m/s. The optimized kite would pull more than 7200 N,
+  the winch curve caps it. At 8 m/s it does not reach the ceiling.
+- **The plant stays on the law, below the corner,** with 13 % less force at 10 and
+  11 m/s and 5 % less at 9 m/s. Under the law power goes with F^1.5, so
+  0.87^1.5 = 0.81 and 0.95^1.5 = 0.93: the whole `power_ratio` gap (0.83, 0.84,
+  0.94) is this force gap.
+- **The depower is the reply's.** Converted reply depower 0.291 – 0.305 at
+  10 m/s and 0.310 – 0.324 at 11 m/s, flown 0.297 and 0.316 (0.263 – 0.267 and
+  0.266 at 8 m/s).
+
+**Result.** Not the force rating (the plant peaks at 6914 N at 10 m/s) and not the
+winch law (Step 2b's case: the speed fits the law, and the plant never reaches
+the upper saturation it would test). At the same converted depower the plant's
+kite pulls 13 % less force than AWETrim's at 0.29 – 0.32, and the same force at
+0.265. The gap opens with the depower, which is the confound below: the depower
+conversion (`AWETRIM_V3KITE_DEPOWER_OFFSET`, calibrated at 6 m/s at depower ≈
+0.27) or the optimizer's force model at higher depower. Next: separate those
+two.
 
 ## Step 2a — de-rate `f_max`
 
@@ -258,5 +303,6 @@ wrong. What remains open is the conversion itself, i.e. the offset above.
 - `docs/fig8_tuning_log.md`, "10 m/s kv — power against the phase-4 force
   limit" (2026-08-27) — the kv sweep above, and the 8400 N rating as the
   binding limit at 10 m/s.
-- `data/winch_kv_table.yaml` header — the shipped kv rows and why 10 m/s is
-  0.039.
+- `data/winch_kv_table.yaml` header — the shipped kv rows (0.0408 flat from 3
+  to 12 m/s), the 2026-08-27 kv sweep at 10 m/s, and why its 0.039 row went back
+  to 0.0408 on 2026-09-22 (a wider first lap spent the force headroom).
