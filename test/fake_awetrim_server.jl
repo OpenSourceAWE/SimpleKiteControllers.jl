@@ -67,6 +67,11 @@ function fake_server(; fail = Float64[], fail_warm = false,
         return json(404, Dict("detail" => "no route"))
     end
     server = HTTP.serve!(handle, "127.0.0.1", 0)
-    return (; server, url = "http://127.0.0.1:$(HTTP.port(server))", log, state)
+    url = "http://127.0.0.1:$(HTTP.port(server))"
+    # The first request compiles the client and this handler, which on a cold CI runner takes
+    # longer than the 2 s `server_running` allows; warm both up here and forget the request.
+    SimpleKiteControllers.server_running(url; timeout = 120) || error("Fake server at $url is not up.")
+    empty!(log)
+    return (; server, url, log, state)
 end
 paths(fs) = first.(fs.log)
