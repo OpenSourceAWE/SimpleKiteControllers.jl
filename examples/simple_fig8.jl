@@ -220,6 +220,16 @@ reload_turn_rate_table!(project)
 project_set = Settings(project)
 apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
+4.0 <= project_set.v_wind <= 10.0 ||
+    @warn "v_wind = $(project_set.v_wind) m/s is outside 4-10 m/s, the range the fig8 \
+           settings were tuned for (docs/fig8_tuning_log.md). Below, the entry may fly \
+           into the ground; above, the run may stop on v_app_abort."
+# Before anything reads fcs: init settles at the depower, the turn-rate lookup, the
+# guidance and the controller are built from it. At high wind more depower keeps
+# v_app under v_app_abort and a larger pattern wins back the turn-radius margin.
+apply_wind_schedule!(fcs, project_set.v_wind)
+@info @sprintf("Wind schedule at v_wind = %.1f m/s: depower %.2f, f8_a %.1f°, f8_b %.1f°.",
+               project_set.v_wind, fcs.depower_setpoint, fcs.f8_a, fcs.f8_b)
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 output_path = normpath(joinpath(@__DIR__, "..", "output"))

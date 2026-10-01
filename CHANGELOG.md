@@ -19,6 +19,12 @@
 - `data/fc_settings_fig8_150m.yaml`: the 150 m fig8 project's own controller settings,
   a copy of `fc_settings.yaml` with a taller pattern (`f8_b` 16°). The 200 m lemniscate
   is curvature-limited on the shorter tether; RMS cross-track error 4.36° → 0.82°.
+- `wind_schedule` / `apply_wind_schedule!` and the `FC_Settings` fields `depower_high`,
+  `f8_a_high`, `f8_b_high`, `wind_ramp_low`, `wind_ramp_high`: depower and pattern size
+  ramped with the wind speed (off by default). `simple_fig8.jl` applies it; the fig8
+  settings ramp from 7 to 10 m/s to depower 0.33 and a taller (150 m: also wider)
+  pattern, so 10 m/s no longer stops on the overspeed guard. All three projects pass
+  all 8 criteria at 8.5 and 10 m/s.
 
 ### Removed
 

@@ -1113,6 +1113,20 @@ end
         @test attractor_distance(fcs, 0.0, 100.0) == attractor_distance(fcs, 10.0, 100.0)
         # Ceiling: 2 x attractor_dist.
         @test attractor_distance(fcs, 60.0, 100.0) == 12.0
+        # wind_schedule: off by default, otherwise a ramp, rounded to 0.01 / 0.5°.
+        fws = FC_Settings(; depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
+        @test wind_schedule(fws, 12.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
+        fws.depower_high = 0.33
+        fws.f8_b_high = 16.0
+        @test wind_schedule(fws, 4.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
+        @test wind_schedule(fws, 7.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
+        @test wind_schedule(fws, 8.5) == (depower_setpoint = 0.30, f8_a = 30.0, f8_b = 14.0)
+        @test wind_schedule(fws, 10.0) == (depower_setpoint = 0.33, f8_a = 30.0, f8_b = 16.0)
+        @test wind_schedule(fws, 14.0) == wind_schedule(fws, 10.0)
+        @test apply_wind_schedule!(fws, 10.0).f8_b == 16.0
+        for f in ("fc_settings.yaml", "fc_settings_fig8_150m.yaml")
+            @test wind_schedule(FC_Settings(f), 10.0).depower_setpoint == 0.33
+        end
         tos = TrajOptSettings("traj_opt.yaml")
         @test tos.guess_points == 361
         @test tos.resample_points == 361

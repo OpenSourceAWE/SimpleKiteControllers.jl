@@ -46,6 +46,24 @@ Add new findings there, not here.
     "Depower held during the run [-]; sets the operating point of the turn-rate law"
     depower_setpoint = 0.26
     """
+    Depower [-] held at and above `wind_ramp_high`: the high-wind end of the
+    schedule [`apply_wind_schedule!`](@ref) ramps between `wind_ramp_low` and
+    `wind_ramp_high` (wind speed at reference height [m/s]). At a fixed
+    `depower_setpoint` the apparent wind grows with the wind until it passes
+    `v_app_abort` (200 m fig8, 0.27: 45 m/s at 10 m/s, 2026-10-01); more depower
+    slows the kite, but lowers `c1` and with it the turn-radius margin, which
+    `f8_a_high`/`f8_b_high` win back. `NaN` (the default) keeps `depower_setpoint`.
+    """
+    depower_high = NaN
+    "Pattern width [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_a`"
+    f8_a_high = NaN
+    "Pattern height [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_b`"
+    f8_b_high = NaN
+    "Wind speed [m/s] up to which `depower_setpoint`, `f8_a` and `f8_b` are flown unchanged"
+    wind_ramp_low = 7.0
+    "Wind speed [m/s] from which the `*_high` values are flown; linear in between"
+    wind_ramp_high = 10.0
+    """
     Settling elevation [deg]. NOTE: currently has NO EFFECT on where the run
     starts — `settle_wing`'s cache key does not include it, so the existing 73°
     geometry is reused.
@@ -832,6 +850,40 @@ function winch_force_gains(fcs::FC_Settings)
             len_kp = fcs.winch_len_kp / fcs.compliance,
             damp = fcs.winch_damp / fcs.compliance,
             force_min = fcs.winch_force_min)
+end
+
+"""
+    wind_schedule(fcs::FC_Settings, v_wind) -> (; depower_setpoint, f8_a, f8_b)
+
+What to fly on the pattern at wind speed `v_wind` [m/s, reference height]: each of
+`depower_setpoint`, `f8_a`, `f8_b` as set up to `fcs.wind_ramp_low`, its `*_high`
+counterpart from `fcs.wind_ramp_high` on, linear in between; a `*_high` that is
+`NaN` leaves its value alone. The depower is rounded to 0.01, the angles to 0.5°:
+the settled-geometry cache is keyed on the depower, so this costs one settle per
+step, not one per wind speed. Applied by [`apply_wind_schedule!`](@ref).
+"""
+function wind_schedule(fcs::FC_Settings, v_wind)
+    frac = clamp((v_wind - fcs.wind_ramp_low) / (fcs.wind_ramp_high - fcs.wind_ramp_low),
+                 0.0, 1.0)
+    ramp(lo, hi, step) = isnan(hi) ? Float64(lo) : round((lo + frac * (hi - lo)) / step) * step
+    return (; depower_setpoint = round(ramp(fcs.depower_setpoint, fcs.depower_high, 0.01); digits = 2),
+            f8_a = ramp(fcs.f8_a, fcs.f8_a_high, 0.5),
+            f8_b = ramp(fcs.f8_b, fcs.f8_b_high, 0.5))
+end
+
+"""
+    apply_wind_schedule!(fcs::FC_Settings, v_wind) -> FC_Settings
+
+Overwrite `fcs.depower_setpoint`, `fcs.f8_a` and `fcs.f8_b` with
+[`wind_schedule`](@ref)`(fcs, v_wind)`. Call it once, before anything is built
+from `fcs`: applied twice, the second call ramps from the first one's result.
+"""
+function apply_wind_schedule!(fcs::FC_Settings, v_wind)
+    (; depower_setpoint, f8_a, f8_b) = wind_schedule(fcs, v_wind)
+    fcs.depower_setpoint = depower_setpoint
+    fcs.f8_a = f8_a
+    fcs.f8_b = f8_b
+    return fcs
 end
 
 """

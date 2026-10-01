@@ -49,7 +49,7 @@ export performance_block, opt_cycle_max
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
-export attractor_distance
+export attractor_distance, wind_schedule, apply_wind_schedule!
 export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)

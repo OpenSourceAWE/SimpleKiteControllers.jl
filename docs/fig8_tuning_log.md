@@ -6273,3 +6273,41 @@ transition to keep its height. Full-length runs with the shipped file: 4 m/s RMS
 0.90°, 4.0 laps, whole-run minimum 15.1° (was 7.4°); 7 m/s 0.82°, 8.0 laps, 16.5°
 (was 13.0°). Both pass all 8 criteria, and in both the whole-run minimum is the
 settled one: no entry dip left. 200 and 300 m keep -145 / 15.
+
+## 2026-10-01 — Wind schedule for depower and pattern size: 10 m/s flies
+
+At 10 m/s (200 m) the run stopped at t = 27 s on `v_app_abort` (45 m/s, 15.3 kN):
+at a fixed depower 0.27 and a winch that barely reels out (200 -> 229 m) the
+apparent wind grows with the wind. The morning's settings stop the same way, at
+43.7 s. Screening at 200 m, 10 m/s, 70 s:
+
+| `depower_setpoint` | run | max v_app | max force | `c1` |
+|--:|--|--:|--:|--:|
+| 0.27 | overspeed at 27 s | 45.0 m/s | 15.3 kN | 0.273 |
+| 0.30 | overspeed at 32 s | 45.0 m/s | 12.9 kN | 0.233 |
+| 0.33 | 70 s | 40.7 m/s | 9.0 kN | 0.189 |
+| 0.36 | 70 s | 35.7 m/s | 6.1 kN | 0.157 |
+
+Depower 0.33 alone flies 10 m/s at 300 m (RMS d 0.80°), but its lower `c1` drops the
+turn-radius margin to 1.09 at 200 m (RMS d 2.29°) and 1.06 at 150 m (6.35°, three
+criteria failed). So `FC_Settings` gets a wind schedule (`wind_schedule`,
+`apply_wind_schedule!`, applied by `simple_fig8.jl` before anything is built from
+`fcs`): `depower_setpoint`, `f8_a`, `f8_b` up to `wind_ramp_low` (7 m/s),
+`depower_high`, `f8_a_high`, `f8_b_high` from `wind_ramp_high` (10 m/s), linear in
+between, rounded to 0.01 / 0.5°. The margins at depower 0.33 picked the patterns:
+200 m `f8_b` 12 -> 16 (1.41); 150 m needed width as well, 30 x 16 -> 45 x 24 (1.59;
+height alone stops at ~1.05).
+
+Full-length runs, shipped files (4 and 7 m/s are untouched by the schedule and
+were flown above):
+
+| wind | project | depower | f8_a x f8_b | max v_app | RMS d | laps | min whole run | margin | criteria |
+|--:|---|--:|--|--:|--:|--:|--:|--:|---|
+| 8.5 | 150 m | 0.30 | 37.5 x 20 | 39.7 m/s | 1.01° | 6.5 | 14.0° | 1.63 | all 8 pass |
+| 8.5 | 200 m | 0.30 | 30 x 14 | 39.6 m/s | 0.72° | 5.5 | 16.7° | 1.62 | all 8 pass |
+| 8.5 | 300 m | 0.30 | 30 x 14 | 37.4 m/s | 0.61° | 5.0 | 18.0° | 2.43 | all 8 pass |
+| 10 | 150 m | 0.33 | 45 x 24 | 39.6 m/s | 1.19° | 5.5 | 11.8° | 1.59 | all 8 pass |
+| 10 | 200 m | 0.33 | 30 x 16 | 40.4 m/s | 0.79° | 5.5 | 14.9° | 1.41 | all 8 pass |
+| 10 | 300 m | 0.33 | 30 x 16 | 38.0 m/s | 0.71° | 5.0 | 16.8° | 2.12 | all 8 pass |
+
+Above 10 m/s the schedule holds its 10 m/s values; not flown.
