@@ -6,6 +6,8 @@
 # against the model T = (1 - 1/G)·L/(1 + L) of stability_opt_reelout.jl.
 # WORK IN PROGRESS, see docs/course_loop_stability_reelout.md, "Cross-track step test".
 #
+# Including the script prints the measured fit of every saved test in data/steptest (`xtrack_fit_table`).
+#
 # Measured part, from the saved 600 s tests at 200 m (no simulation needed):
 #     include("examples/xtrack_step_analysis.jl")
 #     x = load_xtrack_csv("data/steptest/xtrack_step_test_200m_600s_ff0.csv")   # or ..._ff07.csv
@@ -23,6 +25,13 @@
 # C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN, kite_dead_time, kite_lag) plus `guidance_rate`. On a run that
 # reels out only to 200 m that script stops at the dead-time cross-check (phase 4 < 20 s);
 # define `guidance_rate` by hand there.
+
+using Pkg
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    Pkg.activate(joinpath(@__DIR__))
+end
+
+using Statistics, Printf, ControlSystemsBase
 
 """
 Columns of a saved cross-track step test: time, δ, d of the step run and of the δ = 0 twin
@@ -127,8 +136,6 @@ function subtract_by_position(d, q, d_ref, q_ref; smooth = 2)
     return d .- f[q]
 end
 
-using Statistics, ControlSystemsBase
-
 "Aligned, normalised step responses of d: (d(t_k + τ) - d(t_k)) / Δδ_k over `win` seconds."
 function step_responses(t, δ, d; win = 10.0, pre = 1.0)
     ks = findall(i -> δ[i] != δ[i - 1], 2:length(δ)) .+ 1
@@ -205,3 +212,34 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
            ζ = isnothing(dom) ? NaN : -real(dom) / abs(dom))
     end)
 end
+
+"""
+    xtrack_fit(file) -> NamedTuple
+
+The fit of [`fit_second_order_gain`](@ref) to the mean step response of one saved test, held
+(subtracted by path position) or phase 4 (subtracted by time), told apart by the CSV header,
+plus the number of steps.
+"""
+function xtrack_fit(file)
+    if any(startswith("run,"), eachline(file))
+        st = phase4_step_responses(load_xtrack_phase4_csv(file))
+        return (; fit_second_order_gain(st.τ, st.y)..., steps = length(st.steps))
+    end
+    x = load_xtrack_csv(file)
+    keep = x.t .- x.t[1] .>= 10                     # the reference once the offset test has started
+    sr = step_responses(x.t, x.δ, subtract_by_position(x.d, x.q, x.d_ref[keep], x.q_ref[keep]))
+    y = vec(mean(reduce(hcat, sr.resp); dims = 2))
+    return (; fit_second_order_gain(sr.τ, y)..., sr.steps)
+end
+
+"Print the fit of every saved test in `dir`: K, f_d [Hz], ζ, delay [s], rms and the number of steps."
+function xtrack_fit_table(dir = joinpath(@__DIR__, "..", "data", "steptest"))
+    @printf("%-40s %6s %8s %6s %7s %6s %6s\n", "test", "K", "f_d", "ζ", "delay", "rms", "steps")
+    for file in sort(filter(endswith(".csv"), readdir(dir)))
+        f = xtrack_fit(joinpath(dir, file))
+        @printf("%-40s %6.2f %8.3f %6.2f %7.2f %6.3f %6d\n", replace(file, "xtrack_step_test_" => "", ".csv" => ""),
+                f.K, f.f_d, f.ζ, f.delay, f.rms, f.steps)
+    end
+end
+
+xtrack_fit_table()
