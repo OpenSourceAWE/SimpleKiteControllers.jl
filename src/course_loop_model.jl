@@ -14,7 +14,7 @@ const ACTUATOR_LAG = 0.43   # simple_fig8.jl log, phase 4, depower 0.27, v_app 3
 """
 Exponents of the kite's dead time and lag over `v_a`, `x ∝ v_a^-exp`: the
 relay sweeps at depower 0.275 at 9.51 and 15 m/s of wind (`v_a` 13.3 and
-22.5 m/s) split into dead time + lag (`fit_delay_lag`), 2026-09-26:
+22.5 m/s) split into dead time + lag (V3Kite's `fit_delay_lag`), 2026-09-26:
 0.141 + 0.267 s and 0.082 + 0.133 s. Both are roughly a fixed distance flown,
 1.9 m and 3.0 – 3.5 m.
 """

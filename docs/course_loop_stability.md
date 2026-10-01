@@ -149,7 +149,7 @@ re-run with the wind as a parameter), and the fig8 log, all fitted with
 - The kite's response is itself partly a lag (the LS column), which a pure
   dead time overstates; the model keeps the pure dead time, the conservative
   choice. (Superseded 2026-09-26: the model now splits the two, dead time
-  `∝ v_a^-1.03` and lag `∝ v_a^-1.32`, fitted with `fit_delay_lag`.)
+  `∝ v_a^-1.03` and lag `∝ v_a^-1.32`, fitted with V3Kite's `fit_delay_lag`.)
 
 **The table now records `v_app`.** `build_turn_rate_table.jl` writes each
 sweep's mean `v_a` to its row, and `turn_rate_coeffs` returns it (`NaN` for a
