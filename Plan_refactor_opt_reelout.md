@@ -240,10 +240,16 @@ check, as before.
    `update_lift_target!`, `depower_command!` (the 2 -> 3 ramp, phase 5 when the
    reel-out is done, the soft-stop ramp, the force limiter) and
    `steering_hooks!` (disturbance, gain factor, feedback only, delay). Not
-   yet: the rationed rungs of `deliver_lift_in_air!`, `steering_command!` and
-   `xtrack_input!` (they need a full `SysState` and a tracking `fec`), the
-   re-optimization chain (`reoptimize!` … `install_candidate!`, which talks to
-   `opt_chain`).
+   yet: the rationed rungs of `deliver_lift_in_air!`, and `steering_command!`
+   and `xtrack_input!` (they need a full `SysState` and a tracking `fec`).
+
+   `test/test_reopt_chain.jl` covers the re-optimization cycle (`reoptimize!`
+   … `install_candidate!`) with an `OptChain` in replay mode, so without a
+   server: the request on a lap boundary (none while a blend runs or past
+   `max_reopt`), the poll, an install, a rejection on power, a failed solve and
+   a request that could not be sent. Not reached: the blocking requests and the
+   cold retries of a rejected reply (`cold_retry!`), which send `/init`;
+   `test/test_awetrim_server.jl`'s fake server could serve them.
 
    `test/test_startup_path.jl` covers `src/startup_path.jl` where no optimizer
    answers: `score_installed` (the three gates, clearance off),

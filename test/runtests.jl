@@ -26,6 +26,7 @@ using Test
     include("test_opt_request.jl")
     include("test_loop_decisions.jl")
     include("test_reelout_loop.jl")
+    include("test_reopt_chain.jl")
     include("test_startup_path.jl")
     include("test_awetrim_client.jl")
     include("test_awetrim_server.jl")
