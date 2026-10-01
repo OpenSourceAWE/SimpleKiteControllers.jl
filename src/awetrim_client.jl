@@ -1192,7 +1192,8 @@ function optimizer_session(tos, inflow, replay_paths, log_name)
 end
 
 """
-    solve_startup(tos, make_params, solve, start_params, el_center_seed_base, l_set, winch, inflow)
+    solve_startup(tos, make_params, solve, start_params, el_center_seed_base, l_set, winch, inflow;
+                  failure_file = OPT_FAILURE_CACHE)
         -> (; opt_result, opt_seed_trajectory, start_params, el_center_seed, startup_seed_offset,
              guess_az, guess_el)
 
@@ -1200,14 +1201,15 @@ The STARTUP solve, from `start_params` (the shipped guess) and, if the optimizer
 422 (no path from that seed), from the seeds of `startup_retry_el_offsets` in order, then
 whole degrees walked outward. `make_params(el_center)` builds the `/init` request seeded at
 that centre elevation and `solve(params)` sends it, returning `(result, seed_trajectory)`.
-A request the failure cache records as bad is skipped and costs no retry; a 422 is recorded.
+A request the failure cache (`failure_file`, read and written only under `tos.opt_failure_cache`)
+records as bad is skipped and costs no retry; a 422 is recorded.
 
 Returns the result with the request and seed that produced it. Throws when every seed
 within reach is cached as bad, or when the optimizer answered 422 to all that were sent;
 both messages say what to try.
 """
 function solve_startup(tos, make_params, solve, start_params, el_center_seed_base, l_set, winch,
-                       inflow)
+                       inflow; failure_file::AbstractString = OPT_FAILURE_CACHE)
     # A 422 is retried from `startup_retry_el_offsets` in order; cached failures are skipped and cost no retry.
     opt_result = nothing
     opt_seed_trajectory = nothing
@@ -1223,7 +1225,7 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
         sent < budget || break
         el_center = el_center_seed_base + offset
         params = offset == 0 ? start_params : make_params(el_center)
-        cached = tos.opt_failure_cache ? opt_failed_before(params) : nothing
+        cached = tos.opt_failure_cache ? opt_failed_before(params; file = failure_file) : nothing
         if !isnothing(cached)
             cached_msg = @sprintf("This exact request failed before (%s, recorded \
                                    %s) and is cached as bad, so it was not sent: %s \
@@ -1251,14 +1253,14 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
             break
         catch exc
             exc isa HTTP.StatusError && exc.status == 422 || rethrow()
-            tos.opt_failure_cache && record_opt_failure!(params, "422 from /step")
+            tos.opt_failure_cache && record_opt_failure!(params, "422 from /step"; file = failure_file)
             last_422 = exc
         end
     end
     isnothing(opt_result) && isnothing(last_422) &&
         error(cached_msg * "\n\nEvery seed within reach of startup_retry_el_offsets \
               is cached as bad. Retry them with `clear_opt_failures()`, drop an entry \
-              from $OPT_FAILURE_CACHE, or set opt_failure_cache: false in \
+              from $failure_file, or set opt_failure_cache: false in \
               data/traj_opt.yaml.")
     isnothing(opt_result) && error("""
           The optimizer returned no path: $(String(copy(last_422.response.body)))
