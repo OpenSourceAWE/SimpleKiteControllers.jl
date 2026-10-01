@@ -17,7 +17,11 @@ the failure is logged. After a site, `create_overview.jl` rewrites its
 `overview.md`. The `gui.yaml` selection is restored at the end, also after an
 error.
 
-Progress, one line per run, goes to `output/build_all_scenarios.txt`. About
+Progress, one line per run, goes to `output/build_all_scenarios.txt`, with what
+the run's startup did (`ladder_line`: seed retries, the startup retry ladder and
+each retry's outcome, the margin flown, the error of a run that stopped there).
+Each run's log messages go to `output/run_logs/<site>_v<wind>.log` (`with_run_log`),
+replaced by the next build; a run that stopped in the startup keeps its log too. About
 30 minutes for the 22 scenarios of 2026-09-26. Do not start other runs
 meanwhile: they write the same `output/` files.
 
@@ -31,7 +35,8 @@ end
 
 import YAML
 using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs
+using SimpleKiteControllers: run_example, script_inputs, with_run_log
+using SimpleKiteControllers: startup_ladder_report, ladder_line
 
 "Project flown at each site, see `scenario_site`"
 const SITE_PROJECTS = ("maasvlakte" => "system_reelout_maasvlakte.yaml",
@@ -71,11 +76,15 @@ try
             write_gui_field("wind_speed", wind)
             rm(run_done_file; force = true)
             t0 = time()
+            run_log = joinpath(output_dir, "run_logs", "$(site)_v$(wind).log")
             try
-                run_example("simple_opt_reelout.jl"; show_plots = false)
+                with_run_log(run_log) do
+                    run_example("simple_opt_reelout.jl"; show_plots = false)
+                end
             catch e
                 log_line("$site $wind m/s: the run threw $(first_line(e))")
             end
+            log_line("$site $wind m/s: " * ladder_line(startup_ladder_report(run_log)))
             done = isfile(run_done_file) ? read(run_done_file, String) : ""
             criteria = match(r"criteria: (.*)", done)
             archive = match(r"archive: (.*)", done)

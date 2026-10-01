@@ -21,6 +21,10 @@ and the `time`-of-day metadata of the log columns.
 Numbers are compared exactly (`===`, so `NaN` equals `NaN`) unless `rtol > 0`
 is given. A pure refactor must be exact; `rtol` is for diagnosing how large a
 difference is.
+
+`compare_startup_logs(a, b)` compares the startup sections of the two runs' `run.log`
+(written by `with_run_log`, e.g. through `fly_replay`), the only record of a run that
+stopped in the startup.
 """
 
 using Pkg
@@ -30,6 +34,7 @@ end
 
 import YAML
 using KiteUtils
+using SimpleKiteControllers: startup_log_lines
 const Arrow = KiteUtils.Arrow
 
 "Summary keys (at any depth) that hold wall-clock or machine-dependent values"
@@ -120,6 +125,29 @@ function compare_runs(dir_a, dir_b; log = nothing, rtol = 0.0)
         length(diffs) > 40 && println("  ... and $(length(diffs) - 40) more")
     end
     return isempty(diffs)
+end
+
+"""
+    compare_startup_logs(dir_a, dir_b) -> Bool
+
+Compare the startup sections (`startup_log_lines`) of `dir_a/run.log` and `dir_b/run.log` line by
+line. Prints the differing lines; returns `true` if there is none.
+"""
+function compare_startup_logs(dir_a, dir_b)
+    a = startup_log_lines(joinpath(dir_a, "run.log"))
+    b = startup_log_lines(joinpath(dir_b, "run.log"))
+    bad = [i for i in 1:max(length(a), length(b)) if get(a, i, nothing) != get(b, i, nothing)]
+    if isempty(bad)
+        println("IDENTICAL: the $(length(a)) startup log lines of $dir_a and $dir_b")
+    else
+        println("DIFFERENT: $(length(bad)) of $(max(length(a), length(b))) startup log lines \
+                 ($(length(a)) in A, $(length(b)) in B) between $dir_a and $dir_b")
+        for i in first(bad, 10)
+            println("  line $i\n    A: ", get(a, i, "(none)"), "\n    B: ", get(b, i, "(none)"))
+        end
+        length(bad) > 10 && println("  ... and $(length(bad) - 10) more")
+    end
+    return isempty(bad)
 end
 
 nothing

@@ -190,9 +190,40 @@ dominates, so the refactor bought clarity, not speed.
 Optional work. None of it is needed for the goal. Each item needs the replay
 check, as before.
 
-1. **A baseline for the startup retry ladder.** The planned Cabauw baseline
-   (stage 0) would cover `retry_startup!`, which stages 8 and 9 moved and
-   retyped without any run reaching it.
+1. **A baseline for the startup retry ladder.** Done (2026-10-01): the
+   startup of stages 8 and 9 is IDENTICAL to the code before them
+   (`3a78dc6`) on the `ladder` case, compared on the startup log.
+
+   No scenario reaches the ladder: the full build of 2026-10-01 (22 runs,
+   empty caches) had no 422, no seed retry and no ladder. Every startup path
+   cleared 0.82 at the first solve; Cabauw 7-10 m/s came closest (0.85-0.91).
+   `min_feasibility_margin` alone does not reach it, since it sizes the request
+   too (1.3 at headroom 0.85 flew margin 1.74), and neither does a low
+   `turn_radius_headroom` alone (0.6 flew 0.96 against 0.82). Both together
+   do: the `ladder` entry of `LIVE_CASES`, margin 1.3 at headroom 0.4, at
+   Maasvlakte 8.25 m/s. The startup path comes back at 0.979; retries 1, 2
+   (radius correction) and 4 (ceiling step) get a 422, and retry 3 (width step)
+   converges at 1.041 and takes over (`takes_over`, `record_converged!`). The run
+   then stops at the startup gate (1.04 < 1.3), so it leaves no log or summary,
+   only its startup.
+
+   Run logs, `src/run_log.jl`: `with_run_log` writes a run's log messages to a
+   file as well. `fly_replay` writes `out/run.log`; `build_all_scenarios.jl`
+   writes `output/run_logs/<site>_v<wind>.log` and adds `ladder_line` to
+   `build_all_scenarios.txt`. `check_live` and `check_regression` compare the
+   startup logs too (`compare_startup_logs`, `startup_log_lines`: wall times,
+   time stamps, the trajectories folder and the optimizer client's cache and
+   server messages left out), so a run that stops in the startup is still
+   compared. `ladder_d002_8.25` (only `run.log`) is the reference of the default
+   `check_live`.
+
+   The old code had a bug only the ladder reaches: `save_failed_trajectory`,
+   then in the script, called `now()` with only `import Dates` in scope, so the
+   ladder threw `UndefVarError: now` before recording the incumbent. Stage 9
+   fixed it in passing (the package has `using Dates: now`). The old side was
+   flown from a worktree at `3a78dc6` with that fix, `damping_per_stiffness =
+   0.002`, the run log, and `output/` linked to this repo's, so the new run was
+   served from the old run's solution cache.
 2. **Unit tests for the step blocks.** The functions in `src/reelout_loop.jl`
    take hand-made `st`, `setup` and `plant`, so blends, the phase-5 fallback,
    the lap counter and the winch setpoint could be tested without a model,

@@ -92,6 +92,9 @@ export run_example, script_inputs
 # One reel-out run of examples/simple_opt_reelout.jl: its state, and its loop around the model's step!.
 export RunState, step_commands!, record_step!, check_overspeed, apply_optimized_kv!
 
+# A run's log messages written to a file, and what they say about its startup retries.
+export with_run_log, startup_ladder_report, ladder_line, startup_log_lines
+
 """
     skc_data_path() -> String
 
@@ -154,6 +157,8 @@ include("reelout_loop.jl")
 # Its setup and startup, before the loop; the model comes in as the caller's `init_model`.
 include("run_setup.jl")
 include("startup_path.jl")
+# Base only, so an older checkout can include it to log its runs.
+include("run_log.jl")
 
 function __init__()
     reload_turn_rate_table!()
