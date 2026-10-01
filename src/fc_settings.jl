@@ -24,6 +24,10 @@ the controller they feed is V3Kite's `WinchForceController`.
 The dated record of how these values were arrived at — sweeps, reverted attempts
 and the failures behind each closed lever — is in `docs/fig8_tuning_log.md`.
 Add new findings there, not here.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct FC_Settings @deftype Float64
     """
@@ -107,7 +111,7 @@ Add new findings there, not here.
     reelout_l_max = 250.0
     """
     Number of complete figures of eight after which reel-out stops [-], the second
-    stop criterion beside [`reelout_l_max`](@ref); whichever is reached first ends
+    stop criterion beside `reelout_l_max`; whichever is reached first ends
     reel-out and enters phase 5. `0` disables it, leaving `reelout_l_max` the only
     criterion (the pre-change behaviour). Counted from the same lap counter the log
     records as `SysState.fig_8`, which starts at phase 4, so the partial lap flown
@@ -199,7 +203,7 @@ Add new findings there, not here.
     """
     reelout_softstart = 0.0
     """
-    Soft-stop trigger [s], the mirror image of [`reelout_softstart`](@ref): once
+    Soft-stop trigger [s], the mirror image of `reelout_softstart`: once
     the remaining reel-out would finish within this many seconds AT THE CURRENT
     RATE, `v_set` decelerates LINEARLY from whatever it is at that instant to 0,
     landing exactly at `reelout_l_max` — continuous with the speed already being

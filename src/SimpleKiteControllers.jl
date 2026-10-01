@@ -3,7 +3,7 @@
 
 module SimpleKiteControllers
 
-using DiscretePIDs, Parameters, KiteUtils, YAML
+using DiscretePIDs, DocStringExtensions, Parameters, KiteUtils, YAML
 using AtmosphericModels: AtmosphericModel, calc_wind_factor
 using LinearAlgebra: dot, cross, norm
 using StaticArrays: SVector

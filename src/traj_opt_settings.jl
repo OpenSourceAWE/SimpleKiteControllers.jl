@@ -26,6 +26,10 @@ makes the solve fail to converge, while 30°/12°, or the same eight centred at
 26°, converge — and to the same optimum, worth 6080 W, while the server's own
 parametric guess converges to a different one worth 1431 W. The problem is
 multi-modal, so the guess is a choice about the answer.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct TrajOptSettings @deftype Float64
     "Address of the AWETrim server"
@@ -200,8 +204,8 @@ multi-modal, so the guess is a choice about the answer.
     This is a deterministic pre-solve, NOT a retry — it runs unconditionally when
     set, so the ladder is the same every run and the optimum flown stays
     reproducible. That is what keeps it clear of the rule under
-    [`reopt_retry_el_offset`](@ref) that the startup solve retries only through
-    [`startup_retry_el_offsets`](@ref).
+    `reopt_retry_el_offset` that the startup solve retries only through
+    `startup_retry_el_offsets`.
 
     Only sent when it is ABOVE `wc_settings.yaml`'s `use_awe_trim`; a value at or
     below it would seed with a law at least as hard to solve as the real one.
@@ -310,7 +314,7 @@ multi-modal, so the guess is a choice about the answer.
     solve rather than after it. `0.0` therefore turns off the request and the
     gate together.
 
-    What is sent is that number scaled UP, by [`turn_radius_headroom`](@ref) and by
+    What is sent is that number scaled UP, by `turn_radius_headroom` and by
     the lap's reel-out: the optimizer measures the path's radius up its own reel-out
     while the gate reads the same curve at the anchor, so an unscaled request is one
     the reply satisfies and the gate still refuses.
@@ -325,7 +329,7 @@ multi-modal, so the guess is a choice about the answer.
     min_feasibility_margin = 1.0
     """
     Extra turn radius asked of the optimizer, as a factor on what
-    [`min_feasibility_margin`](@ref) demands; `1.0` asks for exactly the gate's
+    `min_feasibility_margin` demands; `1.0` asks for exactly the gate's
     number, which is NOT enough.
 
     The request and the gate do not measure the same curve at the same radius, and
@@ -379,7 +383,7 @@ multi-modal, so the guess is a choice about the answer.
     turn_radius_lap_reelout_m = 0.0
     """
     Corrected startup re-solves allowed when the first reply falls short of
-    [`min_feasibility_margin`](@ref). Each is a warm `/step` under a raised turn
+    `min_feasibility_margin`. Each is a warm `/step` under a raised turn
     radius — the same solve under a better-measured constraint, never a different
     seed. `0` flies the first short path straight to the gates, as before
     2026-08-26; `2` costs at most two extra converged solves (~3 s each).
@@ -387,14 +391,14 @@ multi-modal, so the guess is a choice about the answer.
     startup_retries_max = 2
     """
     First-attempt target margin of a startup retry, as this multiple of the
-    INSTALLED path's measured margin. Combined with [`startup_retry_slack`](@ref)
+    INSTALLED path's measured margin. Combined with `startup_retry_slack`
     into `max(startup_retry_step * margin, startup_retry_slack *
     min_feasibility_margin)`; `1.05` keeps the historical fixed +5 % step.
     """
     startup_retry_step = 1.05
     """
     Floor on every retry's target margin, as a factor on
-    [`min_feasibility_margin`](@ref): the request never aims at or below the very
+    `min_feasibility_margin`: the request never aims at or below the very
     number the gate accepts. Aiming exactly AT the gate lost the rounding on
     2026-08-26 — 0.82 targeted, 0.8199 delivered, refused — while aiming far above
     it overshoots, because replies land wider than asked (2026-08-21: 0.72 ->
@@ -439,7 +443,7 @@ multi-modal, so the guess is a choice about the answer.
     reel-out, so a curve installed as (azimuth, elevation) and flown at its anchor
     radius clears only `50 * r0/r_low` ≈ 42 m, whatever the anchor — and less than
     that where a lap reels out more than the ~35 m that estimate assumes, which is
-    what [`elevation_min_from_gates`](@ref) exists for. This floor is
+    what `elevation_min_from_gates` exists for. This floor is
     therefore about the anchor radius, not about how low the kite gets: the run
     reels out and climbs through 50 m within the first lap. `data/traj_opt.yaml`
     ships 40.0 for that reason, and the flown minimum is reported separately.
@@ -466,7 +470,7 @@ multi-modal, so the guess is a choice about the answer.
     Elevation floor [deg] the optimized pattern must stay above, sent with the
     request; `0.0` keeps the optimizer's own 0.6°.
 
-    Not the same thing as [`min_height`](@ref), and that is the point: AWETrim
+    Not the same thing as `min_height`, and that is the point: AWETrim
     constrains HEIGHT, which a growing tether satisfies at ever lower angles (50 m
     at 350 m of tether is 8.2°), while this repo's criterion — and the elevation floor
     of [`check_startup_path`](@ref) — is an ANGLE. Set it to `min_elevation +
@@ -600,7 +604,7 @@ multi-modal, so the guess is a choice about the answer.
     frozen for.
 
     A warm step that comes back `"failed"` falls back to ONE cold `/init` from the
-    parametric guess, under the same rule as [`reopt_retry_el_offset`](@ref):
+    parametric guess, under the same rule as `reopt_retry_el_offset`:
     blocking mode only, since without the hold there is nothing to retry within.
     That `/init` also RESETS the session, so the warm starts that follow it
     continue from the new solve.
@@ -804,7 +808,7 @@ multi-modal, so the guess is a choice about the answer.
     from a different seed usually lands elsewhere.
 
     This is NOT the startup solve, which retries only through
-    [`startup_retry_el_offsets`](@ref) and reports it. A re-optimization is a
+    `startup_retry_el_offsets` and reports it. A re-optimization is a
     candidate that still has to pass the curvature, clearance and elevation gates
     before it is installed, and a failure just means flying on with the current
     path — so a second attempt costs one solve and risks nothing.

@@ -99,26 +99,48 @@ than the best inside it. Both searches are restricted to points aligned with
 the flight direction (see [`calc_attractor`](@ref)): near the crossing the
 nearest point of all is often the reverse branch, and taking it flips the
 commanded course by ~180°.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct FigureEightSettings @deftype Float64
+    "Time step [s]"
     dt
-    A = 30.0            # width of the figure-eight [deg]
-    B = 12.0            # height of the figure-eight [deg]
-    az_center = 0.0     # azimuth of the path center [deg]
-    el_center = 60.0    # elevation of the path center [deg]
-    theta = 0.0         # rotation angle [rad]
+    "Width of the figure-eight [deg]"
+    A = 30.0
+    "Height of the figure-eight [deg]"
+    B = 12.0
+    "Azimuth of the path center [deg]"
+    az_center = 0.0
+    "Elevation of the path center [deg]"
+    el_center = 60.0
+    "Rotation angle [rad]"
+    theta = 0.0
+    "Number of points of the generated path"
     num_points::Int = 361
-    attractor_distance = 7.0   # arc distance from Q to the attractor [deg]
-    up_loops::Bool = true      # fly upwards during the turns at large |azimuth|
-    branch_tol = 3.0           # candidates within dmin + branch_tol are disambiguated [deg]
-    branch_hysteresis = 10.0   # how much better aligned a candidate must be to take Q [deg]
-    q_rate_gain = 2.0          # Q may advance this many times the kite's own arc per step [-]
-    min_speed = 1.0            # minimum angular speed to trust the course estimate [deg/s]
-    course_tau = 0.5           # low-pass on the course estimate [s]
-    search_window = 45.0       # arc half-width of the local Q search [deg]
-    search_window_max_frac = 0.125 # cap on that half-width, as a fraction of the path [-]
-    reacquire_dist = 25.0      # cross-track error above which the search goes global [deg]
-    reacquire_margin = 3.0     # how much better the global best may be before Q jumps [deg]
+    "Arc distance from Q to the attractor [deg]"
+    attractor_distance = 7.0
+    "Fly upwards during the turns at large |azimuth|"
+    up_loops::Bool = true
+    "Candidates within dmin + branch_tol are disambiguated [deg]"
+    branch_tol = 3.0
+    "How much better aligned a candidate must be to take Q [deg]"
+    branch_hysteresis = 10.0
+    "Q may advance this many times the kite's own arc per step [-]"
+    q_rate_gain = 2.0
+    "Minimum angular speed to trust the course estimate [deg/s]"
+    min_speed = 1.0
+    "Low-pass on the course estimate [s]"
+    course_tau = 0.5
+    "Arc half-width of the local Q search [deg]"
+    search_window = 45.0
+    "Cap on that half-width, as a fraction of the path [-]"
+    search_window_max_frac = 0.125
+    "Cross-track error above which the search goes global [deg]"
+    reacquire_dist = 25.0
+    "How much better the global best may be before Q jumps [deg]"
+    reacquire_margin = 3.0
 end
 
 """
@@ -127,20 +149,37 @@ end
 Stateful figure-of-eight guidance: holds the discretized reference path and the
 filtered course estimate used to disambiguate the two branches at the
 self-intersection.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 mutable struct FigureEightController
+    "The settings it was built from"
     fes::FigureEightSettings
-    az_path::Vector{Float64}   # [deg], cyclic (no duplicated end point)
-    el_path::Vector{Float64}   # [deg]
-    seg_len::Vector{Float64}   # [deg] arc length of segment i -> i+1
-    tangent::Vector{Float64}   # [rad] path direction at point i (chi convention)
-    last_idx::Int              # index of the last closest point Q
-    course::Float64            # [rad] filtered course estimate
-    speed::Float64             # [deg/s] angular speed estimate
-    fx::Float64                # course filter state (elevation component)
-    fy::Float64                # course filter state (azimuth component)
-    prev_az::Float64           # [deg]
-    prev_el::Float64           # [deg]
+    "Azimuth of the path points [deg], cyclic (no duplicated end point)"
+    az_path::Vector{Float64}
+    "Elevation of the path points [deg]"
+    el_path::Vector{Float64}
+    "Arc length of segment i -> i+1 [deg]"
+    seg_len::Vector{Float64}
+    "Path direction at point i [rad] (chi convention)"
+    tangent::Vector{Float64}
+    "Index of the last closest point Q"
+    last_idx::Int
+    "Filtered course estimate [rad]"
+    course::Float64
+    "Angular speed estimate [deg/s]"
+    speed::Float64
+    "Course filter state (elevation component)"
+    fx::Float64
+    "Course filter state (azimuth component)"
+    fy::Float64
+    "Kite azimuth of the previous call [deg]"
+    prev_az::Float64
+    "Kite elevation of the previous call [deg]"
+    prev_el::Float64
+    "Whether `prev_az` and `prev_el` hold a position yet"
     has_prev::Bool
 end
 

@@ -14,6 +14,10 @@ height), both walked in `step_size` degree increments and both inclusive of thei
 bounds. Everything else about a run — the plant, the tether length, the wind, the
 controller tuning — comes from the system project the workers fly, exactly as an
 interactive `simple_reelout.jl` run would; only `f8_a` and `f8_b` are overridden.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct OptSettings @deftype Float64
     "Number of worker processes run in parallel; one simulation each at a time"

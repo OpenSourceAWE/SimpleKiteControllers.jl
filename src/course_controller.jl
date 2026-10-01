@@ -13,8 +13,13 @@ angle ψ' — see [`calc_steering`](@ref).
 Settings of [`CourseController`](@ref): the heading/course PID, the ψ'
 fusion and the gain schedule. All angles in radians unless noted; `dt` has no
 default, matching [`FigureEightSettings`](@ref).
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct CourseControllerSettings @deftype Float64
+    "Time step [s]"
     dt
     "Gain at `v_app == v_app_ref` — see `data/fc_settings.yaml`'s `heading_p`"
     heading_p = 0.1941
@@ -123,9 +128,15 @@ end
 Stateful inner loop of the figure-of-eight flight controller: holds the
 heading/course PID and the entry state machine (0 park, 1 dive, 2 hold,
 3 transition, 4 fig8; 5 "final" is set from outside — see [`set_phase!`](@ref)).
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 mutable struct CourseController
+    "The settings it was built from"
     ccs::CourseControllerSettings
+    "Heading/course PID"
     pid::DiscretePID
     "Entry state machine phase, 0-4 advanced by `calc_steering`, 5 by `set_phase!`"
     phase::Int

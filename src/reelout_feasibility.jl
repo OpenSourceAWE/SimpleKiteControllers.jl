@@ -5,27 +5,34 @@
     ReeloutFeasibility
 
 The turn-rate coefficients and curvature margins a reel-out run's reference path
-is gated against, as returned by [`check_reelout_feasibility`](@ref). Fields:
-
-* `c1`, `c2`, `delay` — the pattern depower's turn-rate law; `NaN` when the table
-  could not serve the `(body_damping, depower_setpoint)` cell.
-* `feas_start`, `feas_end` — [`check_pattern_feasible`](@ref) at the starting and
-  the maximum tether length, or `nothing` when `c1` is `NaN`.
-* `c1_final` — the gain at `depower_final` [1/m], `NaN` when unavailable or equal
-  to the pattern's.
-* `feas_final` — what phase 5 flies: the starting path lifted by `el_offset_final`,
-  scored at `reelout_l_max` with `c1_final`. `nothing` when unavailable.
+is gated against, as returned by [`check_reelout_feasibility`](@ref).
+`c1`, `c2` and `delay` are `NaN` when the table could not serve the
+`(body_damping, depower_setpoint)` cell.
 
 [`check_startup_path`](@ref) applies the abort policy on top of these verdicts:
 which check refuses the run and which only warns.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 Base.@kwdef struct ReeloutFeasibility
+    "Turn-rate gain of the pattern depower [1/m]"
     c1::Float64 = NaN
+    "Turn-rate coefficient `c2` of the pattern depower [-]"
     c2::Float64 = NaN
+    "Steering delay of the pattern depower's turn-rate law [s]"
     delay::Float64 = NaN
+    "[`check_pattern_feasible`](@ref) at the starting tether length, `nothing` when `c1` is `NaN`"
     feas_start::Union{Nothing, NamedTuple} = nothing
+    "[`check_pattern_feasible`](@ref) at the maximum tether length, `nothing` when `c1` is `NaN`"
     feas_end::Union{Nothing, NamedTuple} = nothing
+    "Turn-rate gain at `depower_final` [1/m], `NaN` when unavailable or equal to the pattern's"
     c1_final::Float64 = NaN
+    """
+    What phase 5 flies: the starting path lifted by `el_offset_final`, scored at
+    `reelout_l_max` with `c1_final`; `nothing` when unavailable
+    """
     feas_final::Union{Nothing, NamedTuple} = nothing
 end
 
@@ -64,13 +71,16 @@ end
 """
     Phase5MarginState
 
-Mutable state for the in-air phase-5 margin tracking during a run:
-`margin` is the phase-5 margin of the path currently installed (`NaN` when the
-table could not serve `depower_final`), `warned` records whether the one warning
-per run has been spent.
+Mutable state for the in-air phase-5 margin tracking during a run.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 mutable struct Phase5MarginState
+    "Phase-5 margin of the path currently installed, `NaN` when the table could not serve `depower_final`"
     margin::Float64
+    "Whether the one warning per run has been spent"
     warned::Bool
 end
 Phase5MarginState() = Phase5MarginState(NaN, false)
