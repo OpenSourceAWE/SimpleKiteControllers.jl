@@ -35,7 +35,7 @@ export V3_TURN_RATE_COEFFS, turn_rate_coeffs, turn_rate_depower_range, V3_TURN_R
 export reload_turn_rate_table!, try_turn_rate_coeffs, stack_fits
 
 # Wind-speed-dependent winch law lookup table
-export winch_kv, winch_f_low, winch_force_limit, winch_table_lookup, winch_table_select
+export winch_f_low, winch_force_limit, winch_table_lookup, winch_table_select
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
@@ -51,7 +51,7 @@ export performance_block, opt_cycle_max, run_input_files, archive_run_files
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
 export attractor_distance, guidance_rate, wind_schedule, apply_wind_schedule!
-export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
+export turn_rate_coeffs_file, winch_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
 export TrajOptSettings, turn_radius_lap_reelout
@@ -108,7 +108,7 @@ export with_run_log, startup_ladder_report, ladder_line, startup_log_lines
 
 Absolute path of this package's bundled `data/` directory, holding
 `fc_settings.yaml` ([`FC_Settings`](@ref)), `turn_rate_coeffs.yaml`
-([`turn_rate_coeffs`](@ref)), `winch_kv_table.yaml` ([`winch_kv`](@ref)) and
+([`turn_rate_coeffs`](@ref)), `winch_table.yaml` ([`winch_f_low`](@ref)) and
 the system project of a run ([`project_file`](@ref)).
 
 Not `KiteUtils.get_data_path()`: that points at the *kite model's* data
@@ -122,7 +122,7 @@ include("gui_state.jl")
 include("script_inputs.jl")
 # Before figure_eight_controller.jl: its feasibility helpers default c1 to V3_TURN_RATE_C1.
 include("turn_rate_table.jl")
-include("winch_kv_table.jl")
+include("winch_table.jl")
 include("figure_eight_controller.jl")
 include("fig8_metrics.jl")
 include("summary_yaml.jl")
@@ -140,7 +140,7 @@ include("reelout_feasibility.jl")
 include("reelout_budget.jl")
 # Run inputs of examples/simple_opt_reelout.jl and their defaults.
 include("run_inputs.jl")
-# After winch_kv_table.jl: build_winch sets the wind-dependent winch tables;
+# After winch_table.jl: build_winch sets the wind-dependent winch tables;
 # after figure_eight_controller.jl: build_controllers builds a FigureEightController.
 include("winch_setup.jl")
 # After fig8_metrics.jl and fc_settings.jl: the summary sections score a log and read FC_Settings.

@@ -114,8 +114,8 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
             set = KiteUtils.Settings(project)
             (; wc, wpc, dt0) = build_winch(project, set, (; compliance = 0.0))
             @test dt0 == 1 / set.sample_freq && wc.dt == dt0
-            # The wind-dependent tables override the file's flat values.
-            @test wc.kv == winch_kv(set.v_wind; project)
+            # The wind-dependent tables override the file's flat values; kv is not one of them.
+            @test wc.kv == SimpleKiteControllers._wc_settings_value(project, "kv")
             @test wc.f_low == winch_f_low(set.v_wind; project)
             @test wc.force_limit == winch_force_limit(set.v_wind; project)
             @test wpc isa WinchPosController
@@ -141,9 +141,9 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
     @testset "project_files" begin
         project = project_file("system_reelout_maasvlakte.yaml")
         @test traj_opt_settings_file(project) == "traj_opt.yaml"
-        @test winch_kv_table_file(project) == "winch_kv_table.yaml"
+        @test winch_table_file(project) == "winch_table.yaml"
         @test turn_rate_coeffs_file(project) == "turn_rate_coeffs.yaml"
-        for f in (traj_opt_settings_file(project), winch_kv_table_file(project))
+        for f in (traj_opt_settings_file(project), winch_table_file(project))
             @test isfile(joinpath(skc_data_path(), f))
         end
     end
@@ -151,7 +151,7 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
     @testset "winch_table_select" begin
         project = project_file("system_reelout_maasvlakte.yaml")
         rows = SimpleKiteControllers.YAML.load_file(
-            joinpath(skc_data_path(), winch_kv_table_file(project)))["entries"]
+            joinpath(skc_data_path(), winch_table_file(project)))["entries"]
         winds = sort([Float64(r["v_wind"]) for r in rows])
         value(w) = only(r["force_limit"] for r in rows if Float64(r["v_wind"]) == w)
         # A step lookup: the last row at or below the wind, the first row below the range.

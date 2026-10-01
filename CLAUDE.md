@@ -218,9 +218,10 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   (`calc_steering`). Owns the four-phase entry state machine (0 park, 1 dive, 2 hold,
   3 transition, 4 fig8; 5 "final" is winch-triggered from outside via `set_phase!`), the
   entry descent limiter, and the heading/course feedback blend.
-- `winch_kv_table.jl` — `winch_kv(v_wind)`, wind-speed-dependent `kv` for
-  WinchControllers.jl's reel-out law, interpolated from the system project's
-  `winch_kv_table` file.
+- `winch_table.jl` — `winch_f_low(v_wind)` and `winch_force_limit(v_wind)`,
+  wind-speed-dependent parameters of WinchControllers.jl's reel-out law, looked up
+  in the system project's `winch_table` file. `kv` itself is flat, from
+  `data/wc_settings.yaml`.
 - `optimization.jl` — `OptSettings` and the shared machinery (`opt_grid`,
   `claim_task!`/`release_claims!`, `record_result!`/`load_results`, `rank_results`, ...)
   behind the parallel figure-eight shape sweep driven by `examples/optimize_fig8.jl`.

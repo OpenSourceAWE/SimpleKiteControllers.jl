@@ -767,10 +767,10 @@ multi-modal, so the guess is a choice about the answer.
     The lever for getting mean force under `f_max`: reeling out faster sheds
     force, so at high wind the optimizer raises `k_v` until the path fits inside
     the bound it was given. Measured before this existed, the flat
-    `kv`/`winch_kv_table` tuning ran 8394 N mean at 9 m/s and 8150 N at 10
+    per-wind-speed `kv` tuning ran 8394 N mean at 9 m/s and 8150 N at 10
     against an `f_max` of 8000 N, i.e. the request was for a path the winch law
     could not hold. `false` keeps the gain fixed at whatever
-    `winch_kv(v_wind)` supplies.
+    the `kv` of `data/wc_settings.yaml` supplies.
     """
     optimize_k_v::Bool = false
     """

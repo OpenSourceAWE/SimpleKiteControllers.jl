@@ -315,7 +315,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
             "k_v_optimized" => OrderedDict(time_keyed(opt_kv_log) do e
                 (e.t, (round(e.k_v; digits = 5),
                        @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
-                                 seed winch_kv(v_wind) supplied%s",
+                                 seed kv of wc_settings%s",
                                 e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
                                 e.at_bound ? "; AT ITS BRACKET EDGE" : "")))
             end)),
@@ -659,7 +659,7 @@ function archive_run(setup, run_time, opt_paths_file)
     end
     input_files = [
         run_input_files(project, project_set);
-        joinpath(skc_data_path(), winch_kv_table_file(project)), # kv(v_wind) table
+        joinpath(skc_data_path(), winch_table_file(project)), # f_low/force_limit(v_wind) table
         # The identified c1/c2/delay: they set the steering response and the
         # curvature gate, and a re-identification replaces the rows in place.
         joinpath(skc_data_path(), turn_rate_coeffs_file(project)), # turn-rate law

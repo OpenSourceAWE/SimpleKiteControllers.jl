@@ -795,15 +795,15 @@ function turn_rate_coeffs_file(project = project_file())
 end
 
 """
-    winch_kv_table_file(project = project_file()) -> String
+    winch_table_file(project = project_file()) -> String
 
-Get the winch kv table filename from the system project, the same way as
-[`fc_settings`](@ref). Returns the value of the `winch_kv_table` field of the
+Get the winch table filename from the system project, the same way as
+[`fc_settings`](@ref). Returns the value of the `winch_table` field of the
 project's `system` section; only reel-out projects carry it.
 """
-function winch_kv_table_file(project = project_file())
+function winch_table_file(project = project_file())
     dict = YAML.load_file(project)
-    dict["system"]["winch_kv_table"]
+    dict["system"]["winch_table"]
 end
 
 """

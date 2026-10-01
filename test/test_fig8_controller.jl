@@ -793,19 +793,8 @@ end
         @test_throws ErrorException winch_force_gains(fcs)
     end
 
-    @testset "winch_kv_table" begin
+    @testset "winch_table" begin
         p = project_file("system_reelout_maasvlakte.yaml")
-
-        # kv: flat at the identified 0.0408 from 3 to 12 m/s. The 10 m/s row was
-        # re-identified to 0.039 on 2026-08-27 (+5.5 % power) and went back to
-        # 0.0408 on 2026-09-22: the 499 N of headroom the knee bought was spent
-        # by a wider first lap, which put the force peak 10 N over the 8400 N
-        # rating (sweep and note in data/winch_kv_table.yaml).
-        @test winch_kv(9.0; project = p) ≈ 0.0408
-        @test winch_kv(3.0; project = p) ≈ 0.0408
-        @test winch_kv(6.0; project = p) ≈ 0.0408
-        @test winch_kv(10.0; project = p) ≈ 0.0408
-        @test winch_kv(9.5; project = p) ≈ 0.0408   # no knee left: the table is flat
 
         # f_low: 350 N at 3 m/s, 700 N from 4 m/s up, linear between. One flat
         # value cannot serve both — at 3 m/s a 700 N floor put the limiter in
@@ -817,20 +806,14 @@ end
 
         # Clamped outside the identified range, NEVER extrapolated: below the
         # first row and above the last, the end value is returned unchanged.
-        @test winch_kv(0.5; project = p) == winch_kv(3.0; project = p)
-        @test winch_kv(50.0; project = p) == winch_kv(12.0; project = p)
         @test winch_f_low(0.5; project = p) == winch_f_low(3.0; project = p)
         @test winch_f_low(50.0; project = p) == winch_f_low(10.0; project = p)
 
-        # Monotone (non-increasing) in wind speed over the identified 3-10 m/s
-        # range; 11 and 12 m/s carry an untested legacy value that breaks it.
-        @test issorted([winch_kv(v; project = p) for v in 3:0.5:10]; rev = true)
+        # Monotone (non-decreasing) in wind speed over the identified range.
         @test issorted([winch_f_low(v; project = p) for v in 3:0.5:11])
 
         # The 6 m/s row exists only to place the force_limit step; it must be
-        # NEUTRAL for the two interpolated columns, which are flat 4 -> 9.
-        @test winch_kv(5.0; project = p) ≈ 0.0408
-        @test winch_kv(7.0; project = p) ≈ 0.0408
+        # NEUTRAL for the interpolated f_low column, which is flat 4 -> 9.
         @test winch_f_low(5.0; project = p) == 700.0
         @test winch_f_low(7.0; project = p) == 700.0
 
@@ -872,15 +855,14 @@ end
         # Integer input is converted, like turn_rate_coeffs'.
         @test winch_f_low(4; project = p) == winch_f_low(4.0; project = p)
 
-        # Both read the SAME file through one lookup, so a row can never carry a
-        # kv without an f_low.
-        @test winch_table_lookup(6.0, "kv"; project = p) == winch_kv(6.0; project = p)
+        # kv is flat in wc_settings.yaml, no longer a column of this table.
+        @test_throws ErrorException winch_table_lookup(6.0, "kv"; project = p)
         @test winch_table_lookup(6.0, "f_low"; project = p) == winch_f_low(6.0; project = p)
         # A column the table does not have is named in the error, not a KeyError
         # from inside the comprehension.
         @test_throws ErrorException winch_table_lookup(6.0, "no_such_column"; project = p)
-        # Only reel-out projects carry a winch_kv_table entry.
-        @test_throws Exception winch_kv(6.0; project = project_file())
+        # Only reel-out projects carry a winch_table entry.
+        @test_throws Exception winch_f_low(6.0; project = project_file())
 
         # NOT the entry guard's floor: that one is bounded by what a DEPOWERED
         # wing can pull, does not scale with the winch, and lives in FC_Settings.
@@ -1497,3 +1479,4 @@ end
         @test abs(wrap2pi(path_tangent(fec) - chi_chord)) < deg2rad(10)
     end
 end
+nothing

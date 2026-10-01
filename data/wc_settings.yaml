@@ -55,7 +55,7 @@ wc_settings:
   nf_low:        7.0       # derivative filter N of the lower force controller  [-]
   kbf_low:       1.0       # anti-windup back-calculation, lower force ctrl     [-]
   ktf_low:       8.0       # tracking constant, lower force controller          [-]
-  f_low:         700.0     # below: LowerForceController reels in; overridden per wind speed by winch_kv_table.yaml [N]
+  f_low:         700.0     # below: LowerForceController reels in; overridden per wind speed by winch_table.yaml [N]
   f_reelin:      700.0     # set force during a plain reel-in phase (unused here) [N]
   f_high:        7200.0    # upper limit, < max_force (8400); x first_lap_force_frac = the startup solve's f_max [N]
   f_high_awe_trim: 7200.0  # fixed f_high sent to AWETrim for re-optimizations; 0.0 = plain f_high [N]
@@ -69,10 +69,59 @@ wc_settings:
   max_acc:       8.0       # acceleration limit, step!'s acceleration_limit  [m/s^2]
   damage_factor: 0.2       # winch damage weighting (unused here)               [-]
   jerk_factor:   0.9       # jerk weighting in the damage calculation (unused here) [-]
-  kv:            0.0408    # v_set = kv * sqrt(force); overridden per wind speed by winch_kv_table.yaml [-]
+  # kv: `v_set = kv * sqrt(force)`, one value at every wind speed. It used to be
+  # a column of winch_kv_table.yaml (now winch_table.yaml), flat at 0.0408 from 3 to 12 m/s, and was
+  # removed from there 2026-10-02. The 10 m/s row was 0.039, identified
+  # 2026-08-27 (sweep below), and went back to the sweep's other passing value
+  # 2026-09-22 — see the note under the sweep. 11 and 12 m/s fly 0.0408
+  # UNTESTED at the current tether and winch controller: the 2026-08-26 notes
+  # (0.0558 at 10, 0.0738 shipped at 11, 12 m/s out of envelope) described a
+  # DIFFERENT tether and winch controller and no longer apply. Their text
+  # remains in git history; see also the 2026-08-27 entry in
+  # docs/fig8_tuning_log.md.
+  #
+  # Lower kv reels out slower, the kite keeps more of the wind, and force and
+  # power both rise — until the plant's 8400 N rating is reached. Sweep at
+  # 10 m/s (150 -> 380 m, no turbulence; phase-4 peak force against the 8400 N
+  # limit):
+  #
+  #   kv      mean F   peak F   power    ratio   verdict
+  #   0.0408   6332 N   7294 N  20051 W   0.85   all 10 passed
+  #   0.039    6690 N   7901 N  21161 W   0.84   all 10 passed
+  #   0.0385   6759 N   8411 N  21247 W   0.85   FAILED max force
+  #   0.036    7223 N   9371 N  22543 W   0.85   FAILED max force
+  #
+  # 0.039 shipped first: +5.5 % power for a phase-4 peak 499 N under the limit.
+  # It is the knee: below it the gain collapses while the peak keeps climbing
+  # (0.0385 bought 86 W and crossed the limit by 11 N) because the soft law
+  # starts clamping against f_high 8000 N — mean force 6690 N, peaks 7901 N.
+  # Force is far more kv-sensitive here than the retired 11 m/s sweep
+  # suggested. power_ratio stays at 0.84-0.85 throughout: predicted and
+  # measured power scale together with kv, so kv moves the power LEVEL, not
+  # the plant-model gap.
+  #
+  # 0.0408 shipped instead from 2026-09-22, giving up that 5.5 %. The 499 N the
+  # knee left was spent by a WIDER first lap: the startup request's
+  # min_turn_radius is now sized at the depower the reply is flown at rather
+  # than at depower_setpoint (it was asking 16.0 m where the curvature gate
+  # wanted 24.5 m), and the wider path pulls harder. Peak 8410 N at 19.94 s,
+  # 1.7 s into phase 4 — over the 8400 N rating by 10 N. The limiter cannot
+  # answer it: at 2.48 s of force_limit_tau a ~1.5 s spike is half gone before
+  # calc_vro_soft sees it, and both ways out of that (a shorter tau, an
+  # asymmetric one) are measured CLOSED in docs/fig8_tuning_log.md. kv is not
+  # filtered, so it is the lever that still works. The 0.0408 row above was
+  # measured on the NARROWER path, so its 7294 N does not carry over — only its
+  # slope (about -337 N of peak and -617 W per +0.001 of kv) does. Re-identify
+  # it against the new path and write the measurement in here.
+  #
+  # The slope holds only below v_sat (3.5 m/s). Cabauw 10 m/s reels out at
+  # 3.42 m/s mean, on the limit, so kv cannot lower its force: 0.043 made the
+  # startup solve infeasible (2026-09-23). There the lever is f_high, see
+  # docs/fig8_tuning_log.md.
+  kv:            0.0408    # v_set = kv * sqrt(force); same at every wind speed, see above [-]
 
   # --- SPEED: how the force limits are enforced (PlanWinchSpeed.md, stage 4) --
-  force_limit:      "soft" # "soft" (optimizer's tension curve) | "hard" (two limiters); winch_kv_table.yaml overrides
+  force_limit:      "soft" # "soft" (optimizer's tension curve) | "hard" (two limiters); winch_table.yaml overrides
   softplus_beta:    0.001  # corner sharpness of the UPPER limit; larger = sharper [1/N]
   softminus_beta:   0.03   # corner sharpness of the LOWER limit, local law only; AWETrim is pinned to 1e-3 [1/N]
   v_sat_beta:       10.0   # corner sharpness of the v_sat clamp; .inf = hard clamp [s/m]

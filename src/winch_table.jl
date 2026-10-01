@@ -4,14 +4,14 @@
 """
     winch_table_lookup(v_wind, key; project = project_file()) -> Float64
 
-Linearly interpolate column `key` of the system project's `winch_kv_table` file
-([`winch_kv_table_file`](@ref)) against mean wind speed. Clamped to the
+Linearly interpolate column `key` of the system project's `winch_table` file
+([`winch_table_file`](@ref)) against mean wind speed. Clamped to the
 lowest/highest identified wind speed outside that range, never extrapolated.
-Only reel-out projects carry a `winch_kv_table` entry, so calling this against a
+Only reel-out projects carry a `winch_table` entry, so calling this against a
 fig8 project throws, as does a table missing `key` in any row.
 """
 function winch_table_lookup(v_wind, key; project = project_file())
-    file = joinpath(skc_data_path(), winch_kv_table_file(project))
+    file = joinpath(skc_data_path(), winch_table_file(project))
     raw = YAML.load_file(file)
     rows = raw["entries"]
     all(r -> haskey(r, key), rows) ||
@@ -28,22 +28,11 @@ function winch_table_lookup(v_wind, key; project = project_file())
 end
 
 """
-    winch_kv(v_wind; project = project_file()) -> Float64
-
-Wind-speed-dependent `kv` for WinchControllers.jl's `v_set = kv * sqrt(force)`
-reel-out law, from the `kv` column of the project's `winch_kv_table` file (see
-[`winch_table_lookup`](@ref)). Overrides the flat `kv` of
-`data/wc_settings.yaml`; the caller assigns the result to `WCSettings.kv`.
-"""
-winch_kv(v_wind; project = project_file()) =
-    winch_table_lookup(v_wind, "kv"; project)
-
-"""
     winch_f_low(v_wind; project = project_file()) -> Float64
 
 Wind-speed-dependent force floor [N] below which WinchControllers.jl's
 `LowerForceController` reels in, from the `f_low` column of the project's
-`winch_kv_table` file (see [`winch_table_lookup`](@ref)). Overrides the flat
+`winch_table` file (see [`winch_table_lookup`](@ref)). Overrides the flat
 `f_low` of `data/wc_settings.yaml`; the caller assigns the result to
 `WCSettings.f_low`.
 
@@ -66,7 +55,7 @@ clamped to the first row below the identified range. The counterpart of
 is one thing or another at a given wind speed, never 40 % of the way between them.
 """
 function winch_table_select(v_wind, key; project = project_file())
-    file = joinpath(skc_data_path(), winch_kv_table_file(project))
+    file = joinpath(skc_data_path(), winch_table_file(project))
     raw = YAML.load_file(file)
     rows = raw["entries"]
     all(r -> haskey(r, key), rows) ||
@@ -80,7 +69,7 @@ end
     winch_force_limit(v_wind; project = project_file()) -> String
 
 Wind-speed-dependent `WCSettings.force_limit`, `"hard"` or `"soft"`, from the
-`force_limit` column of the project's `winch_kv_table` file (see
+`force_limit` column of the project's `winch_table` file (see
 [`winch_table_select`](@ref)). Overrides the flat value of `data/wc_settings.yaml`,
 which is `"hard"` so that a script not consulting this table gets the safe law.
 
@@ -96,6 +85,6 @@ soft law is used where it was measured — see `docs/fig8_tuning_log.md`.
 function winch_force_limit(v_wind; project = project_file())
     value = String(winch_table_select(v_wind, "force_limit"; project))
     value in ("hard", "soft") ||
-        error("winch_kv_table: force_limit must be \"hard\" or \"soft\", got \"$value\".")
+        error("winch_table: force_limit must be \"hard\" or \"soft\", got \"$value\".")
     return value
 end

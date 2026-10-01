@@ -68,7 +68,6 @@ stack_fits
 ## Wind-speed-dependent winch law lookup table
 
 ```@docs
-winch_kv
 winch_f_low
 winch_force_limit
 winch_table_lookup
@@ -120,7 +119,7 @@ guidance_rate
 wind_schedule
 apply_wind_schedule!
 turn_rate_coeffs_file
-winch_kv_table_file
+winch_table_file
 traj_opt_settings_file
 ```
 

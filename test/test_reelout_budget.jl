@@ -77,7 +77,7 @@ import KiteUtils
             for wind in (8.25, 3.5)
                 b = reelout_budget(wind, set.v_wind, set.sim_time;
                                    l_reel = fcs.reelout_l_max - set.l_tether,
-                                   kv = winch_kv(wind; project),
+                                   kv = SimpleKiteControllers._wc_settings_value(project, "kv"),
                                    v_cap = _drum_speed_limit(project), wind_factor)
                 @test sim_budget(project, set, fcs, nothing, wind, set.v_wind) ≈ b.time
             end
@@ -87,3 +87,4 @@ import KiteUtils
         end
     end
 end
+nothing
