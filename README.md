@@ -1,5 +1,6 @@
 # SimpleKiteControllers
 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev)
 [![Build Status](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23015560-0A7BBB?style=flat-square)](https://doi.org/10.5281/zenodo.23015560)
