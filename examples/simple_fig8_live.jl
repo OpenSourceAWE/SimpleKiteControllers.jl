@@ -17,6 +17,11 @@ loop (`src/course_controller.jl`'s `CourseController`) tracks it with the
 steering tape — that file also owns the entry state machine and `rel_depower`;
 this script calls it once per step and applies what it returns.
 
+guidance (`src/figure_eight_controller.jl`) commands a course and the inner
+loop (`src/course_controller.jl`'s `CourseController`) tracks it with the
+steering tape — that file also owns the entry state machine and `rel_depower`;
+this script calls it once per step and applies what it returns.
+
 # The live viewer
 
 A `Viewer3D` opens once the model is built and is updated from inside the loop,
@@ -129,12 +134,34 @@ Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 | `var_07` | entry descent limiter weight (0 = raw guidance, 1 = fully limited) |
 | `var_08` | course/heading blend weight (0 = heading, 1 = course) |
 | `var_09` | span-mean geometric AoA [deg]             |
+| `var_11` | curvature feed-forward steering `u_ff` [-] |
+| `var_13` | feed-forward chord correction `chi_ff` [deg] |
+
+`var_10` and `var_12` stay unused: `fig8_metrics.jl` reads them as the reel-out
+length setpoint and winch state and relies on a figure-eight run leaving them at 0.
+
+Not a `var_XX` slot: `fig_8` (0 before phase 4, 1 at first entry, +1 per lap
+after) carries the live lap count, `SysState`'s field of that name. `cycle`
+(the pumping-cycle number) is left at its default — this script has no
+reel-in phase to count cycles over.
 
 `bearing` carries `chi_cmd`, the course the loop actually tracks, so
 `course - bearing` is the path-following error; the unmodified guidance course
 is kept in `var_05`. `var_06`/`var_08` are `CourseController`'s regulated error
 and heading/course blend weight — see that file's `calc_steering` docstring for
 the feedback-angle fusion and gain schedule behind them.
+
+# Steering feed-forward
+
+With `ff_gain > 0` in `data/fc_settings.yaml` the PID is helped by a curvature
+feed-forward from phase 4 on, the same law `simple_opt_reelout.jl` flies: the
+path's own course rate `ff_lead_time` ahead of Q, inverted through the turn-rate
+law, `u_ff = ff_gain * psi_dot_path / (c1 * v_app)`, plus the chord correction
+`chi_ff` subtracted from the commanded course so the guidance does not ask the
+PD for the same turn a second time. Both are faded out off the path
+(`ff_d_fade`, `ff_err_fade`) and low-passed over `ff_tau`; see
+`FC_Settings.ff_gain` for the rationale. It needs `c1`, so it is OFF when
+`turn_rate_coeffs` has no cell for this `body_damping`/`depower_setpoint`.
 
 The `sys_state` field carries `CourseController`'s ENTRY STATE MACHINE (0 park,
 1 dive, 2 hold, 3 transition, 4 fig8 — this script never reaches 5, which is
@@ -200,12 +227,14 @@ KiteUtils' `update_yaml_scalar` (`src/gui_state.jl` uses it the same way for
 
 Which system project is flown (150m/200m/300m pattern), the run length
 (`sim_time`, `default` for the project's own value or a specific number of
-seconds) and the turbulence level (`use_turbulence`, `default` to leave the
-settings YAML in charge) are read fresh on every `include` from `data/gui.yaml`
+seconds), the turbulence level (`use_turbulence`, `default` to leave the
+settings YAML in charge) and the mean wind speed (`default` for the project's
+own `v_wind`) are read fresh on every `include` from `data/gui.yaml`
 (`src/gui_state.jl`), not `Main` globals: run `select_project()`
 (`examples/select_project.jl`), `select_sim_time()`
-(`examples/select_sim_time.jl`) and `select_turbulence()`
-(`examples/select_turbulence.jl`) beforehand to change them.
+(`examples/select_sim_time.jl`), `select_turbulence()`
+(`examples/select_turbulence.jl`) and `select_windspeed()`
+(`examples/select_windspeed.jl`) beforehand to change them.
 
 The dated record of how these parameters were arrived at — sweeps, reverted
 attempts and the failures behind each closed lever — is in
@@ -244,11 +273,18 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 include(joinpath(@__DIR__, "v3_segments.jl"))
-# The caller's inputs, `run_example("simple_fig8_live.jl"; show_plots = false, record_video = true)`;
-# a plain `include` flies with these defaults.
-inputs = script_inputs(@__FILE__, (; show_plots = true, record_video = false))
-show_plots = inputs.show_plots
+# The caller's inputs, `run_example("simple_fig8_live.jl"; show_plots = false, record_video = true, ...)`;
+# a plain `include` flies with these defaults. The V1 hooks and `steer_injection` are explained where
+# they act, below.
+(; show_plots, steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle,
+   steer_injection) = inputs =
+    script_inputs(@__FILE__, (; show_plots = true, record_video = false, steer_gain_factor = 1.0,
+                               steer_gain_feedback_only = false, extra_steer_delay = 0,
+                               hook_settle = 15.0, steer_injection = nothing))
 record_video_ = inputs.record_video   # `record_video` is the function below
+# Cleared for the same reason: a lemniscate run must not plot the optimized
+# reference a previous simple_opt_fig8.jl left behind.
+REF_PATH = nothing
 VIEWER_INTERVAL = 3     # draw every n-th step
 VIEWER_TIME_LAPSE = 1.0 # playback speed cap: 1 = realtime, N = N times faster
 REPLAY_TIME_LAPSE = 2.0 # speed of the post-run replay on RUN: 1 = realtime
@@ -263,7 +299,7 @@ AERO_MODE = ContinuousAero() # ContinuousAero() or AeroDirect()
 # Structural damping of the tether and bridle segments, as a ratio of their
 # stiffness: unit_damping = ratio * unit_stiffness [s]. See the docstring above.
 DAMPING_PER_STIFFNESS = 0.002
-PROJECT = selected_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
+PROJECT = selected_fig8_project() # system_fig8_{150,200,300}m.yaml, set via select_project()
 SIM_TIME = selected_sim_time() # seconds, or `nothing` for the project's own default
 TURBULENCE = selected_turbulence() # level in [0, 1], or "default" for the settings YAML value
 WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wind
@@ -271,10 +307,22 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+# The turn-rate table PROJECT names, not whatever an earlier script left in the session.
+reload_turn_rate_table!(project)
 
 project_set = Settings(project)
 apply_windspeed_override!(project_set, WIND_SPEED)
 l_tether = project_set.l_tether
+4.0 <= project_set.v_wind <= 10.0 ||
+    @warn "v_wind = $(project_set.v_wind) m/s is outside 4-10 m/s, the range the fig8 \
+           settings were tuned for (docs/fig8_tuning_log.md). Below, the entry may fly \
+           into the ground; above, the run may stop on v_app_abort."
+# Before anything reads fcs: init settles at the depower, the turn-rate lookup, the
+# guidance and the controller are built from it. At high wind more depower keeps
+# v_app under v_app_abort and a larger pattern wins back the turn-radius margin.
+apply_wind_schedule!(fcs, project_set.v_wind)
+@info @sprintf("Wind schedule at v_wind = %.1f m/s: depower %.2f, f8_a %.1f°, f8_b %.1f°.",
+               project_set.v_wind, fcs.depower_setpoint, fcs.f8_a, fcs.f8_b)
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
@@ -306,6 +354,8 @@ end
 # The wind speed comes from the same file unless WIND_SPEED overrides it above: it is
 # a plant condition, and project_set.v_wind keeps the mean wind and the turbulent
 # field (which init builds for it) at the same speed.
+# No cache_path either: V3Kite's default is where its own precompile workload
+# compiled the model, and a different model binary costs 40 s of re-JIT in init.
 s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     body_sim_damping = 0.8 .* fcs.body_damping,
     damping_per_stiffness = DAMPING_PER_STIFFNESS,
@@ -328,9 +378,10 @@ fec = FigureEightController(fcs; dt = s.dt)
 # value identifies both the settling transient and the flown damping c1 belongs
 # to.
 #
-# The coefficients are DIAGNOSTIC here — they feed the feasibility check and the
-# dead-time context below, no gain and no control law — so a damping/depower the
-# table cannot serve costs the diagnosis, not the run. `turn_rate_coeffs` refuses
+# The coefficients feed the feasibility check, the dead-time context below and,
+# through `c1`, the curvature feed-forward; no PD gain is scaled by them, so a
+# damping/depower the table cannot serve costs the diagnosis and the
+# feed-forward, not the run. `turn_rate_coeffs` refuses
 # to extrapolate (by design: c1 moves violently with both arguments), so catch
 # that and fly on unadvised rather than aborting a deliberate off-grid run.
 coeffs = try
@@ -360,14 +411,64 @@ else
         @warn "Pattern is tighter than the kite's minimum turn radius — expect \
                curvature-limited tracking, not a tuning problem."
 
-    # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
-    @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
+    # Dead-time context for the attractor lead: how long the lead arc takes to fly.
+    lead_deg = attractor_distance(fcs, fcs.v_app_ref, l_tether)
+    lead_time = deg2rad(lead_deg) * l_tether / fcs.v_app_ref
+    @info @sprintf("Attractor lead %.1f°%s ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   lead_deg, fcs.attractor_lead_time > 0 ? " (lead time)" : "",
+                   lead_time, fcs.v_app_ref, delay, lead_time / delay)
 end
 
 cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
+
+# Live lap counter, logged to SysState's `fig_8`: 0 before the pattern is
+# tracked, 1 at first entry into phase 4, then +1 each time `fec.last_idx` has
+# advanced one full lemniscate (`n_path` points) since then — the guidance's
+# own path parametrization, not a re-derived azimuth threshold. Refs, not plain
+# variables: the top-level `for` below is a soft scope, so a plain variable
+# reassigned only inside a conditional would rebind to a fresh, unassigned
+# local every iteration instead of carrying its value forward.
+fig8 = Ref(0)
+idx_prev = Ref(fec.last_idx)
+idx_progress = Ref(0.0)
+n_path = length(fec.az_path)
+
+# Low-pass state of the steering feed-forward; Refs for the same soft-scope reason.
+ff_u_filt = Ref(0.0)    # [-]   feed-forward steering
+ff_chi_filt = Ref(0.0)  # [rad] chord correction
+if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
+    @warn "ff_gain = $(fcs.ff_gain), but there is no turn-rate coefficient c1 — \
+           flying WITHOUT steering feed-forward."
+end
+
+# V1 model-validation test inputs (oldplans/Plan_model_validation.md, V1), read at the top:
+# `steer_gain_factor` multiplies rel_steering, and
+# `extra_steer_delay` adds a FIFO delay to it, in samples. Both act only from
+# `hook_settle` seconds after phase 4 is first reached, so the entry and phase 3
+# fly identically in every run of a sweep. With ff_gain = 0 (as V1 requires),
+# scaling rel_steering is the same as scaling heading_p, except at the
+# max_steering clamp.
+# `steer_gain_feedback_only` true: scale only the feedback part, rel_steering - u_ff. The
+# feed-forward lies outside the loop, so this scales the loop gain alone; it differs from the
+# default only with ff_gain > 0.
+(steer_gain_factor == 1.0 && extra_steer_delay == 0) ||
+    @info @sprintf("V1 stability hook in force: gain factor %.3g%s, extra delay %d \
+                    samples (%.3f s), active %.1f s after phase 4 begins.",
+                   steer_gain_factor, steer_gain_feedback_only ? " (feedback only)" : "",
+                   extra_steer_delay, extra_steer_delay * s.dt, hook_settle)
+# Kept full of the last `extra_steer_delay` raw commands from the start of the run,
+# so it is already primed with real history by the time the hook switches on
+# (extra_steer_delay * s.dt is well under hook_settle at every V1 point). The
+# feed-forward goes through a FIFO of its own, so the two stay aligned.
+steer_delay_buf = Float64[]
+ff_delay_buf = Float64[]
+t_phase4 = Ref(NaN)    # [s] time phase 4 was first reached this run; NaN before that
+# Test input for V2 (oldplans/Plan_model_validation.md): a function τ -> Δu added to
+# rel_steering, τ the time since the V1 hooks switched on (t_phase4 + hook_settle), the
+# input `steer_injection`. It is not logged: it is a function of time, so
+# the analysis recomputes it from the log's phase-4 start (validate_margins.jl).
+isnothing(steer_injection) || @info "Steering injection in force (test input)."
 
 # ==================== LIVE VIEWER ======================== #
 
@@ -420,7 +521,10 @@ try
     for i in 1:s.steps
         t = s.sys_state.time
 
-        # L0 attractor guidance -> commanded course [rad].
+        # L0 attractor guidance -> commanded course [rad]. The lead is a flight
+        # TIME when attractor_lead_time is set, so it is re-read every step.
+        fec.fes.attractor_distance = attractor_distance(fcs, Float64(s.sys_state.v_app),
+                                                        Float64(s.sys_state.l_tether[1]))
         chi_set, az_attr, el_attr, dmin =
             navigate_fig8(fec, Float64(s.sys_state.azimuth),
                           Float64(s.sys_state.elevation))
@@ -429,15 +533,75 @@ try
         # fusion, PID and rel_depower: see CourseController.
         heading = Float64(s.sys_state.heading)
         local v_kite = norm(s.sys_state.vel_kite)
+
+        # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.
+        local u_ff = 0.0
+        local chi_ff = 0.0
+        if fcs.ff_gain > 0 && cc.phase >= 4 && isfinite(c1) && c1 > 0
+            local v_app_ff = max(Float64(s.sys_state.v_app), fcs.v_app_min)
+            local speed_ff = rad2deg(v_kite / Float64(s.sys_state.l_tether[1]))  # [deg/s]
+            if speed_ff > 0
+                local psi_dot_ff = path_turn_rate(fec, fcs.ff_lead_time * speed_ff, speed_ff;
+                                                  smooth = fcs.ff_smooth)
+                # Faded out when the kite is not on this branch (a Q swap hands it the other lobe's curvature).
+                local fade_d = clamp((fcs.ff_d_fade - dmin) / (0.5 * fcs.ff_d_fade), 0.0, 1.0)
+                local fade_e = clamp((deg2rad(fcs.ff_err_fade) - abs(cc.err)) /
+                                     (0.5 * deg2rad(fcs.ff_err_fade)), 0.0, 1.0)
+                local g_ff = fcs.ff_gain * fade_d * fade_e
+                local alpha_ff = fcs.ff_tau > 0 ? s.dt / (s.dt + fcs.ff_tau) : 1.0
+                ff_u_filt[] += alpha_ff * (g_ff * psi_dot_ff / (c1 * v_app_ff) - ff_u_filt[])
+                ff_chi_filt[] += alpha_ff * (g_ff * path_chord_offset(fec) - ff_chi_filt[])
+                u_ff = ff_u_filt[]
+                chi_ff = ff_chi_filt[]
+            end
+        end
         local rel_steering, rel_depower, phase = calc_steering(cc, chi_set, heading,
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
-            dmin, tangent = path_tangent(fec))
+            dmin, tangent = path_tangent(fec), u_ff, chi_ff)
         chi_cmd = cc.chi_cmd
         w_lim = cc.w_lim
         w_course = cc.w_course
         err = cc.err
+
+        # fig8: jumps to 1 the instant phase 4 is first reached, then +1 per
+        # full traversal of the reference path, unwrapped so a single lap
+        # never double-counts across the index's `mod1` wrap.
+        if phase == 4
+            if fig8[] == 0
+                fig8[] = 1
+                idx_prev[] = fec.last_idx
+                t_phase4[] = t   # V1 hook: this run's phase-4 start
+            else
+                delta = fec.last_idx - idx_prev[]
+                delta < -(n_path ÷ 2) && (delta += n_path)
+                delta > n_path ÷ 2 && (delta -= n_path)
+                idx_progress[] += delta
+                idx_prev[] = fec.last_idx
+                fig8[] = 1 + floor(Int, idx_progress[] / n_path)
+            end
+        end
+
+        # V1 stability hooks: see the steer_gain_factor/extra_steer_delay setup above.
+        push!(steer_delay_buf, rel_steering)
+        push!(ff_delay_buf, u_ff)
+        local delayed_u = length(steer_delay_buf) > extra_steer_delay ?
+            popfirst!(steer_delay_buf) : rel_steering
+        local delayed_ff = length(ff_delay_buf) > extra_steer_delay ?
+            popfirst!(ff_delay_buf) : u_ff
+        if !isnan(t_phase4[]) && t - t_phase4[] >= hook_settle
+            local u_scaled = steer_gain_feedback_only ?
+                delayed_ff + steer_gain_factor * (delayed_u - delayed_ff) :
+                delayed_u * steer_gain_factor
+            isnothing(steer_injection) ||
+                (u_scaled += steer_injection(t - t_phase4[] - hook_settle))
+            # calc_steering already clamped its own output to ±max_steering;
+            # re-clamp here too, or a gain factor > 1 commands the tape angles
+            # it was never calibrated for instead of just saturating earlier,
+            # as scaling heading_p itself would.
+            rel_steering = clamp(u_scaled, -fcs.max_steering, fcs.max_steering)
+        end
 
         # Force mode reels out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
@@ -458,6 +622,15 @@ try
                             rad2deg(s.sys_state.elevation), rad2deg(s.sys_state.AoA))
             break
         end
+        # Same for a kite that flies into the ground: nothing stops it there, and the
+        # solver only gives up tens of seconds later, well underground.
+        if s.sys_state.elevation < 0
+            @error @sprintf("Ground contact at t=%.2fs: elevation %.1f° (phase %d, azimuth %.1f°, \
+                             v_app %.1f m/s). Stopping.",
+                            s.sys_state.time, rad2deg(s.sys_state.elevation), cc.phase,
+                            rad2deg(s.sys_state.azimuth), s.sys_state.v_app)
+            break
+        end
 
         # After step!, which overwrites parts of sys_state.
         s.sys_state.sys_state = Int16(phase)   # 0 park, 1 dive, 2 hold, 3 transition, 4 fig8
@@ -474,6 +647,9 @@ try
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
+        s.sys_state.var_11 = u_ff              # feed-forward steering [-]
+        s.sys_state.var_13 = rad2deg(chi_ff)   # feed-forward chord correction [deg]
+        s.sys_state.fig_8 = Int16(fig8[])      # live lap count
         # Not filled anywhere in the model chain: without this the log and the viewer read 0.
         s.sys_state.v_wind_200m .= calc_wind_factor(s.am, 200.0) .* s.sys_state.v_wind_gnd
 
