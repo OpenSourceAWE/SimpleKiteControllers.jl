@@ -27,7 +27,18 @@ makedocs(;
         "Examples - identification" => "examples_identification.md",
         "Examples - figure-of-eight" => "examples_fig8.md",
         "Examples - reel-out" => "examples_reelout.md",
-        "API" => "api.md",
+        "API" => [
+            "Overview" => "api/index.md",
+            "Flight control" => "api/flight_control.md",
+            "Flight-path geometry" => "api/path_geometry.md",
+            "Winch" => "api/winch.md",
+            "Settings and data files" => "api/settings.md",
+            "Reel-out runs" => "api/reelout_run.md",
+            "Run evaluation" => "api/evaluation.md",
+            "Course-loop stability" => "api/stability.md",
+            "Shape optimization" => "api/optimization.md",
+            "Internals" => "api/internals.md",
+        ],
     ],
 )
 
