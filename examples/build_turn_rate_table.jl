@@ -70,7 +70,6 @@ import Dates
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
-include(joinpath(@__DIR__, "delay_lag_fit.jl"))
 
 # ============== FIXED CONDITIONS (data/turn_rate_coeffs.yaml) ============== #
 # Only body_damping and depower vary across the grid. These must agree with the

@@ -83,7 +83,7 @@ max_elevation = 55.0     # [°] a flight's fit window starts at its first sample
 
 # ==================== JOINT FIT ========================== #
 
-# `joint_delay_lag_fit` is in `delay_lag_fit.jl`, so `plot_turn_rate_vs_depower.jl` can refit
+# `joint_delay_lag_fit` is in V3Kite, so `plot_turn_rate_vs_depower.jl` can refit
 # saved fit windows without flying.
 
 "The model's turn rate [°/s] of `fit`'s window for the delay-lag fit `dl`"

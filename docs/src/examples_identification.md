@@ -47,10 +47,6 @@ Two checks on saved data, without flying. First, it fits the gravity term of the
 fits best. Second, it checks whether the linear pattern model with the identified coefficients is
 still conservative at the operating points where the stability margins were measured.
 
-### [`delay_lag_fit.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/delay_lag_fit.jl)
-A helper, included by `build_turn_rate_table.jl` and `stability_opt_reelout.jl`, that splits the
-kite's response to the applied steering into a dead time and a first-order lag by fitting on a grid.
-
 ## Validation of the course-loop model
 
 ### [`validate_margins.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/validate_margins.jl)

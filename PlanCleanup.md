@@ -58,7 +58,7 @@ Move both into `examples/viewer_replay.jl` with these as keywords; the
 
 ## 6. Smaller leftovers
 
-- The `trim(x) = x[dmax + 1:end]` closure is still in `delay_lag_fit.jl`,
+- The `trim(x) = x[dmax + 1:end]` closure is still in V3Kite's `joint_delay_lag_fit`,
   `gravity_term_form.jl` and `plot_turn_rate_identification.jl` for the shifted
   inputs `us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])`.
 - `col` is defined in `plot_relay_low_elevation.jl` and `plot_turn_rate_vs_depower.jl`
