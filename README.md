@@ -110,7 +110,7 @@ Choose example to run or `q` to quit:
    plot_powercurve.jl           - plot mean reel-out power vs wind speed across archived scenarios
    quit
 ```
-The menu shows eleven entries at a time and scrolls; the five `select_*` entries change the
+The menu shows twelve entries at a time and scrolls; the five `select_*` entries change the
 simulation settings, which are persisted to `data/gui.yaml` and read fresh by every run
 rather than cached in a REPL global.
 
