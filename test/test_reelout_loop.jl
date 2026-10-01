@@ -119,6 +119,26 @@ end
         st.fig8_n = 4
         @test_logs deliver_lift_in_air!(st, setup, plant, 60.0, 4, 1.0)   # no second warning
         @test length(st.el_shift_events) == 1
+
+        # A shift too big for the gate is rationed to the first rung that clears it. Raising the
+        # path compresses its azimuth by cos(elevation), so its turns tighten as it goes up.
+        st, setup, fec = lift_case(; c1 = 0.28, margin_min = 1.0)
+        margin_at(fm) = check_pattern_feasible(
+            prepare_path(fec.az_path, fec.el_path .+ fm * 40.0; resample = 60, up_loops)...,
+            200.0, fcs0.max_steering; c1 = 0.28, prn = false).margin
+        rungs = (1.0, 0.75, 0.5, 0.25)
+        fm = rungs[findfirst(r -> margin_at(r) >= 1.0, rungs)]
+        @test margin_at(1.0) < 1.0 && 0.25 <= fm < 1          # the case needs a rationed rung
+        el0 = copy(fec.el_path)
+        @test_logs (:info, r"rationed to fit the curvature gate") deliver_lift_in_air!(
+            st, setup, plant, 50.0, 4, 40.0)
+        @test st.el_applied == fm * 40.0 && st.blend_to[2] ≈ el0 .+ fm * 40.0
+        @test st.el_shift_events[end].status == "blended in ($(round(Int, 100fm)) %)"
+        @test st.el_shift_events[end].margin == margin_at(fm)
+        # A shift of a hundredth of a degree or less is no delivery: no blend.
+        st, setup, _ = lift_case()
+        deliver_lift_in_air!(st, setup, plant, 50.0, 4, 0.005)
+        @test isnothing(st.blend_to) && st.el_applied == 0.0
     end
 
     @testset "phase5_fallback" begin

@@ -240,7 +240,11 @@ check, as before.
    `update_lift_target!`, `depower_command!` (the 2 -> 3 ramp, phase 5 when the
    reel-out is done, the soft-stop ramp, the force limiter) and
    `steering_hooks!` (disturbance, gain factor, feedback only, delay). Not
-   yet: the rationed rungs of `deliver_lift_in_air!`.
+   also the rationed rungs of `deliver_lift_in_air!` (a 40° shift that fails the
+   gate whole goes in at the first rung that clears it). A shift of 0.01° or
+   less is not delivered, but warns that it was "held back: the curvature
+   margin would be Inf even rationed to a quarter", which blames the wrong
+   gate; the test checks only that no blend is queued.
 
    `test/test_steering_blocks.jl` covers `steering_command!` (the hand-over to
    phase 3 sets `transition_start`, the feed-forward log, and the gain scale and
