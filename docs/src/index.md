@@ -38,7 +38,8 @@ Planned:
 - [`FC_Settings`](@ref), every tuning parameter of a figure-of-eight run, loaded from
   `data/fc_settings.yaml`
 
-The examples that fly these controllers are described on the [Examples](examples.md) page,
+The examples are described on four pages: [general](examples_general.md), [identification](examples_identification.md),
+[figure-of-eight](examples_fig8.md) and [reel-out](examples_reelout.md);
 and the docstrings of all exported types and functions are on the [API](api.md) page.
 
 ## Further documentation
