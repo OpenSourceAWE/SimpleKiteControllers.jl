@@ -240,8 +240,14 @@ check, as before.
    `update_lift_target!`, `depower_command!` (the 2 -> 3 ramp, phase 5 when the
    reel-out is done, the soft-stop ramp, the force limiter) and
    `steering_hooks!` (disturbance, gain factor, feedback only, delay). Not
-   yet: the rationed rungs of `deliver_lift_in_air!`, and `steering_command!`
-   and `xtrack_input!` (they need a full `SysState` and a tracking `fec`).
+   yet: the rationed rungs of `deliver_lift_in_air!`.
+
+   `test/test_steering_blocks.jl` covers `steering_command!` (the hand-over to
+   phase 3 sets `transition_start`, the feed-forward log, and the gain scale and
+   inputs it hands `calc_steering`, checked against a direct call) and
+   `xtrack_input!` (no effect without the input or before its phase; the
+   attractor moved along the path normal, the course re-aimed, every step
+   logged), with the kite's state as a NamedTuple of the fields they read.
 
    `test/test_reopt_chain.jl` covers the re-optimization cycle (`reoptimize!`
    … `install_candidate!`) with an `OptChain` in replay mode, so without a
