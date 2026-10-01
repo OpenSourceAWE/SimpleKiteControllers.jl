@@ -3,14 +3,16 @@
 
 """
 Unit tests for blocks of one step of the reel-out loop (`src/reelout_loop.jl`): the lap counter,
-the path blend, the phase-5 fallback, the reel-out release and the compliant hold. Each takes a
-hand-made `RunState`, `setup` and `plant`: no model, no optimizer.
+the path blend, the phase-5 fallback, the reel-out release, speed and stop, the entry force guard
+and the compliant hold. Each takes a hand-made `RunState`, `setup` and `plant`: no model, no
+optimizer. The winch controllers are the real ones, from `build_controllers` on a stand-in plant.
 """
 
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: count_laps!, advance_blend!, phase5_fallback!, release_reelout!,
-    winch_setpoint!, compliant_hold!
+    winch_setpoint!, compliant_hold!, reelout_speed!, entry_force_guard!, build_controllers,
+    WCSettings
 
 # `rcs.f_high` is written by `count_laps!`; a WCSettings stand-in with only that field.
 mutable struct ForceLimits
@@ -132,6 +134,72 @@ end
         st = RunState(; transition_start = 10.0)
         release_reelout!(st, setup, (; force = 3500.0, ss = nothing), 12.0)   # timer and force
         @test st.reelout_started && !st.reelout_trigger_fired
+    end
+
+    # The reel-out controller and the entry guard as a run builds them, at dt = 0.01 s.
+    function winch(fcs)
+        rcs = WCSettings(; dt = 0.01)
+        c = build_controllers(FC_Settings(), rcs, (; dt = 0.01, sys_state = (; l_tether = [150.0])))
+        return (; fcs, rc = c.rc, rcs, guard_lfc = c.guard_lfc)
+    end
+    wplant(v_reel, force) = (; v_reel, force, dt = 0.01, ss = nothing)
+
+    @testset "reelout_speed_stops_at_the_length" begin
+        setup = winch((; reelout_l_max = 160.0, reelout_softstop = 2.0, n_fig_eight = 0,
+                       reelout_softstart = 0.0))
+        st = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0)
+        v, t, l_latch = Float64[], 0.0, NaN
+        while !st.reelout_done && t < 60
+            l_before = st.l_set
+            push!(v, reelout_speed!(st, setup, wplant(isempty(v) ? 0.0 : v[end], 2000.0), t, 0.3))
+            isnan(l_latch) && !isnan(st.stop_start) && (l_latch = l_before)
+            t += 0.01
+        end
+        @test st.reelout_done && st.stop_reason == "length"
+        @test st.l_set == 160.0                       # capped, never past reelout_l_max
+        @test all(>=(0), v) && sum(v) * 0.01 >= 10.0 - 1e-9  # the last step is cut at the limit
+        # The soft-stop latched once `reelout_softstop` seconds at the entry speed covered the rest,
+        # and plans a linear ramp to zero over twice the time that rest takes at that speed.
+        i = findfirst(==(st.stop_v_entry), v)
+        @test !isnothing(i) && 160.0 - l_latch <= st.stop_v_entry * 2.0
+        @test st.stop_T ≈ 2 * (160.0 - l_latch) / st.stop_v_entry
+        @test all(diff(v[i:end]) .<= 0)               # decelerates from there on
+    end
+
+    @testset "reelout_speed_stops_after_the_laps" begin
+        fcs = (; reelout_l_max = 400.0, reelout_softstop = 2.0, n_fig_eight = 2, reelout_softstart = 0.0)
+        setup = winch(fcs)
+        st = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0, n_path = 100,
+                      fig8_idx_progress = 200.0)      # two complete laps flown
+        reelout_speed!(st, setup, wplant(0.0, 2000.0), 10.0, 0.3)
+        @test st.stop_reason == "laps" && st.stop_start == 10.0 && st.stop_T == 2 * 2.0
+        @test !st.reelout_done
+        t = 10.0
+        while !st.reelout_done && t < 30
+            t += 0.01
+            reelout_speed!(st, setup, wplant(0.0, 2000.0), t, 0.3)
+        end
+        @test st.reelout_done
+        @test t - st.stop_start ≈ st.stop_T atol = 0.011   # the ramp has run out
+        @test st.l_set < 400.0
+        # Without a soft-stop the laps end the reel-out at once.
+        setup0 = winch(merge(fcs, (; reelout_softstop = 0.0)))
+        st0 = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0, n_path = 100,
+                       fig8_idx_progress = 200.0)
+        reelout_speed!(st0, setup0, wplant(0.0, 2000.0), 10.0, 0.3)
+        @test st0.reelout_done && st0.stop_reason == "laps" && isnan(st0.stop_start)
+    end
+
+    @testset "entry_force_guard" begin
+        setup = merge(winch((;)), (; fcs = (; entry_f_min = 350.0)))
+        st = RunState(; l_set = 150.0)
+        # Force above the floor: inactive, the setpoint and the length are left alone.
+        @test all(_ -> entry_force_guard!(st, setup, wplant(0.0, 2000.0), 0.0) == 0.0, 1:50)
+        @test st.l_set == 150.0 && !setup.guard_lfc.active
+        # A force sag: the guard reels IN, never out, and the length follows it.
+        v = [entry_force_guard!(st, setup, wplant(0.0, 100.0), 0.0) for _ in 1:200]
+        @test setup.guard_lfc.active && all(<=(0), v) && minimum(v) < 0
+        @test st.l_set ≈ 150.0 + sum(v) * 0.01
     end
 
     @testset "compliant_hold" begin

@@ -231,9 +231,11 @@ check, as before.
    `src/startup_path.jl`. Partly done (2026-10-01): `test/test_reelout_loop.jl`
    covers `count_laps!` (lap 1 force limit, the wrap, no counting down),
    `advance_blend!`, `phase5_fallback!` (the crossing, once only, no better
-   path, off), `release_reelout!` and the compliant hold through
-   `winch_setpoint!`. Not yet: `reelout_speed!` and `entry_force_guard!`
-   (they need a real `WinchController`), the re-optimization chain
+   path, off), `release_reelout!`, `reelout_speed!` (the soft-stop at the
+   length, the stop after the laps, with and without a soft-stop),
+   `entry_force_guard!` (reel-in only, on a force sag) and the compliant hold
+   through `winch_setpoint!`; the winch controllers are the real ones, from
+   `build_controllers` on a stand-in plant. Not yet: the re-optimization chain
    (`reoptimize!` … `install_candidate!`, which talks to `opt_chain`),
    `deliver_lift_in_air!`, the steering blocks, and `src/startup_path.jl`.
 3. **A typed `setup`.** The block functions read about 40 fields of the
