@@ -84,11 +84,19 @@ which can be called again once the script has been included. The choices are wri
 `data/gui.yaml`, which every run reads fresh.
 
 ### [`select_project.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/select_project.jl)
-Chooses which system project (`system_*.yaml`, with 150, 200 or 300 m of tether) the examples fly
-and writes the choice to `data/gui.yaml`. The reel-out scripts read the same key through
-[`selected_reelout_project`](@ref), which ignores a figure-of-eight project and flies
-`system_reelout_maasvlakte.yaml` instead, so switching between the two families needs no new
-selection.
+Chooses which system project the examples fly and writes the choice to `data/gui.yaml`.
+
+To fly a figure of eight at a fixed tether length, select one of the three projects
+- `system_fig8_150m.yaml`
+- `system_fig8_200m.yaml`
+- `system_fig8_300m.yaml`
+
+To produce power by reeling out, select one of the projects
+- `system_reelout_cabauw.yaml`: onshore, with a strong wind shear
+- `system_reelout_maasvlakte.yaml`: nearshore, with little wind shear
+
+The reel-out scripts read the selection through [`selected_reelout_project`](@ref), which ignores
+a figure-of-eight project and flies `system_reelout_maasvlakte.yaml` instead.
 
 ### [`select_sim_time.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/select_sim_time.jl)
 Chooses how long a run lasts: the project's own `sim_time`, or a value in seconds entered at the
