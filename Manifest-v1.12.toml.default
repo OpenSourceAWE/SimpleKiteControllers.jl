@@ -3550,11 +3550,11 @@ version = "1.29.0"
 
 [[deps.V3Kite]]
 deps = ["AtmosphericModels", "CSV", "DataFrames", "Dates", "DiscretePIDs", "HDF5", "KitePodModels", "KiteUtils", "LaTeXStrings", "LinearAlgebra", "ModelingToolkit", "ModelingToolkitBase", "Parameters", "PrecompileTools", "Printf", "REPL", "Rotations", "Serialization", "StaticArrays", "Statistics", "SymbolicAWEModels", "SymbolicIndexingInterface", "UnPack", "VortexStepMethod", "YAML"]
-git-tree-sha1 = "79168ecc6ee4d2107276cee6ff61fc99e3aac6d4"
-repo-rev = "v1.4.1"
+git-tree-sha1 = "6ab0bc3a4831e822f7b41526d9b2271d091b34ba"
+repo-rev = "delay-lag-fit"
 repo-url = "https://github.com/OpenSourceAWE/V3Kite.jl"
 uuid = "4caac9c8-c726-438f-ab10-3553e918eab1"
-version = "1.4.1"
+version = "1.5.0"
 weakdeps = ["GLMakie"]
 
     [deps.V3Kite.extensions]
