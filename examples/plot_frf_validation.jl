@@ -30,12 +30,9 @@ using SimpleKiteControllers
 using SimpleKiteControllers: project_file, skc_data_path
 using KiteUtils: Settings
 using ControlSystemsBase
-using LinearAlgebra: diagm
 using Statistics: mean
 using Printf
 using GLMakie
-
-include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 const FRF_POINTS = [
     (key = "F150_f8a42_f8b17", project = "system_fig8_150m.yaml", title = "150 m (pattern 42 × 17°)"),

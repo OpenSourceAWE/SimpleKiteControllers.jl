@@ -44,6 +44,7 @@ using Statistics: mean
 # DT, lag_filter, shift_delay; and V1_POINTS, course_controller_tf, v1_lag, tf_margins, model helpers.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
 include(joinpath(@__DIR__, "validate_margins.jl"))
+using SimpleKiteControllers: C3
 
 gt_output = normpath(joinpath(@__DIR__, "..", "output"))
 gt_windows = joinpath(gt_output, "turn_rate_low_flights")

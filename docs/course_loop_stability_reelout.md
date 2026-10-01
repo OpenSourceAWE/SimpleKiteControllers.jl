@@ -4,7 +4,7 @@
 analysis of the course loop flown by `simple_opt_reelout.jl` over the full
 range of tether length. It extends the fig8 analysis in
 [course_loop_stability.md](course_loop_stability.md); the plant model is
-shared with it (`examples/course_loop_model.jl`).
+shared with it (`src/course_loop_model.jl`, with the transfer functions in `ext/SimpleKiteControllersControlSystemsBaseExt.jl`).
 
 **Status (2026-09-26): the guided-loop model is validated in the simulation
 while the steering stays off its clamp.** Cross-track step tests (see

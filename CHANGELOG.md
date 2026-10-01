@@ -8,6 +8,10 @@
   the AWETrim client, optimizer request/conditions, pattern limits, re-optimization
   gate, loop decisions, run setup/startup, `RunState` and the reel-out loop step,
   run summaries, GUI state, `run_example`/`script_inputs`.
+- The linear course-loop model of the stability analysis, from `examples/course_loop_model.jl`:
+  the pattern law, plant coefficients and margin helpers in `src/course_loop_model.jl`; the
+  transfer functions (`course_pid`, `turn_rate_plant`, `delay_margin`, `guidance_tf`,
+  `kite_correction`) in a package extension loaded with `using ControlSystemsBase`.
 - `FigureEightController(fcs; dt, A, B)`, `apply_overrides!`, `turn_rate_coeffs(...; table)`.
 - Turn-rate identification in a low crosswind pattern, while reeling out and over
   depower.

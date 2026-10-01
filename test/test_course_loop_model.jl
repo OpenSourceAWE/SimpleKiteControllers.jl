@@ -3,10 +3,9 @@
 
 """
 V5 of oldplans/Plan_model_validation.md: code consistency of
-`examples/course_loop_model.jl`, no simulation. The model lives in `examples/`,
-not `src/`, so it is `include`d here rather than loaded as part of the package
-— hence `ControlSystemsBase` and `DiscretePIDs` in `test/Project.toml`, both
-already direct dependencies of `SimpleKiteControllers` itself.
+`src/course_loop_model.jl` and its ControlSystemsBase extension, no simulation.
+`using ControlSystemsBase` loads the extension, hence `ControlSystemsBase` in
+`test/Project.toml`.
 """
 
 using Test
@@ -14,8 +13,8 @@ using DiscretePIDs
 using ControlSystemsBase
 using LinearAlgebra: diagm
 using Random
-
-include(joinpath(@__DIR__, "..", "examples", "course_loop_model.jl"))
+using SimpleKiteControllers: PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP, PATTERN_V_FLOOR,
+    PATTERN_LAW_DEPOWER, PATTERN_DEPOWER_EXP, PLANT_COEFFS, PLANT_SPLIT
 
 @testset verbose=true "course_loop_model.jl (V5)" begin
     @testset "controller: course_pid vs DiscretePID" begin

@@ -89,7 +89,8 @@ using SimpleKiteControllers
 using SimpleKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
-using LinearAlgebra: diagm
+using SimpleKiteControllers: KITE_DEAD_TIME_EXP, KITE_LAG_EXP, PATTERN_DELAY_REF, PATTERN_V_REF,
+    PATTERN_DELAY_EXP, PATTERN_V_FLOOR, KITE_CORR_ZERO, KITE_CORR_POLE
 using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
@@ -102,8 +103,6 @@ fcs = FC_Settings(fc_settings(project))
 reload_turn_rate_table!(project)
 SET = Settings(project)
 Ts = 1 / SET.sample_freq
-
-include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 "The tape's small-signal lag [s], `1/steering_gain` of the project's settings"
 const TAPE_LAG = 1 / SET.steering_gain
@@ -146,7 +145,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = 
         α = isnothing(dm) ? 0.0 : dm.margin
         (; L, dm, α, delay_margin = delay_margin(L))
     end
-    worst = argmin(r -> r.α, vec(results))
+    worst = argmin(r -> r.α, results)
     return (; worst..., c1 = tc.c1, delay = τ, kite_lag = T_kite, K)
 end
 
@@ -230,7 +229,7 @@ println("Pattern (phase ≥ 3), depower = $(fcs.depower_setpoint), full gain, ov
 pattern = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
            for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, pattern)
-rate("Pattern", [r.α for r in pattern])
+rate_disk_margin("Pattern", [r.α for r in pattern])
 println("  the same, inner loop C·P alone:")
 inner = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN) for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, inner)
@@ -238,7 +237,7 @@ foreach((v, r) -> print_row("v_app", v, r), v_apps, inner)
 println("Entry (phases 1-2), depower = $(fcs.entry_depower), entry_gain = $(fcs.entry_gain), over v_app [m/s]:")
 entry = [loop_margins(fcs.entry_depower, fcs.entry_gain * fcs.heading_p, v) for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, entry)
-rate("Entry", [r.α for r in entry])
+rate_disk_margin("Entry", [r.α for r in entry])
 
 dp_lo, dp_hi = turn_rate_depower_range(fcs.body_damping)
 depowers = collect(range(dp_lo, dp_hi; length = 13))
@@ -247,7 +246,7 @@ println("Full gain at v_app = v_app_ref = $(fcs.v_app_ref) m/s, over depower [-]
 sweep = [loop_margins(dp, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN, pattern = true)
          for dp in depowers]
 foreach((dp, r) -> print_row("depower", dp, r), depowers, sweep)
-rate("Depower sweep", [r.α for r in sweep])
+rate_disk_margin("Depower sweep", [r.α for r in sweep])
 
 """
     pattern_frd_margins(v_app; fs = 0.25:0.005:3.9) -> NamedTuple

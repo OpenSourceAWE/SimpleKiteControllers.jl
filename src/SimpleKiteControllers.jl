@@ -75,6 +75,12 @@ export claim_task!, release_claims!, reset_claims!, n_unclaimed
 export run_metrics, side_conditions, rank_results, unique_results
 export format_results_table
 
+# Linear course-loop model of the stability analysis (examples/stability_*.jl);
+# the transfer functions need `using ControlSystemsBase` (ext/)
+export kite_dead_time, kite_lag, pattern_dead_time_lag, plant_coeffs, dead_time_fraction, c2_at
+export course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
+export frd_margins, frd_diskmargin, rate_disk_margin, load_course_correction, course_correction
+
 # Data
 export skc_data_path
 
@@ -158,6 +164,8 @@ include("reelout_loop.jl")
 # Its setup and startup, before the loop; the model comes in as the caller's `init_model`.
 include("run_setup.jl")
 include("startup_path.jl")
+# Linear course-loop model; after skc_data_path, which locates its measured course correction.
+include("course_loop_model.jl")
 # Base only, so an older checkout can include it to log its runs.
 include("run_log.jl")
 

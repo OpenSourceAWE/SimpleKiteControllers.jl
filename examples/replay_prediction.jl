@@ -48,12 +48,11 @@ using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file
 using ControlSystemsBase
-using LinearAlgebra: diagm
+using SimpleKiteControllers: C3, KITE_CORR_ZERO, KITE_CORR_POLE
 using Statistics: mean, std, var
 using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 const ARCHIVES = normpath(joinpath(@__DIR__, "..", "output", "archives"))
 

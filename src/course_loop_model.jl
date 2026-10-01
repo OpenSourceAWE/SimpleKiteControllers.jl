@@ -1,10 +1,12 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-# The linear course-loop model shared by `stability_fig8.jl` and
-# `stability_opt_reelout.jl`: the plant (actuator lag, turn-rate law, the kite's
-# dead time and lag over v_a), the discrete PD and the margin helpers. Needs
-# ControlSystemsBase and LinearAlgebra.diagm in scope.
+# The linear course-loop model of the stability analysis (`examples/stability_fig8.jl`,
+# `examples/stability_opt_reelout.jl`): the plant (actuator lag, turn-rate law, the
+# kite's dead time and lag over v_a), the discrete PD and the margin helpers. The
+# functions that build transfer functions (`course_pid`, `turn_rate_plant`,
+# `delay_margin`, `guidance_tf`, `kite_correction`) are defined by the extension
+# ext/SimpleKiteControllersControlSystemsBaseExt.jl, loaded with `using ControlSystemsBase`.
 
 # Identified 2026-09-25, see docs/course_loop_stability.md.
 "Equivalent lag [s] of the rate-limited steering tape, `set_steering` -> `steering`"
@@ -84,7 +86,7 @@ end
 
 function _scaled_row(tc, key, v_app, expo)
     x = getfield(tc, key)
-    (isnan(tc.v_app) || isnan(x)) && error("course_loop_model: the turn-rate table row has no v_app or " *
+    (isnan(tc.v_app) || isnan(x)) && error("_scaled_row: the turn-rate table row has no v_app or " *
         "$key; run add_delay_lag_split! of examples/build_turn_rate_table.jl for it.")
     return x * (tc.v_app / v_app)^expo
 end
@@ -96,15 +98,9 @@ Discrete transfer function from the regulated error to `rel_steering` of the
 `DiscretePID` built in `CourseController`: `K` + `K·Ts/Ti/(z-1)` +
 `bd·(z-1)/(z-ad)`, with `ad = Td/(Td+N·Ts)` and `bd = K·N·ad`. `Ti = false` means
 no integral action.
+Needs `using ControlSystemsBase`, which loads the method.
 """
-function course_pid(K, Ti, Td, N, Ts)
-    z = tf("z", Ts)
-    ad = Td / (Td + N * Ts)
-    bd = K * N * ad
-    C = K + bd * (z - 1) / (z - ad)
-    Ti isa Bool || (C += K * Ts / Ti / (z - 1))
-    return C
-end
+function course_pid end
 
 """
     C3
@@ -212,20 +208,9 @@ end
 turn-rate law with the kite's own first-order lag `kite_lag` [s] and its dead
 time `delay` [s] rounded to whole samples. `gravity = cos(ψ0)·cos(β)` in
 [-1, 1] selects the sign and size of the gravity pole.
+Needs `using ControlSystemsBase`, which loads the method.
 """
-function turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0)
-    first_order(T) = ss(-1 / T, 1 / T, 1.0, 0.0)
-    kite = ss(c2 / v_app * gravity, c1 * v_app, 1.0, 0.0)
-    lag > 0 && (kite = kite * first_order(lag))
-    kite_lag > 0 && (kite = kite * first_order(kite_lag))
-    P = c2d(kite, Ts)
-    n = round(Int, delay / Ts)
-    n == 0 && return P
-    # Dead time as an n-sample shift register; a z^-n transfer function is ill-conditioned.
-    A = diagm(-1 => ones(n - 1))
-    D = ss(A, [1.0; zeros(n - 1)], [zeros(1, n - 1) 1.0], 0.0, Ts)
-    return P * D
-end
+function turn_rate_plant end
 
 """
     delay_margin(L) -> Float64
@@ -234,15 +219,17 @@ Smallest extra dead time [s] that destabilizes `L`, over all its gain
 crossovers; 0 if the closed loop is already unstable.
 `ControlSystemsBase.delaymargin` takes the phase margin unwrapped and so reports
 e.g. 374° instead of 14° for a loop with a long dead time.
+Needs `using ControlSystemsBase`, which loads the method.
 """
-function delay_margin(L)
-    isstable(feedback(L)) || return 0.0
-    _, _, wpm, pm = margin(L; allMargins = true)
-    dms = [deg2rad(mod(p, 360)) / w for (w, p) in zip(wpm[1], pm[1]) if w > 0]
-    return isempty(dms) ? Inf : minimum(dms)
-end
+function delay_margin end
 
-function rate(name, αs)
+
+"""
+    rate_disk_margin(name, αs) -> Float64
+
+Log and return the minimum disk margin of `αs`, rated as robust (≥ 0.5), marginal (≥ 0.3) or fragile.
+"""
+function rate_disk_margin(name, αs)
     α_min = minimum(αs)
     if α_min < 0.3
         @error "$name: unstable or fragile, minimum disk margin $(round(α_min, digits=3))."
@@ -264,8 +251,9 @@ the attractor's arc distance [rad]). Multiply the inner loop `C·P` by it for
 pattern flight, as `stability_opt_reelout.jl` does. Validated at the 300 m
 fig8 point (oldplans/Plan_model_validation.md, V1 step 1): it predicts the
 measured course → regulated-error link at 0.5 Hz to within 5 % and 1°.
+Needs `using ControlSystemsBase`, which loads the method.
 """
-guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
+function guidance_tf end
 
 """
     kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) -> StateSpace
@@ -276,9 +264,9 @@ from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
 1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it,
 together with the pattern law's dead time and lag (`pattern_dead_time_lag`),
 against which it is fitted.
+Needs `using ControlSystemsBase`, which loads the method.
 """
-kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) =
-    c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
+function kite_correction end
 
 """
 Zero and pole [Hz] of [`kite_correction`](@ref): fit at the 300 m fig8 point,
@@ -330,7 +318,7 @@ crossover region for the course loop.
 frd_diskmargin(L) = 2 / maximum(abs.((1 .- L) ./ (1 .+ L)))
 
 "Path of the measured course correction, see [`load_course_correction`](@ref)"
-const COURSE_CORRECTION_FILE = normpath(joinpath(@__DIR__, "..", "data", "course_correction_measured.csv"))
+const COURSE_CORRECTION_FILE = joinpath(skc_data_path(), "course_correction_measured.csv")
 
 """
     load_course_correction(path = COURSE_CORRECTION_FILE) -> Vector{NamedTuple}

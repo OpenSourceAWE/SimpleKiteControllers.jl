@@ -90,7 +90,8 @@ using SimpleKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
 using V3Kite: load_log, YAML, identify_turn_rate_law
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
-using LinearAlgebra: diagm, norm
+using SimpleKiteControllers: ACTUATOR_LAG, C3, KITE_CORR_ZERO, KITE_CORR_POLE
+using LinearAlgebra: norm
 using Statistics: median
 using Printf
 using Base.CoreLogging: with_logger, NullLogger
@@ -113,8 +114,6 @@ fcs = FC_Settings(fc_settings(project))
 reload_turn_rate_table!(project)
 SET = Settings(project)
 Ts = 1 / SET.sample_freq
-
-include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 "Width of a tether-length bin [m]"
 const BIN_M = 10.0
@@ -367,8 +366,8 @@ isempty(handover) || @warn @sprintf("Not rated: %d bin(s) at L = %s m span a pha
                                      where depower ramps within the bin); the actuator-lag fit is not one \
                                      operating point, not a linear loop.",
                                     length(handover), join((@sprintf("%.0f", r.L) for r in handover), ", "))
-rate("Inner loop", [r.α_inner for r in lin_rows])
-α_min = rate("Loop with guidance", [r.α_guided for r in lin_rows])
+rate_disk_margin("Inner loop", [r.α_inner for r in lin_rows])
+α_min = rate_disk_margin("Loop with guidance", [r.α_guided for r in lin_rows])
 if isempty(uncovered)
     @info @sprintf("Tether length: the log covers the full range %.0f – %.0f m.", l_lo, l_hi)
 else

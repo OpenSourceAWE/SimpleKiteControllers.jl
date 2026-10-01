@@ -69,13 +69,12 @@ using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file
 using ControlSystemsBase, RobustAndOptimalControl
-using LinearAlgebra: diagm
+using SimpleKiteControllers: ACTUATOR_LAG
 using Statistics: mean, std
 using Dates
 using Printf
 
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
-include(joinpath(@__DIR__, "course_loop_model.jl"))
 
 # ==================== OPERATING POINTS ==================== #
 # oldplans/Plan_model_validation.md#operating-points
