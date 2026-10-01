@@ -100,3 +100,4 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         @test b.elevation_amplitude_max ≈ 1.2 * elevation_amplitude(el)
     end
 end
+nothing

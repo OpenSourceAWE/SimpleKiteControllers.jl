@@ -94,3 +94,4 @@ import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_
         @test !rc.opt_r_on
     end
 end
+nothing

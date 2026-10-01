@@ -34,3 +34,4 @@ using SimpleKiteControllers
     @test script_inputs(joinpath(dir, "other.jl"), (; a = 5)) == (; a = 5)
     @test_throws ErrorException run_example(joinpath(dir, "missing.jl"))
 end
+nothing

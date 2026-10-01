@@ -48,3 +48,4 @@ end
         @test s.v_wind == 8.0
     end
 end
+nothing

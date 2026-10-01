@@ -212,3 +212,4 @@ import SimpleKiteControllers: _longest_run
         @test weighted_prediction(timeline[1:1], 0.0:3.0).power == 1000.0
     end
 end
+nothing

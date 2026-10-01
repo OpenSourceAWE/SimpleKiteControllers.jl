@@ -93,3 +93,4 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
         @test soft_stop_speed(2.0, 15.0, 10.0, 4.0) == 0.0
     end
 end
+nothing

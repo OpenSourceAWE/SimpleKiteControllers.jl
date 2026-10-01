@@ -118,3 +118,4 @@ fake_fig8m(; failed = String[]) = (; criteria = 10, criteria_failed = failed,
         @test c.s == 20.0 && occursin("slowest re-optimization took 12.0 s", c.comment)
     end
 end
+nothing

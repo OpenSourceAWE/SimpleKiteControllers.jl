@@ -279,3 +279,4 @@ import KiteUtils: wrap2pi
         @test phase == 4   # dmin = 0.0 < fig8_d_gate advances 3 -> 4 immediately
     end
 end
+nothing

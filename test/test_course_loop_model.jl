@@ -158,3 +158,4 @@ using SimpleKiteControllers: PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP
         @test course_correction([t], 0.5, t.v_a) ≈ course_correction([t], 1.0, 2t.v_a)
     end
 end
+nothing

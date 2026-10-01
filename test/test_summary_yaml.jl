@@ -34,3 +34,4 @@ using SimpleKiteControllers
         @test isempty(time_keyed(e -> (e.t, e.v), NamedTuple[]))
     end
 end
+nothing
