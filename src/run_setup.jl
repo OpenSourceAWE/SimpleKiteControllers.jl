@@ -189,7 +189,9 @@ function setup_run(inputs; init_model)
     power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
 
     # Simulated time to ask `init` for: the reel-out budget under a wind-speed override, see `sim_budget`.
-    effective_sim_time = sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_wind)
+    # Without a sim_time and a wind override that is `nothing`: the project's own, as `init` would take it.
+    effective_sim_time = Float64(something(sim_budget(project, project_set, fcs, sim_time, wind_speed,
+                                                      default_v_wind), project_set.sim_time))
 
     # Arrow log files named after the project's `log_file`; `output_path` redirects them for parallel sweep runs.
     # The default is the package's output/, next to src/ and examples/.
