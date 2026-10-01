@@ -17,7 +17,7 @@ import SimpleKiteControllers: GUI_STATE_FILE_OVERRIDE, FAILED_TRAJECTORY_DIR, se
     capture_startup_geometry!, startup_feasibility, init_phase5_and_controller!, init_loop_state!,
     startup_params, startup_solve, write_run_done, step_commands!, record_step!, check_overspeed,
     OptChain, KiteUtils
-include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
+@isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
 const PROJECT = "system_reelout_maasvlakte.yaml"
 const UP_LOOPS = FC_Settings(fc_settings(project_file(PROJECT))).up_loops

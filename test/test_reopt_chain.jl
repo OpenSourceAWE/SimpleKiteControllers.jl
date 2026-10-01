@@ -14,7 +14,7 @@ using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchParams,
     TrajOptSettings, awetrim_depower_to_v3kite, opt_request_key, min_turn_radius_request
-include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
+@isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
 @testset verbose = true "reopt_chain" begin
     fcs = FC_Settings()

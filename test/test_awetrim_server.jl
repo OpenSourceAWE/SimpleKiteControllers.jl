@@ -17,11 +17,11 @@ import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitPar
     stale_conn_error, server_running, ensure_server, replay_entries, clear_opt_chain_cache,
     free_speed_reference, TrajOptSettings, WCSettings, HTTP, JSON3, YAML
 
-include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
+@isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 const AZ, EL = FAKE_AZ, FAKE_EL
 const INFLOW = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0, profile_law = 3)
 const WINCH = WinchParams("reelout", 0.04, 700.0, 7200.0)
-params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH,
+server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH,
                              inflow_conditions = INFLOW, trajectory = Trajectory(AZ, EL), kw...)
 
 
@@ -30,7 +30,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
         fs = fake_server()
         try
             @test server_running(fs.url) && ensure_server(fs.url; autostart = false) == fs.url
-            r = opt_init(params(); url = fs.url)
+            r = opt_init(server_params(); url = fs.url)
             @test r.name == "v4" && r.length == 150.0 && r.trajectory.azimuth == AZ
             # The request as sent: every field of InitParams, in JSON.
             body = fs.log[end][2]
@@ -97,8 +97,8 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
         fs = fake_server(; fail = [180.0])
         try
             oc = OptChain(fs.url; dir)
-            chain_init(oc, params())
-            @test oc.state == oc.server == opt_request_key(params())
+            chain_init(oc, server_params())
+            @test oc.state == oc.server == opt_request_key(server_params())
             r = chain_step(oc, StepParams(160.0, WINCH))   # a miss: asks the server
             @test r.metrics.avg_power_W == 1000.0 && oc.misses == 1 && !oc.served
             @test paths(fs)[end-1:end] == ["/step", "/trajectory"]   # the table of a converged step
@@ -113,7 +113,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
             # The same chain again: served from the cache, the server is not asked.
             n = length(fs.log)
             oc2 = OptChain(fs.url; dir)
-            chain_init(oc2, params())                        # /init always goes out
+            chain_init(oc2, server_params())                        # /init always goes out
             @test chain_step(oc2, StepParams(160.0, WINCH)).metrics.avg_power_W == 1000.0
             @test oc2.hits == 1 && oc2.served
             @test_throws HTTP.StatusError chain_step(oc2, StepParams(180.0, WINCH))
@@ -123,7 +123,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
             # A request the cache has not seen, after hits: the server's session is REBUILT first
             # (/init seeded with the cached optimum and its depower, one /step), then it is sent.
             oc3 = OptChain(fs.url; dir)
-            chain_init(oc3, params())
+            chain_init(oc3, server_params())
             chain_step(oc3, StepParams(160.0, WINCH))      # hit
             n = length(fs.log)
             r = @test_logs (:info, r"Rebuilding the optimizer's session") match_mode = :any chain_step(
@@ -140,7 +140,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
             # What is solved from a rebuilt session is stored under its own lineage.
             record_opt_success!(oc3)
             oc4 = OptChain(fs.url; dir)
-            chain_init(oc4, params())
+            chain_init(oc4, server_params())
             chain_step(oc4, StepParams(160.0, WINCH))
             n = length(fs.log)
             chain_step(oc4, StepParams(170.0, WINCH))      # found under the rebuilt lineage
@@ -154,7 +154,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
         fs = fake_server()
         try
             oc = OptChain(fs.url; dir = mktempdir())
-            chain_init(oc, params())
+            chain_init(oc, server_params())
             @test chain_step(oc, StepParams(160.0, WINCH); wait = false) == 7
             @test chain_status(oc)["state"] == "solving"   # asked: the outcome is not known yet
             fs.state[] = "converged"
@@ -174,7 +174,7 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
         fs = fake_server()
         dir = mktempdir()
         oc = OptChain(fs.url; dir)
-        chain_init(oc, params())
+        chain_init(oc, server_params())
         close(fs.server)
         @test_throws Exception chain_step(oc, StepParams(160.0, WINCH))
         @test isnothing(oc.current) && oc.server == "" && isempty(oc.pending)
