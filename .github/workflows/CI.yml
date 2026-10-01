@@ -42,3 +42,26 @@ jobs:
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      contents: write # push the built pages to gh-pages
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+      # docs/ is a workspace sub-project, so the instantiate above already resolved it;
+      # skip the action's Pkg.develop of the package into docs/.
+      - uses: julia-actions/julia-docdeploy@v1
+        with:
+          install-package: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
