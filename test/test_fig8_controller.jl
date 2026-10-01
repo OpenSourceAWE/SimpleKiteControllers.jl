@@ -575,9 +575,11 @@ end
         fcs_ro = FC_Settings("fc_settings_reelout.yaml")
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_setpoint).c1 isa Real
         @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_final).c1 isa Real
-        # The reel-out projects fly the low-elevation table (2026-09-29): the same depowers
-        # resolve there too, entry included. Restores the default table afterwards.
-        for pr in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml")
+        # The reel-out projects fly the low-elevation table (2026-09-29), the fig8 projects
+        # too (2026-10-01): the same depowers resolve there, entry included. Restores the
+        # default table afterwards.
+        for pr in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml",
+                   "system_fig8_150m.yaml", "system_fig8_200m.yaml", "system_fig8_300m.yaml")
             @test turn_rate_coeffs_file(project_file(pr)) == "turn_rate_coeffs_low.yaml"
         end
         try
@@ -632,15 +634,20 @@ end
         @test V3_TURN_RATE_C1 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1
         @test V3_TURN_RATE_C2 == turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c2
 
-        # Canary: catches an accidental edit of the YAML. EXPECTED to change on
-        # a deliberate re-identification -- update it then, nothing else here.
+        # Canaries: catch an accidental edit of either YAML. EXPECTED to change on
+        # a deliberate re-identification -- update them then, nothing else here.
+        # The default table is turn_rate_coeffs_low.yaml since the fig8 projects
+        # switched to it (2026-10-01): 0.3062365853867301, identified 2026-09-29.
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.3062365853867301
+        # turn_rate_coeffs.yaml, still named by system_reelout_180m.yaml:
         # 0.26912723875946765: table rebuilt 2026-09-27 (adds delay_exp,
         # v_app_halves, delay_halves); was 0.26976888270335364 from 2026-09-25,
         # re-identified to record each row's v_app
         # (docs/course_loop_stability.md); was 0.2697451625905726 from
         # 2026-09-22 (11 kg wing, 150 m / 8 mm tether, system_reelout_maasvlakte.yaml,
         # see docs/fig8_tuning_log.md) and 0.26975787521515693 from 2026-08-30.
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.26912723875946765
+        relay_table = SimpleKiteControllers._load_turn_rate_table(project_file("system_reelout_180m.yaml"))
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25; table = relay_table).c1 ≈ 0.26912723875946765
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin

@@ -214,6 +214,8 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+# The turn-rate table PROJECT names, not whatever an earlier script left in the session.
+reload_turn_rate_table!(project)
 
 project_set = Settings(project)
 apply_windspeed_override!(project_set, WIND_SPEED)
@@ -273,9 +275,10 @@ fec = FigureEightController(fcs; dt = s.dt)
 # value identifies both the settling transient and the flown damping c1 belongs
 # to.
 #
-# The coefficients are DIAGNOSTIC here — they feed the feasibility check and the
-# dead-time context below, no gain and no control law — so a damping/depower the
-# table cannot serve costs the diagnosis, not the run. `turn_rate_coeffs` refuses
+# The coefficients feed the feasibility check, the dead-time context below and,
+# through `c1`, the curvature feed-forward; no PD gain is scaled by them, so a
+# damping/depower the table cannot serve costs the diagnosis and the
+# feed-forward, not the run. `turn_rate_coeffs` refuses
 # to extrapolate (by design: c1 moves violently with both arguments), so catch
 # that and fly on unadvised rather than aborting a deliberate off-grid run.
 coeffs = try

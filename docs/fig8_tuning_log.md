@@ -6077,3 +6077,135 @@ passed at every wind speed:
 
 `el_offset_final` was not the lever: it lifts the path only after the reel-out,
 and phase 5 already passed at 8.2°. Cabauw not re-flown.
+
+## 2026-10-01 — Fig8 projects fly `turn_rate_coeffs_low.yaml`; `attractor_dist` 8 -> 5.5°; own 150 m settings with `f8_b` 16°
+
+`system_fig8_{150,200,300}m.yaml` now name `turn_rate_coeffs_low.yaml`, the table the
+reel-out projects switched to on 2026-09-29, and `simple_fig8.jl` calls
+`reload_turn_rate_table!(project)`: until now it read whatever table the session
+held, so a fig8 run after a reel-out run silently flew the other table. At
+`depower_setpoint` 0.27, `c1` rises 0.2496 -> 0.2728 1/m (x1.093). Since
+`system_fig8_200m.yaml` is the project `__init__` loads against, the low table is also
+the session default now; `system_reelout_180m.yaml` still names the old one.
+
+7 m/s, no turbulence, project sim_time, one run per point (each deterministic: the
+baseline repeated to the digit), scored with `fig8_metrics`. "rate-lim." is
+`tape_rate_frac`.
+
+**200 m.** The table alone costs 10 %, and `ff_gain` cannot win it back: it scales
+`u_ff` and the chord correction `chi_ff` together, and the tracking is set by their
+ratio. Old table at `ff_gain` 0.915 (the low table's `u_ff` at 1.0, smaller `chi_ff`)
+flies 0.86°, low table at 1.09 (the old `u_ff`, larger `chi_ff`) 0.94°.
+
+| table | change | RMS d | rate-lim. |
+|---|---|--:|--:|
+| old | — (baseline) | 0.85° | 29 % |
+| low | — | 0.94° | |
+| low | `ff_gain` 0.9 / 1.09 / 1.2 | 0.95 / 0.94 / 0.93° | |
+| low | `heading_p` 0.30 / 0.40 | 1.03 / 0.87° | |
+| low | `heading_d` 0.20 / 0.40 | 0.95 / 0.92° | |
+| low | `attractor_dist` 9 / 7.5 / 7 | 1.06 / 0.89 / 0.83° | 22 % (7) |
+| low | `attractor_dist` 6.5 / 6 | 0.78 / 0.73° | 24 / 25 % |
+| low | **`attractor_dist` 5.5** | **0.68°** | 26 % |
+| low | `attractor_dist` 5 / 4.5 | 0.65 / 0.67° | 27 / 35 % |
+| low | `attractor_dist` 4 | 1.44°, rings | 51 % |
+| old | `attractor_dist` 6 / 5 | 0.74 / 0.90° | 34 / 47 % |
+
+The 8° of 2026-09-24 is stale with either table (old table at 6°: 0.74°), unlike then,
+when 6° rang. At 6° `heading_p` 0.30/0.40 and `heading_d` 0.20/0.40 gave 0.81/0.69° and
+0.74/0.71°, so the gains stay. 5.5° is set, 1.5° clear of the 4° cliff; 5° is 0.03°
+better and closer to it. Turbulence 0.2 changes nothing (8°: 0.94°, 5.5°: 0.68°).
+300 m: 0.84° (old) -> 0.87° (low) -> 0.71° (low, 5.5°).
+
+**150 m** was curvature-limited before any of this: margin 1.08 with the old `c1`
+(1.18 with the low one), the steering at `max_steering` in the right-hand lobe every
+lap, RMS d 4.36°, growing overshoots. A shorter lead makes it worse (low table, 8 / 6 /
+5.5 / 5°: 4.32 / 5.42 / 7.79 / 8.34°), so it gets its own
+`fc_settings_fig8_150m.yaml` (a copy of `fc_settings.yaml`, pattern and attractor
+aside). A taller lemniscate opens the lobe tips (margin 1.18 -> 1.42 / 1.53 / 1.51 for
+`f8_b` 14 / 16 / 18 at `f8_a` 30; 200 m has 1.58):
+
+| `f8_a` | `f8_b` | `attractor_dist` | RMS d | max \|u\| | rate-lim. |
+|--:|--:|--:|--:|--:|--:|
+| 30 | 14 | 8 / 5.5 | 1.14 / 2.93° | 0.298 / 0.300 | 47 / 57 % |
+| 30 | **16** | **8** | **0.84°** | 0.245 | 23 % |
+| 30 | 16 | 5.5 | 0.78° | 0.248 | 43 % |
+| 30 | 18 | 8 / 5.5 | 0.79 / 1.04° | 0.229 / 0.251 | 22 / 46 % |
+| 35 | 16 | 8 / 5.5 | 0.87 / 0.72° | 0.250 / 0.262 | 19 / 33 % |
+
+Set to `f8_b` 16, `attractor_dist` 8: same width, 23 % on the rate limit where the
+5.5° variants sit at 33-46 %. The reel-out paths at 150 m are narrower (±20-26°) and
+12-18° tall, with startup margins 1.13-1.22.
+
+Shipped files, flown as is: 150 m 0.84° (6.5 laps), 200 m 0.68° (4 laps), 300 m 0.71°
+(2 laps). 150 and 200 m pass all 8 criteria. 300 m failed `laps >= 2.5` with 2.0 laps,
+as it did before this change (old table, 8°: also 2.0): its 90 s `sim_time` left 44 s
+after settling at 45.6 s, at ~22 s per lap. `settings_fig8_300m.yaml` `sim_time` 90 ->
+130 s: 4.0 laps, RMS d 0.59°, all 8 criteria pass. Only 7 m/s was flown.
+
+## 2026-10-01 — `settings_fig8_150m.yaml` `sample_freq` 90 -> 100 Hz: an 8 Hz ring from t = 74 s
+
+The 150 m run of the entry above (`f8_b` 16, low table) tracks at 0.84°, but from
+t ≈ 74 s on the AoA, the wing L/D and the winch force carry a growing high-frequency
+oscillation. Measured over 5 s windows against 50-70 s, the high-passed AoA rises
+~25x, `pulley_len` ~20x and the winch force ~12x. Steering, heading and pitch do
+not change, so the controller is not involved. The pulley rings at 8.1 Hz and the
+force at 16.2 Hz.
+
+Not the winch crossing zero speed: the 200 and 300 m runs reel in and out across
+zero as often (21 % / 43 % of the time with `v_reelout` > 0) without any ring. The
+150 m project was the only one at 90 Hz (`5cfefed`, copied from the reel-out
+settings); 200 and 300 m fly 100 Hz. Same run at 100 / 120 Hz: no growth to the end
+(`pulley_len` HF 1.0-1.6 / 0.7-1.0 mm in every window), turn-rate HF std 3.02 ->
+1.36°/s, RMS d 0.84 -> 0.82°, all 8 criteria pass. The explicit coupling the
+header of the settings file warns about (VSM load frozen between updates) has its
+limit above 90 Hz here, not at ~60 Hz. Set to 100 Hz, as the other two projects.
+
+## 2026-10-01 — Fig8 entry: `dive_el_margin` 7 -> 15° (`fc_settings.yaml` and `fc_settings_fig8_150m.yaml`)
+
+The whole-run minimum elevation of the 200 m run was 15.8°, set in phase 3 at
+t = 32.9 s, 2.9° under the pattern's own minimum (18.7-18.9° in every later 10 s
+window). Phase table of the baseline (7 m/s, no turbulence):
+
+| phase | azimuth | elevation | min | duration |
+|---|---|---|--:|--:|
+| 1 dive | -0.9 -> -54.9° | 71.5 -> 33.0° | 33.0° | 25.2 s |
+| 2 hold | -54.9 -> -56.1° | 33.0 -> 31.6° | 31.6° | 0.8 s |
+| 3 transition | -56.1 -> -31.4° | 31.5 -> 18.2° | **15.8°** | 7.0 s |
+
+The dive ends at `el_center + dive_el_margin` = 33°, 26° of azimuth outside the
+pattern, at v_app ~13 m/s; phase 3 then turns back with the steering at
+`max_steering` for 1.5 s and loses 16° in that turn. Screening runs (50 s, scored on
+the entry minimum only):
+
+| lever | entry min | dive end az / el | dive | phase 3 | phase 4 from | phase-4 min |
+|---|--:|--|--:|--:|--:|--:|
+| baseline (`chi_dive` -85, margin 7) | 15.8° | -54.9 / 33.0° | 25.2 s | 7.0 s | 35.0 s | 18.2° |
+| `chi_dive` -100 | 15.3° | -55.6 / 33.0° | 21.9 s | 7.2 s | 32.0 s | 18.2° |
+| `chi_dive` -115 | 14.9° | -54.5 / 33.0° | 19.2 s | 7.2 s | 29.2 s | 18.0° |
+| `chi_dive` -130 | 13.3° | -49.8 / 32.9° | 15.7 s | 6.6 s | 25.1 s | 17.3° |
+| margin 10 | 18.3° | -52.2 / 36.0° | 23.4 s | 6.5 s | 32.7 s | 18.9° |
+| margin 12 | 19.6° | -50.3 / 38.0° | 22.2 s | 6.2 s | 31.2 s | 18.9° |
+| margin 13 | 20.0° | -49.3 / 39.0° | 21.6 s | 6.0 s | 30.4 s | 18.9° |
+| margin 13, `chi_dive` -75 | 20.4° | -47.0 / 39.0° | 23.2 s | 5.7 s | 31.7 s | 18.9° |
+| **margin 15** | **21.5°** | -47.4 / 41.0° | 20.4 s | 5.7 s | 28.9 s | 18.9° |
+| margin 17 | 23.7° | -45.6 / 43.0° | 19.1 s | 5.4 s | 27.4 s | 17.8° |
+
+Unlike the reel-out entry, a steeper `chi_dive` makes it WORSE here: it only shortens
+the dive, which still ends at the same 33° and the same azimuth. `dive_el_margin` is
+the lever: the dive ends higher and closer to the pattern, and the transition has
+the altitude to spend. 17° starts phase 4 with an overshoot (17.8°), so 15° is set,
+in both files (the 150 m copy keeps its non-pattern values in step).
+
+Full-length confirmation, shipped files:
+
+| project | whole-run min, before -> after | min settled | RMS d | laps | criteria |
+|---|---|--:|--:|--:|---|
+| 200 m | 15.8 -> **18.7°** | 18.7° | 0.68 -> 0.67° | 4.0 -> 4.5 | all 8 pass |
+| 300 m | 17.9 -> **19.2°** | 19.2° | 0.59 -> 0.58° | 4.0 | all 8 pass |
+| 150 m | 11.0 -> **16.5°** | 16.5° | 0.82° | 6.5 -> 7.0 | all 8 pass |
+
+The whole-run minimum now equals `min_settled` in every project: the entry dip is
+gone (entry minimum 22.5° at 300 m, 16.9° at 150 m), and what remains is the pattern's
+own bottom, `el_center - f8_b/2` minus the tracking error. 19° at 200 m would need the
+pattern raised, not the entry. Only 7 m/s was flown.
