@@ -14,7 +14,8 @@ using SimpleKiteControllers
 import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
     OptChain, opt_request_key, post, opt_init, opt_step, opt_status, opt_trajectory,
     chain_init, chain_step, chain_status, chain_trajectory, record_opt_success!,
-    stale_conn_error, server_running, ensure_server, HTTP, JSON3
+    stale_conn_error, server_running, ensure_server, replay_entries, clear_opt_chain_cache,
+    free_speed_reference, TrajOptSettings, WCSettings, HTTP, JSON3, YAML
 
 include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 const AZ, EL = FAKE_AZ, FAKE_EL
@@ -165,6 +166,95 @@ params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params = WINCH
         finally
             close(fs.server)
         end
+    end
+
+    @testset "chain_server_lost" begin
+        # A request that never reaches the solver leaves the server's state unknown: not stored,
+        # and the chain no longer claims to know what the server holds.
+        fs = fake_server()
+        dir = mktempdir()
+        oc = OptChain(fs.url; dir)
+        chain_init(oc, params())
+        close(fs.server)
+        @test_throws Exception chain_step(oc, StepParams(160.0, WINCH))
+        @test isnothing(oc.current) && oc.server == "" && isempty(oc.pending)
+        @test isempty(readdir(dir))
+    end
+
+    @testset "ensure_server_bad_url" begin
+        @test_throws r"Cannot parse a host and port" ensure_server("not-a-url"; verbose = false)
+    end
+
+    @testset "replay_entries" begin
+        dir, scenario = mktempdir(), mktempdir()
+        # A startup entry matched by its reply, a re-optimization by its table (in radians).
+        az2, el2 = [0.0, 12.0, 0.0, -12.0], [26.0, 31.0, 26.0, 21.0]
+        startup = Dict("status" => "converged", "key" => "a",
+                       "reply" => Dict("trajectory" => Dict("azimuth" => AZ, "elevation" => EL)))
+        reopt = Dict("status" => "converged", "key" => "b",
+                     "table" => Dict("table" => Dict("azimuth" => deg2rad.(az2),
+                                                     "elevation" => deg2rad.(el2))))
+        failed = Dict("status" => "failed", "key" => "c",
+                      "reply" => Dict("trajectory" => Dict("azimuth" => az2, "elevation" => el2)))
+        for (name, e) in (("a", startup), ("b", reopt), ("c", failed))
+            write(joinpath(dir, "$name.json"), JSON3.write(e))
+        end
+        write(joinpath(dir, "notes.txt"), "not an entry")
+        path(az, el, t) = Dict("azimuth" => az, "elevation" => el, "installed_t" => t)
+        YAML.write_file(joinpath(scenario, "run_opt_paths.yaml"),
+                        Dict("paths" => [path(AZ, EL .+ 0.001, 0.0), path(az2, el2, 40.0)]))
+        entries = replay_entries(scenario, "run"; dir)
+        @test [e["key"] for e in entries] == ["a", "b"]
+        # A path the cache does not hold (only a FAILED entry carries it) cannot be replayed.
+        YAML.write_file(joinpath(scenario, "miss_opt_paths.yaml"),
+                        Dict("paths" => [path(az2 .+ 1, el2, 55.0)]))
+        @test_throws r"installed at t = 55.0 s" replay_entries(scenario, "miss"; dir)
+        @test_throws r"no other_opt_paths.yaml" replay_entries(scenario, "other"; dir)
+    end
+
+    @testset "clear_opt_chain_cache" begin
+        dir = joinpath(mktempdir(), "chains")
+        mkpath(dir)
+        write(joinpath(dir, "x.json"), "{}")
+        @test clear_opt_chain_cache(; dir) && !isdir(dir)
+        @test !clear_opt_chain_cache(; dir)
+    end
+
+    @testset "free_speed_reference" begin
+        # Three probes at 150, 175 and 200 m; the one at 175 m fails and is skipped.
+        fs = fake_server(; fail = [175.0])
+        try
+            tos = TrajOptSettings()
+            tos.base_url = fs.url
+            tos.opt_success_cache = tos.opt_failure_cache = false
+            tos.free_speed_reference_points = 3
+            wc = WCSettings(; dt = 0.01)
+            lengths = collect(150.0:10.0:200.0)
+            guess = (collect(Float64, AZ), collect(Float64, EL))
+            r = free_speed_reference(tos, wc, INFLOW, guess..., lengths)
+            @test [p.l for p in r.points] == [150.0, 200.0]
+            @test [p.power for p in r.points] == [1000.0, 2000.0]
+            # Interpolated between the two, sample by sample: 1000, 1200, ..., 2000 W.
+            @test r.weighted ≈ 1500.0
+            inits = [b for (p, b) in fs.log if p == "/init"]
+            @test length(inits) == 3 && all(b -> b["name"] == tos.name * "-fsref", inits)
+            @test all(b -> b["winch_params"]["winch_mode"] == "free_speed", inits)
+            # Below 1 m of span the probes are spread over 1 m; off or without samples: nothing.
+            r = free_speed_reference(tos, wc, INFLOW, guess..., [160.0])
+            @test [p.l for p in r.points] == [160.0, 160.5, 161.0] && r.weighted == r.points[1].power
+            tos.free_speed_reference_points = 1
+            @test isnothing(free_speed_reference(tos, wc, INFLOW, guess..., lengths))
+            tos.free_speed_reference_points = 3
+            @test isnothing(free_speed_reference(tos, wc, INFLOW, guess..., Float64[]))
+        finally
+            close(fs.server)
+        end
+        # Every probe failing: nothing.
+        tos = TrajOptSettings()
+        tos.base_url = fs.url
+        tos.opt_success_cache = tos.opt_failure_cache = false
+        tos.free_speed_reference_points = 2
+        @test isnothing(free_speed_reference(tos, WCSettings(; dt = 0.01), INFLOW, AZ, EL, [150.0, 200.0]))
     end
 end
 nothing

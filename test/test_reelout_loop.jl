@@ -12,7 +12,7 @@ using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: count_laps!, advance_blend!, phase5_fallback!, release_reelout!,
     winch_setpoint!, compliant_hold!, reelout_speed!, entry_force_guard!, build_controllers,
-    WCSettings, deliver_lift_in_air!, update_lift_target!, depower_command!, steering_hooks!
+    WCSettings, apply_optimized_kv!, deliver_lift_in_air!, update_lift_target!, depower_command!, steering_hooks!
 
 # `rcs.f_high` is written by `count_laps!`; a WCSettings stand-in with only that field.
 mutable struct ForceLimits
@@ -354,6 +354,42 @@ end
         # Phase 4 after the reel-out: no hold, no motion.
         l = st.l_set
         @test winch_setpoint!(st, setup, plant(4000.0), 100.0, 4, 0.3) == 0.0 && st.l_set == l
+    end
+
+    @testset "apply_optimized_kv" begin
+        wc = WCSettings(; dt = 0.01)
+        kv0 = wc.kv
+        setup(; optimize_k_v = true) = (; tos = (; optimize_k_v), wc, rc = (; wcs = wc),
+                                        opt_kv_log = log)
+        log = NamedTuple[]
+        tab(params) = Dict{String, Any}("optimized_parameters" => params)
+        # No gain to apply: off, no parameters, no k_v, or not positive.
+        apply_optimized_kv!(setup(; optimize_k_v = false), tab(Dict("k_v" => 0.05)), 0.0, 150.0)
+        apply_optimized_kv!(setup(), Dict{String, Any}(), 0.0, 150.0)
+        apply_optimized_kv!(setup(), tab(Dict("input_depower" => 1.4)), 0.0, 150.0)
+        apply_optimized_kv!(setup(), tab(Dict("k_v" => 0.0)), 0.0, 150.0)
+        @test wc.kv == kv0 && isempty(log)
+        @test_logs (:info, r"optimizer chose k_v = 0\.05000 at L = 150 m") apply_optimized_kv!(
+            setup(), tab(Dict("k_v" => 0.05)), 1.0, 150.0)
+        @test wc.kv == 0.05 && log[end] == (; t = 1.0, l = 150.0, k_v = 0.05, at_bound = false)
+        # The same gain again: logged in `opt_kv_log`, not said again.
+        @test_logs apply_optimized_kv!(setup(), tab(Dict("k_v" => 0.05)), 2.0, 160.0)
+        @test length(log) == 2
+        # A gain at its bracket edge is warned about.
+        @test_logs (:info, r"AT ITS BRACKET EDGE") (:warn, r"K_V_BRACKET_FACTOR") apply_optimized_kv!(
+            setup(), tab(Dict("k_v" => 0.06, "k_v_at_bound" => true)), 3.0, 170.0)
+        @test wc.kv == 0.06 && log[end].at_bound
+        # The reel-out controller must read the settings the gain goes to.
+        bad = merge(setup(), (; rc = (; wcs = WCSettings(; dt = 0.01))))
+        @test_throws AssertionError apply_optimized_kv!(bad, tab(Dict("k_v" => 0.07)), 4.0, 180.0)
+    end
+
+    @testset "check_overspeed" begin
+        setup = (; fcs = (; v_app_abort = 60.0))
+        ss = (; v_app = 50.0, time = 12.0, elevation = 0.5, AoA = 0.1)
+        @test !check_overspeed(setup, (; ss))
+        @test (@test_logs (:error, r"Overspeed at t=12\.00s: v_app=61\.0 m/s > 60\.0") check_overspeed(
+            setup, (; ss = merge(ss, (; v_app = 61.0)))))
     end
 end
 nothing

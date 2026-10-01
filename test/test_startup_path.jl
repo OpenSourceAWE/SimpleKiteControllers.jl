@@ -13,7 +13,7 @@ using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: score_installed, install_optimized_path!, capture_startup_geometry!,
     startup_feasibility, init_phase5_and_controller!, init_loop_state!, TrajOptSettings, c1_at,
-    phase5_margin
+    phase5_margin, log_lobe_lift
 
 @testset verbose = true "startup_path" begin
     fcs = FC_Settings()
@@ -152,6 +152,17 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         # The scored reference must have as many points as the path flown.
         set_path!(fec, raw...; resample = 50)
         @test_throws ErrorException init_loop_state!(setup, RunState(; opt_paths_raw = [raw]))
+    end
+
+    @testset "log_lobe_lift" begin
+        reply = (; trajectory = (; azimuth = [-30.0, 0.0, 30.0]))
+        lift(mode; lift = 2.0) = (; el_offset_wing = lift, el_offset_wing_mode = mode,
+                                  el_offset_wing_az = 0.5, el_offset_wing_blend = 0.25)
+        @test_logs (:info, r"beyond \|azimuth\| = 0\.5°") log_lobe_lift(lift("azimuth"), reply)
+        # As fractions of the pattern's own amplitude, here ±30°: 15° and 7.5°.
+        @test_logs (:info, r"0\.50 of the pattern's own amplitude.*15\.0° and 7\.5° on the startup path's ±30\.0°") log_lobe_lift(
+            lift("azimuth_frac"), reply)
+        @test_logs log_lobe_lift(lift("azimuth_frac"; lift = 0.0), reply)   # no lift: nothing said
     end
 end
 nothing

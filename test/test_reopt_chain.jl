@@ -13,7 +13,7 @@ retries, which send `/init`, are served by the fake server of `fake_awetrim_serv
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchParams,
-    TrajOptSettings, awetrim_depower_to_v3kite, opt_request_key
+    TrajOptSettings, awetrim_depower_to_v3kite, opt_request_key, min_turn_radius_request
 include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
 @testset verbose = true "reopt_chain" begin
@@ -200,6 +200,53 @@ include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
         @test !st.reopt_pending && st.reopt_n == 1
         @test st.reopt_events[end].status == "request failed"
         @test st.reopt_cycles[end].status == "request failed"
+    end
+
+    @testset "blocking_cold_seed" begin
+        # Without use_step every request is a cold /init from the guess.
+        fs = fake_server(; instant = true, table = reply_table)
+        try
+            st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
+            setup.tos.use_step = false
+            reoptimize!(st, setup, plant, 30.0, 4, 0.0)
+            @test paths(fs) == ["/init", "/step", "/status", "/trajectory"]
+            @test mean_el(fs.log[1][2]) ≈ 30.0 atol = 0.5
+            @test st.reopt_events[end].status == "installed"
+        finally
+            close(fs.server)
+        end
+    end
+
+    @testset "status_unreachable" begin
+        # A poll that cannot reach the optimizer is retried at the next poll, the request kept.
+        fs = fake_server(; table = reply_table)
+        st, setup = cycle(nothing; server = fs, power = 1000.0)
+        reoptimize!(st, setup, plant, 30.0, 4, 0.0)
+        @test st.reopt_pending
+        close(fs.server)
+        @test_logs (:warn, r"Could not reach the optimizer; will retry") match_mode = :any reoptimize!(
+            st, setup, plant, 30.5, 4, 0.0)
+        @test st.reopt_pending && st.reopt_n == 0 && st.reopt_next_poll == 31.0
+    end
+
+    @testset "cold_retry_failed" begin
+        # The rejected reply's cold retry fails on the server: the cycle gives up, nothing flown.
+        fs = fake_server(; table = reply_table)
+        try
+            st, setup = cycle(nothing; server = fs, retries = 1, poll = 0.05, power = 5000.0)
+            reoptimize!(st, setup, plant, 30.0, 4, 0.0)
+            fs.state[] = "converged"                     # 1000 W: below 30 % of 5000 W
+            retry_fails = @async (sleep(0.3); fs.state[] = "failed")
+            @test_logs (:warn, r"Blend-fold retry 1 of 1 .* did not converge \(failed\)") match_mode = :any reoptimize!(
+                st, setup, plant, 30.05, 4, 0.0)
+            wait(retry_fails)
+            ev = st.reopt_events[end]
+            @test ev.status == "rejected" && occursin("retry 1 did not converge", ev.detail)
+            @test isnothing(st.blend_to) && length(st.opt_paths_raw) == 1
+            @test st.reopt_blocked_s > 0
+        finally
+            close(fs.server)
+        end
     end
 end
 nothing
