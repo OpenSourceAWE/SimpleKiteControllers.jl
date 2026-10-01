@@ -28,6 +28,7 @@ using Test
     include("test_reelout_loop.jl")
     include("test_startup_path.jl")
     include("test_awetrim_client.jl")
+    include("test_awetrim_server.jl")
     include("test_opt_conditions.jl")
     include("test_settings_files.jl")
     include("test_run_log.jl")
