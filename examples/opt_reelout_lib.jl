@@ -3,7 +3,7 @@
 
 """
 The model side of `simple_opt_reelout.jl`, which the package cannot hold because it
-does not depend on V3Kite (see `Plan_refactor_opt_reelout.md`). Included at the top of
+does not depend on V3Kite (see `oldplans/Plan_refactor_opt_reelout.md`). Included at the top of
 the script, into the same module; `init_model` is handed to `setup_run`.
 """
 

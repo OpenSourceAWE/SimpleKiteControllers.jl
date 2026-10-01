@@ -185,10 +185,10 @@ dominates, so the refactor bought clarity, not speed.
   since stage 4, point at the new places. Replays `poststartup_*` IDENTICAL,
   live pairs as above.
 
-## Open
+## Follow-up work (done 2026-10-01)
 
-Optional work. None of it is needed for the goal. Each item needs the replay
-check, as before.
+Optional work beyond the goal, all three items done. Each was checked against
+the replays, as before.
 
 1. **A baseline for the startup retry ladder.** Done (2026-10-01): the
    startup of stages 8 and 9 is IDENTICAL to the code before them
@@ -228,7 +228,7 @@ check, as before.
    take hand-made `st`, `setup` and `plant`, so blends, the phase-5 fallback,
    the lap counter and the winch setpoint could be tested without a model,
    like `test_loop_decisions.jl`. The same now holds for most of
-   `src/startup_path.jl`. Partly done (2026-10-01): `test/test_reelout_loop.jl`
+   `src/startup_path.jl`. Done (2026-10-01): `test/test_reelout_loop.jl`
    covers `count_laps!` (lap 1 force limit, the wrap, no counting down),
    `advance_blend!`, `phase5_fallback!` (the crossing, once only, no better
    path, off), `release_reelout!`, `reelout_speed!` (the soft-stop at the

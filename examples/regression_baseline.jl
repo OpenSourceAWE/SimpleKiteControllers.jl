@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Baselines for refactors of `simple_opt_reelout.jl` (see `Plan_refactor_opt_reelout.md`).
+Baselines for refactors of `simple_opt_reelout.jl` (see `oldplans/Plan_refactor_opt_reelout.md`).
 
 `fly_replay(site, wind, scenario, out)` flies `simple_opt_reelout.jl` at the
 site and wind speed with the optimizer's answers replayed from the scenario
@@ -136,7 +136,7 @@ function check_line(name, dir_ref, dir_new, fly)
 end
 
 """
-The LIVE runs that cover branches no replay reaches (see `Plan_refactor_opt_reelout.md`),
+The LIVE runs that cover branches no replay reaches (see `oldplans/Plan_refactor_opt_reelout.md`),
 all at Maasvlakte 8.25 m/s: `name => run inputs`. `reject` forces gate retries, cold retries,
 rejections and a cold retry that does not converge; `hooks` sets every test input; `ladder`
 reaches `retry_startup!`: the startup path misses `min_feasibility_margin`. The margin alone
