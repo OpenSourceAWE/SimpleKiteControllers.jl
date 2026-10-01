@@ -173,8 +173,10 @@ const RE_TRANSPORT = r"^\[ \w+: (POST |This exact request failed before|Optimize
 The startup section of a run log (see `with_run_log`), as two runs of the same code with the same
 optimizer answers write it: the messages up to the first progress line of the loop (`step …`), without
 their continuation lines, without the optimizer client's transport messages (`RE_TRANSPORT`, which differ
-between a server run and a cached one), and with wall times (`… s`), file time stamps and the folder
-of saved trajectories (`…/trajectories/`, which differs between checkouts) masked.
+between a server run and a cached one), and with wall times (`… s`), file time stamps, the folder
+of saved trajectories (`…/trajectories/`, which differs between checkouts) and the
+`SimpleKiteControllers.` prefix of printed types (shown only when `Main` does not import the type)
+masked.
 """
 function startup_log_lines(log)
     out = String[]
@@ -183,7 +185,7 @@ function startup_log_lines(log)
         occursin(r"^\[ Info: step\s+\d+ /", line) && break
         occursin(RE_TRANSPORT, line) && continue
         s = replace(line, r"\d+(\.\d+)? s\b" => "<t> s", r"\d{4}-\d{2}-\d{2}_\d{4}" => "<stamp>",
-                    r"\S*/trajectories/" => "trajectories/")
+                    r"\S*/trajectories/" => "trajectories/", "SimpleKiteControllers." => "")
         push!(out, s)
     end
     return out

@@ -83,6 +83,8 @@ const TAKES_OVER = """
         @test !any(l -> occursin("POST", l) || occursin("exact request failed", l), a)
         @test "[ Info: Received the optimized path in <t> s" in a
         @test any(l -> occursin("to trajectories/startup_incumbent_<stamp>.yaml", l), a)
+        @test startup_log_lines("[ Info: box SimpleKiteControllers.PatternLimits(28.0)") ==
+              ["[ Info: box PatternLimits(28.0)"]
         b = startup_log_lines(TAKES_OVER)
         @test last(b) == "[ Info: Pattern feasibility at the STARTING length: margin 0.90 — path radius 4.4°."
     end
