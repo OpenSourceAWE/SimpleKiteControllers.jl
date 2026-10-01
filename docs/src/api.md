@@ -6,11 +6,6 @@ CurrentModule = SimpleKiteControllers
 
 Docstrings of all exported types, functions and constants, grouped as in the module's export list.
 
-```@contents
-Pages = ["api.md"]
-Depth = 2
-```
-
 ## Figure-of-eight inner-loop (course) controller
 
 ```@docs
