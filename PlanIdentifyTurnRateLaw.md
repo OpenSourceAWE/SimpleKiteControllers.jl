@@ -375,7 +375,7 @@ $v_\mathrm{a}$ ($v_\mathrm{k} = 0.96\,v_\mathrm{a}$), not from the run records, 
 not reproduce the earlier model column exactly (delay margin 8 – 12 % higher,
 above the measurement at 300 m, 23.7 m/s); A against B is like for like.
 
-**The scenarios** (`examples/stability_new_coeffs.jl`). The worst bin of each
+**The scenarios** (`examples/stability_new_coeffs.jl`, removed on 2026-10-01). The worst bin of each
 reel-out scenario, 19 of 22: Cabauw 3 m/s and Maasvlakte 3.5 and 4 m/s are left
 out, their phase-4 $v_\mathrm{a}$ drops to 10.1, 8.3 and 10.6 m/s. A as Table 6;
 B the plant's $c_1$, $c_2/v_\mathrm{a}$ from the low flights, the pattern-law delay;

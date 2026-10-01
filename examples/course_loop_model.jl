@@ -110,7 +110,7 @@ end
     C3
 
 SUPERSEDED on 2026-09-29 by [`PLANT_COEFFS`](@ref) (`c2/v_a`, ≈ 0.10 1/s in the operating
-range); kept for comparisons (`gravity_term_form.jl`, `stability_new_coeffs.jl`). Its
+range); kept for comparisons (`gravity_term_form.jl`). Its
 fit took `c1` and the delay from the turn-rate table, whose delays (73° sweeps, `v_a`
 ≈ 13 m/s) are too long in pattern flight, and the gravity term trades against the
 delay; a likely, unverified reason why it is twice the low flights' value.
