@@ -29,6 +29,7 @@ using Test
     include("test_reopt_chain.jl")
     include("test_steering_blocks.jl")
     include("test_startup_path.jl")
+    include("test_startup_pipeline.jl")
     include("test_awetrim_client.jl")
     include("test_awetrim_server.jl")
     include("test_opt_conditions.jl")

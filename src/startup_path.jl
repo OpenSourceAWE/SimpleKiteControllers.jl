@@ -207,9 +207,15 @@ function score_installed(setup, st::RunState)
     (; margin, el_ok, clr_ok, height,
        ok = margin >= tos.min_feasibility_margin && el_ok && clr_ok)
 end
+"""
+Where [`save_failed_trajectory`](@ref) writes: the package's `trajectories/`. Set it only around a
+block that must not write there, e.g. a unit test, and reset it in a `finally`.
+"""
+const FAILED_TRAJECTORY_DIR = Ref(joinpath(@__DIR__, "..", "trajectories"))
+
 # Saves a rejected curve for examples/plot_trajectory.jl.
 function save_failed_trajectory(setup, name, az, el; margin = NaN, power = NaN)
-    dir = joinpath(@__DIR__, "..", "trajectories")
+    dir = FAILED_TRAJECTORY_DIR[]
     mkpath(dir)
     stamp = replace(string(now()), r"[:.]" => "", "T" => "_")[1:15]
     file = joinpath(dir, "$(name)_$stamp.yaml")

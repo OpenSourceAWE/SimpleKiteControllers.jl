@@ -30,11 +30,12 @@ A `/step` whose length is in `fail`, or that is warm (no trajectory) under `fail
 blocking with a 422 carrying `detail`, non-blocking as a `"failed"` status; `validation` answers
 every `/step` with a validation 422. A non-blocking step reports `"solving"` until the test sets
 `state`, or `"converged"` at once under `instant`. The power grows by 1000 W with every converged
-step, so replies can be told apart; `/trajectory` serves `table(power)`.
+step, so replies can be told apart; a blocking `/step` answers `reply(length, power)` and
+`/trajectory` serves `table(power)`.
 """
 function fake_server(; fail = Float64[], fail_warm = false,
                      detail = "optimization did not converge", validation = false,
-                     instant = false, table = fake_table)
+                     instant = false, table = fake_table, reply = step_reply)
     log = Tuple{String, Any}[]
     state = Ref("ready")
     power = Ref(0.0)
@@ -61,7 +62,7 @@ function fake_server(; fail = Float64[], fail_warm = false,
             end
             failing && return json(422, Dict("detail" => detail))
             power[] += 1000.0
-            return json(200, step_reply(body["length"], power[]))
+            return json(200, reply(body["length"], power[]))
         end
         return json(404, Dict("detail" => "no route"))
     end
