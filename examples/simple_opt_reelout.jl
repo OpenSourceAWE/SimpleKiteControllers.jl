@@ -107,7 +107,7 @@ flown here; the pattern's centre and extent are measured off the installed path.
 The run keeps two: `setup` (see `setup_run`), everything it reads, and `st`, the
 `RunState` everything it writes. The setup and the startup are the package's
 (src/run_setup.jl, src/startup_path.jl): the script hands `setup_run` its
-`init_model` (opt_reelout_lib.jl), since the package does not depend on the model,
+`init_model` (model_setup.jl), since the package does not depend on the model,
 and calls the startup steps in order. `startup_feasibility` (the gates of
 [`check_startup_path`](@ref)) adds `feas`, `margin5`, `c1_at_phase` and
 `phase5_margin_at` to `setup`. Left here are the loop around the model's `step!`
@@ -160,7 +160,7 @@ set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch adapter uses WinchControllers.jl to implement the force dependent speed control.
 include(joinpath(@__DIR__, "winch_adapter.jl"))
 # The model, which the package cannot build: `init_model`, passed to `setup_run`.
-include(joinpath(@__DIR__, "opt_reelout_lib.jl"))
+include(joinpath(@__DIR__, "model_setup.jl"))
 # Reference curve and log name for simple_reelout_plots.jl; set by reelout_results.jl, cleared here.
 REF_PATH = nothing
 LOG_NAME = nothing

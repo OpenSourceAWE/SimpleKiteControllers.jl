@@ -3,24 +3,11 @@
 Done on 2026-10-01: `build_controllers` in `simple_reelout.jl`, `try_turn_rate_coeffs`,
 `run_input_files`/`archive_run_files`, `guidance_rate`, `muted`/`latest_global`,
 `unwrap_angle`/`unwrap_onto`, `first_error_line` and `stack_fits` moved into `src/`.
+The four copies of the `init(...)` call now use `init_model` in `examples/model_setup.jl` (formerly `opt_reelout_lib.jl`).
 
 This file lists what is left. The package does not depend on V3Kite or GLMakie
-(see `examples/opt_reelout_lib.jl`), so anything that calls `init`, the viewer or
+(see `examples/model_setup.jl`), so anything that calls `init`, the viewer or
 Makie can only move into a shared file in `examples/`, not into `src/`.
-
-## 1. The `init(...)` call (examples-side)
-
-The same 9-line `init(project_set.v_wind, l_tether; body_start_damping = …, …)` is in
-`simple_fig8.jl`, `simple_fig8_live.jl`, `simple_opt_fig8.jl` and `simple_reelout.jl`.
-`init_model` in `opt_reelout_lib.jl` is already the general version.
-
-- Give `init_model` a `warmup_torque` keyword (the fig8 scripts hold with `wfc` when
-  `compliance > 0`) and make its `sim_time + final_time` padding optional (the
-  fig8 scripts pass `SIM_TIME`, which can be `nothing`).
-- Move `opt_reelout_lib.jl` to a neutral name, e.g. `examples/model_setup.jl`, and
-  include it from the four scripts.
-- Risk: `remake_model = false` is passed only by `init_model`; check that the
-  other scripts are happy with it before unifying.
 
 ## 2. The simulation-loop tail (examples-side)
 

@@ -192,6 +192,7 @@ toc("Loaded packages in: ")
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch loops are ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
+include(joinpath(@__DIR__, "model_setup.jl"))
 # The caller's inputs, `run_example("simple_fig8.jl"; show_plots = false, ...)`; a plain `include`
 # flies with these defaults. The V1 hooks and `steer_injection` are explained where they act, below.
 (; show_plots, steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle,
@@ -256,23 +257,14 @@ else
     @info "Winch: POSITION mode at compliance = 0 — constant unstretched length."
 end
 
-# No dt: init takes it from the project's settings (sample_freq). sim_time falls
-# back to the project's own value when SIM_TIME is `nothing` (the `default` choice).
-# The wind speed comes from the same file unless WIND_SPEED overrides it above: it is
-# a plant condition, and project_set.v_wind keeps the mean wind and the turbulent
-# field (which init builds for it) at the same speed.
-# No cache_path either: V3Kite's default is where its own precompile workload
-# compiled the model, and a different model binary costs 40 s of re-JIT in init.
-s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
-    body_sim_damping = 0.8 .* fcs.body_damping,
-    damping_per_stiffness = DAMPING_PER_STIFFNESS,
-    elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
-    system_yaml = project, use_turbulence = TURBULENCE, aero_mode = AERO_MODE,
-    sim_time = SIM_TIME, warmup_time = fcs.warmup_time,
+# `init_model` (model_setup.jl): sim_time falls back to the project's own value when
+# SIM_TIME is `nothing` (the `default` choice); the wind speed comes from the project
+# file unless WIND_SPEED overrides it above.
+s = init_model(project, project_set, fcs, wpc, SIM_TIME; turbulence = TURBULENCE,
+    aero_mode = AERO_MODE, damping_per_stiffness = DAMPING_PER_STIFFNESS, pad_final_time = false,
     # The warm-up must relax against the winch the loop will command.
     warmup_torque = isnothing(wfc) ? (m, l) -> winch_torque!(wpc, m, l) :
                                      (m, l) -> winch_force_hold!(wfc, m, l))
-@info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
 # Constant-length setpoint: the tether length after settling and warm-up.
 l0 = s.sys_state.l_tether[1]

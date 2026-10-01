@@ -12,6 +12,10 @@
   `run_input_files`/`archive_run_files`, `guidance_rate`, `muted`/`latest_global`,
   `unwrap_angle`/`unwrap_onto`, `first_error_line` and `stack_fits`.
   `simple_reelout.jl` now uses `build_controllers`.
+- `examples/opt_reelout_lib.jl` is now `examples/model_setup.jl`; its `init_model`
+  (new keywords `warmup_torque`, `pad_final_time`, `set_overrides` optional) replaces
+  the copied `init(...)` call in `simple_fig8.jl`, `simple_fig8_live.jl`,
+  `simple_opt_fig8.jl` and `simple_reelout.jl`.
 - The linear course-loop model of the stability analysis, from `examples/course_loop_model.jl`:
   the pattern law, plant coefficients and margin helpers in `src/course_loop_model.jl`; the
   transfer functions (`course_pid`, `turn_rate_plant`, `delay_margin`, `guidance_tf`,
