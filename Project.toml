@@ -53,6 +53,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [targets]
 test = ["Test"]
 
-# examples/ and test/ resolve against the Manifest.toml here; see examples/Project.toml and test/Project.toml.
+# examples/, test/ and docs/ resolve against the Manifest.toml here; see examples/Project.toml, test/Project.toml and docs/Project.toml.
 [workspace]
-projects = ["examples", "test"]
+projects = ["examples", "test", "docs"]

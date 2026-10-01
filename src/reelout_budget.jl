@@ -6,8 +6,10 @@
 # passes the drum's speed limit, the winch's kv and the profile's wind factor, so every branch can
 # be tested with hand-made numbers. `sim_budget` reads those three from the project's files.
 
-const BUDGET_HEIGHT = 100.0            # height the budget's wind is taken at            [m]
-const BUDGET_KNOT = 7.7                # wind at BUDGET_HEIGHT, sqrt-law valid at/above  [m/s]
+"Height the budget's wind is taken at [m]."
+const BUDGET_HEIGHT = 100.0
+"Wind at [`BUDGET_HEIGHT`](@ref) at and above which the square-root law of the budget holds [m/s]."
+const BUDGET_KNOT = 7.7
 const BUDGET_F_COEF = 48.0             # low-side fit of reeling-mean force ~ w_100²     [N/(m/s)²]
 const BUDGET_REEL_MARGIN = 0.9         # achievable fraction of nominal speed (rings, soft-start)
 const BUDGET_ENTRY = 25.0              # park + dive + hold + reelout_delay              [s]

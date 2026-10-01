@@ -28,7 +28,7 @@ const KITE_LAG_EXP = 1.32
 The kite's dead time and first-order lag [s] from the applied steering to the
 turn rate at `v_app` [m/s], for the turn-rate coefficients `tc`: the table's
 `tc.dead_time` and `tc.kite_lag`, scaled as `(tc.v_app / v_app)^exp` with
-[`KITE_DEAD_TIME_EXP`](@ref) and [`KITE_LAG_EXP`](@ref), where `tc.v_app` is the
+[`KITE_DEAD_TIME_EXP`](@ref) and `KITE_LAG_EXP`, where `tc.v_app` is the
 airspeed of the sweep they were identified at. Away from it they are extrapolated.
 """
 kite_dead_time(tc, v_app) = _scaled_row(tc, :dead_time, v_app, KITE_DEAD_TIME_EXP)

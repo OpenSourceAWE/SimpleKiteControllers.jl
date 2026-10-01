@@ -23,3 +23,5 @@ docs/.$flight_path_controller.drawio.bkp
 docs/.$flight_path_controller2.drawio.bkp
 test/Manifest.toml
 docs/.$course_loop_model.drawio.bkp
+# Documenter output.
+/docs/build/
