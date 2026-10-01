@@ -70,7 +70,7 @@ function frf_point(p)
     v_a = mean(v_as)
     K = fcs.heading_p * fcs.v_app_ref / max(v_a, max(fcs.v_app_min, fcs.v_app_min_pattern))
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
-    ω_g = FRF_VK_OVER_VA * v_a / (L_t * deg2rad(attractor_distance(fcs, v_a, L_t)))
+    ω_g = guidance_rate(fcs, v_a, L_t, FRF_VK_OVER_VA * v_a)
     tc = turn_rate_coeffs(fcs.body_damping, FRF_DEPOWER)
     # The plant's c1 and gravity term c2/v_a of the low pattern (plant_coeffs, course_loop_model.jl).
     pc = plant_coeffs(FRF_DEPOWER)

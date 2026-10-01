@@ -154,7 +154,7 @@ the best pure delay (`T = 0`), and the number of samples.
 function joint_delay_lag_fit(fits, dt; lag_max = 1.0, t_max = 0.8)
     dmax = round(Int, t_max / dt)
     trim(x) = x[dmax + 1:end]
-    stack(field) = reduce(vcat, [trim(collect(Float64.(getfield(f, field)))) for f in fits])
+    stack(field) = stack_fits(fits, field; skip = dmax)
     rate, v_app, psi, beta = stack(:rate), stack(:v_app), stack(:psi), stack(:beta)
     best = nothing
     rms_delay = Inf

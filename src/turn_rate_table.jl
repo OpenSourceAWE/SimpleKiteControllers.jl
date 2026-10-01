@@ -237,6 +237,46 @@ function turn_rate_coeffs(body_damping, depower; interpolate::Bool = true,
 end
 
 """
+    stack_fits(fits, field::Symbol; skip = 0) -> Vector{Float64}
+
+The `field` of every fit in `fits` (one identification window each), the first
+`skip` samples of each dropped — the samples a delay shift of up to `skip` leaves
+without input — concatenated into one series for a joint fit.
+"""
+stack_fits(fits, field::Symbol; skip = 0) =
+    reduce(vcat, [Float64.(getfield(f, field))[skip + 1:end] for f in fits])
+
+"""
+    try_turn_rate_coeffs(fcs; consequence = "flying WITHOUT the feasibility check",
+                         info = true) -> NamedTuple or nothing
+
+[`turn_rate_coeffs`](@ref) at `fcs.body_damping` and `fcs.depower_setpoint`, or
+`nothing`, with a warning ending in `consequence`, when the table cannot serve that
+cell. `turn_rate_coeffs` refuses to extrapolate (by design: c1 moves violently with
+both arguments), so a caller that can run on unadvised — a deliberate off-grid run —
+uses this instead of aborting. Errors other than its `ArgumentError` are rethrown.
+`info = true` logs the coefficients that were found.
+"""
+function try_turn_rate_coeffs(fcs; consequence = "flying WITHOUT the feasibility check",
+                              info = true)
+    coeffs = try
+        turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+    catch exc
+        exc isa ArgumentError || rethrow()
+        @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
+               depower = $(fcs.depower_setpoint) — $consequence. Identify this cell \
+               with V3Kite.jl's steering_test_v3.jl to get it back.\n$(exc.msg)"
+        return nothing
+    end
+    info && @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
+                            c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
+                           fcs.body_damping, fcs.depower_setpoint,
+                           coeffs.interpolated ? " (INTERPOLATED)" : "",
+                           coeffs.c1, coeffs.c2, coeffs.delay)
+    return coeffs
+end
+
+"""
     turn_rate_depower_range(body_damping; table) -> (lo, hi)
 
 The depower interval [`turn_rate_coeffs`](@ref) can serve for `body_damping`

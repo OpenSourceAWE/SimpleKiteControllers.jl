@@ -77,7 +77,7 @@ flight's steering filtered and shifted on its own and its first `t_max` dropped:
 function gravity_form_fit(fits; ns = 0:0.1:2, lag_max = 0.5, t_max = 0.5)
     dmax = round(Int, t_max / DT)
     trim(x) = x[dmax + 1:end]
-    cat(k) = reduce(vcat, [trim(getfield(f, k)) for f in fits])
+    cat(k) = stack_fits(fits, k; skip = dmax)
     rate, va, psi, beta = cat(:rate), cat(:v_app), cat(:psi), cat(:beta)
     g0 = sin.(psi) .* cos.(beta)
     return map(ns) do n
@@ -144,7 +144,7 @@ function model_point(point, L, v_a; plant = :A)
     C, Ts = course_controller_tf(point, v_a)
     dp = f.depower_setpoint
     tc = turn_rate_coeffs(f.body_damping, dp)
-    ω_g = 0.96 * v_a / (L * deg2rad(attractor_distance(f, v_a, L)))
+    ω_g = guidance_rate(f, v_a, L, 0.96 * v_a)
     τp, Tp = pattern_dead_time_lag(tc, v_a, dp)
     c1, c2 = plant === :A ? (tc.c1, c2_at(v_a)) : (low_interp(gt_low.c1, dp), low_interp(gt_low.c2, dp))
     P = turn_rate_plant(c1, c2, τp, v_a, -cosd(f.el_center), Ts; lag = v1_lag(point), kite_lag = Tp)

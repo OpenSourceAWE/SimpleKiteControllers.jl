@@ -381,29 +381,14 @@ fec = FigureEightController(fcs; dt = s.dt)
 # The coefficients feed the feasibility check, the dead-time context below and,
 # through `c1`, the curvature feed-forward; no PD gain is scaled by them, so a
 # damping/depower the table cannot serve costs the diagnosis and the
-# feed-forward, not the run. `turn_rate_coeffs` refuses
-# to extrapolate (by design: c1 moves violently with both arguments), so catch
-# that and fly on unadvised rather than aborting a deliberate off-grid run.
-coeffs = try
-    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-catch e
-    e isa ArgumentError || rethrow()
-    @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
-           depower = $(fcs.depower_setpoint) — flying WITHOUT the feasibility \
-           check. Identify this cell with V3Kite.jl's steering_test_v3.jl to get \
-           it back.\n$(e.msg)"
-    nothing
-end
+# feed-forward, not the run, so `try_turn_rate_coeffs` flies on unadvised
+# rather than aborting a deliberate off-grid run.
+coeffs = try_turn_rate_coeffs(fcs)
 
 if isnothing(coeffs)
     c1 = c2 = delay = NaN
 else
-    c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
-    @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
-                    c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                   fcs.body_damping, fcs.depower_setpoint,
-                   coeffs.interpolated ? " (INTERPOLATED)" : "",
-                   c1, c2, delay)
+    (; c1, c2, delay) = coeffs
 
     # c1 must match the damping in use; that is what makes this check meaningful.
     feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)

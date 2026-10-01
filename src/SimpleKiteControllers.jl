@@ -32,24 +32,25 @@ export path_min_height, check_pattern_height, pattern_size_growth
 
 # Turn-rate-law lookup table
 export V3_TURN_RATE_COEFFS, turn_rate_coeffs, turn_rate_depower_range, V3_TURN_RATE_C1, V3_TURN_RATE_C2
-export reload_turn_rate_table!
+export reload_turn_rate_table!, try_turn_rate_coeffs, stack_fits
 
 # Wind-speed-dependent winch law lookup table
 export winch_kv, winch_f_low, winch_force_limit, winch_table_lookup, winch_table_select
 
 # Figure-of-eight run metrics
 export fig8_metrics, print_fig8_metrics, reelout_power, reelout_ringing
+export unwrap_angle, unwrap_onto
 export winch_state_pct, lap_durations, on_log, weighted_prediction
 
 # Commented run summaries (examples/simple_opt_reelout.jl, examples/simple_reelout.jl)
 export write_yaml_commented, time_keyed
 export package_git_state, success_verdict, simulation_block, fig8_metrics_block, reelout_block
-export performance_block, opt_cycle_max
+export performance_block, opt_cycle_max, run_input_files, archive_run_files
 
 # Flight-controller settings
 export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
-export attractor_distance, wind_schedule, apply_wind_schedule!
+export attractor_distance, guidance_rate, wind_schedule, apply_wind_schedule!
 export turn_rate_coeffs_file, winch_kv_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
@@ -93,7 +94,7 @@ export set_selected_project, set_selected_sim_time, set_selected_plots, set_sele
 export scenario_site, selected_scenarios_dir, apply_windspeed_override!
 
 # Caller inputs of the example scripts (examples/*.jl)
-export run_example, script_inputs
+export run_example, script_inputs, muted, latest_global, first_error_line
 
 # One reel-out run of examples/simple_opt_reelout.jl: its state, and its loop around the model's step!.
 export RunState, step_commands!, record_step!, check_overspeed, apply_optimized_kv!

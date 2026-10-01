@@ -413,9 +413,7 @@ function plot_path_webgl(d)
     sleep(0.1)
 end
 
-# --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
-unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
-onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
+# --- angles for the psi/chi panel, plotted UNWRAPPED (unwrap_angle, unwrap_onto) --- #
 
 "The time series: guidance, course, steering, tether, reel-out, depower and the entry state machine"
 function plot_time_series(d)
@@ -450,8 +448,8 @@ function plot_time_series(d)
         # this panel reads as demanded vs actual. var_04 is the pattern centre, a
         # constant, which said nothing about tracking.
         [el_deg, Float64.(sl.var_03[rng])],
-        [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
-         rad2deg.(onto(chi_u, chi, chiset))],
+        [rad2deg.(unwrap_onto(chi_u, chi, psi)), rad2deg.(chi_u),
+         rad2deg.(unwrap_onto(chi_u, chi, chiset))],
         [err_course, err_heading, Float64.(sl.var_06[rng])],
         (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
         getindex.(sl.winch_force[rng], 1),

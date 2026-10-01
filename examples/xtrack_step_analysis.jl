@@ -22,9 +22,7 @@
 #     fit_second_order_gain(st.τ, st.y)               # 0.75, 0.191 Hz, 0.56, 0.45 s
 #
 # Model part: needs the globals of stability_opt_reelout.jl (fcs, Ts, course_pid, turn_rate_plant,
-# C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN, kite_dead_time, kite_lag) plus `guidance_rate`. On a run that
-# reels out only to 200 m that script stops at the dead-time cross-check (phase 4 < 20 s);
-# define `guidance_rate` by hand there.
+# C1_SETPOINT, DP_LO, DP_HI, V_MIN_PATTERN, kite_dead_time, kite_lag); `guidance_rate` is the package's.
 
 using Pkg
 if Base.active_project() != joinpath(@__DIR__, "Project.toml")
@@ -195,7 +193,7 @@ function model_T(Lt, v_app, v_kite, depower, el_c, lag)
     tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
     C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
-    ωg = guidance_rate(Lt, v_app, v_kite)
+    ωg = guidance_rate(fcs, v_app, Lt, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
     τd = kite_dead_time(tc, v_app)
     pc = plant_coeffs(clamp(depower, DP_LO, DP_HI))   # the plant's c1 and c2; K keeps the table's c1

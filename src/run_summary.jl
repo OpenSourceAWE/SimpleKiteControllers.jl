@@ -357,3 +357,44 @@ function opt_cycle_max(reopt_cycles, startup_solve_s)
     return (; s, comment = "longest wall time to compute a new figure of eight, retries \
                             included: $which [s]")
 end
+
+"""
+    run_input_files(project, project_set) -> Vector{String}
+
+The input files every reel-out run is configured by: the system project, the
+plant/solver settings it names, the winch gains, the flight-controller tuning and
+`gui.yaml` (the project/sim_time/turbulence choice). A caller with more inputs
+appends them before handing the list to [`archive_run_files`](@ref).
+"""
+function run_input_files(project, project_set)
+    return [
+        project,                                                  # system project
+        joinpath(dirname(project), project_set.sim_settings),     # plant/solver settings
+        joinpath(skc_data_path(), KiteUtils.wc_settings(project)), # winch gains
+        joinpath(skc_data_path(), fc_settings(project)),          # flight-controller tuning
+        joinpath(skc_data_path(), "gui.yaml"),                    # project/sim_time/turbulence choice
+    ]
+end
+
+"""
+    archive_run_files(output_path, run_time, input_files, output_files) -> archive_dir
+
+Copy a run's `input_files` and `output_files` into one timestamped folder,
+`<output_path>/archives/yyyy-mm-dd_HHMMSS` of `run_time`, so the exact config that
+produced a log survives even after the next run overwrites `output/*`. The inputs
+are copied back to `output_path` too, for the plotting script to find them: they
+get overwritten on the next run, but that is the point — each run's plots use the
+settings that run actually flew. Files that do not exist are skipped.
+"""
+function archive_run_files(output_path, run_time, input_files, output_files)
+    archive_dir = joinpath(output_path, "archives", format(run_time, "yyyy-mm-dd_HHMMSS"))
+    mkpath(archive_dir)
+    for f in unique(vcat(input_files, output_files))
+        isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
+    end
+    for f in input_files
+        isfile(f) && cp(f, joinpath(output_path, basename(f)); force = true)
+    end
+    @info "Archived run inputs and outputs to $archive_dir"
+    return archive_dir
+end

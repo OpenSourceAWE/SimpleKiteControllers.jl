@@ -33,11 +33,10 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using Printf
-using Base.CoreLogging: with_logger, NullLogger
 import YAML
 
 using SimpleKiteControllers: selected_scenarios_dir
-using SimpleKiteControllers: run_example, script_inputs
+using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
 scenarios_dir = selected_scenarios_dir()
@@ -58,35 +57,17 @@ function scenario_wind(dir)
     return NaN
 end
 
-"""
-    muted(f)
-
-Call `f()` with `stdout` and logging silenced. Rebinds `Base.stdout` instead of
-`redirect_stdout`, which can only restore a file-backed stream and so fails, with
-`stdout` left on `devnull`, in a REPL whose `stdout` is a custom IO (e.g. Kaimon's).
-"""
-function muted(f)
-    out = stdout
-    setglobal!(Base, :stdout, devnull)
-    try
-        return with_logger(f, NullLogger())
-    finally
-        setglobal!(Base, :stdout, out)
-    end
-end
-
 "Run `stability_opt_reelout.jl` on the scenario folder `dir`, muted unless `verbose`"
 function analyse_scenario(dir; plots = false, quiet = true)
     analyse() = run_example("stability_opt_reelout.jl"; show_plots = plots, log_dir = dir)
     quiet ? muted(analyse) : analyse()
     # Globals the include just (re)defined: read them at the latest world age.
-    latest(name) = Base.invokelatest(getglobal, Main, name)
-    lin_rows, rows, worst = latest(:lin_rows), latest(:rows), latest(:worst)
+    lin_rows, rows, worst = latest_global(:lin_rows), latest_global(:rows), latest_global(:worst)
     return (; α_inner = minimum(r.α_inner for r in lin_rows), α_guided = worst.α_guided,
             dm_guided = worst.dm_guided, L = worst.L, va = worst.va, dp = worst.dp,
-            not_rated = length(rows) - length(lin_rows), not_flown = length(latest(:uncovered)),
-            n_bins = length(latest(:edges)) - 1,
-            τ = latest(:τ_log))
+            not_rated = length(rows) - length(lin_rows), not_flown = length(latest_global(:uncovered)),
+            n_bins = length(latest_global(:edges)) - 1,
+            τ = latest_global(:τ_log))
 end
 
 results = []

@@ -215,9 +215,7 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
 
     el_deg = rad2deg.(sl.elevation[rng])
 
-    # --- angles for the psi/chi panel, plotted UNWRAPPED ---------------------- #
-    unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap_to_pi.(diff(a))))
-    onto(ref_u, ref_w, a) = ref_u .+ wrap_to_pi.(a .- ref_w)
+    # --- angles for the psi/chi panel, plotted UNWRAPPED (unwrap_angle, unwrap_onto) --- #
 
     psi    = Float64.(sl.heading[rng])
     # +π puts the logged course into the same convention as heading (0 = zenith).
@@ -247,8 +245,8 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
         sl.time[rng],
         sl.var_01[rng],
         [el_deg, Float64.(sl.var_03[rng])],
-        [rad2deg.(onto(chi_u, chi, psi)), rad2deg.(chi_u),
-         rad2deg.(onto(chi_u, chi, chiset))],
+        [rad2deg.(unwrap_onto(chi_u, chi, psi)), rad2deg.(chi_u),
+         rad2deg.(unwrap_onto(chi_u, chi, chiset))],
         [err_course, err_heading, Float64.(sl.var_06[rng])],
         (100.0 .* sl.steering[rng], 100.0 .* sl.set_steering[rng]),
         getindex.(sl.winch_force[rng], 1),

@@ -110,8 +110,7 @@ const TAPE_LAG = 1 / SET.steering_gain
 const V_K_OVER_V_A = 0.96
 
 "Corner [rad/s] of the attractor guidance at `v_app` [m/s] and the project's tether length"
-guidance_corner(v_app) = V_K_OVER_V_A * v_app /
-    (SET.l_tether * deg2rad(attractor_distance(fcs, v_app, SET.l_tether)))
+guidance_corner(v_app) = guidance_rate(fcs, v_app, SET.l_tether, V_K_OVER_V_A * v_app)
 
 """
     loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false) -> NamedTuple

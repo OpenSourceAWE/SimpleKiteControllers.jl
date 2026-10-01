@@ -27,7 +27,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using SimpleKiteControllers: read_gui_field, write_gui_field, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs, with_run_log
+using SimpleKiteControllers: run_example, script_inputs, with_run_log, first_error_line
 using SimpleKiteControllers: startup_ladder_report, ladder_line
 include(joinpath(@__DIR__, "compare_runs.jl"))
 
@@ -92,7 +92,6 @@ function check_regression(tag; cases = REGRESSION_CASES)
             for (site, wind, folder) in cases]
 end
 
-first_line(err) = first(split(sprint(showerror, err), '\n'))
 has_run(dir) = isdir(dir) && any(endswith("_opt.arrow"), readdir(dir))
 
 """
@@ -127,7 +126,7 @@ function check_line(name, dir_ref, dir_new, fly)
         fly()
         nothing
     catch err
-        first_line(err)
+        first_error_line(err)
     end
     log = joinpath(dir_new, "run.log")
     return "$name: " * compare_flights(dir_ref, dir_new) *

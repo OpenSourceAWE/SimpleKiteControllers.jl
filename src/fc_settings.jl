@@ -902,3 +902,13 @@ function attractor_distance(fcs::FC_Settings, v_app, l_tether)
     lead = rad2deg(fcs.attractor_lead_time * max(v_app, fcs.v_app_min) / l_tether)
     return clamp(lead, fcs.attractor_dist, 2 * fcs.attractor_dist)
 end
+
+"""
+    guidance_rate(fcs::FC_Settings, v_app, l_tether, v_kite) -> ω_g
+
+Corner frequency `ω_g = v_kite/(l_tether·D)` [rad/s] of the attractor guidance, with
+`D` the [`attractor_distance`](@ref) at `v_app` [m/s] and `l_tether` [m] in rad and
+`v_kite` the kite's speed [m/s]: the corner of [`guidance_tf`](@ref).
+"""
+guidance_rate(fcs::FC_Settings, v_app, l_tether, v_kite) =
+    v_kite / (l_tether * deg2rad(attractor_distance(fcs, v_app, l_tether)))

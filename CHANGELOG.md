@@ -8,6 +8,10 @@
   the AWETrim client, optimizer request/conditions, pattern limits, re-optimization
   gate, loop decisions, run setup/startup, `RunState` and the reel-out loop step,
   run summaries, GUI state, `run_example`/`script_inputs`.
+- Helpers the examples each defined for themselves: `try_turn_rate_coeffs`,
+  `run_input_files`/`archive_run_files`, `guidance_rate`, `muted`/`latest_global`,
+  `unwrap_angle`/`unwrap_onto`, `first_error_line` and `stack_fits`.
+  `simple_reelout.jl` now uses `build_controllers`.
 - The linear course-loop model of the stability analysis, from `examples/course_loop_model.jl`:
   the pattern law, plant coefficients and margin helpers in `src/course_loop_model.jl`; the
   transfer functions (`course_pid`, `turn_rate_plant`, `delay_margin`, `guidance_tf`,

@@ -91,8 +91,6 @@ function log_folder(log::V3Log)
     return joinpath(ARCHIVES, last(ds))
 end
 
-unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, rem2pi.(diff(a), RoundNearest)))
-
 """
     replay(log; variant = :model, min_phase = 3) -> NamedTuple
 

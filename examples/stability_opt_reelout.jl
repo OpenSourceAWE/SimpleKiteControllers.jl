@@ -212,11 +212,8 @@ let p4 = findall(==(4), sl.sys_state)
     global τ_pat, T_pat = pattern_dead_time_lag(tc, v_log, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
 end
 
-"Corner frequency [rad/s] of the guidance at tether length `L` [m], `v_app` and `v_kite` [m/s], for the settings `f`"
-guidance_rate(L, v_app, v_kite; f = fcs) = v_kite / (L * deg2rad(attractor_distance(f, v_app, L)))
-
 # Per sample: v_k/v_a changes along the lap, and a bin holds less than one lap.
-log_ωg = guidance_rate.(log_L, log_va, log_vk)
+log_ωg = guidance_rate.(Ref(fcs), log_va, log_L, log_vk)
 
 """
     reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true) -> NamedTuple
@@ -274,7 +271,7 @@ bin's median length `L`, all corners `evals`, and the worst corner of the inner 
 """
 function bin_margins(s, lag; f = fcs, inner = true)
     L_mid = median(s.L)
-    ωg = guidance_rate.(s.L, s.va, s.vk; f)
+    ωg = guidance_rate.(Ref(f), s.va, s.L, s.vk)
     ωg_at(va) = maximum(ωg[abs.(s.va .- va) .<= WG_VA_BAND])
     el_c = median(s.elc)
     evals = [(; va, dp, ωg = ωg_at(va),

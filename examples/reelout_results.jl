@@ -657,19 +657,12 @@ function archive_run(setup, run_time, opt_paths_file)
         @info "Archiving suppressed by run_archive = false."
         return "none"
     end
-    archive_dir = joinpath(output_path, "archives",
-                           Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
-    mkpath(archive_dir)
-    input_yaml_files = [
-        project,                                              # system project
-        joinpath(dirname(project), project_set.sim_settings), # plant/solver settings
-        joinpath(skc_data_path(), wc_settings(project)),      # winch gains
-        joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
+    input_files = [
+        run_input_files(project, project_set);
         joinpath(skc_data_path(), winch_kv_table_file(project)), # kv(v_wind) table
         # The identified c1/c2/delay: they set the steering response and the
         # curvature gate, and a re-identification replaces the rows in place.
         joinpath(skc_data_path(), turn_rate_coeffs_file(project)), # turn-rate law
-        joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
         # Without this the archive cannot reproduce its own run: the guess decides
         # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin
         # decide what is re-anchored and what is flown.
@@ -680,17 +673,7 @@ function archive_run(setup, run_time, opt_paths_file)
         joinpath(output_path, log_name * ".yaml"),
         opt_paths_file,                                       # optimizer's uncorrected curves
     ]
-    for f in unique(vcat(input_yaml_files, output_files))
-        isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
-    end
-    # Copy settings back to output/ for the plotting script to find them.
-    # They get overwritten on the next run, but that is the point: each run's
-    # plots use the settings that run actually flew.
-    for f in input_yaml_files
-        isfile(f) && cp(f, joinpath(output_path, basename(f)); force = true)
-    end
-    @info "Archived run inputs and outputs to $archive_dir"
-    return archive_dir
+    return archive_run_files(output_path, run_time, input_files, output_files)
 end
 
 """

@@ -250,45 +250,15 @@ s = init(project_set.v_wind, l_tether; body_start_damping = fcs.body_damping,
     warmup_torque = (m, l) -> winch_torque!(wpc, m, l))
 @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
 
-# REEL_OUT controller: built fresh here so its soft-start ramp (t_startup) begins
-# the moment reel-out actually starts (phase 3), not at t = 0. `rcs` is `wc`, the
-# object loaded above from the project's `wc_settings:` file — the two winches
-# used to need two files in two schemas, and since the merge they share one.
-# The file's `dt` is a placeholder; the plant's own timestep is the real one.
-rcs.dt = s.dt
-rc = WinchController(rcs)
-stop_criteria = fcs.n_fig_eight > 0 ?
-    @sprintf("%.0f m or after %d figures of eight", fcs.reelout_l_max, fcs.n_fig_eight) :
-    @sprintf("%.0f m", fcs.reelout_l_max)
-@info @sprintf("Winch: REEL_OUT mode — %s, stopping at %s.",
-               rcs.force_limit == "soft" ?
-                   @sprintf("soft force limit inverting kv = %.4f saturated at [%.0f, %.0f] N \
-                             (beta %.0e/%.0e, force filtered at tau = %.2f s); the \
-                             UpperForceController is held in reset",
-                            rcs.kv, rcs.f_low, rcs.f_high, rcs.softminus_beta,
-                            rcs.softplus_beta, rcs.force_limit_tau) :
-                   @sprintf("v_set = %.3f * sqrt(force)", rcs.kv),
-               stop_criteria)
-
-# Standalone force-floor guard for phases 0-2 (park/dive/hold) — deliberately
-# NOT `rc`. `WinchController`'s own SpeedController is ACTIVE (its integrator
-# accumulating v_set_in - v_act = kv*sqrt(force) - v_act) whenever the force
-# limiters are off, i.e. essentially the whole entry, since nothing before
-# phase 3 is meant to move the drum. Left running "live" while its output is
-# ignored, that integrator winds up over tens of seconds and dumps a large,
-# stale command once something changes — MEASURED: v_reelout spiking to
-# +8 m/s (`rcs.v_sat`, saturated) instead of the intended reel-IN, once `rc`
-# was stepped throughout the entry to fix the force floor below. A bare
-# `LowerForceController` has no SpeedController and no mixer to wind up, so
-# the guard uses one of those instead; `rc` itself stays untouched (and its
-# soft-start clock at 0) until phase 3, exactly as before this guard existed.
-guard_lfc = LowerForceController(rcs)
-
-# Length setpoint: starts at the tether length after settling and warm-up, and
-# grows from the first step of phase 3 onward until it reaches `reelout_l_max`.
-l_set = s.sys_state.l_tether[1]
-
-fec = FigureEightController(fcs; dt = s.dt)
+# The controllers, built on the settled model (`build_controllers`, src/winch_setup.jl):
+# the REEL_OUT controller `rc`, built fresh here so its soft-start ramp (t_startup)
+# begins the moment reel-out actually starts (phase 3), not at t = 0; the standalone
+# force-floor guard `guard_lfc` for phases 0-2 — deliberately NOT `rc`, whose own
+# SpeedController would wind up while its output is ignored (MEASURED: v_reelout
+# spiking to +8 m/s instead of the intended reel-IN); the length setpoint `l_set`,
+# the settled length, growing from phase 3 until it reaches `reelout_l_max`; and `fec`.
+# `rcs` is `wc`, the one `WCSettings` of both winches; `rcs.dt` becomes the plant's.
+(; rc, guard_lfc, l_set, fec) = build_controllers(fcs, rcs, s)
 
 # Never hardcode these: both arguments move them a lot. The lookup key is
 # `body_damping`, the value `init` was given: the damping the model FLIES the
@@ -298,29 +268,14 @@ fec = FigureEightController(fcs; dt = s.dt)
 #
 # The coefficients are DIAGNOSTIC here — they feed the feasibility check and the
 # dead-time context below, no gain and no control law — so a damping/depower the
-# table cannot serve costs the diagnosis, not the run. `turn_rate_coeffs` refuses
-# to extrapolate (by design: c1 moves violently with both arguments), so catch
-# that and fly on unadvised rather than aborting a deliberate off-grid run.
-coeffs = try
-    turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-catch e
-    e isa ArgumentError || rethrow()
-    @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
-           depower = $(fcs.depower_setpoint) — flying WITHOUT the feasibility \
-           check. Identify this cell with V3Kite.jl's steering_test_v3.jl to get \
-           it back.\n$(e.msg)"
-    nothing
-end
+# table cannot serve costs the diagnosis, not the run, so `try_turn_rate_coeffs`
+# flies on unadvised rather than aborting a deliberate off-grid run.
+coeffs = try_turn_rate_coeffs(fcs)
 
 if isnothing(coeffs)
     c1 = c2 = delay = NaN
 else
-    c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
-    @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
-                    c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                   fcs.body_damping, fcs.depower_setpoint,
-                   coeffs.interpolated ? " (INTERPOLATED)" : "",
-                   c1, c2, delay)
+    (; c1, c2, delay) = coeffs
 
     # c1 must match the damping in use; that is what makes this check meaningful.
     # At l_tether (the START, before any reel-out) this is the WORST case: a longer
@@ -656,30 +611,9 @@ end
 # one folder per grid point otherwise, each with a copy of the 40 MB arrow log,
 # and its own results table already records what distinguished the runs.
 if run_archive
-    archive_dir = joinpath(output_path, "archives",
-                           Dates.format(run_time, "yyyy-mm-dd_HHMMSS"))
-    mkpath(archive_dir)
-    input_yaml_files = [
-        project,                                              # system project
-        joinpath(dirname(project), project_set.sim_settings), # plant/solver settings
-        joinpath(skc_data_path(), wc_settings(project)),      # winch gains
-        joinpath(skc_data_path(), fc_settings(project)),      # flight-controller tuning
-        joinpath(skc_data_path(), "gui.yaml"),                # project/sim_time/turbulence choice
-    ]
-    output_files = [
-        joinpath(output_path, log_name * ".arrow"),
-        joinpath(output_path, log_name * ".yaml"),
-    ]
-    for f in unique(vcat(input_yaml_files, output_files))
-        isfile(f) && cp(f, joinpath(archive_dir, basename(f)); force = true)
-    end
-    # Copy settings back to output/ for the plotting script to find them.
-    # They get overwritten on the next run, but that is the point: each run's
-    # plots use the settings that run actually flew.
-    for f in input_yaml_files
-        isfile(f) && cp(f, joinpath(output_path, basename(f)); force = true)
-    end
-    @info "Archived run inputs and outputs to $archive_dir"
+    archive_run_files(output_path, run_time, run_input_files(project, project_set),
+                      [joinpath(output_path, log_name * ".arrow"),
+                       joinpath(output_path, log_name * ".yaml")])
 else
     @info "Archiving suppressed by run_archive = false."
 end

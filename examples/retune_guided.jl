@@ -44,8 +44,7 @@ end
 
 using Printf
 using Statistics: median
-using Base.CoreLogging: with_logger, NullLogger
-using SimpleKiteControllers: run_example, script_inputs
+using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
 
 "Sites and their projects, as `stability_opt_reelout.jl` supports them"
 const RETUNE_SITES = ("cabauw" => "system_reelout_cabauw.yaml",
@@ -57,19 +56,6 @@ Step per setting: relative for `heading_p`, absolute otherwise [-, s, deg, s].
 const RETUNE_STEPS = (heading_p = 0.02, heading_d = 0.005, attractor_dist = 0.25,
                       attractor_lead_time = 0.02)
 
-"Call `f()` with `stdout` and logging silenced (see `muted` in `stability_global.jl`)"
-function muted(f)
-    out = stdout
-    setglobal!(Base, :stdout, devnull)
-    try
-        return with_logger(f, NullLogger())
-    finally
-        setglobal!(Base, :stdout, out)
-    end
-end
-
-latest(name) = Base.invokelatest(getglobal, Main, name)
-
 """
     collect_scenario(project, dir) -> NamedTuple
 
@@ -78,8 +64,8 @@ keep its linear bins: `(; bins, lag, Ts)`, each bin with its log `samples`.
 """
 function collect_scenario(project, dir)
     muted(() -> run_example("stability_opt_reelout.jl"; show_plots = false, log_dir = dir, project))
-    return (; bins = [r.samples for r in latest(:lin_rows)], lag = latest(:tape_lag).T,
-            Ts = latest(:Ts))
+    return (; bins = [r.samples for r in latest_global(:lin_rows)], lag = latest_global(:tape_lag).T,
+            Ts = latest_global(:Ts))
 end
 
 """
@@ -104,12 +90,12 @@ function collect_scenarios(; sites = RETUNE_SITES)
 end
 
 "The live `fc_settings_reelout.yaml`"
-live_settings() = deepcopy(latest(:fcs))
+live_settings() = deepcopy(latest_global(:fcs))
 
 "Copy of the settings `f` with the field `k` moved by one step in direction `sgn`"
 function step_setting(f, k, sgn)
     g = deepcopy(f)
-    δ = k == :heading_p ? RETUNE_STEPS[k] * latest(:fcs).heading_p : RETUNE_STEPS[k]
+    δ = k == :heading_p ? RETUNE_STEPS[k] * latest_global(:fcs).heading_p : RETUNE_STEPS[k]
     setproperty!(g, k, getproperty(f, k) + sgn * δ)
     return g
 end
@@ -122,7 +108,7 @@ Worst guided disk margin `α_g`, its delay margin `dm_g`, tether length `L` and
 `d` for the settings `f`.
 """
 function scenario_margins(d, f; inner = false)
-    bin_margins, Ts = latest(:bin_margins), latest(:Ts)
+    bin_margins, Ts = latest_global(:bin_margins), latest_global(:Ts)
     Ts == d.Ts || error("Collected at another sample time; collect_scenarios() again.")
     bms = [Base.invokelatest(bin_margins, s, d.lag; f, inner) for s in d.bins]
     w = argmin(b -> b.wg.m.guided.α, bms)

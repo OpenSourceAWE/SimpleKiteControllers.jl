@@ -35,7 +35,7 @@ end
 
 import YAML
 using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs, with_run_log
+using SimpleKiteControllers: run_example, script_inputs, with_run_log, first_error_line
 using SimpleKiteControllers: startup_ladder_report, ladder_line
 
 "Project flown at each site, see `scenario_site`"
@@ -64,7 +64,6 @@ function scenario_winds(site)
     return sort(unique(winds))
 end
 
-first_line(e) = first(split(sprint(showerror, e), '\n'))
 log_line(s) = (open(io -> println(io, s), progress_file, "a"); @info s)
 
 gui_project0, gui_wind0 = read_gui_field("project"), read_gui_field("wind_speed")
@@ -82,7 +81,7 @@ try
                     run_example("simple_opt_reelout.jl"; show_plots = false)
                 end
             catch e
-                log_line("$site $wind m/s: the run threw $(first_line(e))")
+                log_line("$site $wind m/s: the run threw $(first_error_line(e))")
             end
             log_line("$site $wind m/s: " * ladder_line(startup_ladder_report(run_log)))
             done = isfile(run_done_file) ? read(run_done_file, String) : ""
@@ -100,7 +99,7 @@ try
         try
             include(joinpath(@__DIR__, "create_overview.jl"))
         catch e
-            log_line("$site: create_overview.jl threw $(first_line(e))")
+            log_line("$site: create_overview.jl threw $(first_error_line(e))")
         end
     end
 finally

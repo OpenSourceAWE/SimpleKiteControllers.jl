@@ -54,3 +54,33 @@ function script_inputs(file::AbstractString, defaults::NamedTuple)
                its inputs are $(join(keys(defaults), ", ")).")
     return merge(defaults, given.inputs)
 end
+
+"""
+    muted(f)
+
+Call `f()` with `stdout` and logging silenced, e.g. a `run_example` inside a sweep.
+Rebinds `Base.stdout` instead of `redirect_stdout`, which can only restore a
+file-backed stream and so fails, with `stdout` left on `devnull`, in a REPL whose
+`stdout` is a custom IO (e.g. Kaimon's).
+"""
+function muted(f)
+    out = stdout
+    setglobal!(Base, :stdout, devnull)
+    try
+        return with_logger(f, Base.CoreLogging.NullLogger())
+    finally
+        setglobal!(Base, :stdout, out)
+    end
+end
+
+"""
+    latest_global(name::Symbol)
+
+The global `name` of `Main`, read at the latest world age: after a
+[`run_example`](@ref) the script's globals were (re)defined in a newer world than
+the caller's code runs in.
+"""
+latest_global(name::Symbol) = Base.invokelatest(getglobal, Main, name)
+
+"The first line of the message `err` would print: a one-line reason for a progress log"
+first_error_line(err) = first(split(sprint(showerror, err), '\n'))

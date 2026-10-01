@@ -361,9 +361,6 @@ function excess_peak(run, baseline; fs = 0.15:0.01:1.2)
     return (; f_hz = fs[i], deg = ex[i])
 end
 
-"Unwrap an angle series [rad], so a DFT does not see the ±π jumps."
-unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, rem2pi.(diff(a), RoundNearest)))
-
 """
     window_signals(r) -> NamedTuple
 
@@ -671,13 +668,13 @@ function mid_lines(T_lap, f_lo, f_hi; every = 1)
 end
 
 """
-    guidance_rate(r) -> NamedTuple
+    run_guidance_rate(r) -> NamedTuple
 
 The guidance corner `ω_g = v_k/(L·D)` [rad/s] of run `r` over its analysis
 window (`guidance_tf`), with the kite speed `v_k`, tether length `L` and
 attractor distance `D` [deg] it comes from.
 """
-function guidance_rate(r)
+function run_guidance_rate(r)
     sl = load_log(basename(r.log_path); path = dirname(r.log_path)).syslog
     t = Float64.(sl.time)
     w = findall(k -> r.window[1] <= t[k] <= r.window[2], eachindex(t))
@@ -685,7 +682,7 @@ function guidance_rate(r)
     L = mean(Float64(x[1]) for x in sl.l_tether[w])
     f = FC_Settings(fc_settings(project_file(V1_POINTS[r.point].project)))
     D = attractor_distance(f, r.v_a_mean, L)
-    return (; ω_g = v_k / (L * deg2rad(D)), v_k, L, D)
+    return (; ω_g = guidance_rate(f, r.v_a_mean, L, v_k), v_k, L, D)
 end
 
 """
@@ -722,7 +719,7 @@ function measured_loop(runs; band = (0.0, Inf))
     pts = Tuple{Float64, ComplexF64}[]
     for x in runs
         C, Ts = course_controller_tf(x.r.point, x.r.v_a_mean; depower = x.r.depower)
-        ω_g = guidance_rate(x.r).ω_g
+        ω_g = run_guidance_rate(x.r).ω_g
         for q in x.frf
             band[1] <= q.f <= band[2] || continue
             Cz = evalfr(C, cis(2π * q.f * Ts))[1]
@@ -763,7 +760,7 @@ function model_loops(r)
     P = turn_rate_plant(pc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
                         -cosd(f.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))
-    G = guidance_tf(guidance_rate(r).ω_g, Ts)
+    G = guidance_tf(run_guidance_rate(r).ω_g, Ts)
     # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
     τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
     Pp = turn_rate_plant(pc.c1, c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),

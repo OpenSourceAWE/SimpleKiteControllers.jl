@@ -134,7 +134,7 @@ fit over all `e`, and the best with `e = 0`.
 function extended_law_fit(data, dt; es = 0:0.05:3, lag_max = 0.5, t_max = 0.5)
     dmax = round(Int, t_max / dt)
     trim(x) = x[dmax + 1:end]
-    cat(field) = reduce(vcat, [trim(getfield(x, field)) for x in data])
+    cat(field) = stack_fits(data, field; skip = dmax)
     rate, ang, v_app, beta, v_tau = cat(:rate), cat(:ang), cat(:v_app), cat(:beta), cat(:v_tau)
     grav = sin.(ang) .* cos.(beta)
     best = current = nothing

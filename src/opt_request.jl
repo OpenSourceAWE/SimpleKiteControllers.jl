@@ -166,17 +166,11 @@ function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
     if !isnothing(c1) && isfinite(c1) && c1 > 0
         return scale * margin / (c1 * fcs.max_steering)
     end
-    coeffs = try
-        turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-    catch exc
-        exc isa ArgumentError || rethrow()
-        @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
-               depower = $(fcs.depower_setpoint) — asking the optimizer for NO \
-               minimum turn radius, though min_feasibility_margin = \
-               $(tos.min_feasibility_margin) will still gate the reply. Identify \
-               this cell to get the constraint back."
-        return nothing
-    end
+    coeffs = try_turn_rate_coeffs(fcs; info = false,
+        consequence = "asking the optimizer for NO minimum turn radius, though \
+                       min_feasibility_margin = $(tos.min_feasibility_margin) will \
+                       still gate the reply")
+    isnothing(coeffs) && return nothing
     return scale * margin / (coeffs.c1 * fcs.max_steering)
 end
 

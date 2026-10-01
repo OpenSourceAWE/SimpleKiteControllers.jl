@@ -15,6 +15,23 @@ winch is logged in `winch_force[1]`; `var_01` carries the cross-track error
 """
 
 """
+    unwrap_angle(a) -> Vector
+
+The angle series `a` [rad] unwrapped: each step wrapped to ±π and summed from
+`first(a)`, so a plot or a DFT does not see the ±π jumps.
+"""
+unwrap_angle(a) = first(a) .+ cumsum(vcat(0.0, wrap2pi.(diff(a))))
+
+"""
+    unwrap_onto(ref_u, ref_w, a) -> Vector
+
+The angles `a` [rad] put on the unwrapped branch of a reference: `ref_u` is the
+reference unwrapped ([`unwrap_angle`](@ref)), `ref_w` the same reference wrapped, so
+`a` is drawn next to `ref_u` instead of jumping by 2π.
+"""
+unwrap_onto(ref_u, ref_w, a) = ref_u .+ wrap2pi.(a .- ref_w)
+
+"""
     fig8_metrics(sl; t_start=0.0, settle_time=10.0, settle_d_threshold=5.0, hf_window=0.5)
 
 Compute figure-of-eight quality metrics of syslog `sl` over the settled window
@@ -140,8 +157,7 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
     # guidance tracks whatever shape it is given correctly; the shape itself
     # is what went wrong). See docs/fig8_tuning_log.md, 2026-08-20.
     psi_settled = Float64.(sl.heading[settled])
-    psi_unwrapped = first(psi_settled) .+
-                    cumsum(vcat(0.0, wrap2pi.(diff(psi_settled))))
+    psi_unwrapped = unwrap_angle(psi_settled)
     heading_range = rad2deg(maximum(psi_unwrapped) - minimum(psi_unwrapped))
 
     """
