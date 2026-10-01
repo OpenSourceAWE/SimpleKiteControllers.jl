@@ -48,7 +48,8 @@ jobs:
     timeout-minutes: 40
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
-      contents: write # push the built pages to gh-pages
+      contents: write # Documenter pushes the built pages to gh-pages with GITHUB_TOKEN; the
+                      # org-wide DOCUMENTER_KEY is the deploy key of another repo
       statuses: write
     steps:
       - uses: actions/checkout@v7
@@ -64,4 +65,3 @@ jobs:
           install-package: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
