@@ -39,9 +39,9 @@ Response time of the kite in pattern flight, `τ_kite + T_kite` [s] at `v_a`
 [m/s]: `PATTERN_DELAY_REF · (PATTERN_V_REF / v_a)^PATTERN_DELAY_EXP`.
 Re-identified (`identify_turn_rate_law`) on 12 pattern logs at depower 0.27,
 elevation 15 – 26°, tether 150 – 380 m, `v_a` 12.8 – 40.6 m/s
-(oldplans/Plan_model_validation.md, V4). The relay sweeps behind the table fly at
-73°, where at low `v_a` the kite responds more slowly: at 12.8 m/s the table
-gives 0.43 s, the pattern 0.29 s.
+(oldplans/Plan_model_validation.md, V4). The relay sweeps the table came from
+until 2026-10-01 flew at 73°, where at low `v_a` the kite responds more slowly: at
+12.8 m/s they gave 0.43 s, the pattern 0.29 s.
 """
 const PATTERN_DELAY_REF = 0.14
 const PATTERN_V_REF = 34.0
@@ -72,8 +72,8 @@ law ([`PATTERN_DELAY_REF`](@ref)) times the measured depower factor
 ([`PATTERN_DEPOWER_EXP`](@ref)), split in the ratio of the low crosswind flights at
 `depower` ([`dead_time_fraction`](@ref)). Until 2026-09-29 the split was that of the
 table row `tc` (the relay sweeps at 73°); `tc` is no longer used and kept for the
-callers. Use it for the pattern loop only: the entry flies high, close to the relay
-sweeps' conditions, where the table itself applies. Below [`PATTERN_V_FLOOR`](@ref)
+callers. Use it for the pattern loop only: the entry flies high, where the pattern
+law was not measured. Below [`PATTERN_V_FLOOR`](@ref)
 the law holds its value there (the measured response time stops growing at about
 0.28 s).
 """
@@ -87,7 +87,7 @@ end
 function _scaled_row(tc, key, v_app, expo)
     x = getfield(tc, key)
     (isnan(tc.v_app) || isnan(x)) && error("_scaled_row: the turn-rate table row has no v_app or " *
-        "$key; run add_delay_lag_split! of examples/build_turn_rate_table.jl for it.")
+        "$key; re-identify it with examples/build_turn_rate_table.jl.")
     return x * (tc.v_app / v_app)^expo
 end
 
@@ -107,8 +107,8 @@ function course_pid end
 
 SUPERSEDED on 2026-09-29 by [`PLANT_COEFFS`](@ref) (`c2/v_a`, ≈ 0.10 1/s in the operating
 range); kept for comparisons (`gravity_term_form.jl`). Its
-fit took `c1` and the delay from the turn-rate table, whose delays (73° sweeps, `v_a`
-≈ 13 m/s) are too long in pattern flight, and the gravity term trades against the
+fit took `c1` and the delay from the turn-rate table of then, whose delays (73° sweeps,
+`v_a` ≈ 13 m/s) are too long in pattern flight, and the gravity term trades against the
 delay; a likely, unverified reason why it is twice the low flights' value.
 
 Gravity coefficient [1/s] of the turn-rate law in the form
@@ -121,8 +121,8 @@ table-form `c2` grows about in proportion to `v_a`, while `c3` stays flat. Fitte
 on the samples the stability analysis rates (phases 3-5, cross-track error below
 `attractor_dist`), with `c1` and the delay taken from the turn-rate table: pooled
 0.230 over 91 000 samples, per run 0.18 – 0.30, phase 4 0.227, phase 5 0.247
-(2026-09-28). The relay sweeps of `build_turn_rate_table.jl` cannot identify it:
-their steering is fed back from the heading, so the gravity term trades against
+(2026-09-28). The 73° relay sweeps the table came from until 2026-10-01 could not
+identify it: their steering is fed back from the heading, so the gravity term trades against
 the delay, and the table's `c2` is arbitrary.
 """
 const C3 = 0.23

@@ -12,23 +12,22 @@ How to install and start the examples is described on
 
 ### [`build_turn_rate_table.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/build_turn_rate_table.jl)
 Fills `data/turn_rate_coeffs.yaml`, the table [`turn_rate_coeffs`](@ref) interpolates in. For
-each (`body_damping`, `depower`) cell it settles the kite, holds a constant tether length,
-oscillates the heading with a relay and a stepped steering amplitude, and fits the turn-rate law,
-dead time and lag on the log. It flies this package's project, so the sweep sees the same
-plant the runs do, and it rewrites the file after every cell, so a diverged run costs only one cell.
+each depower it flies three relay flights low in the wind window, at fixed steering amplitudes:
+each flight relays about a crosswind heading, reverses at a given azimuth and holds an elevation
+of about 30°, so the kite flies a lazy-eight-like pattern at 20 – 50 m/s of apparent wind, as in
+its figures of eight. The turn-rate law, dead time and lag are fitted on the steady flights
+together. It flies this package's project, so the identification sees the same plant the runs
+do, and it rewrites the file after every depower, so a diverged run costs only one cell.
 
 ### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
 Plots `c1` and the steering delay, split into dead time and lag, against the depower with error
-bars, one figure per `body_damping` in the table. `c2` is not plotted, because the relay sweep
-cannot identify it.
+bars, one figure per `body_damping` in the table.
 
 ### [`plot_turn_rate_identification.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_turn_rate_identification.jl)
-Identifies the turn-rate law at a low elevation, where the kite flies in the pattern. Instead of
-relaying about straight up near the zenith, as the table's sweeps do, each flight relays about a
-crosswind heading and reverses at a given azimuth, so the kite flies a lazy-eight-like pattern low
-in the wind window at 20 – 50 m/s of apparent wind. Each flight is fitted on its own and all
-steady flights together, and turn rate, apparent wind speed, kite speed and elevation are plotted
-over time.
+Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower, without writing
+the table, and compares the fit with the table's row and with an extended law. Each flight is
+fitted on its own and all steady flights together, and turn rate, apparent wind speed, kite speed
+and elevation are plotted over time.
 
 ### [`plot_turn_rate_vs_depower.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_turn_rate_vs_depower.jl)
 Runs the low-elevation identification of `plot_turn_rate_identification.jl` at every depower of

@@ -50,7 +50,7 @@ keys, as `YAML.load_file` returns it) into a NamedTuple.
 
 An entry may carry its own `l_tether`, `dt` or `date` alongside the table's
 `conditions` block. Those are PROVENANCE, not a disqualification: `c1` and `c2`
-are normalised by apparent wind speed and identified from a relay sweep, so
+are normalised by apparent wind speed and identified from relay flights, so
 neither the tether length nor the identification timestep changes them, and such
 a row is used like any other.
 """
@@ -151,17 +151,17 @@ Look up the V3 turn-rate-law coefficients for a given `body_damping` and
 - Outside the identified depower range for that damping, or for a
   `body_damping` with no rows at all, this **throws** rather than
   extrapolating or guessing — re-identify by running
-  `examples/build_turn_rate_table.jl`, which sweeps the missing cells and appends
+  `examples/build_turn_rate_table.jl`, which flies the missing cells and appends
   the rows itself.
 
-`v_app` [m/s] is the mean apparent wind speed of the sweep the row was
+`v_app` [m/s] is the mean apparent wind speed of the flights the row was
 identified at, interpolated linearly like `delay`; `NaN` for a row identified
 before it was recorded. The dead time falls with the airspeed, so `delay` holds
 at that `v_app` only (`docs/course_loop_stability.md`).
 
 `dead_time` and `kite_lag` [s] split `delay` into a dead time and a first-order
-lag of the kite, identified on the same sweep at the same `v_app`
-(`add_delay_lag_split!` in `examples/build_turn_rate_table.jl`); interpolated
+lag of the kite, identified on the same flights at the same `v_app`
+(`joint_delay_lag_fit`, in `examples/build_turn_rate_table.jl`); interpolated
 linearly like `delay`, `NaN` for a row without them.
 
 `table` defaults to the session's table (loaded by [`reload_turn_rate_table!`](@ref));

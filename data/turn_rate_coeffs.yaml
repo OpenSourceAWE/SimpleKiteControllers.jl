@@ -1,239 +1,110 @@
+# Turn-rate law of the V3 kite identified in crosswind flights at low elevation
+# (examples/build_turn_rate_table.jl; these rows by plot_turn_rate_vs_depower.jl,
+# 2026-09-29, the data in data/turn_rate_low_flights.tar.gz). The only table: the
+# relay sweeps at 73° it replaced were deleted on 2026-10-01. A run of
+# build_turn_rate_table rewrites this file with YAML.write_file, without these comments.
+#
+# Per depower, the runs of 200 s at the fixed amplitudes u_s = 0.075, 0.10, 0.125
+# that stayed airborne are fitted jointly: c1 [1/m], c2 [-], dead_time and kite_lag
+# [s]. `delay` [s] is dead_time + kite_lag. `v_app` [m/s] is the mean apparent wind
+# speed of the fit windows (they span ~12 - 55 m/s). The *_se columns are standard
+# errors from the scatter of fits on 20 s blocks (provenance, not read by the
+# parser). Depower 0.40 is missing: no run stayed airborne there, so the table ends
+# at 0.375 and simple_opt_reelout.jl holds c1 at that value above it.
 conditions:
   system: "system_reelout_maasvlakte.yaml"
   l_tether: 150.0
   v_wind: 9.51
-  elevation: 73.0
+  elevation: 30.0
   dt: 0.0166666667
 entries:
-  - c1: 0.26912723875946765
-    delay: 0.35387808025447093
-    v_app: 13.454339
-    dead_time: 0.10558014051065305
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.2833333333333333
-    delay_exp: 0.3164487447413986
-    c2_std: 0.05726489522723088
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.021403896384377744
-    v_app_halves:
-      - 12.902325
-      - 14.006351
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.25
-    c1_std: 0.0003043335094674091
-    rms_delay: 0.02846253905694892
-    delay_std: 0.015957118462605634
-    g_rel_std: 0.12804769206543332
-    delay_halves:
-      - 0.3641405307434896
-      - 0.35480145224572746
-    u_s_max: 0.175
-    c2: 0.6677843366354165
-    min_elevation: 73.00190734863281
-    c1_rel_std: 0.0011308164527315165
-  - c1: 0.24494022733021018
-    delay: 0.37908321720730553
-    v_app: 13.307082
-    dead_time: 0.14277961548216603
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.26666666666666666
-    delay_exp: 0.35458235415858014
-    c2_std: 0.050175558188999415
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.020986405385778395
-    v_app_halves:
-      - 12.861462
-      - 13.752703
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+    c1: 0.3062365853867301
+    c2: 3.1494504378054557
+    delay: 0.10833333333333334
+    dead_time: 0.008333333333333333
+    kite_lag: 0.1
+    v_app: 43.98
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 2
+    c1_se: 0.0025945152938109113
+    c2_se: 0.11618687116517029
+    dead_time_se: 0.005674429854308933
+    kite_lag_se: 0.006073290045766603
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.275
-    c1_std: 0.00028193912597700713
-    rms_delay: 0.026669858143874105
-    delay_std: 0.01595711846260566
-    g_rel_std: 0.14527001138520187
-    delay_halves:
-      - 0.3908751250658722
-      - 0.38169852733521487
-    u_s_max: 0.175
-    c2: 1.443527129249175
-    min_elevation: 72.05294799804688
-    c1_rel_std: 0.001151052765199396
-  - c1: 0.21889444285128307
-    delay: 0.3969088940188425
-    v_app: 13.162557
-    dead_time: 0.1748150067371074
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.25
-    delay_exp: 0.6552358635203459
-    c2_std: 0.04278732972897603
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.020290663553412063
-    v_app_halves:
-      - 12.80718
-      - 13.517932
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+    c1: 0.2649994205293341
+    c2: 3.683614901346327
+    delay: 0.125
+    dead_time: 0.041666666666666664
+    kite_lag: 0.08333333333333333
+    v_app: 38.6
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 3
+    c1_se: 0.0015557244069450038
+    c2_se: 0.1378145656181189
+    dead_time_se: 0.008683945754808256
+    kite_lag_se: 0.010098951586311784
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.3
-    c1_std: 0.0002525359970582413
-    rms_delay: 0.024263557158983675
-    delay_std: 0.020971762320196548
-    g_rel_std: 0.15883022626797466
-    delay_halves:
-      - 0.40841734180779854
-      - 0.39421621462575485
-    u_s_max: 0.175
-    c2: 1.8545136978521224
-    min_elevation: 70.61045837402344
-    c1_rel_std: 0.0011536884800214609
-  - c1: 0.19194515202097281
-    delay: 0.41297185877707454
-    v_app: 13.037694
-    dead_time: 0.20480687866174227
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.23333333333333334
-    delay_exp: 1.0686299652820836
-    c2_std: 0.036088663148239934
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.019119874012522367
-    v_app_halves:
-      - 12.7746935
-      - 13.3006935
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+    c1: 0.23255184014964847
+    c2: 3.686700583650899
+    delay: 0.14166666666666666
+    dead_time: 0.075
+    kite_lag: 0.06666666666666667
+    v_app: 35.66
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 3
+    c1_se: 0.0004898090795275103
+    c2_se: 0.06565265113984582
+    dead_time_se: 0.006207035095851387
+    kite_lag_se: 0.006598517555106549
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.325
-    c1_std: 0.0002227497255948595
-    rms_delay: 0.021853909261990306
-    delay_std: 0.015957118462605634
-    g_rel_std: 0.17524789670575916
-    delay_halves:
-      - 0.4240813637529465
-      - 0.40618393870029496
-    u_s_max: 0.175
-    c2: 2.20240921190223
-    min_elevation: 67.12068939208984
-    c1_rel_std: 0.0011604863329422398
-  - c1: 0.16758071134516825
-    delay: 0.4289723490450073
-    v_app: 13.041692
-    dead_time: 0.2221599562926169
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.23333333333333334
-    delay_exp: 0.3061653942864407
-    c2_std: 0.02897727119598404
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.016904091017925005
-    v_app_halves:
-      - 12.953383
-      - 13.129971
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+    c1: 0.1949102562228119
+    c2: 3.696695427933704
+    delay: 0.15833333333333333
+    dead_time: 0.075
+    kite_lag: 0.08333333333333333
+    v_app: 34.54
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 2
+    c1_se: 0.00037759792484821236
+    c2_se: 0.08094391421917914
+    dead_time_se: 0.006694362884190032
+    kite_lag_se: 0.007546472705068948
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.35
-    c1_std: 0.0001879374533489834
-    rms_delay: 0.018918781419269438
-    delay_std: 0.00962250448649376
-    g_rel_std: 0.1952982504508222
-    delay_halves:
-      - 0.4298424483317695
-      - 0.4280641748276031
-    u_s_max: 0.175
-    c2: 2.4314081557850225
-    min_elevation: 61.407962799072266
-    c1_rel_std: 0.0011214742546466826
-  - c1: 0.14686943955254259
-    delay: 0.44601276618910735
-    v_app: 12.973902
-    dead_time: 0.2812524128301604
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    kite_lag: 0.18333333333333332
-    delay_exp: 3.3177454575737078
-    c2_std: 0.021258982515483027
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.01427883078324618
-    v_app_halves:
-      - 12.95577
-      - 12.992027
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
+    c1: 0.1660169904065537
+    c2: 3.70697600694584
+    delay: 0.175
+    dead_time: 0.10833333333333334
+    kite_lag: 0.06666666666666667
+    v_app: 31.04
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 1
+    c1_se: 0.0003053612978898084
+    c2_se: 0.06793787117555003
+    dead_time_se: 0.011033680822049058
+    kite_lag_se: 0.012559870339120866
+  - body_damping: [0.0, 0.0, 40.0]
     depower: 0.375
-    c1_std: 0.00014653892035036586
-    rms_delay: 0.015386162372315786
-    delay_std: 0.0
-    g_rel_std: 0.21069227157208237
-    delay_halves:
-      - 0.44684166042966783
-      - 0.44271772272504706
-    u_s_max: 0.175
-    c2: 2.429640694930235
-    min_elevation: 54.50028610229492
-    c1_rel_std: 0.0009977495712982655
-  - c1: 0.13106047236134588
-    delay: 0.45878082520403857
-    v_app: 12.836794
-    dead_time: 0.32376132214166525
-    date: "2026-09-27"
-    outcome: "sweep_done"
-    elevation_floor: 40.0
-    kite_lag: 0.15
-    delay_exp: 1.6965665528015421
-    c2_std: 0.01698615197233063
-    body_damping:
-      - 0.0
-      - 0.0
-      - 40.0
-    rms_lag: 0.013062307141508538
-    v_app_halves:
-      - 12.787853
-      - 12.885736
-    body_sim_damping:
-      - 0.0
-      - 0.0
-      - 32.0
-    depower: 0.4
-    c1_std: 0.00012517311808957603
-    rms_delay: 0.013584305765401244
-    delay_std: 0.008333333333333331
-    g_rel_std: 0.24209557440326013
-    delay_halves:
-      - 0.4583877047934935
-      - 0.45249582879335815
-    u_s_max: 0.175
-    c2: 2.4526373475408683
-    min_elevation: 48.17626190185547
-    c1_rel_std: 0.0009550791007716051
+    c1: 0.14438778457918325
+    c2: 3.8584666061118003
+    delay: 0.19166666666666665
+    dead_time: 0.175
+    kite_lag: 0.016666666666666666
+    v_app: 24.14
+    outcome: "time_limit"
+    date: "2026-09-29"
+    n_runs: 1
+    c1_se: 0.003458481003120373
+    c2_se: 0.12392130653051685
+    dead_time_se: 0.022385587784697375
+    kite_lag_se: 0.017223217812720622

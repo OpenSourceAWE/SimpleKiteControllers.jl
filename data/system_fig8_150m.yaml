@@ -19,7 +19,7 @@ system:
     wc_settings: "wc_settings.yaml"
     fc_settings: "fc_settings_fig8_150m.yaml"
     traj_opt_settings: "traj_opt.yaml"
-    turn_rate_coeffs: "turn_rate_coeffs_low.yaml"
+    turn_rate_coeffs: "turn_rate_coeffs.yaml"
     kite_settings: "kite_settings_psm.yaml"
     structural_geometry: "struc_geometry.yaml"
     aero_geometry: "cfd_aero_geometry.yaml"

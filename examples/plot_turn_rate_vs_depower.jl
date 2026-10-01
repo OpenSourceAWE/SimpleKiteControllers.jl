@@ -7,18 +7,19 @@ The turn-rate law identified in the LOW crosswind pattern at every depower of
 `c2`, the dead time and the kite's lag.
 
 For each depower this runs `plot_turn_rate_identification.jl` without its plots
-and without the extended-law comparison: one flight per amplitude of its
-`flight_settings`, at the table's wind and constant tether length, and the joint
-fit of the steady ones (`joint_delay_lag_fit`). Two things are saved after every
+and without the extended-law comparison: one flight per amplitude of
+`FLIGHT_SETTINGS` (`build_turn_rate_table.jl`), at the table's wind and constant
+tether length, and the joint fit of the steady ones (`joint_delay_lag_fit`), the
+same flights and fit as `build_turn_rate_table`. Two things are saved after every
 depower, so a crash later on costs only the rest:
 
 - `output/turn_rate_low_flights.csv`, one row per depower: the fit, its standard
-  errors, and the table's 73° row for comparison (`rms` in °/s, speeds in m/s,
+  errors, and the table's row for comparison (`rms` in °/s, speeds in m/s,
   times in s). Enough to redraw or restyle the plot (`from_csv`).
 - `output/turn_rate_low_flights/depower_<u_d>.csv`: the fit windows of the steady
   flights, one row per sample (`flight`, `amplitude`, `time` [s], `us`, `rate`
   [rad/s], `v_app` [m/s], `psi`, `beta` [rad]). Enough to refit and recompute the
-  error bars, e.g. with another `block_length` (`from_raw`).
+  error bars, e.g. with another `BLOCK_LENGTH` of `build_turn_rate_table.jl` (`from_raw`).
 
 A fresh run first renames both, with the time of their last change appended, so
 it never overwrites an earlier result. The results of 2026-09-29 are archived in
@@ -26,7 +27,7 @@ it never overwrites an earlier result. The results of 2026-09-29 are archived in
 `output/` when the files are missing there.
 
 The error bars are `±k_sigma` standard errors from blocks: every steady flight's
-fit window is cut into `block_length` blocks, dead time, lag, `c1` and `c2` are fitted
+fit window is cut into `BLOCK_LENGTH` blocks, dead time, lag, `c1` and `c2` are fitted
 on each block alone (`joint_delay_lag_fit`), and the standard error of each is
 the scatter over the blocks divided by √(number of blocks). Not the linear fit's
 own standard errors, which assume independent residuals: the residuals of a flown
@@ -51,7 +52,6 @@ using LaTeXStrings
 using Printf
 using DelimitedFiles: readdlm, writedlm
 using Statistics: std
-using Base.CoreLogging: with_logger, NullLogger
 import Dates
 using SimpleKiteControllers: run_example, script_inputs
 
@@ -86,38 +86,14 @@ end
 csv_header = ["depower", "n_steady", "n_flights", "c1", "c2", "dead_time", "lag", "rms",
               "va_min", "va_max", "table_c1", "table_c2", "table_dead_time", "table_lag",
               "n_blocks", "c1_se", "c2_se", "dead_time_se", "lag_se"]
-block_length = 20.0  # [s] length of the blocks the standard errors are taken over
 k_sigma = 2     # [-] half-width of the error bars in standard errors; 2 reads as ~95 %
-
-"""
-    block_standard_errors(fits; block_t=block_length) -> NamedTuple
-
-Standard errors of the dead time, lag, `c1` and `c2`: each fit window of `fits`
-(from `identify_turn_rate_law`) is cut into blocks of `block_t` seconds, the
-four are fitted on each block alone with `joint_delay_lag_fit`, and each standard
-error is the scatter over the blocks divided by √(number of blocks). Returns
-`(; n, c1, c2, dead_time, lag)`, `NaN` for fewer than two blocks.
-"""
-function block_standard_errors(fits; block_t = block_length)
-    nb = round(Int, block_t / DT)
-    blocks = NamedTuple[]
-    for f in fits, k in 1:nb:length(f.rate) - nb + 1
-        r = k:k + nb - 1
-        sub = (; us = f.us[r], rate = f.rate[r], v_app = f.v_app[r], psi = f.psi[r], beta = f.beta[r])
-        # Muted: a short block's lag may hit its search limit, which is scatter, not news.
-        push!(blocks, with_logger(() -> joint_delay_lag_fit([sub], DT), NullLogger()))
-    end
-    se(field) = length(blocks) > 1 ?
-        std([getfield(b, field) for b in blocks]) / sqrt(length(blocks)) : NaN
-    return (; n = length(blocks), c1 = se(:c1), c2 = se(:c2), dead_time = se(:dead_time), lag = se(:lag))
-end
 
 """
     read_raw(dp) -> Vector{NamedTuple}
 
 The fit windows `plot_turn_rate_identification.jl` saved for depower `dp`
 (its input `windows_dir`), one per flight, with the
-fields `joint_delay_lag_fit` and `block_standard_errors` read.
+fields `joint_delay_lag_fit` and `block_standard_errors` (of `build_turn_rate_table.jl`) read.
 """
 function read_raw(dp)
     m, h = readdlm(raw_file(dp), ','; header = true)

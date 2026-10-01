@@ -142,7 +142,7 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
         project = project_file("system_reelout_maasvlakte.yaml")
         @test traj_opt_settings_file(project) == "traj_opt.yaml"
         @test winch_kv_table_file(project) == "winch_kv_table.yaml"
-        @test turn_rate_coeffs_file(project) == "turn_rate_coeffs_low.yaml"
+        @test turn_rate_coeffs_file(project) == "turn_rate_coeffs.yaml"
         for f in (traj_opt_settings_file(project), winch_kv_table_file(project))
             @test isfile(joinpath(skc_data_path(), f))
         end

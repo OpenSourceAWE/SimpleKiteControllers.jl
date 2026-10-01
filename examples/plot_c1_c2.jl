@@ -8,17 +8,13 @@ depower `u_d`, with error bars, one figure per `body_damping`
 present in the table — the quantities are only comparable across rows
 swept at the same damping.
 
-`c2` is not plotted: the relay sweep cannot identify it. The steering is fed
-back from the heading, so a shorter delay trades against a larger gravity term
-(at depower 0.275, `c2` falls by 0.65 per sample of shift, from +2.8 to 0 over
-the flat bottom of the residual, 2026-09-27), and its fit standard error, which
-assumes the delay known, does not show it.
+`c2` is not plotted here; `plot_turn_rate_vs_depower.jl` plots it with the
+others.
 
 Read straight from `data/turn_rate_coeffs.yaml` rather than from
 [`V3_TURN_RATE_COEFFS`](@ref): the lookup dict carries only `c1`, `c2` and
-`delay`, while the `*_std` columns `examples/build_turn_rate_table.jl` writes
-live in the file alone. A row from before those columns existed simply plots
-without bars.
+`delay`, while the `*_se` columns `examples/build_turn_rate_table.jl` writes
+live in the file alone. A row without them simply plots without bars.
 
     include("plot_c1_c2.jl")
 """
@@ -74,22 +70,17 @@ end
 For each `body_damping` in `data/turn_rate_coeffs.yaml`, sort its rows by
 depower `u_d` and plot `c1`, `delay`, and the dead time `τ_d` and lag `T_k`
 the delay is split into (`fit_delay_lag`), against it in a stacked, four-panel
-figure with error bars from the `c1_std` and `delay_std` columns. The split
-has no bars: the table records no scatter for it. A row without the split
-plots it as `NaN`, i.e. not at all. One panel each, not the three times in one
-with a legend: dead time and lag cross, so a legend covers data in every corner.
+figure with error bars from the `c1_se`, `dead_time_se` and `kite_lag_se`
+columns. The `delay` has no bars: the table records no standard error for the
+sum. A row without the split plots it as `NaN`, i.e. not at all. One panel each,
+not the three times in one with a legend: dead time and lag cross, so a legend
+covers data in every corner.
 
-The two bars do not mean the same thing. `c1_std` is the linear
-fit's own standard errors, and are optimistic — the residuals of a fitted
-flight path are strongly autocorrelated, so the effective sample count is far
-below `n`, which is why it comes out visibly tighter than the delay's.
-`delay_std` is a spread across blocks of one sweep, and the delay is quantised
-to the identification timestep, so its panel is a staircase with bars at least
-a sample tall.
-
-Both are drawn at `±K_SIGMA` times the recorded sigma. Scaling does not
-make the coefficient bars honest — their bias is the autocorrelation above, not
-the multiplier — so read them as a lower bound whatever `K_SIGMA` is.
+The standard errors are the scatter of the fit over 20 s blocks of the flights,
+divided by √(number of blocks) (`block_standard_errors` of
+`build_turn_rate_table.jl`), not the linear fit's own, which assume independent
+residuals. Dead time and lag trade against each other within a block, so their
+bars carry that too. All are drawn at `±K_SIGMA` times the recorded sigma.
 
 The figures carry no title: they are meant to be included in a document whose
 caption says what they show. That caption is the only place `K_SIGMA` is now
@@ -122,7 +113,7 @@ function plot_c1_c2()
         fig_name = "c1_delay_" * join(round.(bd; digits = 1), "_")
         plotx(u_s, c1, delay, dead_time, kite_lag;
               xlims = (minimum(u_s) - pad, maximum(u_s) + pad),
-              # Round ticks at the sweep's own 0.05 grid: the padded range makes
+              # Round ticks at the table's own 0.05 grid: the padded range makes
               # Makie pick 0.27/0.30/0.33/... otherwise, which reads as if the
               # cells had been identified at those settings.
               xticks = 0.25:0.05:0.40,
@@ -135,7 +126,8 @@ function plot_c1_c2()
               xlabel = L"\mathrm{relative\ depower}\ u_\mathrm{d}\ [-]",
               ylabels = [L"c_1\ [\mathrm{1/m}]", L"\tau\ [\mathrm{s}]",
                          L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
-              yerr = [_std_column(rows, "c1_std"), _std_column(rows, "delay_std"), nothing, nothing],
+              yerr = [_std_column(rows, "c1_se"), nothing, _std_column(rows, "dead_time_se"),
+                      _std_column(rows, "kite_lag_se")],
               scatter = true, disp = true, labelsize = LABEL_SIZE,
               fig = fig_name)
         mkpath(FIG_DIR)

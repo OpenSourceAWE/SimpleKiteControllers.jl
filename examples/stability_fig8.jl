@@ -25,8 +25,8 @@ with it.
 The kite responds to the applied steering with a dead time `τ_kite` and a lag
 `T_kite` of its own, both scaling with the apparent wind speed, see
 [`kite_dead_time`](@ref) and [`kite_lag`](@ref): the table's `dead_time` and
-`kite_lag` are identified by the relay sweeps of `build_turn_rate_table.jl` at
-the row's `v_app` (about 13 m/s), 0.141 + 0.267 s at depower 0.275. See
+`kite_lag` are identified by the low crosswind flights of `build_turn_rate_table.jl`
+at the row's `v_app` (about 39 m/s), 0.042 + 0.083 s at depower 0.275. See
 `docs/course_loop_stability.md`.
 
 In the pattern (phase ≥ 3) two more factors, both validated against the

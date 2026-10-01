@@ -6,10 +6,9 @@ The relay excitation of the LOW crosswind identification, as a figure for the
 paper: the counterpart of Fig. 3 (`steering_response.pdf`, V3Kite's
 `steering_test_v3_plots.jl`), which shows the sweep at 73°.
 
-One flight of `plot_turn_rate_identification.jl`, at one depower and one fixed
-amplitude, with the same relay (`_run_turn_rate_sweep`): the band centred on
-`±heading_center`, reversed at `±az_reverse` of azimuth and tilted to hold
-`el_hold`. Three panels over `plot_span` seconds from `plot_start` after the
+One flight of `build_turn_rate_table.jl`, at one depower and one fixed amplitude,
+with the same relay (`_fly_relay`): the band centred on `±HEADING_CENTER`,
+reversed at `±az_reverse` of azimuth and tilted to hold `EL_HOLD`. Three panels over `plot_span` seconds from `plot_start` after the
 start of the fit window:
 
 - the heading with the edges of the band, which moves with the reversals and the
@@ -46,16 +45,8 @@ using SimpleKiteControllers: run_example, script_inputs
 (; depower, from_csv) = script_inputs(@__FILE__, (; depower = 0.275, from_csv = false))
 depower = Float64(depower)
 
-# The middle flight of `plot_turn_rate_identification.jl`'s `flight_settings`, which flies the
-# full time at every depower from 0.25 to 0.325 (2026-09-29).
-amplitude = 0.10         # [-] fixed steering amplitude
-az_reverse = 30.0        # [°] azimuth at which the direction of flight reverses
-el_hold_tilt = 45.0      # [°] limit of the band's tilt by the elevation hold
-start_elevation = 30.0   # [°] as in plot_turn_rate_identification.jl
-heading_center = 90.0    # [°]
-el_hold = 30.0           # [°]
-elevation_floor = 10.0   # [°]
-max_elevation = 55.0     # [°] the fit window starts at the first sample below this
+# `EL_HOLD` of build_turn_rate_table.jl [°], for the plot; not loaded when replotting.
+el_hold = 30.0
 
 plot_start = 20.0        # [s] start of the plotted span, after the start of the fit window
 plot_span = 40.0         # [s] length of the plotted span
@@ -68,20 +59,19 @@ csv_header = ["time", "heading", "band_center", "elevation", "set_steering", "st
 # ======================== FLIGHT ========================= #
 
 if !from_csv
-    # `_run_turn_rate_sweep`, `DT`, `T_START`, `HEADING_OFFSET`, `MIN_STEERING_FIT`.
+    # `_fly_relay`, `_fit_window`, `FLIGHT_SETTINGS`, `DT`.
     include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
-    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor,
-                             elevation = start_elevation, heading_center,
-                             start_steering = amplitude, steering_step = 0.0, az_reverse, el_hold,
-                             el_hold_tilt)
+    # The middle flight of `FLIGHT_SETTINGS`, which flies the full time at every depower
+    # from 0.25 to 0.325 (2026-09-29).
+    (; a, az_reverse, el_hold_tilt) = FLIGHT_SETTINGS[2]
+    r = _fly_relay(depower, a; az_reverse, el_hold_tilt)
     r.outcome == :time_limit ||
         @warn "The flight ended with $(r.outcome), not after the full time; plotting what was flown."
-    # The logger is preallocated; a flight that ends early leaves zero rows behind.
-    sl = r.sl[1:findlast(>(0), r.sl.time)]
+    sl = r.sl
     el = rad2deg.(sl.elevation)
-    k_below = findfirst(i -> sl.time[i] >= T_START && el[i] < max_elevation, eachindex(sl.time))
-    isnothing(k_below) && error("The flight never came below max_elevation = $max_elevation° after T_START.")
-    fit = identify_turn_rate_law(sl; dt = DT, t_start = sl.time[k_below], min_steering = MIN_STEERING_FIT)
+    w = _fit_window(sl; label = "The flight")
+    isnothing(w) && error("The flight never came below MAX_ELEVATION after T_START.")
+    fit = w.fit
 
     # The band centre of the step each sample was logged after, NaN before the relay starts.
     band = [(k = searchsortedlast(r.band_time, t + DT / 2); k == 0 ? NaN : r.band_center[k])
@@ -95,7 +85,7 @@ if !from_csv
         writedlm(io, hcat(Float64.(sl.time), rad2deg.(wrap_to_pi.(sl.heading)), band, el,
                           Float64.(sl.set_steering), Float64.(sl.steering), us_delayed), ',')
     end
-    @info "Saved the flight to $csv_file; fit window from $(round(sl.time[k_below]; digits = 1)) s, " *
+    @info "Saved the flight to $csv_file; fit window from $(round(w.t_fit; digits = 1)) s, " *
           "delay $(round(fit.delay_sec; digits = 3)) s."
 end
 

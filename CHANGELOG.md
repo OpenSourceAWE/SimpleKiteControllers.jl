@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed
+
+- The turn-rate table is identified at low elevation only: `build_turn_rate_table.jl`
+  flies, per depower, the three crosswind relay flights at fixed amplitudes that
+  `plot_turn_rate_identification.jl` flew (`_fly_low_flights`, elevation held near
+  30°) and writes the joint fit of the steady ones, with block standard errors
+  (`*_se`). The stepped relay sweep at 73°, the `c3` keyword and
+  `add_delay_lag_split!` are gone. `_run_turn_rate_sweep` is now `_fly_relay`.
+- `data/turn_rate_coeffs_low.yaml` is now `data/turn_rate_coeffs.yaml`, and every
+  project names it. The 73° table and `data/turn_rate_coeffs_c3.yaml` are deleted;
+  `system_reelout_180m.yaml`, the last project on the 73° table, now flies the
+  low-elevation one.
+- `plot_c1_c2.jl` draws the `c1_se`, `dead_time_se` and `kite_lag_se` bars.
+
 ### Added
 
 - Moved from `examples/` into the package (V3Kite is still not a dependency):

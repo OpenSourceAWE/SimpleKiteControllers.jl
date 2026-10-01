@@ -10,9 +10,12 @@ separately on the 25 flown reel-out figures of eight (`examples/identify_c3.jl`,
 2026-09-28). Only `c1` and the delay are fitted. The free-`c2` fit in
 `data/turn_rate_coeffs.yaml` is the reference.
 
-**Status: identified, not used.** The rows are in
-`data/turn_rate_coeffs_c3.yaml`. No project points at that table, so the
-controllers and the stability analysis still read `turn_rate_coeffs.yaml`.
+**Status: removed on 2026-10-01.** The 73° relay sweeps, their table and this
+fixed-`c3` table (`data/turn_rate_coeffs_c3.yaml`) were deleted, and
+`build_turn_rate_table` lost its `c3` keyword and `add_delay_lag_split!`: the table
+now comes from crosswind flights at low elevation, where the free `c2` is
+identified (`examples/build_turn_rate_table.jl`). The commands below are kept as a
+record; they no longer run. The fit functions remain in V3Kite.
 
 ## Why
 

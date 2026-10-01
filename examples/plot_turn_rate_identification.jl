@@ -6,27 +6,26 @@ Identify the turn-rate law at a LOW elevation, from several relay flights at one
 depower, and plot each flight: turn rate, apparent wind speed, kite speed and
 elevation over time.
 
-The first step of `oldplans/PlanIdentifyTurnRateLaw.md`. The table's sweeps start at 73°
-and relay about heading 0 (straight up), so the kite hovers near the zenith at
-`v_a` ≈ 11 – 16 m/s. Here every flight relays about a crosswind heading (`±90°`),
-reverses at `±az_reverse` of azimuth and tilts the band to hold `el_hold`, see
-`_run_turn_rate_sweep`: the kite flies a lazy-eight-like pattern low in the wind
-window, at `v_a` ≈ 20 – 50 m/s (depower 0.275, 2026-09-29).
+The flights `build_turn_rate_table` identifies a row of `data/turn_rate_coeffs.yaml`
+from (`_fly_low_flights` of `build_turn_rate_table.jl`): every flight relays about
+a crosswind heading (`±HEADING_CENTER`), reverses at `±az_reverse` of azimuth and
+tilts the band to hold `EL_HOLD`, so the kite flies a lazy-eight-like pattern low
+in the wind window, at `v_a` ≈ 20 – 50 m/s (depower 0.275, 2026-09-29).
 
-One flight per entry of `flight_settings`, each at a fixed amplitude for
+One flight per entry of `FLIGHT_SETTINGS`, each at a fixed amplitude for
 `SWEEP_SIM_TIME`. Each is fitted on its own (`identify_turn_rate_law`, then
 `fit_delay_lag`), and all steady ones together (`joint_delay_lag_fit`; all of them
-if none flew the full time): one dead time, lag,
-`c1` and `c2` for every flight, the steering of each flight filtered and shifted
-separately so no shift crosses from one flight into the next. The fit window of
-a flight starts at the first sample below `max_elevation` after `T_START` and
-runs to its end, contiguous, as the backward-difference turn rate and the delay
-search need. The law fitted is still the current one; the result is compared
-with the table's 73° row at the same depower. Nothing is written to the table.
+if none flew the full time): one dead time, lag, `c1` and `c2` for every flight,
+the steering of each flight filtered and shifted separately so no shift crosses
+from one flight into the next. The fit window of a flight starts at the first
+sample below `MAX_ELEVATION` after `T_START` and runs to its end, contiguous, as
+the backward-difference turn rate and the delay search need. The result is
+compared with the table's row at the same depower, and with the extended law
+(`fit_laws`). Nothing is written to the table.
 
 The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
 :heading)`, and the joint model, which starts where the flight's fit window does.
-The elevation panel carries `max_elevation`.
+The elevation panel carries `MAX_ELEVATION`.
 
 About two to three minutes per flight. The inputs `depower`, `v_wind` (the wind speed,
 default the table's `V_WIND`) and `v_reelout` (the reel-out speed, default 0) are
@@ -48,8 +47,7 @@ using LinearAlgebra: norm
 using Statistics: median, var
 using DelimitedFiles: writedlm
 
-# `_run_turn_rate_sweep`, the fixed sweep conditions, `_split_delay`, `lag_filter` and
-# `joint_delay_lag_fit`.
+# `_fly_low_flights`, the fixed conditions of the flights, `OUT_FILE` and `_entry_key`.
 include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
 using SimpleKiteControllers: run_example, script_inputs
 
@@ -66,20 +64,6 @@ using SimpleKiteControllers: run_example, script_inputs
     script_inputs(@__FILE__, (; depower = 0.275, v_wind = V_WIND, v_reelout = 0.0,
                                show_plots = true, fit_laws = true, windows_dir = nothing))
 depower, v_wind, v_reelout = Float64(depower), Float64(v_wind), Float64(v_reelout)
-# One flight per fixed steering amplitude `a` [-], each with its own azimuth of reversal
-# `az_reverse` [°] and tilt limit of the elevation hold `el_hold_tilt` [°], see
-# `_run_turn_rate_sweep`. The range that flies steadily at depower 0.275 (2026-09-29): 0.05
-# turns too weakly and drifts to the edge of the wind window even reversing at ±10°; 0.15
-# turns ~90 °/s against a tape that needs ~1 s to swing, so the relay overshoots its band
-# past heading 180° and loops into the ground.
-flight_settings = [(a = 0.075, az_reverse = 20.0, el_hold_tilt = 45.0),
-                   (a = 0.100, az_reverse = 30.0, el_hold_tilt = 45.0),
-                   (a = 0.125, az_reverse = 30.0, el_hold_tilt = 25.0)]
-start_elevation = 30.0   # [°] elevation the flights start at; the table's sweeps start at 73°
-heading_center = 90.0    # [°] centre of the relay's heading band, crosswind; 0 climbs back to ~70°
-el_hold = 30.0           # [°] elevation the band's tilt holds the kite near
-elevation_floor = 10.0   # [°] a flight stops below this
-max_elevation = 55.0     # [°] a flight's fit window starts at its first sample below this
 
 # ==================== JOINT FIT ========================== #
 
@@ -164,50 +148,15 @@ end
 
 # ======================== FLIGHTS ======================== #
 
-# The table's row for this cell, if any: the 73° result to compare with.
+# The table's row for this cell, if any, to compare with.
 row = let entries = YAML.load_file(joinpath(skc_data_path(), OUT_FILE))["entries"]
     k = findfirst(e -> _entry_key(e) == (BODY_START_DAMPING, depower), entries)
     isnothing(k) ? nothing : entries[k]
 end
 isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: nothing to compare with."
 
-flights = NamedTuple[]
-for (; a, az_reverse, el_hold_tilt) in flight_settings
-    r = _run_turn_rate_sweep(depower; max_steering_cap = 1.0, elevation_floor, v_wind, v_reelout,
-                             elevation = start_elevation, heading_center,
-                             start_steering = a, steering_step = 0.0, az_reverse, el_hold,
-                             el_hold_tilt)
-    # The logger is preallocated for SWEEP_SIM_TIME; a flight that ends early leaves the rest
-    # of the rows at zero (time 0 included), which folds the time axis back onto itself.
-    sl = r.sl[1:findlast(>(0), r.sl.time)]
-    el = rad2deg.(sl.elevation)
-    k_below = findfirst(i -> sl.time[i] >= T_START && el[i] < max_elevation, eachindex(sl.time))
-    if isnothing(k_below)
-        @warn @sprintf("Amplitude %.3f: never below max_elevation = %.1f° after T_START; skipped.",
-                       a, max_elevation)
-        continue
-    end
-    t_fit = sl.time[k_below]
-    in_window = sl.time .>= t_fit
-    frac_above = count(in_window .& (el .> max_elevation)) / count(in_window)
-    frac_above > 0 &&
-        @warn @sprintf("Amplitude %.3f: %.0f %% of the fit window above max_elevation = %.1f°.",
-                       a, 100 * frac_above, max_elevation)
-    fit = merge(identify_turn_rate_law(sl; dt = DT, t_start = t_fit, min_steering = MIN_STEERING_FIT),
-                (; c3 = nothing))
-    vk = norm.(sl.vel_kite)
-    v_tau = sqrt.(max.(vk .^ 2 .- Float64.(first.(sl.v_reelout)) .^ 2, 0.0))
-    push!(flights, (; a, outcome = r.outcome, sl, el, vk, t_fit, fit, dl = _split_delay(fit),
-                    v_ratio = v_tau[in_window] ./ Float64.(sl.v_app[in_window])))
-    @info @sprintf("Amplitude %.3f: %s after %.0f s, fit window from %.1f s.", a, r.outcome,
-                   last(sl.time), t_fit)
-end
-isempty(flights) && error("No flight reached max_elevation; nothing to fit.")
-# The steady flights, if any: a flight that sank to the floor is a transient with a short window.
-joint_flights = let steady = filter(f -> f.outcome == :time_limit, flights)
-    isempty(steady) ? flights : steady
-end
-joint = joint_delay_lag_fit([f.fit for f in joint_flights], DT)
+(; flights, joint_flights, joint) = _fly_low_flights(depower; v_wind, v_reelout)
+isnothing(joint) && error("No flight came below MAX_ELEVATION; nothing to fit.")
 
 # The fit windows of the steady flights, one row per sample, for refitting without flying
 # (`plot_turn_rate_vs_depower.jl`, `from_raw`). Only when the caller passes `windows_dir`.
@@ -241,9 +190,9 @@ end
         length(joint_flights), joint.c1, joint.c2, joint.dead_time, joint.lag, rad2deg(joint.rms_lag),
         joint.n, rad2deg(joint.rms_delay))
 isnothing(row) ||
-    @printf("table row, 73°         %7.4f %9.3f %8.3f %8.3f %8s %9s  v_a %.1f m/s (c1, c2 of the pure-delay fit)\n",
+    @printf("table row              %7.4f %9.3f %8.3f %8.3f %8s %9s  v_a %.1f m/s, %s\n",
             row["c1"], row["c2"], get(row, "dead_time", NaN), get(row, "kite_lag", NaN), "", "",
-            row["v_app"])
+            row["v_app"], row["date"])
 
 # Current law (e = 0) against the law with the mass term, on the heading and on the course,
 # each with its own delay and lag; VAF per v_a bin on all flights, the first t_max skipped.
@@ -290,7 +239,7 @@ for f in (show_plots ? flights : NamedTuple[])
         (turn_rate, turn_rate_model),
         Float64.(sl.v_app[rng]),
         f.vk[rng],
-        (f.el[rng], fill(max_elevation, length(rng)));
+        (f.el[rng], fill(MAX_ELEVATION, length(rng)));
         xlabel = L"\mathrm{time}~[\mathrm{s}]",
         ysize = 18,
         ylabels = [
