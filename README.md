@@ -4,6 +4,11 @@
 [![Coverage](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23015560-0A7BBB?style=flat-square)](https://doi.org/10.5281/zenodo.23015560)
 
+This package is part of Julia Kite Power Tools, which consists of the following packages:
+<p align="center"><img src="docs/kite_power_tools.png" alt="Julia Kite Power Tools package overview" width="500" /></p>
+
+SimpleKiteControllers also depends on [WinchControllers](https://github.com/OpenSourceAWE/WinchControllers.jl) and [AtmosphericModels](https://github.com/OpenSourceAWE/AtmosphericModels.jl).
+
 ## Introduction
 This package provides:
 - a path following figure of eight controller
