@@ -53,7 +53,10 @@ fc_settings:
     f8_a:               20.0     # Width of the eight, azimuth spans ±A; sweep optimum [deg]
     f8_b:               11.0     # Height, elevation spans ±B/2; picked for margin 1.07 [deg]
     el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
-    attractor_dist:      8.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
+    # 8.0 -> 9.75 (2026-10-02, retune_guided.jl, target 0.4): worst guided disk margin of the 22
+    # scenarios 0.332 -> 0.401 (weak winds, where this floor sets the attractor); replays at
+    # maasvlakte 3.5/8.0 and cabauw 3.0 m/s pass all criteria, RMS d +20 - 29 %, power unchanged.
+    attractor_dist:      9.75    # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
     # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28).
     attractor_lead_time: 0.96    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
