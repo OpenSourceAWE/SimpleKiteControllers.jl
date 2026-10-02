@@ -15,7 +15,7 @@ kite_settings:
   analytic_jacobian: true        # null takes the backend default (kernel: true)
   vsm_interval: 10               # NOT read by this package's runs: they pass fc_settings' run.vsm_interval to step!
 
-  body_sim_damping: [0.0, 0.0, 38.0]   # NOT read: init_model passes 0.8 x fc_settings' run.body_damping to init
+  body_sim_damping: [0.0, 0.0, 32.0]   # NOT read: init_model passes 0.8 x fc_settings' run.body_damping to init
   world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
 
   # INERT in this run path, despite the name: the only consumer of `wing_mass` in
