@@ -635,9 +635,9 @@ end
 
         # Canary: catch an accidental edit of the YAML. EXPECTED to change on a
         # deliberate re-identification -- update it then, nothing else here.
-        # 0.3062365853867301: the low crosswind flights of 2026-09-29, the only table since
-        # the 73° relay sweeps' table was deleted (2026-10-01; its last value 0.26912723875946765).
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.3062365853867301
+        # The low crosswind flights re-identified on 2026-10-02 at the projects' time step (1/90 s)
+        # and VSM interval 5 (before: 0.3062365853867301, 2026-09-29, at 1/60 s).
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31377205956495025
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin

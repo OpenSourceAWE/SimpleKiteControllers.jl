@@ -32,8 +32,10 @@ course_loop_model:
   # identify_depower_factor.jl, 2026-10-02.
   pattern_depower_exp: 5.98   # [-]
 
-  # Zero and pole of kite_correction: fit at the 300 m fig8 point, 0.5 - 2.1 Hz,
-  # 2026-09-27, against the plant with the pattern law's dead time and lag, which it
-  # goes with.
-  kite_corr_zero:      0.80   # [Hz]
-  kite_corr_pole:      0.58   # [Hz]
+  # Zero and pole of kite_correction, the causal stand-in for the measured kite correction
+  # (kite_correction_measured.csv) in the transfer-function models: chosen as the best fit
+  # among the lag-leads conservative against it at point D (system_fig8_300m, v_a 33.3 m/s):
+  # gain not lower than measured below 0.8 Hz, phase not less lagging from 0.8 to 1.4 Hz;
+  # log-RMS against the table 0.293. identify_kite_correction.jl, 2026-10-02.
+  kite_corr_zero:      1.37   # [Hz]
+  kite_corr_pole:      0.99   # [Hz]

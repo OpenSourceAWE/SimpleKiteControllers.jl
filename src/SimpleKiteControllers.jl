@@ -52,7 +52,7 @@ export FC_Settings, FC_Course, FC_FeedForward, FC_Pattern, FC_WindRamp, FC_Winch
 export set_fc_field!, get_fc_field, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
 export attractor_distance, guidance_rate, wind_schedule, apply_wind_schedule!
-export turn_rate_coeffs_file, course_loop_model_file, winch_table_file, traj_opt_settings_file
+export turn_rate_coeffs_file, course_loop_model_file, kite_correction_file, winch_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
 export TrajOptSettings, turn_radius_lap_reelout

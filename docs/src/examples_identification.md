@@ -8,7 +8,8 @@ and check the linear course-loop model used by the stability analyses against fl
 How to install and start the examples is described on
 [Examples - general](examples_general.md). `menu2()`, in a REPL started with `bin/run_julia`,
 offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl`,
-`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl` and `identify_depower_factor.jl`.
+`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl`, `identify_depower_factor.jl`,
+`identify_kite_correction.jl` and, to check the result, `stability_opt_reelout.jl`.
 
 ## Turn-rate law
 
@@ -38,6 +39,12 @@ the apparent wind speed, which it writes into the course-loop model file of the 
 Flies the figure of eight at 300 m and 7 m/s at several depower settings, identifies the kite's
 response time on each log and fits how it grows with the depower relative to the pattern law,
 which it writes into the course-loop model file of the selected project.
+
+### [`identify_kite_correction.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_kite_correction.jl)
+Measures the kite's steering → heading response with a multisine injected into the steering
+command of a figure of eight at 300 m, writes its ratio to the turn-rate law as a table (the
+measured kite correction) and checks that the lag-lead correction in the course-loop model file
+stays conservative against it.
 
 ### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
 Plots the turn-rate table: `c1`, `c2`, the dead time and the lag against the depower with error
@@ -69,9 +76,8 @@ After a change of the kite (mass, geometry, bridle, damping, aerodynamics), copy
 under new names, enter the new names in the `system:` section of the kite's project, select
 that project and re-identify in the order below; each step uses the results of the steps
 before it. The steering tape's lag needs no identification: it is `1/steering_gain` of the
-KCU's P controller, from the project's settings file. Steps 1 to 4 have scripts that write
-their files. For the others the scripts fly and measure, the fit is done in the REPL, and
-the comment above each new value in `course_loop_model.yaml` has to say where it came from.
+KCU's P controller, from the project's settings file. Each step has a script that writes its
+result and its provenance into the file.
 
 1. **The turn-rate law.** Set `conditions: system` in the copied turn-rate table to the
    kite's project and `conditions: dt` to its time step (`1/sample_freq`), then run `build_turn_rate_table.jl`; it flies the selected project,
@@ -102,16 +108,22 @@ the comment above each new value in `course_loop_model.yaml` has to say where it
    same `v_a`, fits `exp(pattern_depower_exp · (depower − pattern_law_depower))` to these
    ratios and writes the exponent and its provenance into the course-loop model file.
 
-5. **`kite_corr_zero` and `kite_corr_pole`**, the lag-lead [`kite_correction`](@ref). Fly
-   point `D` with a multisine on the steering command, `run_v1(:D; injection = Multisine())`
-   in `validate_margins.jl`, with `v_steering` raised to 1.0 s⁻¹ in the project's settings
-   file for these runs only, so the tape stays off its rate limit. `frf_injection` gives the
-   command → heading response at each line. Divide it by the model's tape lag × turn-rate law
-   with the pattern law's dead time and lag ([`turn_rate_plant`](@ref),
-   [`pattern_dead_time_lag`](@ref)), and fit `(1 + s/ω_z)/(1 + s/ω_p)` to the ratio over
-   0.5 – 2.1 Hz. The same runs give the measured responses in
-   `data/course_link_measured.csv` and `data/course_correction_measured.csv`, which have no
-   script that writes them either.
+5. **The kite correction** (`kite_correction` → `kite_correction_measured.csv`, and
+   `kite_corr_zero`, `kite_corr_pole`). Run `identify_kite_correction.jl`: it flies point `D`
+   of `validate_margins.jl` twice with the tape's rate limit raised to 1 s⁻¹ (in the
+   project's settings file, restored afterwards), a baseline for the lap period and a run
+   with a multisine added to the steering command at lines halfway between the lap's
+   harmonics, 0.5 – 2.1 Hz, and divides the measured tape → heading response by the
+   turn-rate law with the pattern law's dead time and lag. The ratio loses gain with
+   frequency without the phase lag a causal transfer function would have with it, so it is
+   kept as a table: the script writes it to the project's kite-correction file, and
+   `stability_opt_reelout.jl` also rates the guided loop with it. The lag-lead
+   [`kite_correction`](@ref) stays as the causal stand-in in the transfer-function models;
+   the script checks that it is conservative against the table (gain not lower than
+   measured below 0.8 Hz, phase not less lagging from 0.8 to 1.4 Hz) and otherwise writes
+   the best-fitting conservative one. `data/course_link_measured.csv` and
+   `data/course_correction_measured.csv`, measured the same way, have no script that writes
+   them.
 
 Then check the model against the simulation with `validate_margins.jl` and
 `plot_frf_validation.jl`: the model should stay below every measured margin.

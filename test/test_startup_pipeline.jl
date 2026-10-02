@@ -19,8 +19,10 @@ import SimpleKiteControllers: GUI_STATE_FILE_OVERRIDE, FAILED_TRAJECTORY_DIR, se
     OptChain, KiteUtils
 @isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
-const PROJECT = "system_reelout_maasvlakte.yaml"
-const UP_LOOPS = FC_Settings(fc_settings(project_file(PROJECT))).pattern.up_loops
+# Not `PROJECT`: the example scripts assign that as a plain global in the same session, and a
+# `const` of that name in `Main` makes their next `include` fail.
+const PIPELINE_PROJECT = "system_reelout_maasvlakte.yaml"
+const UP_LOOPS = FC_Settings(fc_settings(project_file(PIPELINE_PROJECT))).pattern.up_loops
 # Two 100-point figures of eight [deg]: TIGHT misses a 1.3 gate at 150 m (margin 1.24), WIDE clears it.
 function eight_path(a, b, c)
     r = range(0, 2pi; length = 101)[1:100]
@@ -57,7 +59,7 @@ function fly_startup(; tos = Dict{Symbol, Any}(), wind = "default", path_for = p
     fs = fake_server(; reply, table, fail_warm)
     gui = joinpath(mktempdir(), "gui.yaml")
     write(gui, replace(read(joinpath(skc_data_path(), "gui.yaml.default"), String),
-                       "system_fig8_200m.yaml" => PROJECT,
+                       "system_fig8_200m.yaml" => PIPELINE_PROJECT,
                        "wind_speed: \"default\"" => "wind_speed: \"$wind\""))
     traj_dir = mktempdir()
     data_path, traj_dir0 = KiteUtils.get_data_path(), FAILED_TRAJECTORY_DIR[]

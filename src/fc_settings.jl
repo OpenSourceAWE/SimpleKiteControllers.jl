@@ -573,6 +573,19 @@ function course_loop_model_file(project = project_file())
 end
 
 """
+    kite_correction_file(project = project_file()) -> String
+
+Get the filename of the measured kite correction (written by
+`examples/identify_kite_correction.jl`, read with [`load_course_correction`](@ref)) from the
+system project, the same way as [`fc_settings`](@ref). Returns the value of the
+`kite_correction` field of the project's `system` section; present in every project.
+"""
+function kite_correction_file(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["kite_correction"]
+end
+
+"""
     winch_table_file(project = project_file()) -> String
 
 Get the winch table filename from the system project, the same way as

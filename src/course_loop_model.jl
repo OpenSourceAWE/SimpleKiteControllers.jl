@@ -203,7 +203,10 @@ heading response to what an injected multisine measures in the simulation:
 from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
 1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it,
 together with the pattern law's dead time and lag (`pattern_dead_time_lag`),
-against which it is fitted.
+against which it is chosen. It is the causal stand-in for the measured kite correction
+([`kite_correction_file`](@ref)), which loses gain without the matching phase lag and so
+has no low-order causal form: the zero and pole are chosen conservative against it
+(`examples/identify_kite_correction.jl`).
 Needs `using ControlSystemsBase`, which loads the method.
 """
 function kite_correction end
@@ -259,7 +262,8 @@ fed-back course response is, divided by this model's tape lag × turn-rate law
 multisines on the fig8 pattern at `v_a` 23.7, 34 (200 and 300 m, pooled) and
 40.1 m/s (`oldplans/Plan_model_validation.md`, V1). One table per airspeed, sorted by
 `v_a`, each with the frequencies [Hz], `log|M|` and the unwrapped phase [rad],
-for [`course_correction`](@ref).
+for [`course_correction`](@ref). The measured kite correction
+([`kite_correction_file`](@ref)) has the same format and is read with this function too.
 """
 function load_course_correction(path = COURSE_CORRECTION_FILE)
     rows = [parse.(Float64, split(l, ",")) for l in eachline(path)

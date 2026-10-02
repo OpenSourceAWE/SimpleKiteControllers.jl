@@ -136,7 +136,8 @@ exactly as it would by hand.
 
 ### [`menu2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/menu2.jl)
 Defines `menu2()`, the menu for the model identification: the project selection,
-`build_turn_rate_table.jl` and `plot_c1_c2.jl`, see [Examples - identification](examples_identification.md).
+`build_turn_rate_table.jl`, `plot_c1_c2.jl`, the other identification scripts and
+`stability_opt_reelout.jl`, see [Examples - identification](examples_identification.md).
 
 ### [`identification_utils.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identification_utils.jl)
 Rewrites single values of a YAML file, and the comment above them, without losing the other

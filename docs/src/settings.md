@@ -25,6 +25,7 @@ system:
     winch_table: "winch_table.yaml"
     turn_rate_coeffs: "turn_rate_coeffs.yaml"
     course_loop_model: "course_loop_model.yaml"
+    kite_correction: "kite_correction_measured.csv"
     kite_settings: "kite_settings_psm.yaml"
     structural_geometry: "struc_geometry.yaml"
     aero_geometry: "cfd_aero_geometry.yaml"
@@ -35,7 +36,8 @@ system:
 
 [`project_file`](@ref) resolves a project name such as `"system_reelout_180m.yaml"` to
 this package's `data/` directory. The functions [`fc_settings`](@ref),
-[`turn_rate_coeffs_file`](@ref), [`course_loop_model_file`](@ref), [`winch_table_file`](@ref) and
+[`turn_rate_coeffs_file`](@ref), [`course_loop_model_file`](@ref), [`kite_correction_file`](@ref),
+[`winch_table_file`](@ref) and
 [`traj_opt_settings_file`](@ref) each return one entry of the `system:` section, in
 the same way as `KiteUtils.wc_settings`.
 
@@ -76,6 +78,10 @@ when the package loads.
   the other identified parameters of the linear course-loop model of the stability
   analysis (tape lag, scaling of the kite's dead time and lag, pattern law, kite
   correction). Every key is required.
+- `kite_correction` → `kite_correction_measured.csv`, read with [`load_course_correction`](@ref):
+  the measured kite correction, gain and phase over frequency, written by
+  `examples/identify_kite_correction.jl`; the guided-loop margins of `stability_opt_reelout.jl`
+  are also evaluated with it.
 - `kite_settings` → `kite_settings_psm*.yaml` in this package, read into V3Kite's
   `V3KiteConfig`: wing model, aerodynamics mode, backend and in-flight damping.
 - `structural_geometry`, `aero_geometry`, `vsm_settings`, `settle_settings`,

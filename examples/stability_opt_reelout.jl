@@ -67,6 +67,11 @@ binned on tether length. Each bin is checked at its lowest, median and highest
 the gravity pole, and the worst case is reported. A bin the log does not cover is an error: the whole range must be
 flown before it can be checked.
 
+The guided loop is also rated with the measured kite correction
+([`kite_correction_file`](@ref), written by `identify_kite_correction.jl`) in place of the
+lag-lead `kite_correction`, on frequency points (column "α meas. kite"): the lag-lead is
+only a causal, conservative stand-in for it.
+
 The curvature feed-forward (`u_ff`, `chi_ff`) acts outside the loop and does
 not change its margins; its fades on the cross-track and course error are not
 modelled. The disk margin `α` (skew 0) is the radius of the largest disk of
@@ -136,6 +141,11 @@ const C1_SETPOINT = turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_se
 # The plant's turn-rate law is `c1(u_d)·v_a·u_s + c2(u_d)/v_a·sin(ψ)·cos(β)`, identified in the low
 # crosswind pattern (`turn_rate_coeffs`). The input `gravity_scale` scales the gravity term, 0 leaves it out.
 const GRAVITY_EVAL = Float64(inputs.gravity_scale)
+# The measured kite correction of the project (identify_kite_correction.jl), `nothing` if it
+# has none yet; the guided loop is also rated with it in place of the lag-lead.
+kite_corr_table = let file = joinpath(skc_data_path(), kite_correction_file(project))
+    isfile(file) ? load_course_correction(file) : nothing
+end
 
 # ---- The flown operating points ------------------------------------------ #
 # The input `log_dir` (e.g. an `output/archives/<stamp>` folder) replaces `output/`.
@@ -252,14 +262,34 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = tr
 end
 
 """
+    measured_kite_margin(loop, v_app) -> Float64
+
+Disk margin of the guided `loop` (a transfer function with the lag-lead `kite_correction`)
+with the lag-lead replaced by the measured kite correction `kite_corr_table` at `v_app`
+[m/s] (`course_correction`, end values held outside the measured band), evaluated on
+frequency points (`frd_diskmargin`). `NaN` without a table.
+"""
+function measured_kite_margin(loop, v_app)
+    isnothing(kite_corr_table) && return NaN
+    lag_lead = kite_correction(Ts)
+    points = map(0.02:0.005:min(4.0, 0.45 / Ts)) do freq
+        z = cis(2π * freq * Ts)
+        evalfr(loop, z)[1] / evalfr(lag_lead, z)[1] * course_correction(kite_corr_table, freq, v_app)
+    end
+    return frd_diskmargin(points)
+end
+
+"""
     bin_margins(s, lag; f = fcs, inner = true) -> NamedTuple
 
 Worst case of one tether-length bin with the log samples `s = (; L, va, vk, dp, elc)`
 (vectors) and the tape's lag `lag` [s], for the settings `f`: checked at the bin's
 lowest, median and highest `v_a`, each with the highest `ω_g` its samples within
 `WG_VA_BAND` of that `v_a` fly, and at its lowest and highest depower. Returns the
-bin's median length `L`, all corners `evals`, and the worst corner of the inner loop
-`wi` (`nothing` if `inner = false`) and of the guided loop `wg`.
+bin's median length `L`, all corners `evals`, the worst corner of the inner loop
+`wi` (`nothing` if `inner = false`) and of the guided loop `wg`, and the guided loop's
+worst disk margin with the measured kite correction, `α_measured`
+(`measured_kite_margin`).
 """
 function bin_margins(s, lag; f = fcs, inner = true)
     L_mid = median(s.L)
@@ -272,7 +302,8 @@ function bin_margins(s, lag; f = fcs, inner = true)
              for dp in unique(extrema(s.dp))]
     wi = inner ? argmin(e -> e.m.inner.α, evals) : nothing
     wg = argmin(e -> e.m.guided.α, evals)
-    return (; L = L_mid, evals, wi, wg)
+    α_measured = minimum(e -> measured_kite_margin(e.m.guided.L, e.va), evals)
+    return (; L = L_mid, evals, wi, wg, α_measured)
 end
 
 @info @sprintf("Reel-out course-loop stability, project %s, body_damping = %s, dt = %.4f s, \
@@ -296,7 +327,7 @@ edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M),
 println(@sprintf("Phases 3-5 over tether length, %.0f – %.0f m in %d bins; worst case per bin over \
                   v_a (min, median, max) and depower (min, max), each v_a at the highest ω_g flown near it:", l_lo, l_hi, length(edges) - 1))
 println("  L [m]          n   v_a [m/s]    depower        D [°]  ω_g [1/s]    bin lag  K      ",
-        "α inner          α guided         DM guided")
+        "α inner          α guided         DM guided  α meas. kite")
 rows = NamedTuple[]
 uncovered = Tuple{Float64, Float64}[]
 for b in 1:length(edges) - 1
@@ -326,11 +357,11 @@ for b in 1:length(edges) - 1
                  mixed_phases ?
                  @sprintf("  phase handover: bin spans phases %s, actuator-lag fit unexplained %.0f %%",
                           join(sort(phases), "+"), 100 * tape.unexplained) : ""
-    println(@sprintf("  %5.0f-%-5.0f %5d  %4.1f – %4.1f  %.3f – %.3f  %5.2f  %4.2f – %4.2f  %5.3f    %.3f  %5.3f at %4.2f Hz  %5.3f at %4.2f Hz  %5.3f s%s",
+    println(@sprintf("  %5.0f-%-5.0f %5d  %4.1f – %4.1f  %.3f – %.3f  %5.2f  %4.2f – %4.2f  %5.3f    %.3f  %5.3f at %4.2f Hz  %5.3f at %4.2f Hz  %5.3f s    %5.3f%s",
                      lo, hi, length(idx), extrema(vas)..., extrema(log_dp[idx])...,
                      D, extrema(log_ωg[idx])..., tape.T, wg.m.K, wi.m.inner.α, f0(wi.m.inner),
-                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, note))
-    push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α,
+                     wg.m.guided.α, f0(wg.m.guided), wg.m.guided.delay_margin, bm.α_measured, note))
+    push!(rows, (; L = L_mid, α_inner = wi.m.inner.α, α_guided = wg.m.guided.α, α_measured = bm.α_measured,
                  dm_guided = wg.m.guided.delay_margin, ω_g = wg.ωg, lag = tape_lag.T,
                  loop = wg.m.guided.L, va = wg.va, dp = wg.dp,
                  rate_limited = tape.rate_limited, mixed_phases = mixed_phases, samples,
@@ -357,6 +388,8 @@ isempty(handover) || @warn @sprintf("Not rated: %d bin(s) at L = %s m span a pha
                                     length(handover), join((@sprintf("%.0f", r.L) for r in handover), ", "))
 rate_disk_margin("Inner loop", [r.α_inner for r in lin_rows])
 α_min = rate_disk_margin("Loop with guidance", [r.α_guided for r in lin_rows])
+isnothing(kite_corr_table) ||
+    rate_disk_margin("Loop with guidance, measured kite correction", [r.α_measured for r in lin_rows])
 if isempty(uncovered)
     @info @sprintf("Tether length: the log covers the full range %.0f – %.0f m.", l_lo, l_hi)
 else
