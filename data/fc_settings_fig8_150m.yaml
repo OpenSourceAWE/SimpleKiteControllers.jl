@@ -34,7 +34,7 @@ fc_settings:
     entry_gain:         0.25     # Factor on heading_p during the entry phases        [-]
     entry_depower:      0.37     # Depower during the entry phases                    [-]
     depower_setpoint:   0.27     # Depower held on the pattern                        [-]
-    heading_p:          0.35     # Gain at v_app_ref; only their product is physical   [-]
+    heading_p:          0.35     # Gain at v_app_ref                                  [-]
     heading_i:          false    # Integral time [s], or false for no integral action
     heading_d:          0.30     # Derivative time [s]
     heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]

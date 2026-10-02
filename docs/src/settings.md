@@ -114,8 +114,16 @@ Not named by any project:
 
 The flight-controller settings of all reel-out projects, shown here as shipped:
 
+```@raw html
+<div class="small-code">
+```
+
 ```@eval
 using Markdown, SimpleKiteControllers
 file = joinpath(pkgdir(SimpleKiteControllers), "data", "fc_settings_reelout.yaml")
 Markdown.MD(Markdown.Code("yaml", read(file, String)))
+```
+
+```@raw html
+</div>
 ```

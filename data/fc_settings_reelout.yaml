@@ -22,7 +22,8 @@ fc_settings:
     entry_depower:      0.34     # Depower during the entry phases                    [-]
     depower_setpoint:   0.274    # Depower on the pattern; 0.278 is the curvature ceiling at 150 m [-]
     depower_blend_time: 2.5      # Ramp of `rel_depower` to a new ladder target; 0 = step [s]
-    heading_p:          0.183805 # Gain at v_app_ref; only their product is physical; +8 % for guided α 0.306 and lower RMS d (2026-09-29) [-]
+    # heading_p +8 % for guided α 0.306 and lower RMS d (2026-09-29).
+    heading_p:          0.183805 # Gain at v_app_ref                                  [-]
     heading_i:          false    # Integral time [s], or false for no integral action
     heading_d:          0.141    # Derivative time; raised for the guided disk margin (2026-09-28, 2026-09-29) [s]
     heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
@@ -39,8 +40,9 @@ fc_settings:
 
   feedforward:  # steering feed-forward from the path's curvature, phase 4 on
     # 0.7 with the 73° relay sweeps' table (deleted 2026-10-01); x1.084 = 0.76 with the low-elevation
-    # table, turn_rate_coeffs.yaml, whose c1 at depower_setpoint is 1.084 x higher, so u_ff stays as tuned (2026-09-29).
-    ff_gain:            0.76     # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off, 1 = the law's value [-]
+    # table, turn_rate_coeffs.yaml, whose c1 at depower_setpoint is 1.084 x higher, so u_ff stays as
+    # tuned (2026-09-29).
+    ff_gain:            0.76     # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off, 1 = the law [-]
     ff_lead_time:       0.35     # Read the path's course rate this far ahead of Q; ~the dead time [s]
     ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
     ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
@@ -52,13 +54,14 @@ fc_settings:
     f8_b:               11.0     # Height, elevation spans ±B/2; picked for margin 1.07 [deg]
     el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
     attractor_dist:      8.0     # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
-    attractor_lead_time: 0.96    # Lead as flight time, arc = t*v_app/L; ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28); 0 = off [s]
+    # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28).
+    attractor_lead_time: 0.96    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
   winch:  # compliance of the force-mode winch (its gains are in wc_settings.yaml) and force guards
     compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
-    entry_f_min:        350.0    # Force floor of the entry guard (guard_lfc), phases 0-2; deliberately not wc's f_low [N]
+    entry_f_min:        350.0    # Entry-guard (guard_lfc) force floor, phases 0-2; not wc's f_low [N]
     first_lap_force_frac: 0.93   # f_high x this in lap 1 AND for the startup solve; 1.0 = no lap-1 de-rating [-]
 
   reelout:  # REEL_OUT winch and phase 5; kv/f_low/f_high/v_sat are in wc_settings.yaml
@@ -76,7 +79,7 @@ fc_settings:
     depower_final_f_gain_stop: 1.0e-4 # Same during the soft-stop ramp: 0.35 -> 0.40 in 3 s [1/(N s)]
     el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
     el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
-    final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back to an earlier install; 0 = off [-]
+    final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back; 0 = off [-]
     el_offset_wing:      1.0     # Extra lift at the LOBES, none in the centre       [deg]
     el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
     el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring  [same units]

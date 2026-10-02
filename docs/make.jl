@@ -17,7 +17,7 @@ makedocs(;
         repolink = "https://github.com/OpenSourceAWE/SimpleKiteControllers.jl",
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://OpenSourceAWE.github.io/SimpleKiteControllers.jl",
-        assets=String[],
+        assets=["assets/custom.css"],
         size_threshold_warn = 400 * 1024,
         size_threshold = 1024 * 1024,
     ),
