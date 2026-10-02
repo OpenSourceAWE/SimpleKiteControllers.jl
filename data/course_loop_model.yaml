@@ -5,12 +5,13 @@
 # turn_rate_coeffs.yaml, not here. The steering tape's lag is not identified: it is
 # 1/steering_gain of the KCU's P controller, from the project's settings file.
 course_loop_model:
-  # The kite's dead time and lag over v_a, x ∝ v_a^-exp: the relay sweeps at depower 0.275
-  # at 9.51 and 15 m/s of wind (v_a 13.3 and 22.5 m/s), split into dead time + lag
-  # (V3Kite's fit_delay_lag), 2026-09-26: 0.141 + 0.267 s and 0.082 + 0.133 s. Both are
-  # roughly a fixed distance flown, 1.9 m and 3.0 - 3.5 m.
-  kite_dead_time_exp:  1.03   # [-]
-  kite_lag_exp:        1.32   # [-]
+  # The kite's dead time and lag over v_a, x ∝ v_a^-exp: joint fits of the low-elevation
+  # relay flights of build_turn_rate_table.jl at depower 0.275, v_wind 6.5, 8.0, 9.51 m/s
+  # (v_a 25.9, 32.5, 39.1 m/s): dead time 0.094, 0.072, 0.050 s, lag 0.089, 0.078, 0.078 s.
+  # Standard errors of the exponents ±0.218 and ±0.152. identify_kite_delay_scaling.jl,
+  # system_reelout_maasvlakte.yaml, 2026-10-02.
+  kite_dead_time_exp:  1.459  # [-]
+  kite_lag_exp:        0.371  # [-]
 
   # Pattern law: the kite's response time in pattern flight, dead time + lag =
   # pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
