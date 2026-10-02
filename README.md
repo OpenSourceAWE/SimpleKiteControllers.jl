@@ -204,3 +204,5 @@ This work has been supported by the MERIDIONAL project, which receives funding f
 - A fully working set of flight path controllers and planners can be found here: [KiteControllers.jl](https://github.com/aenarete/KiteControllers.jl)
 
 - The reel-out flight-path optimizer used by `simple_opt_fig8.jl` and `simple_opt_reelout.jl`: [AWETrim](https://github.com/awegroup/AWETrim)
+
+- The kite model used in the examples (TU Delft V3 kite): [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl)
