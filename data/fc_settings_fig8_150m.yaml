@@ -76,7 +76,7 @@ fc_settings:
     compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
 
   run:  # simulation conditions and pass criteria
-    vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
+    vsm_interval:       5        # Steps between VSM aero updates, 1 = tightest; 5 as in the reel-out projects, so every project flies the same aero coupling [-]
     elevation:          73.0     # Where init settles the kite; in the settled-state cache key [deg]
     warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
     body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to

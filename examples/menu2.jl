@@ -10,7 +10,8 @@ is persisted to `data/gui.yaml`; `build_turn_rate_table.jl` then re-identifies t
 turn-rate law of that project's kite and rewrites the turn-rate table the project
 names (about 12 minutes for the whole grid); `plot_c1_c2.jl` plots the result.
 `identify_kite_delay_scaling.jl` identifies how the dead time and lag scale with
-`v_a` and writes the two exponents into the project's course-loop model file. See
+`v_a` and writes the two exponents into the project's course-loop model file;
+`identify_pattern_law.jl` identifies the response time in pattern flight. See
 "Re-identifying after a change of the kite" on the documentation page
 "Examples - identification".
 
@@ -33,6 +34,7 @@ const IDENTIFICATION_SCRIPTS = [
     "build_turn_rate_table.jl       - identify the turn-rate law of every depower (12 min!)" => "build_turn_rate_table.jl",
     "plot_c1_c2.jl                  - plot c1, c2, the dead time and the lag over depower" => "plot_c1_c2.jl",
     "identify_kite_delay_scaling.jl - scaling of dead time and lag over v_a (5 min!)" => "identify_kite_delay_scaling.jl",
+    "identify_pattern_law.jl        - response time in pattern flight over v_a (10 min!)" => "identify_pattern_law.jl",
 ]
 
 """

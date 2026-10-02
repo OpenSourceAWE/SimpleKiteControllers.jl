@@ -7,8 +7,8 @@ rate. The scripts on this page identify these coefficients from simulated flight
 and check the linear course-loop model used by the stability analyses against flown logs.
 How to install and start the examples is described on
 [Examples - general](examples_general.md). `menu2()`, in a REPL started with `bin/run_julia`,
-offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl` and
-`identify_kite_delay_scaling.jl`.
+offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl`,
+`identify_kite_delay_scaling.jl` and `identify_pattern_law.jl`.
 
 ## Turn-rate law
 
@@ -28,6 +28,11 @@ Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower and
 wind speeds, fits how the kite's dead time and lag scale with the apparent wind speed,
 `x ∝ v_a^-exp`, and writes the two exponents, with their provenance, into the course-loop model
 file of the selected project.
+
+### [`identify_pattern_law.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_pattern_law.jl)
+Flies figures of eight at three tether lengths and several wind speeds and a weak-wind reel-out,
+identifies the kite's response time on each log and fits the pattern law, the response time over
+the apparent wind speed, which it writes into the course-loop model file of the selected project.
 
 ### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
 Plots the turn-rate table: `c1`, `c2`, the dead time and the lag against the depower with error
@@ -59,7 +64,7 @@ After a change of the kite (mass, geometry, bridle, damping, aerodynamics), copy
 under new names, enter the new names in the `system:` section of the kite's project, select
 that project and re-identify in the order below; each step uses the results of the steps
 before it. The steering tape's lag needs no identification: it is `1/steering_gain` of the
-KCU's P controller, from the project's settings file. Steps 1 and 2 have scripts that write
+KCU's P controller, from the project's settings file. Steps 1 to 3 have scripts that write
 their files. For the others the scripts fly and measure, the fit is done in the REPL, and
 the comment above each new value in `course_loop_model.yaml` has to say where it came from.
 
@@ -75,17 +80,15 @@ the comment above each new value in `course_loop_model.yaml` has to say where it
    into the course-loop model file. `run_example("identify_kite_delay_scaling.jl"; save = false)`
    only prints them.
 
-3. **The pattern law** (`pattern_delay_ref`, `pattern_v_ref`, `pattern_delay_exp`,
-   `pattern_v_floor`), the kite's response time `τ + T` in pattern flight. Fly
-   `simple_fig8.jl` with the projects `system_fig8_150m`, `system_fig8_200m` and
-   `system_fig8_300m` at several wind speeds, and a weak-wind `simple_opt_reelout.jl` run, so
-   that `v_a` spans about 13 – 40 m/s. Keep only runs whose logged depower is
-   `pattern_law_depower` (the `depower_setpoint` of the figure-of-eight projects; their
-   `wind_ramp` section changes it above `wind_ramp_low`). On each
-   log, identify the pure delay with `identify_turn_rate_law` (V3Kite) on phase 4 from 15 s
-   after its start. Fit `delay = pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp`
-   with `pattern_v_ref` a typical `v_a` of the figure of eight, and set `pattern_v_floor` to
-   the lowest `v_a` measured.
+3. **The pattern law** (`pattern_delay_ref`, `pattern_delay_exp`, `pattern_v_floor`), the
+   kite's response time `τ + T` in pattern flight. Run `identify_pattern_law.jl`: it flies
+   `simple_fig8.jl` at 150, 200 and 300 m and several wind speeds and a weak-wind
+   `simple_reelout.jl`, so that `v_a` spans about 13 – 35 m/s, identifies the pure delay on
+   phase 4 of each log with `identify_turn_rate_law` (V3Kite), fits
+   `delay = pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp` to the logs flown at
+   `pattern_law_depower`, and writes the three values and their provenance into the
+   course-loop model file. The logs are kept in `output/pattern_law/`;
+   `run_example("identify_pattern_law.jl"; fly = false)` refits them.
 
 4. **`pattern_depower_exp`**, the growth of the response time with depower. Fly point `D`
    of `validate_margins.jl` (`system_fig8_300m`, 7 m/s) with `depower_setpoint` raised in
