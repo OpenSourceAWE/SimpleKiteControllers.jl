@@ -11,7 +11,8 @@ turn-rate law of that project's kite and rewrites the turn-rate table the projec
 names (about 12 minutes for the whole grid); `plot_c1_c2.jl` plots the result.
 `identify_kite_delay_scaling.jl` identifies how the dead time and lag scale with
 `v_a` and writes the two exponents into the project's course-loop model file;
-`identify_pattern_law.jl` identifies the response time in pattern flight. See
+`identify_pattern_law.jl` identifies the response time in pattern flight and
+`identify_depower_factor.jl` its growth with the depower. See
 "Re-identifying after a change of the kite" on the documentation page
 "Examples - identification".
 
@@ -35,6 +36,7 @@ const IDENTIFICATION_SCRIPTS = [
     "plot_c1_c2.jl                  - plot c1, c2, the dead time and the lag over depower" => "plot_c1_c2.jl",
     "identify_kite_delay_scaling.jl - scaling of dead time and lag over v_a (5 min!)" => "identify_kite_delay_scaling.jl",
     "identify_pattern_law.jl        - response time in pattern flight over v_a (10 min!)" => "identify_pattern_law.jl",
+    "identify_depower_factor.jl     - growth of the response time with depower (6 min!)" => "identify_depower_factor.jl",
 ]
 
 """

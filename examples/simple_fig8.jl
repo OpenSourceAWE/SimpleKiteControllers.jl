@@ -106,10 +106,11 @@ the global `fcs`; each field is documented there. `fcs = FC_Settings(fc_settings
 runs unconditionally near the top of this script, with no `@isdefined` guard —
 a pre-defined or hand-mutated `fcs` left in `Main` does NOT
 survive the next `include`: it is discarded and rebuilt from the YAML file before
-the run that was meant to use it even starts. There is no REPL-side override; a
-run with different values means editing `data/fc_settings.yaml` itself (or, for a
-sweep, editing it between iterations — see `docs/fig8_tuning_log.md` for how past
-sweeps did this). `body_damping` is among the fields; settling starts there and
+the run that was meant to use it even starts. A run with different values means
+editing `data/fc_settings.yaml` itself, or, for one run, the input `fcs_overrides`, a
+`Dict{Symbol, Any}` of field => value applied on top of the file:
+`run_example("simple_fig8.jl"; fcs_overrides = Dict{Symbol, Any}(:depower_setpoint => 0.30))`
+(`src/script_inputs.jl`). `body_damping` is among the fields; settling starts there and
 decays to `init`'s floor of 0.8x it, so the one value fixes both the settling
 transient and what is flown. A `body_damping` the cache has not seen before makes
 V3Kite re-settle the wing, since the settled-geometry filename encodes it — one
@@ -196,10 +197,11 @@ include(joinpath(@__DIR__, "model_setup.jl"))
 # The caller's inputs, `run_example("simple_fig8.jl"; show_plots = false, ...)`; a plain `include`
 # flies with these defaults. The V1 hooks and `steer_injection` are explained where they act, below.
 (; show_plots, steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle,
-   steer_injection) =
+   steer_injection, fcs_overrides) =
     script_inputs(@__FILE__, (; show_plots = true, steer_gain_factor = 1.0,
                                steer_gain_feedback_only = false, extra_steer_delay = 0,
-                               hook_settle = 15.0, steer_injection = nothing))
+                               hook_settle = 15.0, steer_injection = nothing,
+                               fcs_overrides = Dict{Symbol, Any}()))
 # Cleared for the same reason: a lemniscate run must not plot the optimized
 # reference a previous simple_opt_fig8.jl left behind.
 REF_PATH = nothing
@@ -215,6 +217,9 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
        turbulence = $TURBULENCE, wind_speed = $(isnothing(WIND_SPEED) ? "default" : "$WIND_SPEED m/s")."
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
+# Per-run overrides of the settings just loaded (the input `fcs_overrides`), e.g. the depower
+# runs of identify_depower_factor.jl; before the wind schedule, which reads depower_setpoint.
+apply_overrides!(fcs, fcs_overrides, "fcs_overrides", "FC_Settings", "fcs")
 # The turn-rate table PROJECT names, not whatever an earlier script left in the session.
 reload_turn_rate_table!(project)
 

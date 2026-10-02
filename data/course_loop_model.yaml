@@ -15,15 +15,15 @@ course_loop_model:
 
   # Pattern law: the kite's response time in pattern flight, dead time + lag =
   # pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
-  # (identify_turn_rate_law) on 12 pattern logs at depower 0.27, elevation 15 - 26°,
-  # tether 150 - 380 m, v_a 12.8 - 40.6 m/s (oldplans/Plan_model_validation.md, V4).
-  pattern_delay_ref:   0.14   # [s]
+  # (identify_turn_rate_law, phase 4 from 15.0 s after its start) on 6 logs at depower 0.27,
+  # v_a 11.8 - 35.2 m/s, projects system_fig8_150m, system_fig8_200m, system_fig8_300m,
+  # system_reelout_maasvlakte; standard error of the exponent ±0.053, log-RMS of the fit
+  # 0.041. identify_pattern_law.jl, 2026-10-02.
+  pattern_delay_ref:   0.144  # [s]
   pattern_v_ref:       34.0   # [m/s]
-  pattern_delay_exp:   0.74   # [-]
-  # The lowest v_a the law was identified at; below it the law holds its value. Reel-out
-  # logs below it measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s, against 0.292 s at
-  # 12.8 m/s, where the unfloored law would give 0.33 - 0.35 s.
-  pattern_v_floor:     12.8   # [m/s]
+  pattern_delay_exp:   0.641  # [-]
+  # The lowest v_a the law was identified at; below it the law holds its value.
+  pattern_v_floor:     11.8   # [m/s]
   pattern_law_depower: 0.27   # depower the pattern law was measured at [-]
   # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)):
   # point D (300 m, 7 m/s) flown at depower 0.30 / 0.33 / 0.36 gave x1.17 / 1.39 / 1.78

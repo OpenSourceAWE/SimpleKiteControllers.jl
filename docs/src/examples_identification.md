@@ -8,7 +8,7 @@ and check the linear course-loop model used by the stability analyses against fl
 How to install and start the examples is described on
 [Examples - general](examples_general.md). `menu2()`, in a REPL started with `bin/run_julia`,
 offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl`,
-`identify_kite_delay_scaling.jl` and `identify_pattern_law.jl`.
+`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl` and `identify_depower_factor.jl`.
 
 ## Turn-rate law
 
@@ -33,6 +33,11 @@ file of the selected project.
 Flies figures of eight at three tether lengths and several wind speeds and a weak-wind reel-out,
 identifies the kite's response time on each log and fits the pattern law, the response time over
 the apparent wind speed, which it writes into the course-loop model file of the selected project.
+
+### [`identify_depower_factor.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_depower_factor.jl)
+Flies the figure of eight at 300 m and 7 m/s at several depower settings, identifies the kite's
+response time on each log and fits how it grows with the depower relative to the pattern law,
+which it writes into the course-loop model file of the selected project.
 
 ### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
 Plots the turn-rate table: `c1`, `c2`, the dead time and the lag against the depower with error
@@ -64,7 +69,7 @@ After a change of the kite (mass, geometry, bridle, damping, aerodynamics), copy
 under new names, enter the new names in the `system:` section of the kite's project, select
 that project and re-identify in the order below; each step uses the results of the steps
 before it. The steering tape's lag needs no identification: it is `1/steering_gain` of the
-KCU's P controller, from the project's settings file. Steps 1 to 3 have scripts that write
+KCU's P controller, from the project's settings file. Steps 1 to 4 have scripts that write
 their files. For the others the scripts fly and measure, the fit is done in the REPL, and
 the comment above each new value in `course_loop_model.yaml` has to say where it came from.
 
@@ -90,11 +95,12 @@ the comment above each new value in `course_loop_model.yaml` has to say where it
    course-loop model file. The logs are kept in `output/pattern_law/`;
    `run_example("identify_pattern_law.jl"; fly = false)` refits them.
 
-4. **`pattern_depower_exp`**, the growth of the response time with depower. Fly point `D`
-   of `validate_margins.jl` (`system_fig8_300m`, 7 m/s) with `depower_setpoint` raised in
-   steps (0.30, 0.33, 0.36 last time), identify the delay as in step 3 and divide it by the
-   pattern law at the same `v_a`. Fit `exp(pattern_depower_exp · (depower −
-   pattern_law_depower))` to these ratios, and restore `depower_setpoint` afterwards.
+4. **`pattern_depower_exp`**, the growth of the response time with depower. Run
+   `identify_depower_factor.jl`: it flies point `D` (`system_fig8_300m`, 7 m/s) with
+   `simple_fig8.jl` at depower 0.27, 0.30, 0.33 and 0.36 (the input `fcs_overrides` of
+   `simple_fig8.jl`), identifies the delay as in step 3, divides it by the pattern law at the
+   same `v_a`, fits `exp(pattern_depower_exp · (depower − pattern_law_depower))` to these
+   ratios and writes the exponent and its provenance into the course-loop model file.
 
 5. **`kite_corr_zero` and `kite_corr_pole`**, the lag-lead [`kite_correction`](@ref). Fly
    point `D` with a multisine on the steering command, `run_v1(:D; injection = Multisine())`

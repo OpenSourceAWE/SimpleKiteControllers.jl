@@ -140,7 +140,8 @@ Defines `menu2()`, the menu for the model identification: the project selection,
 
 ### [`identification_utils.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identification_utils.jl)
 Rewrites single values of a YAML file, and the comment above them, without losing the other
-comments; used by the identification scripts that write `course_loop_model.yaml`.
+comments, and flies a run and identifies the kite's response time on its log; used by the
+identification scripts that write `course_loop_model.yaml`.
 
 ### [`model_setup.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/model_setup.jl)
 The model side of the runs, which the package cannot hold because it does not depend on V3Kite:

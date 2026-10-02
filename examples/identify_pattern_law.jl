@@ -41,14 +41,11 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using V3Kite: load_log, identify_turn_rate_law, set_default_turbulence
-using KiteUtils: Settings
 using SimpleKiteControllers
 using SimpleKiteControllers: run_example, script_inputs, project_file, skc_data_path
 using Printf
-using Statistics: median
 import Dates
-# `wrap_comment` and `update_yaml_values!`.
+# `fly_point`, `point_delay`, `log_label`, `wrap_comment` and `update_yaml_values!`.
 include(joinpath(@__DIR__, "identification_utils.jl"))
 
 "The runs flown: system project, wind speed [m/s], simulation time [s] (`nothing`: the project's) and script"
@@ -70,62 +67,9 @@ const DEPOWER_TOL = 0.01
 # The caller's inputs (`run_example`); a plain `include` flies with these defaults.
 (; points, fly, save) = script_inputs(@__FILE__, (; points = PATTERN_POINTS, fly = true, save = true))
 
-"File name of the log of `point` in `LOG_DIR`, without extension"
-log_label(point) = @sprintf("%s_%.1f", splitext(point.project)[1], point.wind)
-
-"""
-    fly_point(point)
-
-Fly `point` without turbulence and copy its log to `LOG_DIR`. The menu's selections
-are restored afterwards.
-"""
-function fly_point(point)
-    project0, wind0, sim_time0 = selected_project(), selected_windspeed(), selected_sim_time()
-    turbulence0 = selected_turbulence()
-    try
-        set_selected_project(point.project)
-        set_selected_windspeed(point.wind)
-        set_selected_sim_time(point.sim_time)
-        set_default_turbulence(0.0; data_path = skc_data_path())
-        inputs = point.script == "simple_reelout.jl" ? (; show_plots = false, run_archive = false) :
-                                                     (; show_plots = false)
-        run_example(point.script; inputs...)
-    finally
-        set_selected_project(project0)
-        set_selected_windspeed(wind0)
-        set_selected_sim_time(sim_time0)
-        set_default_turbulence(turbulence0; data_path = skc_data_path())
-    end
-    log_name = basename(Settings(project_file(point.project)).log_file)
-    src = normpath(joinpath(@__DIR__, "..", "output", log_name * ".arrow"))
-    mkpath(LOG_DIR)
-    cp(src, joinpath(LOG_DIR, log_label(point) * ".arrow"); force = true)
-    return nothing
-end
-
-"""
-    point_delay(point) -> NamedTuple
-
-The pure delay [s] of the turn rate behind the steering on phase 4 of `point`'s log,
-from `T_SETTLE` after its start, with the median `v_a` [m/s] and depower [-] there.
-"""
-function point_delay(point)
-    sl = load_log(log_label(point); path = LOG_DIR).syslog
-    p4 = findall(==(4), Int.(sl.sys_state))
-    isempty(p4) && error("$(log_label(point)): phase 4 never reached.")
-    dt = median(diff(Float64.(sl.time)))
-    i1, i2 = p4[1] + round(Int, T_SETTLE / dt), p4[end]
-    (i2 - i1) * dt > 20 || error(@sprintf("%s: only %.0f s of phase 4 after %.0f s; lengthen sim_time.",
-                                          log_label(point), (i2 - i1) * dt, T_SETTLE))
-    id = identify_turn_rate_law(sl[i1:i2]; dt)
-    return (; label = log_label(point), delay = id.delay_sec, corr = id.delay_corr,
-            v_a = median(Float64.(sl.v_app[i1:i2])), depower = median(Float64.(sl.depower[i1:i2])),
-            window = (i2 - i1) * dt)
-end
-
-fly && foreach(fly_point, points)
+fly && foreach(point -> fly_point(point, LOG_DIR), points)
 clm = course_loop_model()
-results = map(point_delay, points)
+results = [point_delay(point, LOG_DIR; t_settle = T_SETTLE) for point in points]
 used = filter(res -> abs(res.depower - clm.pattern_law_depower) <= DEPOWER_TOL, results)
 length(used) >= 3 || error(@sprintf("Only %d logs at depower %.2f ± %.2f; the fit needs at least 3.",
                                     length(used), clm.pattern_law_depower, DEPOWER_TOL))
