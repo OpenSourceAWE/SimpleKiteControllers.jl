@@ -40,22 +40,13 @@ collapses as the pattern is raised, because `cos(elevation)` compresses the azim
 is why the pattern must be flown low and wide. The margin is worst at the START of a reel-out
 run: a longer tether only ever shrinks `ρ`.
 
-Two mechanisms pick the shape:
-
-- **Shape sweep** (`examples/optimize_fig8.jl`, [`src/optimization.jl`](../src/optimization.jl)).
-  A grid over `f8_a` × `f8_b` is flown, one simulation per grid point across a pool of worker
-  processes, and ranked by **mean reel-out power**. Shapes below `min_feasibility_margin` are
-  dropped pre-flight rather than flown; runs that hit the winch's UpperForceController or that
-  sat near the steering clamp are rejected as side-condition failures, since their power measures
-  the limiter and not the shape. Results are appended to a YAML table under a file lock, which
-  doubles as the sweep's resume state.
-- **External optimizer** (`examples/optimize_path.jl`, the AWETrim REST client). Inflow
-  conditions and an initial guess go to `POST /init`, and the server returns a closed trajectory
-  of the same number of points. It maps `v_set = kv·sqrt(force)` onto its own radial force model,
-  so the optimized path already assumes the winch law of step 4. See
-  [TrajectoryOptimization.md](TrajectoryOptimization.md) for the interface and its open
-  questions. The path following below does not care where the points came from: any closed
-  (azimuth, elevation) curve is flyable by it.
+The shape can be picked by the **external optimizer** (`examples/optimize_path.jl`, the AWETrim
+REST client). Inflow conditions and an initial guess go to `POST /init`, and the server returns a
+closed trajectory of the same number of points. It maps `v_set = kv·sqrt(force)` onto its own
+radial force model, so the optimized path already assumes the winch law of step 4. See
+[TrajectoryOptimization.md](TrajectoryOptimization.md) for the interface and its open questions.
+The path following below does not care where the points came from: any closed (azimuth,
+elevation) curve is flyable by it.
 
 ## 2. Path following: from position to a commanded course
 

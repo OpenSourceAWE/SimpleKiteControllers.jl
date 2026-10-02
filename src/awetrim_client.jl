@@ -310,10 +310,57 @@ function opt_failed_before(p::InitParams; file::AbstractString = OPT_FAILURE_CAC
 end
 
 """
+    with_file_lock(f, lock_path; timeout=300.0, stale_after=900.0) -> f()
+
+Run `f` while holding a cross-process lock, and release it even if `f` throws.
+
+The lock is a DIRECTORY: `mkdir` is atomic on every POSIX filesystem (and on
+NFS), so exactly one of several processes can create it, which a
+check-then-create on a regular file cannot promise. Waiters retry with a jittered
+poll until `timeout` [s] and then error rather than proceed unlocked.
+
+A process killed while holding the lock would otherwise block every later one,
+so a lock older than `stale_after` [s] is broken with a warning. Keep that well
+above the longest critical section, which here is reading and appending a few
+kilobytes of YAML.
+"""
+function with_file_lock(f, lock_path; timeout = 300.0, stale_after = 900.0,
+                        poll = 0.05)
+    t_start = time()
+    while true
+        try
+            mkdir(lock_path)
+            break
+        catch err
+            # Anything other than "it already exists" is a real filesystem problem.
+            isdir(lock_path) || rethrow()
+            age = time() - _lock_mtime(lock_path)
+            if age > stale_after
+                @warn "Breaking a stale lock" lock_path age_s=round(age; digits = 1)
+                rm(lock_path; force = true, recursive = true)
+                continue
+            end
+            time() - t_start > timeout &&
+                error("Timed out after $(timeout) s waiting for the lock $lock_path.")
+            # Jittered: several processes finishing together must not retry in lockstep.
+            sleep(poll * (1 + rand()))
+        end
+    end
+    try
+        return f()
+    finally
+        rm(lock_path; force = true, recursive = true)
+    end
+end
+
+# mtime of the lock as unix seconds; "now" if it vanished under us, i.e. not stale.
+_lock_mtime(path) = try mtime(path) catch; time() end
+
+"""
     record_opt_failure!(p::InitParams, reason; file = OPT_FAILURE_CACHE)
 
 Record that this request failed, so no later run repeats it. Under
-`with_file_lock`, so parallel sweep workers cannot lose each other's entries.
+`with_file_lock`, so parallel runs cannot lose each other's entries.
 The `length` and the guess elevation are stored next to the key in plain text,
 because a cache nobody can read is a cache nobody trusts.
 """

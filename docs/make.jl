@@ -37,7 +37,6 @@ makedocs(;
             "Reel-out runs" => "api/reelout_run.md",
             "Run evaluation" => "api/evaluation.md",
             "Course-loop stability" => "api/stability.md",
-            "Shape optimization" => "api/optimization.md",
             "Internals" => "api/internals.md",
         ],
     ],

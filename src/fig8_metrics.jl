@@ -396,11 +396,10 @@ the controller is being stepped: before reel-out engages it still reads whatever
 state the freshly built controller started in. Returns `nothing` for a log that
 never reeled out, same guard as [`reelout_power`](@ref).
 
-`upper_force_pct` is a side CONDITION rather than a quality metric, and is why
-this function exists: the pattern sweep (`examples/optimize_fig8.jl`) rejects any
-shape that engages the upper limiter, because a shape which pulls harder than the
-winch is allowed to hold had its power bought against the force cap — the number
-describes the cap, not the pattern. `lower_force_pct` is the mirror image and
+`upper_force_pct` is a side CONDITION rather than a quality metric: a shape
+which engages the upper limiter pulls harder than the winch is allowed to hold,
+so its power was bought against the force cap — the number describes the cap,
+not the pattern. `lower_force_pct` is the mirror image and
 worth watching for the same reason (see the `v_ff` entry in `Plan.md`, where it
 going to zero was the whole power gain).
 """

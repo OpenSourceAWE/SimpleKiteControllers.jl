@@ -81,7 +81,7 @@ fake_fig8m(; failed = String[]) = (; criteria = 10, criteria_failed = failed,
         i4 = findall(==(4), phase)
         @test r.p4.power.av ≈ mean(Float32.(force[i4]) .* Float32.(vro[i4]))
         @test r.p4.depower_av ≈ 0.3f0
-        # With the window's means, which run_metrics reads, first.
+        # With the window's means first.
         rm = reelout_block(sl, fcs, 100.0; stop_reason = "length", laps_reeled = 3.0,
                            window_means = true)
         @test collect(keys(rm.block["force"])) == ["mean_N", "peak_N", "cf_force_ro"]

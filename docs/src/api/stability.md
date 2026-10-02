@@ -14,7 +14,6 @@ kite_dead_time
 pattern_dead_time_lag
 plant_coeffs
 dead_time_fraction
-c2_at
 turn_rate_plant
 ```
 

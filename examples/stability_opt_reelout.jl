@@ -11,16 +11,14 @@ The plant and the controller are those of `stability_fig8.jl`
 turn-rate law with the kite's dead time and lag scaled over `v_a`, and the exact
 discrete PD of `CourseController`. The plant's `c1` and gravity term
 `c2/v_a·sin(ψ)·cos(β)` are those of the low crosswind pattern
-([`plant_coeffs`](@ref), since 2026-09-29; before, the table's `c1` and a constant
-`C3`); the gain schedule keeps `data/turn_rate_coeffs.yaml`, as flown. Four things
-differ in the reel-out:
+([`plant_coeffs`](@ref)); the gain schedule keeps `data/turn_rate_coeffs.yaml`, as
+flown. Four things differ in the reel-out:
 
 - **The tape's lag.** `ACTUATOR_LAG` (0.43 s) is the tape's equivalent lag in
   the fig8 pattern, where it is rate-limited 20 % of the time. The reel-out
   steers less hard, and the lag is fitted on the log instead, once on every
   on-path sample off the rate limit ([`fit_actuator_lag`](@ref)); the column
-  "bin lag" is each bin's own fit, for diagnosis only. Since
-  the actuator model was sped up, the lag is much lower here: in phase 4 it
+  "bin lag" is each bin's own fit, for diagnosis only. In phase 4 the lag
   is about 0.20 s at 6 m/s wind, the small-signal `1/steering_gain`, with the
   tape rate-limited ~4 % of the time; phase 5 steers harder (about 0.24 s,
   also ~4 % rate-limited), rising to 0.31 s in the last, largest-signal bin.
@@ -30,15 +28,13 @@ differ in the reel-out:
   with the kite's response time from the pattern law
   ([`pattern_dead_time_lag`](@ref), re-identified on pattern logs including
   this reel-out, 0.29 s at 12.8 m/s against the table's 0.43 s) and
-  [`kite_correction`](@ref); since 2026-09-29 the inner loop `C·P·kite_correction`
-  uses the same plant (before, the turn-rate table's dead time and lag). The
-  log cannot split dead time from lag: closed-loop steering has no steps, and
-  its own split read 0 s + 0.27 s. It checks their sum instead: the pure delay
-  identified on settled phase 4 (`identify_turn_rate_law`) against the pattern
-  law's and the table's at the same `v_a` and depower. Before V3Kite v1.4.1
-  that delay was a cross-correlation, which ignored the gravity term and read
-  0.067 s, too short. `kite_correction` was measured at `v_a` ≈ 34 m/s; at the
-  reel-out's 11 – 20 m/s it is extrapolated.
+  [`kite_correction`](@ref); the inner loop `C·P·kite_correction` uses the same
+  plant. The log cannot split dead time from lag: closed-loop steering has no
+  steps, and its own split read 0 s + 0.27 s. It checks their sum instead: the
+  pure delay identified on settled phase 4 (`identify_turn_rate_law`) against
+  the pattern law's and the table's at the same `v_a` and depower.
+  `kite_correction` was measured at `v_a` ≈ 34 m/s; at the reel-out's
+  11 – 20 m/s it is extrapolated.
 
 - **The gain schedule.** `simple_opt_reelout.jl` rescales the gain by
   `gain_scale = c1(depower_setpoint)/c1(depower)` in every phase, so the loop
@@ -90,7 +86,7 @@ using SimpleKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
 using V3Kite: load_log, YAML, identify_turn_rate_law
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
-using SimpleKiteControllers: ACTUATOR_LAG, C3, KITE_CORR_ZERO, KITE_CORR_POLE
+using SimpleKiteControllers: ACTUATOR_LAG, KITE_CORR_ZERO, KITE_CORR_POLE
 using LinearAlgebra: norm
 using Statistics: median
 using Printf

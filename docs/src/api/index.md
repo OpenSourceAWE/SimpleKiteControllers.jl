@@ -16,5 +16,4 @@ kite-power run they belong to. The pages go from the controllers outward:
 | [Reel-out runs](reelout_run.md) | inputs, time budget, feasibility gates, run state and log |
 | [Run evaluation](evaluation.md) | metrics of a logged run and its commented summary |
 | [Course-loop stability](stability.md) | linear model of the course loop |
-| [Shape optimization](optimization.md) | parallel sweep of the figure-of-eight shape |
 | [Internals](internals.md) | non-exported names the docstrings refer to |

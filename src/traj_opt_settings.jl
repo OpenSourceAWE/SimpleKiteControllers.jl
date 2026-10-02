@@ -8,7 +8,7 @@ Settings of a run flown along an EXTERNALLY optimized path
 (`examples/simple_opt_fig8.jl`): where the AWETrim server is, the initial guess
 the solve starts from, the solver knobs the API exposes, and what is done with
 the path that comes back. Loaded from `data/traj_opt.yaml` the same way
-[`FC_Settings`](@ref) and [`OptSettings`](@ref) are loaded from theirs — a run is
+[`FC_Settings`](@ref) is loaded from its own — a run is
 defined by a file, not by editing a script.
 
 The conditions are NOT here: the wind comes from the system project's settings

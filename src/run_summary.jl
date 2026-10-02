@@ -67,8 +67,7 @@ The summary's `fig8_metrics` section: the numbers the verdict of
 [`print_fig8_metrics`](@ref) was computed from, and the lap times of
 [`lap_durations`](@ref) (`laps_flown`). `cross_track_ref` names what the
 cross-track error is measured against, for the comments. `nested_verdict = true`
-repeats [`success_verdict`](@ref) as the section's last key, where
-[`run_metrics`](@ref) reads a sweep's runs.
+repeats [`success_verdict`](@ref) as the section's last key.
 """
 function fig8_metrics_block(fig8m, laps_flown; cross_track_ref = nothing,
                             nested_verdict = false)
@@ -147,7 +146,7 @@ apparent wind over phase 4 (against `fcs.course.v_app_ref`), the tether's reel-o
 `l_tether` and why it stopped (`stop_reason`, `""` when reel-out never stopped;
 `laps_reeled`, the laps completed by then), and the force, power, winch states and
 ringing over the reeling window. `window_means = true` adds the window's mean and
-peak force and power, which [`run_metrics`](@ref) reads.
+peak force and power.
 
 Also returns `rp` ([`reelout_power`](@ref), `nothing` when the tether never reeled
 out) and `p4`, the phase-4 power, force, reel-out speed and depower as

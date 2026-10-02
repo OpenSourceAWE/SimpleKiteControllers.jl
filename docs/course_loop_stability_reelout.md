@@ -57,8 +57,7 @@ worse and was not adopted.**
   `v_a`; `gravity_scale` is a factor on it (0 = none). β is the pattern's centre
   elevation, read from the log (`var_04`). From 2026-09-28 until the switch it
   was a constant `C3` = 0.23 1/s identified on the flown figures of eight
-  (`identify_c3.jl`); `C3` and `c2_at` stay in `course_loop_model.jl` for
-  comparisons.
+  (`identify_c3.jl`), removed from `course_loop_model.jl` on 2026-10-02.
 
 The results and retunes below are dated; those before the switch to
 `PLANT_COEFFS` on 2026-09-29 were computed with the table's `c1` and the

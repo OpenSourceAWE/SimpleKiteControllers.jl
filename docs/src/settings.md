@@ -85,16 +85,13 @@ difference in effect is `analytic_jacobian: true`. The `vsm_interval` in these f
 this package: they pass `run.vsm_interval` of `fc_settings` to `step!`.
 
 Not named by any project:
-- `optimization.yaml`: the settings of the pattern-shape sweep of
-  `examples/optimize_fig8.jl`, read into [`OptSettings`](@ref).
 - `gui.yaml`: the choices of the example menu (project, simulation time, plots, wind
   speed), see [State of the example menu](@ref). It is created from `gui.yaml.default`
   on first use and is not under version control.
 
 ## Rules shared by the settings files
 
-- Every key of `traj_opt.yaml` and `optimization.yaml` is a field of the struct it is
-  loaded into. A missing key falls back to the struct default; an unknown key is an
+- Every key of `traj_opt.yaml` is a field of the struct it is loaded into. A missing key falls back to the struct default; an unknown key is an
   error (see [`load_yaml_fields!`](@ref)).
 - `fc_settings*.yaml` has one section per part of [`FC_Settings`](@ref): `course`,
   `feedforward`, `pattern`, `wind_ramp`, `winch`, `reelout` and `run`. Each key of a

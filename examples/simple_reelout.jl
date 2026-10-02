@@ -103,11 +103,10 @@ reel-out is done.
 unconditionally on every `include`, so a value is overridden by editing that file,
 not by pre-defining or mutating `fcs` in the REPL. The one exception is the input
 `fcs_overrides`, a `Dict{Symbol, Any}` of field => value applied on top of the file,
-which is how the shape sweep (`examples/optimize_fig8.jl`) flies one `f8_a`/`f8_b`
-pair per run: `run_example("simple_reelout.jl"; fcs_overrides, output_path,
-run_archive = false, show_plots = false)` (`src/script_inputs.jl`).
-`output_path` and `run_archive` let those parallel runs keep their logs apart and
-skip the per-run archive. The inputs hold for that one run: a plain `include` flies
+for example one `f8_a`/`f8_b` pair per run: `run_example("simple_reelout.jl";
+fcs_overrides, output_path, run_archive = false, show_plots = false)`
+(`src/script_inputs.jl`). `output_path` and `run_archive` let parallel runs keep
+their logs apart and skip the per-run archive. The inputs hold for that one run: a plain `include` flies
 with the defaults, so a value from a sweep never changes an interactive run. The
 `REEL_OUT`-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
 the second, independent stop criterion counted in laps (`0` disables it, its
@@ -196,8 +195,7 @@ WIND_SPEED = selected_windspeed() # m/s, or `nothing` for the project's own v_wi
 project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 
-# Per-run overrides of the settings just loaded, for a SWEEP (the input `fcs_overrides`);
-# `examples/optimize_fig8.jl` passes them per run.
+# Per-run overrides of the settings just loaded, for a SWEEP (the input `fcs_overrides`).
 apply_overrides!(fcs, fcs_overrides, "fcs_overrides", "FC_Settings", "fcs")
 
 project_set = Settings(project)
@@ -550,9 +548,7 @@ summary = OrderedDict{String, Any}()
 # …". It is the one line a reader looks for, so it is not buried at the end of
 # `fig8_metrics:` — that section keeps the numbers the verdict was computed from.
 # A failure names the criteria that broke, exactly as the console does. The nested
-# key stays as well here: `run_metrics` reads the sweep's runs from there — a shape
-# sweep flies THIS script — and dropping it would put `success_criteria: null` in
-# every row of output/optimization_results.yaml.
+# key stays as well here.
 summary["success_criteria"] = success_verdict(fig8m)
 run_time = Dates.now()
 # The sections this script shares with simple_opt_reelout.jl are the package's.
@@ -560,7 +556,7 @@ summary["simulation"] = simulation_block(basename(@__FILE__), PROJECT, TURBULENC
                                          project_set.v_wind, run_time)
 fig8m === nothing ||
     (summary["fig8_metrics"] = fig8_metrics_block(fig8m, lap_durations(sl); nested_verdict = true))
-# The window's mean and peak force and power too: `run_metrics` reads them.
+# The window's mean and peak force and power too.
 reelout_sections = reelout_block(sl, fcs, l_tether; stop_reason,
                                  laps_reeled = fig8_idx_progress / n_path, window_means = true)
 rp = reelout_sections.rp

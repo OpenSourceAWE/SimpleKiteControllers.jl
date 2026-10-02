@@ -35,7 +35,7 @@ With `c3` given, the output defaults to `turn_rate_coeffs_c3.yaml`. On first
 use, that file is created from the `conditions` of `turn_rate_coeffs.yaml` plus
 `c3`, and `_check_conditions` refuses to mix fixed-`c3` and free-`c2` tables.
 Each row stores `c3` together with the table-form `c2 = c3·mean(v_app)`
-(`c2_at` of `course_loop_model.jl`), because the table parser requires a `c2`.
+(`c2_at`, removed from `course_loop_model.jl` on 2026-10-02), because the table parser requires a `c2`.
 The fit functions are `estimate_delay_fit_c3` and `fit_c1_c3` in
 V3Kite.jl (`src/delay_lag_fit.jl`). `fit_delay_lag` takes a `c3` keyword, so the dead
 time + lag split, the blockwise delay scatter and the per-half delays all use

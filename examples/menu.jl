@@ -56,7 +56,6 @@ const EXAMPLES = [
     "simple_reelout_play.jl       - replay the last logged reel-out run in the 3D viewer" => "simple_reelout_play.jl",
     "simple_auto_parking.jl       - fly heading-stabilized parking of the V3 kite" => "simple_auto_parking.jl",
     "simple_auto_parking_plots.jl - plot the last logged parking run" => "simple_auto_parking_plots.jl",
-    "optimize_fig8.jl             - sweep the pattern shape in parallel processes (HOURS!)" => "optimize_fig8.jl",
     "optimize_path.jl             - Julia client for the AWETrim reelout flight-path optimizer" => "optimize_path.jl",
     "export_v3_segments.jl        - write the V3 segment table to output/v3_segments.csv" => "export_v3_segments.jl",
     "create_overview.jl           - write scenario overview.md across wind speeds" => "create_overview.jl",

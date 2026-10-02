@@ -102,7 +102,6 @@ Choose example to run or `q` to quit:
    simple_reelout_play.jl       - replay the last logged reel-out run in the 3D viewer
    simple_auto_parking.jl       - fly heading-stabilized parking of the V3 kite
    simple_auto_parking_plots.jl - plot the last logged parking run
-   optimize_fig8.jl             - sweep the pattern shape in parallel processes (HOURS!)
    optimize_path.jl             - Julia client for the AWETrim reelout flight-path optimizer
    export_v3_segments.jl        - write the V3 segment table to output/v3_segments.csv
    create_overview.jl           - write scenario overview.md across wind speeds
@@ -133,9 +132,7 @@ power the optimizer predicted next to the power the run harvested. Both read the
 optimizer settings — server, initial guess, solver knobs — from `data/traj_opt.yaml`, and
 the reel-out one logs to `<log_file>_opt` so the lemniscate run stays as its baseline.
 
-`optimize_fig8.jl` sweeps the pattern shape by driving `simple_reelout.jl` in parallel
-worker processes — hours, not minutes, and resumable. `optimize_path.jl` is the separate
-AWETrim client described above.
+`optimize_path.jl` is the separate AWETrim client described above.
 
 `examples/simple_auto_parking.jl` flies the attitude-stabilized parking maneuver: the wing
 is settled at a fixed depower setting and held at a constant tether length while a

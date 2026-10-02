@@ -8,7 +8,6 @@ Non-exported names that the docstrings of the other API pages refer to.
 
 ```@docs
 SimpleKiteControllers.BUDGET_KNOT
-SimpleKiteControllers.C3
 SimpleKiteControllers.DEPOWER_SEED_BOUNDS
 SimpleKiteControllers.KITE_DEAD_TIME_EXP
 SimpleKiteControllers.PATTERN_DELAY_REF

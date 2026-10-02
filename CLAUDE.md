@@ -222,9 +222,6 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   wind-speed-dependent parameters of WinchControllers.jl's reel-out law, looked up
   in the system project's `winch_table` file. `kv` itself is flat, from
   `data/wc_settings.yaml`.
-- `optimization.jl` — `OptSettings` and the shared machinery (`opt_grid`,
-  `claim_task!`/`release_claims!`, `record_result!`/`load_results`, `rank_results`, ...)
-  behind the parallel figure-eight shape sweep driven by `examples/optimize_fig8.jl`.
 - `traj_opt_settings.jl` — `TrajOptSettings`, the settings of a run flown along an
   externally optimized path (`examples/simple_opt_fig8.jl`), loaded from
   `data/traj_opt.yaml`.

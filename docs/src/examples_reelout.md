@@ -60,19 +60,6 @@ archived scenarios of both sites reaches a target. It starts from the current
 `fc_settings_reelout.yaml` and evaluates each trial setting on the linear model of
 `stability_opt_reelout.jl`, without flying.
 
-## Pattern shape optimization
-
-### [`optimize_fig8.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/optimize_fig8.jl)
-Sweeps the shape of the figure of eight: it flies `simple_reelout.jl` once per (`f8_a`, `f8_b`)
-grid point, several runs at a time in separate Julia processes, and ranks the shapes by the mean
-reel-out power they harvest. The grid is defined in `data/optimization.yaml`; everything else
-comes from the selected project. The sweep takes hours and can be resumed after an interruption.
-
-### [`optimize_fig8_worker.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/optimize_fig8_worker.jl)
-One worker process of `optimize_fig8.jl`, not run by hand. It takes one grid point at a time from
-a shared claim file, flies it and appends the metrics to the results table; a file lock lets any
-number of workers share the table.
-
 ## Scenarios
 
 A scenario is the archived record of one `simple_opt_reelout.jl` run: its log, its run summary

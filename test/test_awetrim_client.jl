@@ -16,7 +16,7 @@ import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitPar
     opt_failures, opt_failed_before, record_opt_failure!, clear_opt_failures, OptChain,
     _write_chain_entry, _chain_entry, _cached_422, chain_step, chain_status, chain_trajectory,
     record_opt_success!, solve_startup, as_step_reply, as_pattern_limits, guess_el_center_seed,
-    reelout_anchor_ratio, HTTP
+    reelout_anchor_ratio, with_file_lock, HTTP
 
 const INFLOW = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0, profile_law = 3)
 const WINCH = WinchParams("reelout", 0.04, 700.0, 7200.0)
@@ -77,6 +77,44 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
         sp = StepParams(150.0, WINCH)
         @test chain_key(k, _key_fields(sp)) != chain_key("v4-0000000000000000", _key_fields(sp))
         @test startswith(chain_key(k, _key_fields(sp)), "c2-")
+    end
+
+    @testset "with_file_lock" begin
+        mktempdir() do dir
+            lockp = joinpath(dir, "x.lock")
+
+            @test with_file_lock(() -> 42, lockp) == 42
+            @test !isdir(lockp)
+
+            # Released even when the protected function throws.
+            @test_throws ErrorException with_file_lock(lockp) do
+                error("boom")
+            end
+            @test !isdir(lockp)
+
+            # A held, non-stale lock makes a waiter time out rather than proceed.
+            mkdir(lockp)
+            try
+                @test_throws ErrorException with_file_lock(() -> 1, lockp;
+                                                            timeout = 0.2,
+                                                            stale_after = 1e6,
+                                                            poll = 0.02)
+            finally
+                isdir(lockp) && rm(lockp; recursive = true, force = true)
+            end
+
+            # A lock far older than stale_after is broken (with a warning) instead
+            # of blocking every later process behind a dead one.
+            mkdir(lockp)
+            run(`touch -d 1970-01-01 $lockp`)
+            ran = Ref(false)
+            @test_logs (:warn,) match_mode = :any with_file_lock(lockp;
+                                                                 stale_after = 1.0) do
+                ran[] = true
+            end
+            @test ran[]
+            @test !isdir(lockp)
+        end
     end
 
     @testset "failure_cache" begin

@@ -70,16 +70,10 @@ export run_input_defaults
 # Winch settings, length loop and controllers of a run (examples/simple_opt_reelout.jl)
 export load_wc_settings, build_winch, build_controllers
 
-# Parallel shape optimization (examples/optimize_fig8.jl)
-export OptSettings, opt_grid, task_key, pattern_margin, filter_grid
-export with_file_lock, init_results_file, record_result!, load_results
-export claim_task!, release_claims!, reset_claims!, n_unclaimed
-export run_metrics, side_conditions, rank_results, unique_results
-export format_results_table
 
 # Linear course-loop model of the stability analysis (examples/stability_*.jl);
 # the transfer functions need `using ControlSystemsBase` (ext/)
-export kite_dead_time, kite_lag, pattern_dead_time_lag, plant_coeffs, dead_time_fraction, c2_at
+export kite_dead_time, kite_lag, pattern_dead_time_lag, plant_coeffs, dead_time_fraction
 export course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
 export frd_margins, frd_diskmargin, rate_disk_margin, load_course_correction, course_correction
 
@@ -130,9 +124,6 @@ include("summary_yaml.jl")
 include("fc_settings.jl")
 # After fc_settings.jl: the FC_Settings constructor is defined with the type it constructs.
 include("course_controller.jl")
-# After fc_settings.jl: OptSettings is loaded the same way and documents itself
-# against FC_Settings, whose fields the sweep overrides.
-include("optimization.jl")
 # After fc_settings.jl too: TrajOptSettings is loaded through load_yaml_fields!.
 include("traj_opt_settings.jl")
 # After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.

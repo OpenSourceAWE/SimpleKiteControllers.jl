@@ -13,7 +13,6 @@ using Test
     # Pure geometry: no simulation and no kite model, so this runs in under a second.
     include("test_fig8_controller.jl")
     include("test_course_controller.jl")
-    include("test_optimization.jl")
     include("test_reelout_metrics.jl")
     include("test_summary_yaml.jl")
     include("test_run_summary.jl")

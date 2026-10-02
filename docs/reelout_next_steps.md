@@ -268,7 +268,7 @@ The four items as answered:
   archives, not `output/`.
 - Adding a field to `FC_Settings` in a live session orphans the methods that
   dispatch on it: `Base.include` `fc_settings.jl`, then `course_controller.jl`,
-  `traj_opt_settings.jl` and `optimization.jl`, or the run dies at
+  and `traj_opt_settings.jl`, or the run dies at
   `CourseControllerSettings(fcs; dt = s.dt)`.
 
 ## ToDo:

@@ -40,12 +40,6 @@ Draws the relay excitation of one low-elevation identification flight as a figur
 the heading with the edges of the relay band, the elevation, and the commanded, actual and
 delay-shifted steering.
 
-### [`gravity_term_form.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/gravity_term_form.jl)
-Two checks on saved data, without flying. First, it fits the gravity term of the turn-rate law as
-`c_g·sin(ψ)·cos(β)·v_a^(−n)` for `n` from 0 to 2 to find which power of the apparent wind speed
-fits best. Second, it checks whether the linear pattern model with the identified coefficients is
-still conservative at the operating points where the stability margins were measured.
-
 ## Validation of the course-loop model
 
 ### [`validate_margins.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/validate_margins.jl)
@@ -57,11 +51,6 @@ the gain margin, delay margin and crossover frequencies of the linear model of t
 Plots the frequency response of the course loop measured by injection in `simple_fig8.jl` over
 the Bode plot of the linear model at the same operating point, one column per tether length
 (150, 200 and 300 m), and writes `docs/course_loop_frf.png`.
-
-### [`replay_prediction.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/replay_prediction.jl)
-Passes the logged steering command of held-out logs through the plant model of the course loop,
-with its parameters updated from the log every sample, and compares the predicted heading with
-the flown one k steps ahead.
 
 ### [`xtrack_step_analysis.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/xtrack_step_analysis.jl)
 Evaluates cross-track step tests of the guided course loop: the measured response of the

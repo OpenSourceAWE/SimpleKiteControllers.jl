@@ -103,34 +103,6 @@ Needs `using ControlSystemsBase`, which loads the method.
 function course_pid end
 
 """
-    C3
-
-SUPERSEDED on 2026-09-29 by [`PLANT_COEFFS`](@ref) (`c2/v_a`, ≈ 0.10 1/s in the operating
-range); kept for comparisons (`gravity_term_form.jl`). Its
-fit took `c1` and the delay from the turn-rate table of then, whose delays (73° sweeps,
-`v_a` ≈ 13 m/s) are too long in pattern flight, and the gravity term trades against the
-delay; a likely, unverified reason why it is twice the low flights' value.
-
-Gravity coefficient [1/s] of the turn-rate law in the form
-
-    ψ̇ = c1·v_a·u_s + c3·sin(ψ)·cos(β)
-
-which fits the flown figures of eight better than the table's `c2/v_a` form: over
-25 archived reel-out runs (SimulationResults, 3 – 11 m/s, `v_a` 8 – 45 m/s) the
-table-form `c2` grows about in proportion to `v_a`, while `c3` stays flat. Fitted
-on the samples the stability analysis rates (phases 3-5, cross-track error below
-`attractor_dist`), with `c1` and the delay taken from the turn-rate table: pooled
-0.230 over 91 000 samples, per run 0.18 – 0.30, phase 4 0.227, phase 5 0.247
-(2026-09-28). The 73° relay sweeps the table came from until 2026-10-01 could not
-identify it: their steering is fed back from the heading, so the gravity term trades against
-the delay, and the table's `c2` is arbitrary.
-"""
-const C3 = 0.23
-
-"`c2` [-] of the table's form `c2/v_a·sin(ψ)·cos(β)` that equals `c3·sin(ψ)·cos(β)` at `v_app` [m/s]"
-c2_at(v_app; c3 = C3) = c3 * v_app
-
-"""
     PLANT_COEFFS
 
 The turn-rate law of the PLANT in the stability analysis,
@@ -144,11 +116,11 @@ amplitudes, reversing in azimuth, elevation held near 30°, 150 m at constant le
 9.51 m/s of wind, `v_a` ≈ 13 – 55 m/s. Standard errors from 20 s blocks: `c1` ±0.0003
 – 0.0035, `c2` ±0.07 – 0.14. Depower 0.40 is left out, none of its flights stayed up.
 
-Replaces the table's `c1` and [`C3`](@ref) in the plant from 2026-09-29: at 73°
-the gravity term is barely observable, and the low flights put it at ≈ 0.10 1/s in
-the operating range instead of 0.23. The `c2/v_a` form follows from the force
-balance; the flights are consistent with it but do not rule out a constant `c3`
-(`examples/gravity_term_form.jl`). The model stays below every measured margin with
+Replaces the table's `c1` and the constant gravity coefficient `c3` = 0.23 1/s in the
+plant from 2026-09-29: at 73° the gravity term is barely observable, and the low flights
+put it at ≈ 0.10 1/s in the operating range instead of 0.23. The `c2/v_a` form follows
+from the force balance; the flights are consistent with it but do not rule out a
+constant `c3`. The model stays below every measured margin with
 it. The controller's gain schedule does NOT use this: it keeps the turn-rate table,
 as flown.
 """
