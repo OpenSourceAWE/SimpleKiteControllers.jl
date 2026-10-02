@@ -26,6 +26,7 @@ get_fc_field
 skc_data_path
 project_file
 turn_rate_coeffs_file
+course_loop_model_file
 winch_table_file
 traj_opt_settings_file
 ```

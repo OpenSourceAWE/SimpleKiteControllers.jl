@@ -21,6 +21,7 @@ system:
     fc_settings: "fc_settings.yaml"
     traj_opt_settings: "traj_opt.yaml"
     turn_rate_coeffs: "turn_rate_coeffs.yaml"
+    course_loop_model: "course_loop_model.yaml"
     kite_settings: "kite_settings_psm.yaml"
     structural_geometry: "struc_geometry.yaml"
     aero_geometry: "cfd_aero_geometry.yaml"

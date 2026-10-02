@@ -8,7 +8,7 @@ module SimpleKiteControllersControlSystemsBaseExt
 
 using ControlSystemsBase: tf, ss, c2d, feedback, isstable, margin
 using LinearAlgebra: diagm
-using SimpleKiteControllers: ACTUATOR_LAG, KITE_CORR_ZERO, KITE_CORR_POLE
+using SimpleKiteControllers: course_loop_model
 import SimpleKiteControllers: course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
 
 function course_pid(K, Ti, Td, N, Ts)
@@ -20,7 +20,7 @@ function course_pid(K, Ti, Td, N, Ts)
     return C
 end
 
-function turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0)
+function turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag, kite_lag = 0.0)
     first_order(T) = ss(-1 / T, 1 / T, 1.0, 0.0)
     kite = ss(c2 / v_app * gravity, c1 * v_app, 1.0, 0.0)
     lag > 0 && (kite = kite * first_order(lag))
@@ -43,7 +43,7 @@ end
 
 guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
 
-kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) =
+kite_correction(Ts; fz = course_loop_model().kite_corr_zero, fp = course_loop_model().kite_corr_pole) =
     c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
 
 end

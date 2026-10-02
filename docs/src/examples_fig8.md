@@ -44,7 +44,7 @@ is to be flown must be optimized for the run's own wind and winch, which is what
 ### [`stability_fig8.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/stability_fig8.jl)
 A disk-margin stability analysis of the linearized course-control loop of `simple_fig8.jl`: the
 gain-scheduled PD controller of [`CourseController`](@ref), closed around the steering actuator
-and the identified turn-rate law of the V3 kite ([`plant_coeffs`](@ref)), with the guidance as
+and the identified turn-rate law of the V3 kite ([`turn_rate_coeffs`](@ref)), with the guidance as
 outer loop. It prints the gain, phase, delay and disk margins over the operating range of the
 selected project and needs `ControlSystemsBase`.
 

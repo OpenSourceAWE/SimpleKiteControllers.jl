@@ -69,7 +69,6 @@ using V3Kite
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file
 using ControlSystemsBase, RobustAndOptimalControl
-using SimpleKiteControllers: ACTUATOR_LAG
 using Statistics: mean, std
 using Dates
 using Printf
@@ -129,8 +128,7 @@ The tape's small-signal lag [s], `rel_steering` -> `steering`, of `point`'s
 project: `1/steering_gain` of its settings YAML (`kcu.steering_gain`, 10 in every
 V1 project since 2026-09-27, i.e. 0.1 s; the KiteUtils default 3 gives 0.33 s).
 It holds while the tape stays off its 0.2 s⁻¹ rate limit, which is what V1
-needs from a baseline anyway. `ACTUATOR_LAG` (0.43 s) was the equivalent lag
-of the gain-3 tape when rate-limited much of the time; it is not used here.
+needs from a baseline anyway.
 """
 v1_lag(point) = 1 / Settings(project_file(V1_POINTS[point].project)).steering_gain
 
@@ -159,6 +157,7 @@ function predict(point::Symbol; v_a = V1_POINTS[point].v_a_nominal, depower = no
     project = project_file(p.project)
     fcs_p = FC_Settings(fc_settings(project))
     reload_turn_rate_table!(project)
+    reload_course_loop_model!(project)
     Ts = 1 / Settings(project).sample_freq
     dp = something(depower, fcs_p.course.depower_setpoint)
     tc = turn_rate_coeffs(fcs_p.run.body_damping, dp)
@@ -167,11 +166,9 @@ function predict(point::Symbol; v_a = V1_POINTS[point].v_a_nominal, depower = no
     C = course_pid(K, fcs_p.course.heading_i, fcs_p.course.heading_d, fcs_p.course.heading_d_n, Ts)
     cos_beta = cosd(fcs_p.pattern.el_center)
     τ, T_kite = kite_dead_time(tc, v_a), kite_lag(tc, v_a)
-    # The plant's c1 and gravity term c2/v_a·sin(ψ)·cos(β) of the low pattern (course_loop_model.jl).
-    pc = plant_coeffs(dp)
-    c2 = pc.c2
+    c2 = tc.c2
     branches = vec(map((-cos_beta, cos_beta)) do g
-        L = C * turn_rate_plant(pc.c1, c2, τ, v_a, g, Ts; lag, kite_lag = T_kite)
+        L = C * turn_rate_plant(tc.c1, c2, τ, v_a, g, Ts; lag, kite_lag = T_kite)
         (; g, c2, L, α = diskmargin(L).margin, open_loop_stable = isstable(L))
     end)
     alpha = minimum(b -> b.α, branches)   # disk margin is well-defined either way
@@ -753,17 +750,15 @@ function model_loops(r)
     f = FC_Settings(fc_settings(project))
     C, Ts = course_controller_tf(r.point, r.v_a_mean; depower = r.depower)
     tc = turn_rate_coeffs(f.run.body_damping, r.depower)
-    # One model to set against the measurement: the stable sign of the gravity pole, with the
-    # plant's c1 and c2 of the low pattern (plant_coeffs, course_loop_model.jl).
-    pc = plant_coeffs(r.depower)
-    c2 = pc.c2
-    P = turn_rate_plant(pc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
+    # One model to set against the measurement: the stable sign of the gravity pole.
+    c2 = tc.c2
+    P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
                         -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))
     G = guidance_tf(run_guidance_rate(r).ω_g, Ts)
     # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
     τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
-    Pp = turn_rate_plant(pc.c1, c2, τp, r.v_a_mean, -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
+    Pp = turn_rate_plant(tc.c1, c2, τp, r.v_a_mean, -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
                          kite_lag = Tp)
     return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))
 end

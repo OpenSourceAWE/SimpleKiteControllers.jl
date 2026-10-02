@@ -72,15 +72,13 @@ function frf_point(p)
     C = course_pid(K, fcs.course.heading_i, fcs.course.heading_d, fcs.course.heading_d_n, Ts)
     ω_g = guidance_rate(fcs, v_a, L_t, FRF_VK_OVER_VA * v_a)
     tc = turn_rate_coeffs(fcs.run.body_damping, FRF_DEPOWER)
-    # The plant's c1 and gravity term c2/v_a of the low pattern (plant_coeffs, course_loop_model.jl).
-    pc = plant_coeffs(FRF_DEPOWER)
-    c2 = pc.c2
+    c2 = tc.c2
     gravity = -cosd(fcs.pattern.el_center)
     lag = 1 / set.steering_gain
-    P = turn_rate_plant(pc.c1, c2, kite_dead_time(tc, v_a), v_a, gravity, Ts; lag,
+    P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, v_a), v_a, gravity, Ts; lag,
                         kite_lag = kite_lag(tc, v_a))
     τp, Tp = pattern_dead_time_lag(tc, v_a, FRF_DEPOWER)
-    Pp = turn_rate_plant(pc.c1, c2, τp, v_a, gravity, Ts; lag, kite_lag = Tp)
+    Pp = turn_rate_plant(tc.c1, c2, τp, v_a, gravity, Ts; lag, kite_lag = Tp)
     model = C * Pp * guidance_tf(ω_g, Ts) * kite_correction(Ts)
     inner = C * P
     # Measured loop: the PD and the guidance applied to each measured line, as `measured_loop`.

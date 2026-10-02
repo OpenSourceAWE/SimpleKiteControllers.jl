@@ -8,79 +8,117 @@
 # `delay_margin`, `guidance_tf`, `kite_correction`) are defined by the extension
 # ext/SimpleKiteControllersControlSystemsBaseExt.jl, loaded with `using ControlSystemsBase`.
 
-# Identified 2026-09-25, see docs/course_loop_stability.md.
-"Equivalent lag [s] of the rate-limited steering tape, `set_steering` -> `steering`"
-const ACTUATOR_LAG = 0.43   # simple_fig8.jl log, phase 4, depower 0.27, v_app 34-38 m/s
 """
-Exponents of the kite's dead time and lag over `v_a`, `x ∝ v_a^-exp`: the
-relay sweeps at depower 0.275 at 9.51 and 15 m/s of wind (`v_a` 13.3 and
-22.5 m/s) split into dead time + lag (V3Kite's `fit_delay_lag`), 2026-09-26:
-0.141 + 0.267 s and 0.082 + 0.133 s. Both are roughly a fixed distance flown,
-1.9 m and 3.0 – 3.5 m.
+The identified parameters of the linear course-loop model, loaded from the file the
+system project names under `course_loop_model` ([`course_loop_model_file`](@ref),
+`data/course_loop_model.yaml` in every project so far), where the provenance of each
+value is recorded. The
+turn-rate law itself (`c1`, `c2`, dead time and kite lag over depower) is not here: it
+is the turn-rate table, see [`turn_rate_coeffs`](@ref), and neither is the steering
+tape's lag, which is `1/steering_gain` of the KCU's P controller. Every field must be given by the
+file; the defaults are `NaN` so that a missing key cannot pass as a value.
+
+The session's instance is [`course_loop_model`](@ref).
+
+# Fields
+
+$(TYPEDFIELDS)
 """
-const KITE_DEAD_TIME_EXP = 1.03
-const KITE_LAG_EXP = 1.32
+@with_kw mutable struct CourseLoopModel @deftype Float64
+    "Exponent of the kite's dead time over `v_a`, `τ ∝ v_a^-exp` [-]"
+    kite_dead_time_exp = NaN
+    "Exponent of the kite's lag over `v_a`, `T ∝ v_a^-exp` [-]"
+    kite_lag_exp = NaN
+    "Pattern law: the kite's response time `τ + T` [s] at `pattern_v_ref`"
+    pattern_delay_ref = NaN
+    "Pattern law: reference airspeed [m/s]"
+    pattern_v_ref = NaN
+    "Pattern law: exponent over `v_a`, `τ + T ∝ v_a^-exp` [-]"
+    pattern_delay_exp = NaN
+    "Airspeed [m/s] below which the pattern law holds its value"
+    pattern_v_floor = NaN
+    "Depower [-] the pattern law was measured at"
+    pattern_law_depower = NaN
+    "Growth of the pattern response time with depower, `exp(exp·(depower - pattern_law_depower))` [-]"
+    pattern_depower_exp = NaN
+    "Zero [Hz] of [`kite_correction`](@ref)"
+    kite_corr_zero = NaN
+    "Pole [Hz] of [`kite_correction`](@ref)"
+    kite_corr_pole = NaN
+end
 
 """
-    kite_dead_time(tc, v_app) -> Float64
-    kite_lag(tc, v_app) -> Float64
+    CourseLoopModel(filename::String; path = skc_data_path()) -> CourseLoopModel
+
+Load the `course_loop_model:` section of `filename`. Errors on an unknown key and on
+a key the file does not give.
+"""
+function CourseLoopModel(filename::String; path = skc_data_path())
+    clm = load_yaml_fields!(CourseLoopModel(), filename, "course_loop_model"; path)
+    missing_keys = [f for f in fieldnames(CourseLoopModel) if isnan(getfield(clm, f))]
+    isempty(missing_keys) ||
+        error("$filename does not give $(join(missing_keys, ", ")) of CourseLoopModel.")
+    return clm
+end
+
+const _COURSE_LOOP_MODEL = Ref{CourseLoopModel}()
+
+"""
+    reload_course_loop_model!(project = project_file()) -> CourseLoopModel
+
+Read the system project's course-loop model file ([`course_loop_model_file`](@ref)) and
+make it the session's [`course_loop_model`](@ref). It is otherwise read only at package
+load, against the default `project`, like the turn-rate table
+([`reload_turn_rate_table!`](@ref)).
+"""
+function reload_course_loop_model!(project = project_file())
+    _COURSE_LOOP_MODEL[] = CourseLoopModel(course_loop_model_file(project))
+end
+
+"""
+    course_loop_model() -> CourseLoopModel
+
+The session's identified course-loop model, read at package load or by the last
+[`reload_course_loop_model!`](@ref).
+"""
+course_loop_model() = _COURSE_LOOP_MODEL[]
+
+"""
+    kite_dead_time(tc, v_app; clm = course_loop_model()) -> Float64
+    kite_lag(tc, v_app; clm = course_loop_model()) -> Float64
 
 The kite's dead time and first-order lag [s] from the applied steering to the
 turn rate at `v_app` [m/s], for the turn-rate coefficients `tc`: the table's
-`tc.dead_time` and `tc.kite_lag`, scaled as `(tc.v_app / v_app)^exp` with
-[`KITE_DEAD_TIME_EXP`](@ref) and `KITE_LAG_EXP`, where `tc.v_app` is the
-airspeed of the sweep they were identified at. Away from it they are extrapolated.
+`tc.dead_time` and `tc.kite_lag`, scaled as `(tc.v_app / v_app)^exp` with the
+exponents `kite_dead_time_exp` and `kite_lag_exp` of [`CourseLoopModel`](@ref), where
+`tc.v_app` is the airspeed of the flights they were identified at. Away from it they
+are extrapolated.
 """
-kite_dead_time(tc, v_app) = _scaled_row(tc, :dead_time, v_app, KITE_DEAD_TIME_EXP)
-kite_lag(tc, v_app) = _scaled_row(tc, :kite_lag, v_app, KITE_LAG_EXP)
+kite_dead_time(tc, v_app; clm = course_loop_model()) =
+    _scaled_row(tc, :dead_time, v_app, clm.kite_dead_time_exp)
+kite_lag(tc, v_app; clm = course_loop_model()) = _scaled_row(tc, :kite_lag, v_app, clm.kite_lag_exp)
 
 """
-Response time of the kite in pattern flight, `τ_kite + T_kite` [s] at `v_a`
-[m/s]: `PATTERN_DELAY_REF · (PATTERN_V_REF / v_a)^PATTERN_DELAY_EXP`.
-Re-identified (`identify_turn_rate_law`) on 12 pattern logs at depower 0.27,
-elevation 15 – 26°, tether 150 – 380 m, `v_a` 12.8 – 40.6 m/s
-(`oldplans/Plan_model_validation.md`, V4). The relay sweeps the table came from
-until 2026-10-01 flew at 73°, where at low `v_a` the kite responds more slowly: at
-12.8 m/s they gave 0.43 s, the pattern 0.29 s.
-"""
-const PATTERN_DELAY_REF = 0.14
-const PATTERN_V_REF = 34.0
-const PATTERN_DELAY_EXP = 0.74
-"""
-Airspeed [m/s] below which the pattern law holds its value instead of growing:
-the lowest `v_a` it was identified at. Reel-out logs below it measured 0.279 s
-at 10.6 m/s and 0.285 s at 10.1 m/s, against 0.292 s at 12.8 m/s, where the
-unfloored law would give 0.33 – 0.35 s (`oldplans/Plan_model_validation.md`).
-"""
-const PATTERN_V_FLOOR = 12.8
-"Depower [-] the pattern law was measured at"
-const PATTERN_LAW_DEPOWER = 0.27
-"""
-Growth of the pattern response time with depower, `exp(PATTERN_DEPOWER_EXP ·
-(depower − PATTERN_LAW_DEPOWER))`: point D (300 m, 7 m/s) flown at depower
-0.30 / 0.33 / 0.36 gave ×1.17 / 1.39 / 1.78 over the 0.27 law
-(`oldplans/Plan_model_validation.md`). The table's rows grow only ×1.05 – 1.15 over
-the same range, so their ratio is not used.
-"""
-const PATTERN_DEPOWER_EXP = 6.1
+    pattern_dead_time_lag(tc, v_app, depower; clm = course_loop_model()) -> (τ, T)
 
-"""
-    pattern_dead_time_lag(tc, v_app, depower) -> (τ, T)
+The kite's dead time and lag [s] in pattern flight. Their sum follows the pattern law
+of [`CourseLoopModel`](@ref), `pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp`,
+times the measured depower factor `exp(pattern_depower_exp · (depower −
+pattern_law_depower))`. It is split in the ratio `tc.dead_time : tc.kite_lag` of the
+turn-rate coefficients `tc`, which must be those at `depower`.
 
-The kite's dead time and lag [s] in pattern flight: their sum follows the pattern
-law ([`PATTERN_DELAY_REF`](@ref)) times the measured depower factor
-([`PATTERN_DEPOWER_EXP`](@ref)), split in the ratio of the low crosswind flights at
-`depower` ([`dead_time_fraction`](@ref)). Until 2026-09-29 the split was that of the
-table row `tc` (the relay sweeps at 73°); `tc` is no longer used and kept for the
-callers. Use it for the pattern loop only: the entry flies high, where the pattern
-law was not measured. Below [`PATTERN_V_FLOOR`](@ref)
-the law holds its value there (the measured response time stops growing at about
-0.28 s).
+The pattern law was identified in the low crosswind pattern (elevation 15 – 26°), so
+this function holds for the pattern loop only, not for the entry, which flies at a
+much higher elevation. Below `pattern_v_floor` the law holds its value (the measured
+response time stops growing at about 0.28 s).
 """
-function pattern_dead_time_lag(tc, v_app, depower)
-    target = PATTERN_DELAY_REF * (PATTERN_V_REF / max(v_app, PATTERN_V_FLOOR))^PATTERN_DELAY_EXP *
-             exp(PATTERN_DEPOWER_EXP * (depower - PATTERN_LAW_DEPOWER))
-    φ = dead_time_fraction(depower)
+function pattern_dead_time_lag(tc, v_app, depower; clm = course_loop_model())
+    target = clm.pattern_delay_ref *
+             (clm.pattern_v_ref / max(v_app, clm.pattern_v_floor))^clm.pattern_delay_exp *
+             exp(clm.pattern_depower_exp * (depower - clm.pattern_law_depower))
+    (isnan(tc.dead_time) || isnan(tc.kite_lag)) && error("pattern_dead_time_lag: the turn-rate " *
+        "table row has no dead_time or kite_lag; re-identify it with examples/build_turn_rate_table.jl.")
+    φ = tc.dead_time / (tc.dead_time + tc.kite_lag)
     return φ * target, (1 - φ) * target
 end
 
@@ -103,80 +141,10 @@ Needs `using ControlSystemsBase`, which loads the method.
 function course_pid end
 
 """
-    PLANT_COEFFS
+    turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag, kite_lag = 0.0) -> StateSpace
 
-The turn-rate law of the PLANT in the stability analysis,
-
-    ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β),
-
-over depower: `(depower, c1 [1/m], c2 [-])`, identified in the low crosswind pattern
-(`oldplans/PlanIdentifyTurnRateLaw.md`, 2026-09-29; `examples/plot_turn_rate_vs_depower.jl`,
-the data in `data/turn_rate_low_flights.tar.gz`): relay flights at fixed steering
-amplitudes, reversing in azimuth, elevation held near 30°, 150 m at constant length,
-9.51 m/s of wind, `v_a` ≈ 13 – 55 m/s. Standard errors from 20 s blocks: `c1` ±0.0003
-– 0.0035, `c2` ±0.07 – 0.14. Depower 0.40 is left out, none of its flights stayed up.
-
-Replaces the table's `c1` and the constant gravity coefficient `c3` = 0.23 1/s in the
-plant from 2026-09-29: at 73° the gravity term is barely observable, and the low flights
-put it at ≈ 0.10 1/s in the operating range instead of 0.23. The `c2/v_a` form follows
-from the force balance; the flights are consistent with it but do not rule out a
-constant `c3`. The model stays below every measured margin with
-it. The controller's gain schedule does NOT use this: it keeps the turn-rate table,
-as flown.
-"""
-const PLANT_COEFFS = [(0.250, 0.30624, 3.1495), (0.275, 0.26500, 3.6836),
-                      (0.300, 0.23255, 3.6867), (0.325, 0.19491, 3.6967),
-                      (0.350, 0.16602, 3.7070), (0.375, 0.14439, 3.8585)]
-
-"""
-    PLANT_SPLIT
-
-Dead time and lag [s] of the kite over depower, `(depower, dead_time, lag)`, from the
-same joint fits of the low crosswind flights as [`PLANT_COEFFS`](@ref) (whole samples
-of `DT` = 1/60 s for the dead time, steps of 2`DT` for the lag). Only their ratio is
-used ([`dead_time_fraction`](@ref)): one pair is fitted per depower over `v_a` ≈ 12 –
-55 m/s, while the response time falls with `v_a`, so the sum comes from the pattern
-law. Standard errors from 20 s blocks: dead time ±0.006 – 0.022 s, lag ±0.006 – 0.017 s.
-"""
-const PLANT_SPLIT = [(0.250, 0.00833, 0.10000), (0.275, 0.04167, 0.08333),
-                     (0.300, 0.07500, 0.06667), (0.325, 0.07500, 0.08333),
-                     (0.350, 0.10833, 0.06667), (0.375, 0.17500, 0.01667)]
-
-"""
-    dead_time_fraction(depower) -> Float64
-
-`τ_d/(τ_d + T_k)` [-] of the low crosswind flights at `depower` [-]: dead time and lag
-linear in [`PLANT_SPLIT`](@ref), held at its ends outside 0.25 – 0.375.
-"""
-function dead_time_fraction(depower)
-    dps = first.(PLANT_SPLIT)
-    u = clamp(depower, first(dps), last(dps))
-    k = clamp(searchsortedlast(dps, u), 1, length(dps) - 1)
-    w = (u - dps[k]) / (dps[k + 1] - dps[k])
-    τ = (1 - w) * PLANT_SPLIT[k][2] + w * PLANT_SPLIT[k + 1][2]
-    T = (1 - w) * PLANT_SPLIT[k][3] + w * PLANT_SPLIT[k + 1][3]
-    return τ / (τ + T)
-end
-
-"""
-    plant_coeffs(depower) -> (; c1, c2)
-
-`c1` [1/m] and `c2` [-] of the plant at `depower` [-], linear in [`PLANT_COEFFS`](@ref),
-held at its ends outside 0.25 – 0.375.
-"""
-function plant_coeffs(depower)
-    dps = first.(PLANT_COEFFS)
-    u = clamp(depower, first(dps), last(dps))
-    k = clamp(searchsortedlast(dps, u), 1, length(dps) - 1)
-    w = (u - dps[k]) / (dps[k + 1] - dps[k])
-    return (; c1 = (1 - w) * PLANT_COEFFS[k][2] + w * PLANT_COEFFS[k + 1][2],
-            c2 = (1 - w) * PLANT_COEFFS[k][3] + w * PLANT_COEFFS[k + 1][3])
-end
-
-"""
-    turn_rate_plant(c1, c2, delay, v_app, gravity, Ts; lag = ACTUATOR_LAG, kite_lag = 0.0) -> StateSpace
-
-`rel_steering` -> heading, ZOH-discretized: the actuator lag `lag` [s], then the
+`rel_steering` -> heading, ZOH-discretized: the steering tape's lag `lag` [s]
+(`1/steering_gain` of the settings, the lag of the KCU's P controller), then the
 turn-rate law with the kite's own first-order lag `kite_lag` [s] and its dead
 time `delay` [s] rounded to whole samples. `gravity = cos(ψ0)·cos(β)` in
 [-1, 1] selects the sign and size of the gravity pole.
@@ -228,7 +196,7 @@ Needs `using ControlSystemsBase`, which loads the method.
 function guidance_tf end
 
 """
-    kite_correction(Ts; fz = KITE_CORR_ZERO, fp = KITE_CORR_POLE) -> StateSpace
+    kite_correction(Ts; fz = course_loop_model().kite_corr_zero, fp = course_loop_model().kite_corr_pole) -> StateSpace
 
 Lag-lead `(1 + s/ω_z)/(1 + s/ω_p)` that brings the turn-rate law's steering →
 heading response to what an injected multisine measures in the simulation:
@@ -239,16 +207,6 @@ against which it is fitted.
 Needs `using ControlSystemsBase`, which loads the method.
 """
 function kite_correction end
-
-"""
-Zero and pole [Hz] of [`kite_correction`](@ref): fit at the 300 m fig8 point,
-0.5 – 2.1 Hz, 2026-09-27, against the plant with the pattern law's dead time
-and lag (`pattern_dead_time_lag`), which it goes with. Against the table's
-dead time and lag it was 1.08 / 0.72 Hz: part of its lag then stood in for the
-delay the table lacks at 34 m/s.
-"""
-const KITE_CORR_ZERO = 0.80
-const KITE_CORR_POLE = 0.58
 
 """
     frd_margins(f, L) -> NamedTuple

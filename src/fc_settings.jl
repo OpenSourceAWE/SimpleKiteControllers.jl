@@ -561,6 +561,18 @@ function turn_rate_coeffs_file(project = project_file())
 end
 
 """
+    course_loop_model_file(project = project_file()) -> String
+
+Get the filename of the identified course-loop model ([`CourseLoopModel`](@ref)) from
+the system project, the same way as [`fc_settings`](@ref). Returns the value of the
+`course_loop_model` field of the project's `system` section; present in every project.
+"""
+function course_loop_model_file(project = project_file())
+    dict = YAML.load_file(project)
+    dict["system"]["course_loop_model"]
+end
+
+"""
     winch_table_file(project = project_file()) -> String
 
 Get the winch table filename from the system project, the same way as

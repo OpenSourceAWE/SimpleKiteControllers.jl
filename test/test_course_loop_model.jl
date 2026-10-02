@@ -13,8 +13,8 @@ using DiscretePIDs
 using ControlSystemsBase
 using LinearAlgebra: diagm
 using Random
-using SimpleKiteControllers: PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP, PATTERN_V_FLOOR,
-    PATTERN_LAW_DEPOWER, PATTERN_DEPOWER_EXP, PLANT_COEFFS, PLANT_SPLIT
+using SimpleKiteControllers
+using SimpleKiteControllers: project_file
 
 @testset verbose=true "course_loop_model.jl (V5)" begin
     @testset "controller: course_pid vs DiscretePID" begin
@@ -35,17 +35,20 @@ using SimpleKiteControllers: PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP
         end
     end
 
-    @testset "plant: plant_coeffs of the low pattern" begin
-        # Exact at the identified depowers, linear between them, held at the ends.
-        for (dp, c1, c2) in PLANT_COEFFS
-            @test plant_coeffs(dp).c1 ≈ c1
-            @test plant_coeffs(dp).c2 ≈ c2
+    @testset "CourseLoopModel: loaded from the project's file" begin
+        clm = course_loop_model()
+        @test clm isa CourseLoopModel
+        @test all(f -> isfinite(getfield(clm, f)), fieldnames(CourseLoopModel))
+        project = project_file("system_reelout_maasvlakte.yaml")
+        @test course_loop_model_file(project) == "course_loop_model.yaml"
+        @test reload_course_loop_model!(project).kite_corr_zero == clm.kite_corr_zero
+        mktempdir() do dir
+            # every key is required, an unknown key is an error
+            write(joinpath(dir, "m.yaml"), "course_loop_model:\n  kite_corr_zero: 0.8\n")
+            @test_throws ErrorException CourseLoopModel("m.yaml"; path = dir)
+            write(joinpath(dir, "m.yaml"), "course_loop_model:\n  no_such_key: 1.0\n")
+            @test_throws ErrorException CourseLoopModel("m.yaml"; path = dir)
         end
-        (d1, a1, b1), (d2, a2, b2) = PLANT_COEFFS[1], PLANT_COEFFS[2]
-        @test plant_coeffs((d1 + d2) / 2).c1 ≈ (a1 + a2) / 2
-        @test plant_coeffs((d1 + d2) / 2).c2 ≈ (b1 + b2) / 2
-        @test plant_coeffs(0.1) == plant_coeffs(first(PLANT_COEFFS)[1])
-        @test plant_coeffs(0.5) == plant_coeffs(last(PLANT_COEFFS)[1])
     end
 
     @testset "plant: DC gain, shift-register states, actuator step" begin
@@ -70,34 +73,26 @@ using SimpleKiteControllers: PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP
     end
 
     @testset "scaling: pattern_dead_time_lag" begin
+        clm = course_loop_model()
+        dp0 = clm.pattern_law_depower
         tc = (v_app = 13.3, dead_time = 0.141, kite_lag = 0.267)
         for v in (12.8, 22.4, 34.0, 40.0)
-            law = PATTERN_DELAY_REF * (PATTERN_V_REF / v)^PATTERN_DELAY_EXP   # all at or above PATTERN_V_FLOOR
-            τ, T = pattern_dead_time_lag(tc, v, PATTERN_LAW_DEPOWER)
-            @test τ + T ≈ law                                            # the law at the reference depower
-            @test τ / (τ + T) ≈ dead_time_fraction(PATTERN_LAW_DEPOWER)  # the low flights' split
-            τ2, T2 = pattern_dead_time_lag(tc, v, 0.36)
-            @test (τ2 + T2) / (τ + T) ≈ exp(PATTERN_DEPOWER_EXP * 0.09)  # the measured depower factor
+            law = clm.pattern_delay_ref * (clm.pattern_v_ref / v)^clm.pattern_delay_exp   # all at or above the floor
+            τ, T = pattern_dead_time_lag(tc, v, dp0)
+            @test τ + T ≈ law                                      # the law at the reference depower
+            @test τ / (τ + T) ≈ tc.dead_time / (tc.dead_time + tc.kite_lag)   # tc's split
+            τ2, T2 = pattern_dead_time_lag(tc, v, dp0 + 0.09)
+            @test (τ2 + T2) / (τ + T) ≈ exp(clm.pattern_depower_exp * 0.09)  # the measured depower factor
         end
-        # below PATTERN_V_FLOOR the sum holds its value there, the split still the low flights'
-        τf, Tf = pattern_dead_time_lag(tc, PATTERN_V_FLOOR, PATTERN_LAW_DEPOWER)
-        τ8, T8 = pattern_dead_time_lag(tc, 8.0, PATTERN_LAW_DEPOWER)
+        # below pattern_v_floor the sum holds its value there, the split still tc's
+        τf, Tf = pattern_dead_time_lag(tc, clm.pattern_v_floor, dp0)
+        τ8, T8 = pattern_dead_time_lag(tc, 8.0, dp0)
         @test τ8 + T8 ≈ τf + Tf
         @test τ8 / T8 ≈ τf / Tf
         # the factor reproduces the depower runs within 5 %: ×1.17 / 1.39 / 1.78 at 0.30 / 0.33 / 0.36
         for (dp, g) in ((0.30, 1.17), (0.33, 1.39), (0.36, 1.78))
-            @test exp(PATTERN_DEPOWER_EXP * (dp - PATTERN_LAW_DEPOWER)) ≈ g rtol=0.05
+            @test exp(clm.pattern_depower_exp * (dp - dp0)) ≈ g rtol=0.05
         end
-    end
-
-    @testset "split: dead_time_fraction of the low pattern" begin
-        # Exact at the identified depowers, held at the ends.
-        for (dp, τ, T) in PLANT_SPLIT
-            @test dead_time_fraction(dp) ≈ τ / (τ + T)
-        end
-        @test dead_time_fraction(0.1) == dead_time_fraction(first(PLANT_SPLIT)[1])
-        @test dead_time_fraction(0.5) == dead_time_fraction(last(PLANT_SPLIT)[1])
-        @test first.(PLANT_SPLIT) == first.(PLANT_COEFFS)   # the same fits
     end
 
     @testset "scaling: kite_dead_time / kite_lag" begin

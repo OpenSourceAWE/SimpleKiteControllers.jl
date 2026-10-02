@@ -1,0 +1,36 @@
+# Identified parameters of the linear course-loop model (src/course_loop_model.jl), used by
+# the stability analysis (examples/stability_fig8.jl, stability_opt_reelout.jl, ...). Each key
+# is a field of `CourseLoopModel`; every key must be present, an unknown key is an error.
+# The turn-rate law itself (c1, c2, dead time, kite lag over depower) is in
+# turn_rate_coeffs.yaml, not here. The steering tape's lag is not identified: it is
+# 1/steering_gain of the KCU's P controller, from the project's settings file.
+course_loop_model:
+  # The kite's dead time and lag over v_a, x ∝ v_a^-exp: the relay sweeps at depower 0.275
+  # at 9.51 and 15 m/s of wind (v_a 13.3 and 22.5 m/s), split into dead time + lag
+  # (V3Kite's fit_delay_lag), 2026-09-26: 0.141 + 0.267 s and 0.082 + 0.133 s. Both are
+  # roughly a fixed distance flown, 1.9 m and 3.0 - 3.5 m.
+  kite_dead_time_exp:  1.03   # [-]
+  kite_lag_exp:        1.32   # [-]
+
+  # Pattern law: the kite's response time in pattern flight, dead time + lag =
+  # pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
+  # (identify_turn_rate_law) on 12 pattern logs at depower 0.27, elevation 15 - 26°,
+  # tether 150 - 380 m, v_a 12.8 - 40.6 m/s (oldplans/Plan_model_validation.md, V4).
+  pattern_delay_ref:   0.14   # [s]
+  pattern_v_ref:       34.0   # [m/s]
+  pattern_delay_exp:   0.74   # [-]
+  # The lowest v_a the law was identified at; below it the law holds its value. Reel-out
+  # logs below it measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s, against 0.292 s at
+  # 12.8 m/s, where the unfloored law would give 0.33 - 0.35 s.
+  pattern_v_floor:     12.8   # [m/s]
+  pattern_law_depower: 0.27   # depower the pattern law was measured at [-]
+  # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)):
+  # point D (300 m, 7 m/s) flown at depower 0.30 / 0.33 / 0.36 gave x1.17 / 1.39 / 1.78
+  # over the 0.27 law (oldplans/Plan_model_validation.md).
+  pattern_depower_exp: 6.1    # [-]
+
+  # Zero and pole of kite_correction: fit at the 300 m fig8 point, 0.5 - 2.1 Hz,
+  # 2026-09-27, against the plant with the pattern law's dead time and lag, which it
+  # goes with.
+  kite_corr_zero:      0.80   # [Hz]
+  kite_corr_pole:      0.58   # [Hz]

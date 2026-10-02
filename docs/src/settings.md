@@ -24,6 +24,7 @@ system:
     traj_opt_settings: "traj_opt.yaml"
     winch_table: "winch_table.yaml"
     turn_rate_coeffs: "turn_rate_coeffs.yaml"
+    course_loop_model: "course_loop_model.yaml"
     kite_settings: "kite_settings_psm.yaml"
     structural_geometry: "struc_geometry.yaml"
     aero_geometry: "cfd_aero_geometry.yaml"
@@ -34,7 +35,7 @@ system:
 
 [`project_file`](@ref) resolves a project name such as `"system_reelout_180m.yaml"` to
 this package's `data/` directory. The functions [`fc_settings`](@ref),
-[`turn_rate_coeffs_file`](@ref), [`winch_table_file`](@ref) and
+[`turn_rate_coeffs_file`](@ref), [`course_loop_model_file`](@ref), [`winch_table_file`](@ref) and
 [`traj_opt_settings_file`](@ref) each return one entry of the `system:` section, in
 the same way as `KiteUtils.wc_settings`.
 
@@ -50,7 +51,8 @@ These projects are included (all names without the `.yaml` extension):
 | `system_reelout_cabauw`     | reel-out, Cabauw | `settings_reelout_cabauw` | `fc_settings_reelout`   |
 
 `system_fig8_200m.yaml` is the default project: [`project_file`](@ref) uses it when no
-name is given, and the turn-rate table is loaded against it when the package loads.
+name is given, and the turn-rate table and the course-loop model are loaded against it
+when the package loads.
 
 ## The files a project names
 
@@ -70,6 +72,10 @@ name is given, and the turn-rate table is loaded against it when the package loa
   [`winch_force_limit`](@ref): wind-dependent winch-law parameters. Reel-out projects only.
 - `turn_rate_coeffs` → `turn_rate_coeffs.yaml`, read by [`turn_rate_coeffs`](@ref): the
   identified turn-rate law (`c1`, `c2`, `delay`) per body damping and depower.
+- `course_loop_model` → `course_loop_model.yaml`, read into [`CourseLoopModel`](@ref):
+  the other identified parameters of the linear course-loop model of the stability
+  analysis (tape lag, scaling of the kite's dead time and lag, pattern law, kite
+  correction). Every key is required.
 - `kite_settings` → `kite_settings_psm*.yaml` in this package, read into V3Kite's
   `V3KiteConfig`: wing model, aerodynamics mode, backend and in-flight damping.
 - `structural_geometry`, `aero_geometry`, `vsm_settings`, `settle_settings`,

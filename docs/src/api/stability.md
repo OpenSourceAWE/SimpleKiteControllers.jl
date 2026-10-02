@@ -10,10 +10,11 @@ The linear model behind `examples/stability_*.jl`. The transfer functions need
 ## Plant
 
 ```@docs
+CourseLoopModel
+course_loop_model
+reload_course_loop_model!
 kite_dead_time
 pattern_dead_time_lag
-plant_coeffs
-dead_time_fraction
 turn_rate_plant
 ```
 

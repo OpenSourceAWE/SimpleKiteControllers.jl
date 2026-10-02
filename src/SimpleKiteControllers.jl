@@ -52,7 +52,7 @@ export FC_Settings, FC_Course, FC_FeedForward, FC_Pattern, FC_WindRamp, FC_Winch
 export set_fc_field!, get_fc_field, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
 export attractor_distance, guidance_rate, wind_schedule, apply_wind_schedule!
-export turn_rate_coeffs_file, winch_table_file, traj_opt_settings_file
+export turn_rate_coeffs_file, course_loop_model_file, winch_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
 export TrajOptSettings, turn_radius_lap_reelout
@@ -73,7 +73,8 @@ export load_wc_settings, build_winch, build_controllers
 
 # Linear course-loop model of the stability analysis (examples/stability_*.jl);
 # the transfer functions need `using ControlSystemsBase` (ext/)
-export kite_dead_time, kite_lag, pattern_dead_time_lag, plant_coeffs, dead_time_fraction
+export CourseLoopModel, course_loop_model, reload_course_loop_model!
+export kite_dead_time, kite_lag, pattern_dead_time_lag
 export course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
 export frd_margins, frd_diskmargin, rate_disk_margin, load_course_correction, course_correction
 
@@ -164,6 +165,7 @@ include("run_log.jl")
 
 function __init__()
     reload_turn_rate_table!()
+    reload_course_loop_model!()
 end
 
 end

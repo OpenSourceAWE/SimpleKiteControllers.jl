@@ -47,7 +47,7 @@ old model.
   `u̇ = clamp(steering_gain·(u_cmd − u), ±v_steering)`, `v_steering = 0.2 s⁻¹`:
   the lag holds for small commands (injected multisines confirm it up to
   4 Hz), larger ones are rate-limited. Until 2026-09-27 the gain was 3 and the
-  model used `ACTUATOR_LAG = 0.43 s`, the rate-limited equivalent at the
+  model used a lag of 0.43 s, the rate-limited equivalent at the
   pattern's amplitudes, see [Log validation](#log-validation-2026-09-25).
 - **Kite:** the identified turn-rate law linearized about heading `ψ0`:
 
@@ -72,12 +72,12 @@ old model.
     `τ_kite + T_kite = 0.14 s · (34/v_a)^0.74` (`pattern_dead_time_lag`), the
     table's dead time and lag scaled by one factor so their sum follows it
     (at other depowers times the measured factor
-    `exp(6.1·(depower − 0.27))`, `PATTERN_DEPOWER_EXP`). Re-identified on 12
+    `exp(6.1·(depower − 0.27))`, `pattern_depower_exp`). Re-identified on 12
     pattern logs from 12.8 to 40.6 m/s (2026-09-27): flatter over `v_a` than
     the relay sweeps, which fly at 73° and give the kite 50 % more delay at
     13 m/s. The depower factor comes from pattern runs at 0.30 / 0.33 / 0.36
     (×1.17 / 1.39 / 1.78); the table's rows grow only ×1.05 – 1.15 over that
-    range. Below 12.8 m/s (`PATTERN_V_FLOOR`) the law holds its value there:
+    range. Below 12.8 m/s (`pattern_v_floor`) the law holds its value there:
     weak-wind reel-outs measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s,
     where the unfloored law gave 0.33 – 0.35 s. The entry keeps the table:
     it flies high, close to the sweeps' conditions.
@@ -252,7 +252,7 @@ Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
 | 45 m/s | 0.048 + 0.066 s | 0.68 | 0.84 Hz | 0.22 s | 0.86 / 0.37 s |
 
 The rows below 12.8 m/s hold the pattern law's value at 12.8 m/s
-(`PATTERN_V_FLOOR`; measured in the reel-out: about 0.28 s at 10 – 11 m/s). The same pattern at other
+(`pattern_v_floor`; measured in the reel-out: about 0.28 s at 10 – 11 m/s). The same pattern at other
 tether lengths (the guidance corner scales as 1/L): minimum α 0.71 at 300 m,
 0.66 at 200 m, 0.58 at 150 m. Against every margin measured (150 – 300 m,
 `v_a` 22 – 40 m/s) this loop is low by 0 – 42 % in the delay margin and

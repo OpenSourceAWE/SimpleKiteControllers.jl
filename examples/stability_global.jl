@@ -135,8 +135,8 @@ open(report_path, "w") do io
                  "DM guided is that same guided loop's delay margin, the extra pure delay it could ",
                  "absorb before going unstable. The gravity term of the turn-rate law is ",
                  "c2(u_d)/v_a·sin(ψ)·cos(β), with c1(u_d) and c2(u_d) of the plant identified in the low ",
-                 "crosswind pattern (plant_coeffs, course_loop_model.jl; the gain schedule keeps the ",
-                 "turn-rate table, as flown); all margins are the worst case over the sign of its pole.")
+                 "crosswind pattern (the turn-rate table, data/turn_rate_coeffs.yaml, which the gain ",
+                 "schedule uses too); all margins are the worst case over the sign of its pole.")
 end
 @info "Wrote $report_path"
 

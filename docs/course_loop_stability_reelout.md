@@ -43,15 +43,12 @@ worse and was not adopted.**
   [The tape's lag in the reel-out](#the-tapes-lag-in-the-reel-out) and
   [One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)). Until
   2026-09-27 it was fitted per tether-length bin; the first version used
-  `ACTUATOR_LAG` = 0.43 s, the fig8's rate-limited equivalent.
-- Kite: the turn-rate law with the plant's `c1` and `c2` from the low crosswind
-  flights, `plant_coeffs(depower)` (`PLANT_COEFFS` in `course_loop_model.jl`,
-  since 2026-09-29, see `oldplans/PlanIdentifyTurnRateLaw.md`), with the kite's
-  dead time and first-order lag scaled over the apparent wind speed
-  (`kite_dead_time`, exponent 1.03; `kite_lag`, exponent 1.32). The controller
-  keeps the gain schedule with `c1` of `data/turn_rate_coeffs.yaml`, as flown.
-  Before 2026-09-29 the plant used the table's `c1` too; the first version had a
-  single dead time (`kite_delay`, exponent 1.24).
+  a lag of 0.43 s, the fig8's rate-limited equivalent.
+- Kite: the turn-rate law with `c1` and `c2` of the low crosswind flights,
+  `data/turn_rate_coeffs.yaml` (see `oldplans/PlanIdentifyTurnRateLaw.md`), the same
+  table the gain schedule uses, with the kite's dead time and first-order lag scaled
+  over the apparent wind speed (`kite_dead_time`, `kite_lag`, exponents in
+  `data/course_loop_model.yaml`).
 - Gravity: both signs of the gravity pole `±(c2/v_a)·cos(β)` are checked, with
   the gravity term `(c2/v_a)·sin(ψ)·cos(β)`, ≈ 0.10 – 0.18 1/s at the worst bins'
   `v_a`; `gravity_scale` is a factor on it (0 = none). β is the pattern's centre
@@ -59,8 +56,8 @@ worse and was not adopted.**
   was a constant `C3` = 0.23 1/s identified on the flown figures of eight
   (`identify_c3.jl`), removed from `course_loop_model.jl` on 2026-10-02.
 
-The results and retunes below are dated; those before the switch to
-`PLANT_COEFFS` on 2026-09-29 were computed with the table's `c1` and the
+The results and retunes below are dated; those before the switch to the
+low-flight turn-rate law on 2026-09-29 were computed with the table's `c1` and the
 gravity term of their time.
 - Controller: the exact discrete PD of `CourseController`, at the project's
   `1/sample_freq`.
@@ -229,7 +226,7 @@ explain why the baseline tracks well at α ≈ 0.07.
 
 ## The tape's lag in the reel-out
 
-`ACTUATOR_LAG` = 0.43 s was identified on a fig8 log, where the tape sits on
+A lag of 0.43 s was identified on a fig8 log, where the tape sits on
 its 0.2/s rate limit 20 % of the time. The reel-out steers less hard. A
 least-squares fit of `ẏ = (u − y)/T`, from `set_steering` to `steering`, on
 the baseline runs gives, in phase 4:
@@ -255,7 +252,7 @@ the baseline runs gives, in phase 4:
 [One tape lag per log](#one-tape-lag-per-log-2026-09-27-evening)),
 from the same on-path samples it analyses (`fit_actuator_lag`), prints it as
 a column and uses it in the plant. `log_dir` points the script at an archived
-run. Worst guided α over the length, with `ACTUATOR_LAG` → with the fitted
+run. Worst guided α over the length, with 0.43 s → with the fitted
 lag:
 
 | Run | α guided, min | Median over the bins | α inner, min | Fitted lag per bin |
@@ -893,7 +890,7 @@ Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
    `ω_g ∝ v_k`, so a bin's highest `ω_g` (0.78 rad/s at 154 m) is flown at its
    highest `v_a` (15.5 m/s); the old worst case paired it with the lowest
    (8.4 m/s, where the kite flies ~0.42 rad/s).
-2. **The pattern law is floored at 12.8 m/s** (`PATTERN_V_FLOOR`). Below it
+2. **The pattern law is floored at 12.8 m/s** (`pattern_v_floor`). Below it
    the law kept growing (0.46 s at 8.4 m/s, depower 0.294); the reel-out logs
    measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s.
 
