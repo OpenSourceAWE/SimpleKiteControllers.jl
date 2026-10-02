@@ -25,10 +25,12 @@ course_loop_model:
   # The lowest v_a the law was identified at; below it the law holds its value.
   pattern_v_floor:     11.8   # [m/s]
   pattern_law_depower: 0.27   # depower the pattern law was measured at [-]
-  # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)):
-  # point D (300 m, 7 m/s) flown at depower 0.30 / 0.33 / 0.36 gave x1.17 / 1.39 / 1.78
-  # over the 0.27 law (oldplans/Plan_model_validation.md).
-  pattern_depower_exp: 6.1    # [-]
+  # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)): point D
+  # (system_fig8_300m, 7.0 m/s) flown at depower 0.270 / 0.300 / 0.330 / 0.360 gave x0.94 /
+  # 1.11 / 1.37 / 1.81 over the pattern law at the same v_a (identify_turn_rate_law, phase 4
+  # from 15.0 s after its start); standard error of the exponent ±0.62.
+  # identify_depower_factor.jl, 2026-10-02.
+  pattern_depower_exp: 5.98   # [-]
 
   # Zero and pole of kite_correction: fit at the 300 m fig8 point, 0.5 - 2.1 Hz,
   # 2026-09-27, against the plant with the pattern law's dead time and lag, which it
