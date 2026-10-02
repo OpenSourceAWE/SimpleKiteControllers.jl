@@ -71,7 +71,10 @@ and start it in the background:
 started from. Without a subcommand `./bin/run_server` runs it in the foreground
 in a second terminal window, as before.
 
-Then, from a Julia REPL in this repository:
+Then, from a Julia REPL in this repository, there are two menus:
+
+- `menu()` — the examples: settings, simulation runs, plots and scenario management
+- `menu2()` — the model identification of the kite (see below)
 
 ```julia
 menu()
@@ -112,6 +115,31 @@ Choose example to run or `q` to quit:
 The menu shows twelve entries at a time and scrolls; the five `select_*` entries change the
 simulation settings, which are persisted to `data/gui.yaml` and read fresh by every run
 rather than cached in a REPL global.
+
+The second menu, started with
+
+```julia
+menu2()
+```
+re-identifies the model of the kite, for example after a change of the kite:
+
+```text
+Choose identification script to run or `q` to quit: 
+ > select_project.jl              - choose the system project (the kite) to identify
+   build_turn_rate_table.jl       - identify the turn-rate law of every depower (12 min!)
+   plot_c1_c2.jl                  - plot c1, c2, the dead time and the lag over depower
+   identify_kite_delay_scaling.jl - scaling of dead time and lag over v_a (5 min!)
+   identify_pattern_law.jl        - response time in pattern flight over v_a (10 min!)
+   identify_depower_factor.jl     - growth of the response time with depower (6 min!)
+   identify_kite_correction.jl    - measured kite correction by multisine injection (5 min!)
+   stability_opt_reelout.jl       - disk margins of the reel-out course loop with the identified model
+   quit
+```
+The identified coefficients are written into the files the selected project names, such as
+`data/turn_rate_coeffs.yaml` and the project's course-loop model file;
+`stability_opt_reelout.jl` then checks the reel-out course loop with the identified model.
+See [Examples - identification](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev/examples_identification/)
+in the documentation.
 
 The runs themselves come in two families. `simple_fig8.jl` flies the pattern at constant
 tether length and plots the results when it is done; `simple_fig8_live.jl` is the same
