@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Plotting for simple_fig8.jl results.
+Plotting for `simple_fig8.jl` results.
 
-Loads the `output/<log_file>.arrow` log saved by simple_fig8.jl and produces
+Loads the `output/<log_file>.arrow` log saved by `simple_fig8.jl` and produces
 three figures:
 
 1. the flown pattern in the (azimuth, elevation) plane against the reference
@@ -46,7 +46,7 @@ Which of the three figures get shown is controlled by `select_plots()`
 (`examples/select_plots.jl`), persisted to `data/gui.yaml`.
 
 Run from the REPL after (or instead of, if the log already exists) running
-simple_fig8.jl:
+`simple_fig8.jl`:
 
     include("simple_fig8_plots.jl")
 """

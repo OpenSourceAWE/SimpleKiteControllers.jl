@@ -56,8 +56,8 @@ Log slot mapping (`step!` already fills `var_14`/`var_15`/`var_16`):
 | `var_02` | attractor azimuth [deg]                   |
 | `var_03` | attractor elevation [deg]                 |
 | `var_04` | pattern-centre elevation [deg]            |
-| `var_05` | raw guidance course chi_set [rad]         |
-| `var_06` | regulated error (feedback - chi_cmd) [deg] |
+| `var_05` | raw guidance course `chi_set` [rad]       |
+| `var_06` | regulated error (feedback - `chi_cmd`) [deg] |
 | `var_07` | entry descent limiter weight (0 = raw guidance, 1 = fully limited) |
 | `var_08` | course/heading blend weight (0 = heading, 1 = course) |
 | `var_09` | span-mean geometric AoA [deg]             |

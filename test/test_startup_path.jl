@@ -6,7 +6,7 @@ Unit tests for the startup of a reel-out run that need no optimizer (`src/startu
 gates on an installed path, the lobe lift rationed to the curvature gate, the startup geometry, the
 feasibility laws the loop reads, and the state the loop starts from. Each takes a hand-made
 `RunState` and `setup` on a synthetic figure of eight. `retry_startup!` is covered by the live
-`ladder` case of examples/regression_baseline.jl, its decisions by test_startup_retry.jl.
+`ladder` case of `examples/regression_baseline.jl`, its decisions by `test_startup_retry.jl`.
 """
 
 using Test

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-V3 of oldplans/Plan_model_validation.md: k-step-ahead prediction of the course-loop
+V3 of `oldplans/Plan_model_validation.md`: k-step-ahead prediction of the course-loop
 plant on held-out logs.
 
 The logged steering command `set_steering` is passed through the plant of
@@ -15,7 +15,7 @@ each sample from the log:
     turn rate: ψ̇ = c1(u_d)·v_a·u_k + C3·sin(ψ)·cos(β)
 
 `c1` at the logged depower `u_d`, `β` the logged elevation; `C3` the gravity
-coefficient identified on the flown figures of eight (course_loop_model.jl). The steering
+coefficient identified on the flown figures of eight (`course_loop_model.jl`). The steering
 chain depends on the input alone and runs over the whole log; only the heading
 integrates, so it is re-initialized from the log every `H` seconds. Three
 variants separate the error sources:

@@ -6,7 +6,7 @@
 # minimum turn radius. Pure: settings in, numbers out; only the client talks to the server.
 
 """
-Total offset [rel_depower units] between the two models at equal power.
+Total offset [`rel_depower` units] between the two models at equal power.
 
 Recalibrated 2026-08-29 after `kite.mass` in `data/settings_reelout_150m.yaml`
 rose from 6.2 kg to 10.9926 kg (commit `6443fbe`) to match AWETrim's own LEI-V3
@@ -18,17 +18,17 @@ ratio 1.00, both runs inside the 0.995..1.004 acceptance band.
 
 Earlier 2026-08-26 sweep, at the 6.2 kg mass (predictor AWETrim `a745914`):
 
-| offset | measured − predicted [W] | power_ratio |
-|--------|--------------------------|-------------|
-| 0.105  | −578                     | 0.92        |
-| 0.100  | −68                      | 0.99        |
-| 0.0985 | +67                      | 1.01        |
-| 0.095  | +451                     | 1.06        |
+| offset | measured − predicted [W] | `power_ratio` |
+|--------|--------------------------|---------------|
+| 0.105  | −578                     | 0.92          |
+| 0.100  | −68                      | 0.99          |
+| 0.0985 | +67                      | 1.01          |
+| 0.095  | +451                     | 1.06          |
 
 ~100 W measured per 0.001, ~0.14 of ratio per 0.010 — steep enough that the
 0.995..1.004 band (±0.00036 in this variable) needs the constant written to
 four decimals. Earlier history: 0.12 measured 2026-08-18
-(`docs/steering_depower.md`, VSM needing 0.12 more rel_depower than the ROM for
+(`docs/steering_depower.md`, VSM needing 0.12 more `rel_depower` than the ROM for
 equal power, of which 0.08 was the two tape-length zeros and 0.04 genuine aero
 disagreement), lowered to 0.107 by commit `ee1ecbd` without re-measurement, then
 (post-8 mm tether) to 0.099, then (post-mass) to this value. RE-MEASURE after

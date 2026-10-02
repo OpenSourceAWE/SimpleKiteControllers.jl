@@ -451,8 +451,8 @@ end
     startup_feasibility(setup, st) -> (; feas, margin5, c1_at_phase, phase5_margin_at)
 
 The gates that refuse the run (`check_startup_path`) on the installed startup path, at
-the depower the pattern is FLOWN at (`pattern_depower`): with fly_opt_depower the kite
-flies the optimizer's u_d from phase 3 on. Returns the verdicts `feas`, `margin5`, the
+the depower the pattern is FLOWN at (`pattern_depower`): with `fly_opt_depower` the kite
+flies the optimizer's `u_d` from phase 3 on. Returns the verdicts `feas`, `margin5`, the
 `Phase5MarginState` of the in-air phase-5 check, and the two laws the loop reads off
 `feas`: `c1_at_phase(phase, depower | st)`, the c1 to check a path against at time t,
 and `phase5_margin_at(az, el)`, what phase 5 will fly a candidate path with.

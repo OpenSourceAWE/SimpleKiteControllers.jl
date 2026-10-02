@@ -19,7 +19,7 @@ start of the fit window:
   flight, the input of its fit.
 
 The channels are saved to `output/relay_low_elevation.csv` (time [s], heading,
-band_center, elevation [°], set_steering, steering, us_delayed [-], `NaN` outside
+`band_center`, elevation [°], `set_steering`, steering, `us_delayed` [-], `NaN` outside
 the fit window), so the figure can be redrawn without flying (`from_csv`). The
 PDF goes to LearningControl's `figures/`, as in `plot_c1_c2.jl`.
 

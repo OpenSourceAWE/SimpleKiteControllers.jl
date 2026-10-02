@@ -17,6 +17,7 @@ SimpleKiteControllers.PATTERN_V_FLOOR
 SimpleKiteControllers.PLANT_COEFFS
 SimpleKiteControllers.PLANT_SPLIT
 SimpleKiteControllers.RETIRED_YAML_KEYS
+SimpleKiteControllers.depower_command!
 SimpleKiteControllers.elevation_min_request
 SimpleKiteControllers.merge_into!
 SimpleKiteControllers.setup_run

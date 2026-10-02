@@ -38,7 +38,7 @@ end
 The winch settings and the length loop of the run. ONE `WCSettings` (`wc`) serves BOTH
 winch loops, the POSITION-mode torque gains (`wpc`) and the speed-controller tuning of the
 reel-out controller, so the wind-dependent force floor and force-limit law of the
-project's tables are set on it here. Refuses a `compliance` other than 0: REEL_OUT and
+project's tables are set on it here. Refuses a `compliance` other than 0: `REEL_OUT` and
 V3Kite's own FORCE mode both drive the winch, and only one can hold the drum at a time.
 """
 function build_winch(project, project_set, fcs)

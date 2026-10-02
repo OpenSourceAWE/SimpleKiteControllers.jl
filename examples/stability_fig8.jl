@@ -30,7 +30,7 @@ at the row's `v_app` (about 39 m/s), 0.042 + 0.083 s at depower 0.275. See
 `docs/course_loop_stability.md`.
 
 In the pattern (phase ≥ 3) two more factors, both validated against the
-simulation at 200 and 300 m (oldplans/Plan_model_validation.md, V1 step 1):
+simulation at 200 and 300 m (`oldplans/Plan_model_validation.md`, V1 step 1):
 
 - the attractor guidance, `guidance_tf(ω_g)` = `1 + ω_g/s`, `ω_g = v_k/(L·D)`,
   with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;
@@ -69,8 +69,8 @@ and the `max_steering` clamp, to find what the rate limit does to large turns.
 Above `v_app_min` the schedule cancels `v_a` from the loop gain `K·c1·v_a`, but
 not from the kite's dead time, which grows as `v_a` falls. The depower moves
 `c1` and, through the table, the dead time too. Three sweeps are therefore
-reported: the pattern (depower_setpoint, full gain) over `v_a`, the entry
-(entry_depower, entry_gain) over `v_a`, and the full gain over the identified
+reported: the pattern (`depower_setpoint`, full gain) over `v_a`, the entry
+(`entry_depower`, `entry_gain`) over `v_a`, and the full gain over the identified
 depower range of the flown `body_damping`.
 
 The disk margin `α` (skew 0) is the radius of the largest disk of simultaneous

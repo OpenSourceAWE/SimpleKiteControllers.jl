@@ -83,7 +83,7 @@ end
     steering_command!(st, setup, plant, t, chi_set, dmin)
         -> (; rel_steering, rel_depower, phase, u_ff, chi_cmd, w_lim, w_course, err)
 
-Entry state machine, descent limiter, feedback fusion, PID and rel_depower (see `CourseController`),
+Entry state machine, descent limiter, feedback fusion, PID and `rel_depower` (see `CourseController`),
 with the gain scale and the curvature feed-forward, then the depower of [`depower_command!`](@ref).
 The phase is the one after the switch to phase 5 when the reel-out is done.
 """
@@ -663,7 +663,7 @@ end
     install_candidate!(st, setup, t, phase, l_now, el_target, tab, cand) -> event
 
 Install a candidate that passed the gate: queue the blend from the aligned old path, move the scored
-reference, the optimizer's depower and k_v with it, re-base the lap counter, and record the install
+reference, the optimizer's depower and `k_v` with it, re-base the lap counter, and record the install
 and its phase-5 margin. Returns the cycle's event.
 """
 function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab, cand)
@@ -936,7 +936,7 @@ end
 """
     release_reelout!(st, setup, plant, t)
 
-REEL_OUT is released `reelout_delay` seconds after phase 3, or early by `reelout_f_trigger`. The gate
+`REEL_OUT` is released `reelout_delay` seconds after phase 3, or early by `reelout_f_trigger`. The gate
 LATCHES: once open it never re-closes.
 """
 function release_reelout!(st::RunState, setup, plant, t)
@@ -1015,7 +1015,7 @@ end
     entry_force_guard!(st, setup, plant, v_set) -> v_set
 
 Force floor BEFORE reel-out: `guard_lfc` (NOT `rc`, see `build_winch`) stepped by hand through
-calc_v_set's setters. Reel-IN only; returns `v_set` unchanged while the guard is inactive.
+`calc_v_set`'s setters. Reel-IN only; returns `v_set` unchanged while the guard is inactive.
 """
 function entry_force_guard!(st::RunState, setup, plant, v_set)
     (; guard_lfc, fcs, rcs) = setup

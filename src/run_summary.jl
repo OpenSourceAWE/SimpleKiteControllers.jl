@@ -363,7 +363,7 @@ end
 
 The input files every reel-out run is configured by: the system project, the
 plant/solver settings it names, the winch gains, the flight-controller tuning and
-`gui.yaml` (the project/sim_time/turbulence choice). A caller with more inputs
+`gui.yaml` (the `project`/`sim_time`/`turbulence` choice). A caller with more inputs
 appends them before handing the list to [`archive_run_files`](@ref).
 """
 function run_input_files(project, project_set)

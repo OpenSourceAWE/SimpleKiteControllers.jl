@@ -91,7 +91,7 @@ The wind of a run, from the `KiteUtils.Settings` of its system project — the
 same file the plant is built from, so the path cannot be optimized for a wind
 the kite does not fly in. Field for field: `v_wind`, `upwind_dir` (both are "the
 direction the wind comes FROM", 0 = North, clockwise), `profile_law`, `alpha`,
-`z0`, and `heights`/`speeds` for the fitted CUSTOM_* laws 4-6.
+`z0`, and `heights`/`speeds` for the fitted `CUSTOM_*` laws 4-6.
 
 `turbulence` is left at 0 on purpose: the server accepts and echoes it but does
 NOT use it — the optimizer is deterministic and works on the mean profile.
@@ -113,7 +113,7 @@ end
 """
 The `softminus_beta` always sent to AWETrim, independent of the local winch's own
 `wc.softminus_beta` — measured 2026-08-25: `2e-3`/`5e-3` both make the 3 m/s
-solve FAIL (422, Max_Iterations_Exceeded), `1e-3` converges. Kept fixed here so a
+solve FAIL (422, `Max_Iterations_Exceeded`), `1e-3` converges. Kept fixed here so a
 local sharpening of the plain `force_limit = "soft"` law WITHOUT `soft_lfc`
 (which needs `softminus_beta * f_low >= 8`, e.g. `0.03` at `f_low = 350`)
 never reaches the server. With `soft_lfc = true` this value is not even read

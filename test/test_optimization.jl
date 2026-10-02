@@ -6,7 +6,7 @@ Unit tests for the parallel figure-of-eight shape sweep: `OptSettings` loading,
 grid generation, the file-lock/claim protocol, the results table's YAML I/O and
 its ranking. All file-based tests run against a fresh `mktempdir`, never against
 `output/`, and `pattern_margin` is the only geometry entering here — the same
-fast, no-simulation computation already exercised in test_fig8_controller.jl.
+fast, no-simulation computation already exercised in `test_fig8_controller.jl`.
 """
 
 using Test

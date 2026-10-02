@@ -6,7 +6,7 @@ Example script demonstrating an ATTITUDE-STABILIZED parking maneuver of the V3
 kite using the high-level `init` + `step!` interface.
 
 Same setup as `examples/simple_parking.jl` — the wing is settled at a fixed
-depower setting (DEPOWER_SETPOINT) and parked at a constant tether length
+depower setting (`DEPOWER_SETPOINT`) and parked at a constant tether length
 (the caller's winch length loop holds the tether) — but instead of leaving the
 steering at zero, a heading PID (as in `examples/simple_sinus.jl`) regulates
 the heading to a constant setpoint of zero, so the kite does not drift away
@@ -22,7 +22,7 @@ the closed-loop response stays roughly invariant when the apparent wind speed
 changes. Because `DiscretePID` is in standard form (`K*(e + ...)`), scaling `K`
 scales the D action along with it.
 
-Logs the run to "tmp_auto_parking" in the `output` folder
+Logs the run to `"tmp_auto_parking"` in the `output` folder
 (`examples/../output`, created if missing). For verification, run
 `include("examples/simple_auto_parking.jl")` and check the printed heading
 regulation RMS error.
@@ -31,8 +31,8 @@ At the end it also prints the AoA ripple metrics (see `src/ripple_metrics.jl` an
 PlanSuppressOscillations.md) together with the solver cost and the wall clock, as
 `examples/simple_parking.jl` does, so a change to e.g. the body-frame damping can
 be judged on both the oscillation and the simulation speed. Those numbers are
-only comparable across runs that fix PROJECT, V_WIND, TETHER_LENGTH,
-DEPOWER_SETPOINT, the heading gains, SIM_TIME and DT.
+only comparable across runs that fix `PROJECT`, `V_WIND`, `TETHER_LENGTH`,
+`DEPOWER_SETPOINT`, the heading gains, `SIM_TIME` and `DT`.
 """
 
 using Pkg

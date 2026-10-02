@@ -56,7 +56,7 @@ it. The traversal direction is asserted too: `set_path!` reverses a path to matc
 `up_loops`, so a `downloops` mismatch would otherwise silently fly the optimizer's
 curve backwards — the same curve, but not the one that was optimized.
 
-# Geometry that no longer comes from FC_Settings
+# Geometry that no longer comes from `FC_Settings`
 
 `fcs.f8_a`/`f8_b` and `fcs.el_center` describe the guess, not what is flown, so
 the pattern's centre (the dive target, and `var_04`) and its extent (the size

@@ -3,8 +3,8 @@
 
 """
 Utility functions for pattern, time-series, power and aerodynamics plotting —
-extracted from simple_reelout_plots.jl to enable batch processing in
-create_plots.jl while keeping the interactive script's structure intact.
+extracted from `simple_reelout_plots.jl` to enable batch processing in
+`create_plots.jl` while keeping the interactive script's structure intact.
 """
 
 # These imports are assumed to be available in the including script's context

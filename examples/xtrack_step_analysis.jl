@@ -46,7 +46,7 @@ end
 """
 Runs of a saved phase-4 cross-track step test (`output/xtrack_step_test_phase4.csv`), as a Dict
 from the run name ("ref", "s0", ...) to its columns: time, δ, d, Q, phase and the operating
-point L, v_a, v_k, depower.
+point L, `v_a`, `v_k`, depower.
 """
 function load_xtrack_phase4_csv(file)
     runs = Dict{String, Any}()
@@ -70,8 +70,8 @@ end
 Step responses of every step run in `P4` (from [`load_xtrack_phase4_csv`](@ref)) against its
 "ref" run, subtracted by time — valid through the reel-out, unlike over a long hold. Only steps
 whose whole `win` window is in `phase` are kept. Returns the time axis `τ`, the mean response `y`
-and its standard error `se`, and `steps`, each with its response and operating point (L, v_a,
-v_k averaged over the window, depower).
+and its standard error `se`, and `steps`, each with its response and operating point (L, `v_a`,
+`v_k` averaged over the window, depower).
 """
 function phase4_step_responses(P4; phase = 4, win = 10.0, pre = 1.0)
     ref = P4["ref"]
@@ -99,7 +99,7 @@ end
 
 The model's step response from δ to d ([`model_T`](@ref)) at each step's own operating point,
 averaged over `steps` like the measurement, per sign of the gravity pole. Needs the globals of
-stability_opt_reelout.jl, included on the reference run's log (for `τ_log` and `Ts`).
+`stability_opt_reelout.jl`, included on the reference run's log (for `τ_log` and `Ts`).
 """
 function model_step_average(steps, τ, el_c, lag)
     idx = clamp.(round.(Int, τ ./ Ts) .+ 1, 1, typemax(Int))

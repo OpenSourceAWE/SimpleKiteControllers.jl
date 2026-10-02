@@ -379,7 +379,7 @@ end
 """
     winch_state_pct(sl) -> NamedTuple or `nothing`
 
-How the REEL_OUT winch controller spent the reel-out window, as the percentage
+How the `REEL_OUT` winch controller spent the reel-out window, as the percentage
 of its samples in each of WinchControllers.jl's three states (logged to `var_12`
 by `examples/simple_reelout.jl`): `lower_force_pct` (state 0, the
 `LowerForceController` reeling IN to keep the tether taut), `speed_pct` (state 1,
@@ -447,7 +447,7 @@ end
                     peak_floor=0.02, settle_frac=0.05) -> NamedTuple or `nothing`
 
 Characterizes the underdamped ring the winch's `v_set = kv*sqrt(force)` law
-excites when reel-out engages (`docs/fig8_tuning_log.md`, "REEL_OUT winch"):
+excites when reel-out engages (`docs/fig8_tuning_log.md`, "`REEL_OUT` winch"):
 `v_reelout` overshoots the speed the square-root law settles to and rings for
 several cycles before decaying into it. Returns `nothing` for a log that never
 reeled out, same guard as [`reelout_power`](@ref).

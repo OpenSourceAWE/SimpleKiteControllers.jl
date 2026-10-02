@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Plotting for simple_reelout.jl results.
+Plotting for `simple_reelout.jl` results.
 
 A copy of `simple_fig8_plots.jl` with the time-series figure's tether-length
 panel changed from a flat `l0` line to the actual flown length against `fig_8`
@@ -70,7 +70,7 @@ see `depower_series`/`kv_series` for why a replot must never touch them.
 An archive from before `depower_optimized_rel` was written gets no `u_d` panel.
 
 Run from the REPL after (or instead of, if the log already exists) running
-simple_reelout.jl:
+`simple_reelout.jl`:
 
     include("simple_reelout_plots.jl")
 
@@ -185,13 +185,13 @@ end
 """
     live_log_name(project_set, output_path) -> String
 
-A run that flew an externally optimized path (simple_opt_reelout.jl) logs under
+A run that flew an externally optimized path (`simple_opt_reelout.jl`) logs under
 `<log_file>_opt` and leaves the name in `LOG_NAME`, so the two runs of one
 project keep separate logs and can be plotted against each other. A standalone
 re-include with no `LOG_NAME` around (a fresh session, or the plots having
 failed at the end of the run that set it) takes whichever of the project's two
-logs was written last — a project only ever flown by simple_opt_reelout.jl
-(system_reelout_cabauw.yaml) has no plain `<log_file>.arrow` at all.
+logs was written last — a project only ever flown by `simple_opt_reelout.jl`
+(`system_reelout_cabauw.yaml`) has no plain `<log_file>.arrow` at all.
 """
 function live_log_name(project_set, output_path)
     @isdefined(LOG_NAME) && LOG_NAME isa AbstractString && return LOG_NAME

@@ -10,7 +10,7 @@ The operating points of every archived scenario of both sites
 (`output/scenarios/<site>/vNN`, selected as `stability_global.jl` does) are
 collected once: for each linear tether-length bin its log samples and the tape's
 lag. A trial setting is then evaluated on them with `bin_margins`, the same
-worst case per bin as `stability_opt_reelout.jl` (v_a and depower corners, the
+worst case per bin as `stability_opt_reelout.jl` (`v_a` and depower corners, the
 highest `ω_g` flown near each `v_a`, both signs of the gravity pole), so the
 live settings reproduce `stability_overview.md`. The samples are those on the
 path within the live `attractor_dist`; a trial `attractor_dist` changes `ω_g`,
@@ -26,7 +26,7 @@ by hand and fly the regression runs before adopting it.
 
 Result 2026-09-28 (c3 = 0.23 1/s, 22 scenarios): from lead 0.88 s and
 `heading_d` 0.126 s, worst α guided 0.257 (Cabauw 10 m/s) -> 0.305 with lead
-0.96 s and `heading_d` 0.136 s, see docs/course_loop_stability_reelout.md.
+0.96 s and `heading_d` 0.136 s, see `docs/course_loop_stability_reelout.md`.
 
 About 1 min to collect, then about 20 s per trial setting (3 – 8 per step).
 

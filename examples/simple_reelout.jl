@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Figure-of-eight path following of the V3 kite, extended with a REEL_OUT winch: the
+Figure-of-eight path following of the V3 kite, extended with a `REEL_OUT` winch: the
 tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
 `simple_fig8.jl` (park -> dive -> hold -> transition), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
@@ -31,12 +31,12 @@ back out there is a first-order lag of `1/winch_pos_kp` = 2 s — measured at 1.
 of delay and 0.49 of the commanded amplitude on the 5.7 s reel-out oscillation
 before `v_ff` existed, plus a standing `v_ro/winch_pos_kp` ≈ 5 m length error.
 Feeding the speed forward leaves the P loop only the error to correct.
-`fcs.compliance` must be `0` (POSITION mode): REEL_OUT and V3Kite's own FORCE mode
+`fcs.compliance` must be `0` (POSITION mode): `REEL_OUT` and V3Kite's own FORCE mode
 both drive `set_length`/`set_torque`, and only one winch can hold the drum at a
 time — this script errors at startup otherwise, rather than silently picking
 one. That is why `fcs` here is loaded from `data/fc_settings_reelout.yaml`, a
 copy of `simple_fig8.jl`'s `fc_settings.yaml` with `compliance: 0` and the
-REEL_OUT keys below, not the shared file (whose `compliance: 0.5` is fig8's
+`REEL_OUT` keys below, not the shared file (whose `compliance: 0.5` is fig8's
 FORCE-mode tuning) — `system_reelout_maasvlakte.yaml`'s `fc_settings:` key names it.
 
 **Two winch controllers, ONE settings file.** Both read the same `WCSettings`
@@ -70,7 +70,7 @@ through `var_09` are as in `simple_fig8.jl`):
 | slot     | quantity                                          |
 |:---------|:---------------------------------------------------|
 | `var_10` | tether length setpoint `l_set` [m]                |
-| `var_11` | speed setpoint `v_set` [m/s] — REEL_OUT's law from phase 3, or the standalone force-floor guard's reel-IN before that |
+| `var_11` | speed setpoint `v_set` [m/s] — `REEL_OUT`'s law from phase 3, or the standalone force-floor guard's reel-IN before that |
 | `var_12` | WinchController state (0 lower-force, 1 speed, 2 upper-force) |
 | `var_13` | force error of the active force limiter [N], NaN in speed control |
 
@@ -109,7 +109,7 @@ run_archive = false, show_plots = false)` (`src/script_inputs.jl`).
 `output_path` and `run_archive` let those parallel runs keep their logs apart and
 skip the per-run archive. The inputs hold for that one run: a plain `include` flies
 with the defaults, so a value from a sweep never changes an interactive run. The
-REEL_OUT-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
+`REEL_OUT`-specific fields are `reelout_l_max`, the stop length, `n_fig_eight`,
 the second, independent stop criterion counted in laps (`0` disables it, its
 own docstring in `src/fc_settings.jl` has the counting details), `reelout_delay`,
 how long after phase 3 the winch waits before it starts reeling out, and

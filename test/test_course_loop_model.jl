@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-V5 of oldplans/Plan_model_validation.md: code consistency of
+V5 of `oldplans/Plan_model_validation.md`: code consistency of
 `src/course_loop_model.jl` and its ControlSystemsBase extension, no simulation.
 `using ControlSystemsBase` loads the extension, hence `ControlSystemsBase` in
 `test/Project.toml`.

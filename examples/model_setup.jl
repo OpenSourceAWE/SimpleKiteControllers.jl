@@ -22,7 +22,7 @@ With `pad_final_time` the run gets room for a full phase 5 (`fcs.final_time`) pa
 `set_overrides` are applied to the model's own `Settings` afterwards, e.g. `v_steering`,
 the tape's rate limit. `aero_mode` is `ContinuousAero()` or `AeroDirect()`;
 `damping_per_stiffness` [s] is the tether/bridle structural damping as a ratio of
-stiffness, see simple_fig8.jl's docstring.
+stiffness, see `simple_fig8.jl`'s docstring.
 """
 function init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_overrides = (),
                     aero_mode = ContinuousAero(), damping_per_stiffness = 0.002,

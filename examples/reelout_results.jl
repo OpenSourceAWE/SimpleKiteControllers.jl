@@ -681,7 +681,7 @@ end
 
 `simple_reelout_plots.jl`, handed the flown curve and this run's log name in
 `REF_PATH` and `LOG_NAME`, so the plots draw the optimized path and load the
-_opt log instead of the lemniscate run's; the optimizer's raw curves reach them
+`_opt` log instead of the lemniscate run's; the optimizer's raw curves reach them
 through `<log>_opt_paths.yaml`. Returns the exception the plots threw, or
 `nothing`: they are cosmetic and the run is already scored, logged and archived
 by here, so a GLMakie failure (needs the main thread, so an eval off it throws)

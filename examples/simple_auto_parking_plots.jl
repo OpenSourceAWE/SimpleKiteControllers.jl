@@ -2,19 +2,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Plotting for simple_auto_parking.jl results.
+Plotting for `simple_auto_parking.jl` results.
 
-Loads the "tmp_auto_parking" log saved by simple_auto_parking.jl in the
+Loads the `"tmp_auto_parking"` log saved by `simple_auto_parking.jl` in the
 `output` folder (`examples/../output`) and reproduces the same
-plot as auto_parking.jl, entirely from logged data — no re-simulation needed.
-v_reelout, winch_force, elevation, heading and AoA come straight from the
+plot as `auto_parking.jl`, entirely from logged data — no re-simulation needed.
+`v_reelout`, `winch_force`, elevation, heading and AoA come straight from the
 syslog; the L/D ratios come from the SysState spare slots that `step!` fills
-during simple_auto_parking.jl's simulation loop (var_15 = L/D_wing, var_16 =
-L/D_eff). The steering panel shows the actual value (`steering`, the KCU's tape-lagged
+during `simple_auto_parking.jl`'s simulation loop (`var_15` = `L/D_wing`, `var_16` =
+`L/D_eff`). The steering panel shows the actual value (`steering`, the KCU's tape-lagged
 fraction) against the command (`set_steering`), the standard SysState pair.
 
-Run from the REPL after (or instead of, if "tmp_auto_parking" already exists) running
-simple_auto_parking.jl:
+Run from the REPL after (or instead of, if `"tmp_auto_parking"` already exists) running
+`simple_auto_parking.jl`:
 
     include("simple_auto_parking_plots.jl")
 """

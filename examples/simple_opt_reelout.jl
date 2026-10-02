@@ -106,8 +106,8 @@ flown here; the pattern's centre and extent are measured off the installed path.
 
 The run keeps two: `setup` (see `setup_run`), everything it reads, and `st`, the
 `RunState` everything it writes. The setup and the startup are the package's
-(src/run_setup.jl, src/startup_path.jl): the script hands `setup_run` its
-`init_model` (model_setup.jl), since the package does not depend on the model,
+(`src/run_setup.jl`, `src/startup_path.jl`): the script hands `setup_run` its
+`init_model` (`model_setup.jl`), since the package does not depend on the model,
 and calls the startup steps in order. `startup_feasibility` (the gates of
 [`check_startup_path`](@ref)) adds `feas`, `margin5`, `c1_at_phase` and
 `phase5_margin_at` to `setup`. Left here are the loop around the model's `step!`
@@ -204,7 +204,7 @@ Everything it writes lives in `st`; the run's settings and controllers (`fcs`, `
 come in `setup` (see `setup_run`), unchanged during the loop. Passed as an argument, not read as a global, so the loop compiles against their concrete
 types. `reelout_results.jl` reads `st` afterwards. The `try` stays at the call, so the wall time survives
 an early `break` or a throw. What happens before and after `step!` is the package's
-(`step_commands!`, `record_step!`, src/reelout_loop.jl); only the model calls are here.
+(`step_commands!`, `record_step!`, `src/reelout_loop.jl`); only the model calls are here.
 """
 function run_loop!(st::RunState, setup::RunSetup)
     (; effective_sim_time, fcs, rcs, wpc) = setup
