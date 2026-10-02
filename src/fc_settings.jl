@@ -223,6 +223,33 @@ $(TYPEDFIELDS)
 end
 
 """
+The low-wind schedule of a reel-out run, section `low_wind:` of [`FC_Settings`](@ref)'s
+YAML file: the starting tether length, the startup guess's centre elevation, the gain
+schedule's `v_app_min` and the phase-5 lift, one value per wind speed at
+`low_wind_height`, linear in between and held below the first. At and above the last
+wind speed the schedule is off and the settings files' own values are flown. Empty
+vectors (the default) switch it off. See [`low_wind_schedule`](@ref).
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_LowWind
+    "Height [m] of the wind speed the schedule is keyed on"
+    low_wind_height::Float64 = 100.0
+    "Wind speeds [m/s] at `low_wind_height`, ascending; empty = off"
+    low_wind_speeds::Vector{Float64} = Float64[]
+    "Tether length [m] reel-out starts at, per wind speed"
+    low_wind_l_tether::Vector{Float64} = Float64[]
+    "Startup guess's centre elevation [deg] (`guess_el_center`)"
+    low_wind_guess_el_center::Vector{Float64} = Float64[]
+    "Floor [m/s] of the gain schedule (`v_app_min`)"
+    low_wind_v_app_min::Vector{Float64} = Float64[]
+    "Phase-5 path lift [deg] (`el_offset_final`)"
+    low_wind_el_offset_final::Vector{Float64} = Float64[]
+end
+
+"""
 The simulation conditions and the pass criteria of [`FC_Settings`](@ref),
 section `run:` of its YAML file.
 
@@ -273,6 +300,7 @@ for a modified copy.
 - `wind_ramp::`[`FC_WindRamp`](@ref): Wind schedule of depower and pattern size
 - `winch::`[`FC_Winch`](@ref): Force-mode winch and force guards
 - `reelout::`[`FC_Reelout`](@ref): Reel-out start and stop, phase-5 depower and path
+- `low_wind::`[`FC_LowWind`](@ref): Low-wind schedule of the reel-out start
 - `run::`[`FC_Run`](@ref): Simulation conditions and pass criteria
 """
 mutable struct FC_Settings
@@ -288,6 +316,8 @@ mutable struct FC_Settings
     winch::FC_Winch
     "Reel-out start and stop, phase-5 depower and path"
     reelout::FC_Reelout
+    "Low-wind schedule of the reel-out start"
+    low_wind::FC_LowWind
     "Simulation conditions and pass criteria"
     run::FC_Run
 end
@@ -297,7 +327,7 @@ of the sections of its YAML file.
 """
 const FC_PARTS = (; course = FC_Course, feedforward = FC_FeedForward, pattern = FC_Pattern,
                   wind_ramp = FC_WindRamp, winch = FC_Winch, reelout = FC_Reelout,
-                  run = FC_Run)
+                  low_wind = FC_LowWind, run = FC_Run)
 
 """
 Which part of [`FC_Settings`](@ref) holds a setting: setting name => part name, e.g.

@@ -18,6 +18,15 @@
 
 ### Added
 
+- A low-wind schedule for `simple_opt_reelout.jl`: section `low_wind:` of
+  `fc_settings_reelout.yaml` ([`FC_LowWind`], `low_wind_schedule`,
+  `apply_low_wind_schedule!`) sets the starting tether length, the startup guess's
+  `guess_el_center`, `v_app_min` and `el_offset_final` per wind speed at 100 m height,
+  linear in between. At 150 m the guided disk margin was marginal at Cabauw 3 m/s and
+  Maasvlakte 3.5 and 4 m/s (0.41-0.44); starting at 195 m lifts it to 0.57-0.61 at
+  equal or higher power. `stability_opt_reelout.jl` applies the schedule at the log's
+  wind speed. An override of the same setting wins over the schedule.
+
 - Moved from `examples/` into the package (V3Kite is still not a dependency):
   the AWETrim client, optimizer request/conditions, pattern limits, re-optimization
   gate, loop decisions, run setup/startup, `RunState` and the reel-out loop step,

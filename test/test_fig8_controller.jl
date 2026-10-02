@@ -1100,6 +1100,32 @@ end
         for f in ("fc_settings.yaml", "fc_settings_fig8_150m.yaml")
             @test wind_schedule(FC_Settings(f), 10.0).depower_setpoint == 0.33
         end
+        # low_wind_schedule: off when empty, held below the first row, linear between rows,
+        # off from the last row on.
+        flw = FC_Settings()
+        @test isnothing(low_wind_schedule(flw, 3.0))
+        flw.low_wind.low_wind_speeds = [4.0, 6.0]
+        flw.low_wind.low_wind_l_tether = [200.0, 150.0]
+        flw.low_wind.low_wind_guess_el_center = [25.0, 29.0]
+        flw.low_wind.low_wind_v_app_min = [8.0, 10.0]
+        flw.low_wind.low_wind_el_offset_final = [1.5, 1.0]
+        @test low_wind_schedule(flw, 3.0) == (l_tether = 200.0, guess_el_center = 25.0,
+                                              v_app_min = 8.0, el_offset_final = 1.5)
+        @test low_wind_schedule(flw, 5.0) == (l_tether = 175.0, guess_el_center = 27.0,
+                                              v_app_min = 9.0, el_offset_final = 1.25)
+        @test isnothing(low_wind_schedule(flw, 6.0))
+        flw.low_wind.low_wind_v_app_min = [8.0]
+        @test_throws ErrorException low_wind_schedule(flw, 5.0)
+        flw.low_wind.low_wind_v_app_min = [8.0, 10.0]
+        flw.low_wind.low_wind_speeds = [6.0, 4.0]
+        @test_throws ErrorException low_wind_schedule(flw, 5.0)
+        # The shipped table: its last row is what the files fly, so it hands over without a step.
+        fro = FC_Settings("fc_settings_reelout.yaml")
+        @test fro.low_wind.low_wind_l_tether[end] == 150.0
+        @test fro.low_wind.low_wind_v_app_min[end] == fro.course.v_app_min
+        @test fro.low_wind.low_wind_el_offset_final[end] == fro.reelout.el_offset_final
+        @test fro.low_wind.low_wind_guess_el_center[end] == TrajOptSettings("traj_opt.yaml").guess_el_center
+        @test low_wind_schedule(fro, 4.51).v_app_min == 8.0
         tos = TrajOptSettings("traj_opt.yaml")
         @test tos.guess_points == 361
         @test tos.resample_points == 361

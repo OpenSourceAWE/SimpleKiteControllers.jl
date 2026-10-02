@@ -246,6 +246,12 @@ function setup_run(inputs; init_model)
     project_set = Settings(project)
     default_v_wind = project_set.v_wind
     apply_windspeed_override!(project_set, wind_speed)
+    # The low-wind schedule (`fcs.low_wind`) at the wind flown: starting length, startup guess,
+    # gain-schedule floor and phase-5 lift. Before `sim_budget`, which reels out from `l_tether`;
+    # an override of the same setting wins.
+    apply_low_wind_schedule!(fcs, tos, project_set;
+                             keep = (keys(inputs.fcs_overrides)..., keys(inputs.tos_overrides)...,
+                                     keys(inputs.set_overrides)...))
     l_tether = project_set.l_tether
 
     # Whether `min_power_frac`/`min_power_frac_prev` are bypassed for a candidate predicting `pred`

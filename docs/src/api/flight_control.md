@@ -13,12 +13,16 @@ FC_Course
 FC_FeedForward
 FC_Pattern
 FC_WindRamp
+FC_LowWind
 FC_Winch
 FC_Reelout
 FC_Run
 fc_settings
 wind_schedule
 apply_wind_schedule!
+low_wind_schedule
+low_wind_reference
+apply_low_wind_schedule!
 ```
 
 ## Course controller
