@@ -5,9 +5,11 @@
 # after, so this copy is the one flown, and a change upstream does not reach these
 # runs unnoticed. Keep it in step with V3Kite's file on purpose, not by accident.
 #
-# `vsm_interval` below is NOT read by this package's runs: V3Kite's `init` and
-# `step!` ignore it, and every example passes `fc_settings`' `run.vsm_interval` to
-# `step!` instead. It is kept so the file stays a faithful copy.
+# Two keys below are NOT read by this package's runs, and are kept so the file
+# stays a faithful copy: `vsm_interval` (V3Kite's `init` and `step!` ignore it, and
+# every example passes `fc_settings`' `run.vsm_interval` to `step!` instead) and
+# `body_sim_damping` (`init_model` passes 0.8 x `fc_settings`' `run.body_damping`
+# to `init`, which overrides it).
 #
 # The V3 as a particle lattice: the wing is a net of DYNAMIC point masses joined
 # by springs. Loaded into a `V3KiteConfig` via a project file's `kite_settings:`.

@@ -1,8 +1,13 @@
-# Local override of V3Kite's data/kite_settings_psm.yaml, forced onto the
-# monolith backend regardless of what the upstream package ships (see
-# examples/simple_auto_parking.jl and examples/simple_opt_reelout.jl, which
-# always point their project's `kite_settings:` at this file instead of
-# V3Kite's own copy).
+# Local variant of V3Kite's data/kite_settings_psm.yaml (a plain copy of which is
+# kite_settings_psm.yaml next to this file), named by system_reelout_maasvlakte.yaml
+# and system_reelout_cabauw.yaml. V3Kite looks for a project's `kite_settings:` file
+# beside the project first, so this file is the one those runs fly.
+#
+# Against V3Kite's file it differs in three keys, of which only one acts:
+#   - analytic_jacobian: true here (the kernel backend's default), false upstream.
+#     A Cabauw run at 10 m/s flew the same within 0.05 % either way (2026-10-02).
+#   - vsm_interval and body_sim_damping: both NOT read by this package's runs, see
+#     their comments below.
 kite_settings:
   wing_type: particle_dynamics   # particle_dynamics | rigid_dynamics
   aero_mode: continuous          # direct | continuous | pressure
@@ -10,12 +15,12 @@ kite_settings:
   analytic_jacobian: true        # null takes the backend default (kernel: true)
   vsm_interval: 10               # NOT read by this package's runs: they pass fc_settings' run.vsm_interval to step!
 
-  body_sim_damping: [0.0, 0.0, 38.0]   # per-axis wing-frame damping in flight
+  body_sim_damping: [0.0, 0.0, 38.0]   # NOT read: init_model passes 0.8 x fc_settings' run.body_damping to init
   world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
 
   # INERT in this run path, despite the name: the only consumer of `wing_mass` in
   # V3Kite is examples/flight_replay.jl, guarded by `wing_mass > 0`. The wing mass
-  # that actually reaches the model is `mass` in settings_reelout_150m.yaml, which
+  # that actually reaches the model is `mass` in the project's sim_settings file, which
   # SymbolicAWEModels distributes over the wing points because their own extra_mass
   # is 0. Left at 0.0 so it cannot be mistaken for the live value; `0` also means
   # "keep what the geometry carries" if this path ever does read it.

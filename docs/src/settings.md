@@ -80,8 +80,8 @@ V3Kite looks for each of these files beside the project first and in its own dat
 directory after. The figure-of-eight projects and `system_reelout_180m.yaml` name
 `kite_settings_psm.yaml`, a local copy of V3Kite's file, so an upstream change does not
 reach these runs unnoticed. `system_reelout_maasvlakte.yaml` and
-`system_reelout_cabauw.yaml` name `kite_settings_psm_kernel.yaml`, an older local variant
-of it. The `vsm_interval` in these files is not read by the runs of
+`system_reelout_cabauw.yaml` name `kite_settings_psm_kernel.yaml`, a local variant whose only
+difference in effect is `analytic_jacobian: true`. The `vsm_interval` in these files is not read by the runs of
 this package: they pass `run.vsm_interval` of `fc_settings` to `step!`.
 
 Not named by any project:
