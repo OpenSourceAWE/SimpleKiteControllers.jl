@@ -18,7 +18,7 @@ The optimizer predicts a mean reel-out power for its path; reeling out along it
 measures one. Both land in the `traj_opt:` section of the run summary with their
 ratio. A large gap is the finding, not a bug to hide. With `fly_opt_depower`
 (on in the shipped yaml) phases 3 and 4 also fly the optimizer's depower, ramped
-in over `path_blend_time`; phase 5 always flies `fcs.depower_final`.
+in over `path_blend_time`; phase 5 always flies `fcs.reelout.depower_final`.
 
 # Re-optimizing while the tether grows
 
@@ -54,7 +54,7 @@ re-based in the same move. Every solve is recorded in `traj_opt.reopt`.
 # Lifting the path
 
 The kite tracks BELOW the path it is given (1-2 deg, 3.5 deg at 380 m).
-`fcs.el_offset_final` adds a fixed lift once reel-out ends — a setpoint move for
+`fcs.reelout.el_offset_final` adds a fixed lift once reel-out ends — a setpoint move for
 clearance. It latches at the STOP LATCH (the run's lowest point falls between
 latch and phase 4 -> 5), or, with `reelout_softstop` at 0, once the length left
 is under `v_reelout * el_offset_lead`. It reaches the kite through the next path
@@ -62,7 +62,7 @@ install or, when none is due, as a blend onto the path in the air, gated on the
 curvature margin and rationed down to a quarter of it if the whole lift is
 refused; the remainder waits in `el_target - el_applied` and is retried next lap.
 
-`fcs.el_offset_wing` lifts the LOBES only, because the sag is deeper there than
+`fcs.reelout.el_offset_wing` lifts the LOBES only, because the sag is deeper there than
 at the crossing; it is baked into every installed path and rationed the same way.
 
 Every lift is flown narrower, so the pattern-SIZE criteria break first;
@@ -99,7 +99,7 @@ is re-sent from guess centres shifted by `startup_retry_el_offsets` (see
 [`solve_startup`](@ref)), and a failed blocking COLD re-optimization
 (`use_step: false`) once from `guess_el_center + reopt_retry_el_offset`. A
 startup path that converges but is too tight keeps its seed (`retry_startup!`).
-See `simple_opt_fig8.jl` for the measurements. `fcs.f8_a`/`f8_b`/`el_center` are NOT
+See `simple_opt_fig8.jl` for the measurements. `fcs.pattern.f8_a`/`f8_b`/`el_center` are NOT
 flown here; the pattern's centre and extent are measured off the installed path.
 
 # Globals
@@ -170,14 +170,14 @@ setup = setup_run(script_inputs(@__FILE__, run_input_defaults()); init_model)
 
 # What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
 st = RunState(; l_set = setup.l_set, opt_r_scale = setup.opt_r_scale, opt_r_min = setup.opt_r_min,
-              depower_flown_opt = setup.fcs.depower_setpoint)
+              depower_flown_opt = setup.fcs.course.depower_setpoint)
 
 merge_into!(setup, solve_startup_path!(setup, st))
 toc("Received the optimized path in: ")
 log_startup_reply(setup.fcs, st.opt_result, setup.opt_r_min)
 log_lobe_lift(setup.fcs, st.opt_result)
 # The turn-rate law the retry reads a path against; `startup_feasibility` looks it up again later.
-st.c1_startup = setup.c1_at_depower(setup.fcs.depower_setpoint)
+st.c1_startup = setup.c1_at_depower(setup.fcs.course.depower_setpoint)
 adopt_startup_path!(setup, st)
 finish_startup!(setup, st)
 capture_startup_geometry!(setup, st)
@@ -211,7 +211,7 @@ function run_loop!(st::RunState, setup::RunSetup)
     model = setup.s
     for _ in 1:model.steps
         t = model.sys_state.time
-        t - st.final_start >= fcs.final_time && break
+        t - st.final_start >= fcs.reelout.final_time && break
         isnan(st.final_start) && t >= effective_sim_time && break
         # What the package's blocks need of the model, read once: none of them changes it before `step!`.
         plant = (; ss = model.sys_state, dt = model.dt, force = winch_force(model),
@@ -219,7 +219,7 @@ function run_loop!(st::RunState, setup::RunSetup)
         commands = step_commands!(st, setup, plant, t)
         (; rel_depower, rel_steering, v_set) = commands
         # `v_ff = v_set` removes the position loop's 2 s lag; `acceleration_limit` is `rcs.max_acc`, not the plant's own.
-        step!(model; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
+        step!(model; rel_depower, rel_steering, vsm_interval = fcs.run.vsm_interval,
               set_torque = winch_torque!(wpc, model, st.l_set; v_ff = v_set,
                                          speed_limit = rcs.v_sat,
                                          acceleration_limit = rcs.max_acc))

@@ -95,8 +95,8 @@ live_settings() = deepcopy(latest_global(:fcs))
 "Copy of the settings `f` with the field `k` moved by one step in direction `sgn`"
 function step_setting(f, k, sgn)
     g = deepcopy(f)
-    δ = k == :heading_p ? RETUNE_STEPS[k] * latest_global(:fcs).heading_p : RETUNE_STEPS[k]
-    setproperty!(g, k, getproperty(f, k) + sgn * δ)
+    δ = k == :heading_p ? RETUNE_STEPS[k] * latest_global(:fcs).course.heading_p : RETUNE_STEPS[k]
+    set_fc_field!(g, k, get_fc_field(f, k) + sgn * δ)
     return g
 end
 
@@ -140,14 +140,14 @@ function retune(data; target = 0.3, settings_keys = keys(RETUNE_STEPS), max_step
         k, sgn = moves[best]
         g = step_setting(trail[end].settings, k, sgn)
         push!(trail, (; settings = g, α = vals[best],
-                      move = @sprintf("%s %s → %.5g", k, sgn > 0 ? "+" : "−", getproperty(g, k))))
+                      move = @sprintf("%s %s → %.5g", k, sgn > 0 ? "+" : "−", get_fc_field(g, k))))
         @info @sprintf("step %d: %s, worst α guided = %.4f", length(trail) - 1, trail[end].move, vals[best])
     end
     trail[end].α >= target || @warn @sprintf("Target %.2f not reached: %.4f.", target, trail[end].α)
     f0, f1 = trail[1].settings, trail[end].settings
     println("Proposal (live → retuned):")
     for k in RETUNE_STEPS |> propertynames
-        println(@sprintf("  %-20s %8.5g → %8.5g", k, getproperty(f0, k), getproperty(f1, k)))
+        println(@sprintf("  %-20s %8.5g → %8.5g", k, get_fc_field(f0, k), get_fc_field(f1, k)))
     end
     return trail
 end

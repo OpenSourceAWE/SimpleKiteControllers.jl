@@ -87,7 +87,7 @@ law, `u_ff = ff_gain * psi_dot_path / (c1 * v_app)`, plus the chord correction
 `chi_ff` subtracted from the commanded course so the guidance does not ask the
 PD for the same turn a second time. Both are faded out off the path
 (`ff_d_fade`, `ff_err_fade`) and low-passed over `ff_tau`; see
-`FC_Settings.ff_gain` for the rationale. It needs `c1`, so it is OFF when
+`FC_Settings.feedforward.ff_gain` for the rationale. It needs `c1`, so it is OFF when
 `turn_rate_coeffs` has no cell for this `body_damping`/`depower_setpoint`.
 
 The `sys_state` field carries `CourseController`'s ENTRY STATE MACHINE (0 park,
@@ -230,7 +230,7 @@ l_tether = project_set.l_tether
 # v_app under v_app_abort and a larger pattern wins back the turn-radius margin.
 apply_wind_schedule!(fcs, project_set.v_wind)
 @info @sprintf("Wind schedule at v_wind = %.1f m/s: depower %.2f, f8_a %.1f°, f8_b %.1f°.",
-               project_set.v_wind, fcs.depower_setpoint, fcs.f8_a, fcs.f8_b)
+               project_set.v_wind, fcs.course.depower_setpoint, fcs.pattern.f8_a, fcs.pattern.f8_b)
 
 # Log files are arrow files, named after the project's `log_file`, kept out of git.
 output_path = normpath(joinpath(@__DIR__, "..", "output"))
@@ -240,17 +240,17 @@ log_name = basename(project_set.log_file)
 # ======================== INIT =========================== #
 
 # Decided BEFORE init: the warm-up must relax against the winch the loop commands.
-fcs.compliance >= 0 || error("compliance must be >= 0, got $(fcs.compliance)")
+fcs.winch.compliance >= 0 || error("compliance must be >= 0, got $(fcs.winch.compliance)")
 # Both winch loops are the CALLER's now: V3Kite's `step!` takes a torque.
 wcs = load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq)
 wpc = nothing
 wfc = nothing
-if fcs.compliance > 0
+if fcs.winch.compliance > 0
     # winch_force_gains returns plain numbers; the controller object is V3Kite's.
     wfc = WinchForceController(; winch_force_gains(fcs)...)
     @info @sprintf("Winch: FORCE mode at compliance = %.2f — len_kp %.0f N/m, \
                     damp %.0f N·s/m, tau %.1f s.",
-                   fcs.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
+                   fcs.winch.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
 else
     # Perfectly stiff: the position feed-forward cancels the measured load exactly.
     wpc = WinchPosController(wcs; dt = 1 / project_set.sample_freq)
@@ -290,18 +290,18 @@ else
     (; c1, c2, delay) = coeffs
 
     # c1 must match the damping in use; that is what makes this check meaningful.
-    feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
+    feas = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1)
     feas.feasible ||
         @warn "Pattern is tighter than the kite's minimum turn radius — expect \
                curvature-limited tracking, not a tuning problem."
 
     # Dead-time context for the attractor lead: how long the lead arc takes to fly.
-    lead_deg = attractor_distance(fcs, fcs.v_app_ref, l_tether)
-    lead_time = deg2rad(lead_deg) * l_tether / fcs.v_app_ref
+    lead_deg = attractor_distance(fcs, fcs.course.v_app_ref, l_tether)
+    lead_time = deg2rad(lead_deg) * l_tether / fcs.course.v_app_ref
     @info @sprintf("Attractor lead %.1f°%s ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   lead_deg, fcs.attractor_lead_time > 0 ? " (lead time)" : "",
-                   lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   lead_deg, fcs.pattern.attractor_lead_time > 0 ? " (lead time)" : "",
+                   lead_time, fcs.course.v_app_ref, delay, lead_time / delay)
 end
 
 cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
@@ -321,8 +321,8 @@ n_path = length(fec.az_path)
 # Low-pass state of the steering feed-forward; Refs for the same soft-scope reason.
 ff_u_filt = Ref(0.0)    # [-]   feed-forward steering
 ff_chi_filt = Ref(0.0)  # [rad] chord correction
-if fcs.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
-    @warn "ff_gain = $(fcs.ff_gain), but there is no turn-rate coefficient c1 — \
+if fcs.feedforward.ff_gain > 0 && !(isfinite(c1) && c1 > 0)
+    @warn "ff_gain = $(fcs.feedforward.ff_gain), but there is no turn-rate coefficient c1 — \
            flying WITHOUT steering feed-forward."
 end
 
@@ -377,21 +377,21 @@ try
         heading = Float64(s.sys_state.heading)
         local v_kite = norm(s.sys_state.vel_kite)
 
-        # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.
+        # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.feedforward.ff_gain.
         local u_ff = 0.0
         local chi_ff = 0.0
-        if fcs.ff_gain > 0 && cc.phase >= 4 && isfinite(c1) && c1 > 0
-            local v_app_ff = max(Float64(s.sys_state.v_app), fcs.v_app_min)
+        if fcs.feedforward.ff_gain > 0 && cc.phase >= 4 && isfinite(c1) && c1 > 0
+            local v_app_ff = max(Float64(s.sys_state.v_app), fcs.course.v_app_min)
             local speed_ff = rad2deg(v_kite / Float64(s.sys_state.l_tether[1]))  # [deg/s]
             if speed_ff > 0
-                local psi_dot_ff = path_turn_rate(fec, fcs.ff_lead_time * speed_ff, speed_ff;
-                                                  smooth = fcs.ff_smooth)
+                local psi_dot_ff = path_turn_rate(fec, fcs.feedforward.ff_lead_time * speed_ff, speed_ff;
+                                                  smooth = fcs.feedforward.ff_smooth)
                 # Faded out when the kite is not on this branch (a Q swap hands it the other lobe's curvature).
-                local fade_d = clamp((fcs.ff_d_fade - dmin) / (0.5 * fcs.ff_d_fade), 0.0, 1.0)
-                local fade_e = clamp((deg2rad(fcs.ff_err_fade) - abs(cc.err)) /
-                                     (0.5 * deg2rad(fcs.ff_err_fade)), 0.0, 1.0)
-                local g_ff = fcs.ff_gain * fade_d * fade_e
-                local alpha_ff = fcs.ff_tau > 0 ? s.dt / (s.dt + fcs.ff_tau) : 1.0
+                local fade_d = clamp((fcs.feedforward.ff_d_fade - dmin) / (0.5 * fcs.feedforward.ff_d_fade), 0.0, 1.0)
+                local fade_e = clamp((deg2rad(fcs.feedforward.ff_err_fade) - abs(cc.err)) /
+                                     (0.5 * deg2rad(fcs.feedforward.ff_err_fade)), 0.0, 1.0)
+                local g_ff = fcs.feedforward.ff_gain * fade_d * fade_e
+                local alpha_ff = fcs.feedforward.ff_tau > 0 ? s.dt / (s.dt + fcs.feedforward.ff_tau) : 1.0
                 ff_u_filt[] += alpha_ff * (g_ff * psi_dot_ff / (c1 * v_app_ff) - ff_u_filt[])
                 ff_chi_filt[] += alpha_ff * (g_ff * path_chord_offset(fec) - ff_chi_filt[])
                 u_ff = ff_u_filt[]
@@ -443,25 +443,25 @@ try
             # re-clamp here too, or a gain factor > 1 commands the tape angles
             # it was never calibrated for instead of just saturating earlier,
             # as scaling heading_p itself would.
-            rel_steering = clamp(u_scaled, -fcs.max_steering, fcs.max_steering)
+            rel_steering = clamp(u_scaled, -fcs.course.max_steering, fcs.course.max_steering)
         end
 
         # Force mode reels out under load; compliance = 0 holds the length outright.
         if isnothing(wfc)
             step!(s; rel_depower, rel_steering,
                   set_torque = winch_torque!(wpc, s, l0),
-                  vsm_interval = fcs.vsm_interval)
+                  vsm_interval = fcs.run.vsm_interval)
         else
             step!(s; rel_depower, rel_steering,
                   set_torque = winch_force_hold!(wfc, s, l0),
-                  vsm_interval = fcs.vsm_interval)
+                  vsm_interval = fcs.run.vsm_interval)
         end
 
         # Report the overspeed rather than the opaque solver abort it causes later.
-        if Float64(s.sys_state.v_app) > fcs.v_app_abort
+        if Float64(s.sys_state.v_app) > fcs.run.v_app_abort
             @error @sprintf("Overspeed at t=%.2fs: v_app=%.1f m/s > %.1f (elevation %.1f°, AoA %.1f°). \
                              Stopping before the solver diverges.",
-                            s.sys_state.time, s.sys_state.v_app, fcs.v_app_abort,
+                            s.sys_state.time, s.sys_state.v_app, fcs.run.v_app_abort,
                             rad2deg(s.sys_state.elevation), rad2deg(s.sys_state.AoA))
             break
         end
@@ -482,11 +482,11 @@ try
         s.sys_state.var_01 = dmin              # cross-track error [deg]
         s.sys_state.var_02 = az_attr           # attractor azimuth [deg]
         s.sys_state.var_03 = el_attr           # attractor elevation [deg]
-        s.sys_state.var_04 = fcs.el_center     # pattern-centre elevation [deg]
+        s.sys_state.var_04 = fcs.pattern.el_center     # pattern-centre elevation [deg]
         s.sys_state.var_05 = chi_set           # RAW guidance course [rad]
         s.sys_state.var_06 = rad2deg(err)      # REGULATED error [deg]
         # A weight, not a flag: a step here means entry_d_blend is too narrow.
-        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.entry_chi_max) ? w_lim : 0.0
+        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.course.entry_chi_max) ? w_lim : 0.0
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
@@ -512,10 +512,10 @@ save_log(s.logger, log_name; path = output_path, colmeta = timestamp_colmeta())
 syslog = load_log(log_name; path = output_path)
 sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
-print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = 0.0,
-                   az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
-                   min_span_frac = fcs.min_span_frac)
+print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs.run.entry_time,
+                   min_elevation = fcs.run.min_elevation, az_center = 0.0,
+                   az_amplitude = fcs.pattern.f8_a, el_height = fcs.pattern.f8_b,
+                   min_span_frac = fcs.run.min_span_frac)
 
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
 let fig8 = findall(x -> Int(x) == 4, sl.sys_state)
@@ -527,7 +527,7 @@ let fig8 = findall(x -> Int(x) == 4, sl.sys_state)
                  | v_app_ref = %.1f (%+.1f%%)\n",
                 sl.time[fig8[end]] - sl.time[fig8[1]],
                 mean(va), minimum(va), maximum(va),
-                fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
+                fcs.course.v_app_ref, 100 * (mean(va) / fcs.course.v_app_ref - 1))
     end
 end
 
@@ -536,7 +536,7 @@ if t_sim > 0
     @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
             t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / round(Int, t_sim / s.dt),
-            round(Int, t_sim / s.dt), s.dt, fcs.vsm_interval)
+            round(Int, t_sim / s.dt), s.dt, fcs.run.vsm_interval)
 else
     @warn "No simulated time elapsed — no performance figure."
 end

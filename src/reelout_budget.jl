@@ -87,7 +87,7 @@ function sim_budget(project, project_set, fcs, sim_time, wind_speed, default_v_w
     # Ratio of the wind at BUDGET_HEIGHT to the one at h_ref, from the project's own profile law.
     wind_factor = calc_wind_factor(AtmosphericModel(project_set; nowindfield = true),
                                    BUDGET_HEIGHT)
-    l_reel = fcs.reelout_l_max - project_set.l_tether
+    l_reel = fcs.reelout.reelout_l_max - project_set.l_tether
     b = reelout_budget(wind_speed, default_v_wind, something(sim_time, project_set.sim_time);
                        l_reel, kv = _wc_settings_value(project, "kv"), v_cap, wind_factor)
     w_budget = wind_speed * wind_factor

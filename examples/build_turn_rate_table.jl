@@ -84,8 +84,8 @@ const SWEEP_AERO_MODE  = ContinuousAero()
 const VSM_INTERVAL     = 5
 
 # Settling starts at the first and decays to the second, which is what the flights
-# are FLOWN at — the same pair every run here uses (`0.8 .* fcs.body_damping`).
-# The row is keyed by the START value, as `fcs.body_damping` is.
+# are FLOWN at — the same pair every run here uses (`0.8 .* fcs.run.body_damping`).
+# The row is keyed by the START value, as `fcs.run.body_damping` is.
 const BODY_START_DAMPING = [0.0, 0.0, 40.0]
 const BODY_SIM_DAMPING   = 0.8 .* BODY_START_DAMPING
 

@@ -146,7 +146,7 @@ physical ones, with the kite's physical minimum `1/(c1*u_s)` = 11.35 m at
 `c1 = 0.2752`, `u_s = 0.32`. That much IS length-free — what is not is where the
 optimizer measures the path's own radius.
 
-`c1` defaults to the identified turn-rate table at `fcs.depower_setpoint`, which is
+`c1` defaults to the identified turn-rate table at `fcs.course.depower_setpoint`, which is
 the turn authority the pattern is flown with. PASS THE ONE THE GATE WILL USE: from
 phase 5 the run flies `depower_final`, where c1 is ~23 % lower (0.2133 against
 0.2752), and a request made at the pattern's c1 is then ~23 % short of what the
@@ -164,14 +164,14 @@ function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
     margin > 0 || return nothing
     scale >= 0 || error("min_turn_radius_request: scale must be >= 0, got $scale.")
     if !isnothing(c1) && isfinite(c1) && c1 > 0
-        return scale * margin / (c1 * fcs.max_steering)
+        return scale * margin / (c1 * fcs.course.max_steering)
     end
     coeffs = try_turn_rate_coeffs(fcs; info = false,
         consequence = "asking the optimizer for NO minimum turn radius, though \
                        min_feasibility_margin = $(tos.min_feasibility_margin) will \
                        still gate the reply")
     isnothing(coeffs) && return nothing
-    return scale * margin / (coeffs.c1 * fcs.max_steering)
+    return scale * margin / (coeffs.c1 * fcs.course.max_steering)
 end
 
 """
@@ -198,9 +198,9 @@ function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
     opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.turn_radius_headroom
     depower_request = tos.fly_opt_depower ?
                       awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed)) :
-                      fcs.depower_setpoint
+                      fcs.course.depower_setpoint
     c1_request = try
-        turn_rate_coeffs(fcs.body_damping, depower_request).c1
+        turn_rate_coeffs(fcs.run.body_damping, depower_request).c1
     catch exc
         exc isa ArgumentError || rethrow()
         nothing       # off the grid: the request falls back to the setpoint and warns

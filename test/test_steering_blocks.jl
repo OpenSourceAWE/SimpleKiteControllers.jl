@@ -17,9 +17,9 @@ using LinearAlgebra: norm
     fcs = FC_Settings()
     n = 120
     s = range(0, 2pi; length = n + 1)[1:n]
-    path = prepare_path(20 .* sin.(s), 25 .+ 5 .* sin.(2 .* s); resample = n, up_loops = fcs.up_loops)
+    path = prepare_path(20 .* sin.(s), 25 .+ 5 .* sin.(2 .* s); resample = n, up_loops = fcs.pattern.up_loops)
     new_fec() = (fec = FigureEightController(fcs; dt = 0.02);
-                 set_path!(fec, path...; up_loops = fcs.up_loops);
+                 set_path!(fec, path...; up_loops = fcs.pattern.up_loops);
                  fec)
     new_cc() = CourseController(CourseControllerSettings(fcs; dt = 0.02))
     # The kite at (azimuth, elevation) [deg], flying east at 25 m/s.
@@ -36,7 +36,7 @@ using LinearAlgebra: norm
 
     @testset "hand_over_to_phase_3" begin
         setup = steer_setup()
-        st = RunState(; cc = new_cc(), rel_depower_prev = fcs.depower_setpoint)
+        st = RunState(; cc = new_cc(), rel_depower_prev = fcs.course.depower_setpoint)
         set_phase!(st.cc, 2)
         st.cc.hold_start = 10.0
         hold = st.cc.ccs.hold_time
@@ -71,7 +71,7 @@ using LinearAlgebra: norm
         st1 = RunState(; cc = new_cc(), rel_depower_prev = 0.3)
         set_phase!(st1.cc, 3)
         cmd1 = steering_command!(st1, steer_setup(), plant(ss), 40.0, chi_set, 1.5)
-        @test abs(cmd.rel_steering) < fcs.max_steering && abs(cmd1.rel_steering) < fcs.max_steering
+        @test abs(cmd.rel_steering) < fcs.course.max_steering && abs(cmd1.rel_steering) < fcs.course.max_steering
         @test cmd1.rel_steering != cmd.rel_steering
     end
 

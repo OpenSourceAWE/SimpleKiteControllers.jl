@@ -165,7 +165,7 @@ only starts to matter on a softer winch.
 `f_max` defaults to `wc.f_high_awe_trim` when that is set (a fixed de-rating,
 independent of wind speed) and to `wc.f_high` otherwise, and is overridable so
 a request can be solved against the ceiling that will actually be in force
-while its path is flown — `fcs.first_lap_force_frac` holds the runtime limit
+while its path is flown — `fcs.winch.first_lap_force_frac` holds the runtime limit
 down for the first figure of eight, and the startup path is the one flown
 there. Lowering it also lowers the speed ceiling `kv*sqrt(f_max)` referred to
 above.
@@ -251,10 +251,10 @@ function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
     opt_winch_mode = isempty(tos.opt_winch_mode) ? nothing : tos.opt_winch_mode
     winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
                           winch_mode = opt_winch_mode, f_max = f_high_nominal)
-    winch_first_lap = fcs.first_lap_force_frac < 1 ?
+    winch_first_lap = fcs.winch.first_lap_force_frac < 1 ?
         winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
                       winch_mode = opt_winch_mode,
-                      f_max = f_high_nominal * fcs.first_lap_force_frac) : winch
+                      f_max = f_high_nominal * fcs.winch.first_lap_force_frac) : winch
     winch_reopt = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
                                 winch_mode = opt_winch_mode)
     @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \

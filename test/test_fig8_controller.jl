@@ -140,18 +140,18 @@ end
     @testset "controller_from_fc_settings" begin
         fcs = FC_Settings()
         explicit = FigureEightController(FigureEightSettings(;
-            dt = 0.02, A = fcs.f8_a, B = fcs.f8_b, az_center = 0.0, el_center = fcs.el_center,
-            attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
-            reacquire_margin = fcs.reacquire_margin))
+            dt = 0.02, A = fcs.pattern.f8_a, B = fcs.pattern.f8_b, az_center = 0.0, el_center = fcs.pattern.el_center,
+            attractor_distance = fcs.pattern.attractor_dist, up_loops = fcs.pattern.up_loops,
+            reacquire_margin = fcs.pattern.reacquire_margin))
         fec = FigureEightController(fcs; dt = 0.02)
         # Mutable, so compared field by field.
         @test all(getfield(fec.fes, f) == getfield(explicit.fes, f) for f in fieldnames(FigureEightSettings))
         @test fec.az_path == explicit.az_path && fec.el_path == explicit.el_path
         # A sweep's own size replaces the settings' one, the rest still comes from `fcs`.
-        swept = FigureEightController(fcs; dt = 0.02, A = fcs.f8_a + 5, B = fcs.f8_b + 2)
-        @test (swept.fes.A, swept.fes.B) == (fcs.f8_a + 5, fcs.f8_b + 2)
-        @test swept.fes.el_center == fcs.el_center
-        @test swept.fes.reacquire_margin == fcs.reacquire_margin
+        swept = FigureEightController(fcs; dt = 0.02, A = fcs.pattern.f8_a + 5, B = fcs.pattern.f8_b + 2)
+        @test (swept.fes.A, swept.fes.B) == (fcs.pattern.f8_a + 5, fcs.pattern.f8_b + 2)
+        @test swept.fes.el_center == fcs.pattern.el_center
+        @test swept.fes.reacquire_margin == fcs.pattern.reacquire_margin
     end
 
     @testset "set_path" begin
@@ -571,10 +571,10 @@ end
         # Every depower the shipped settings actually look up resolves -- this
         # is what a retune past the identified range actually breaks.
         fcs = FC_Settings("fc_settings.yaml")
-        @test turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1 isa Real
+        @test turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint).c1 isa Real
         fcs_ro = FC_Settings("fc_settings_reelout.yaml")
-        @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_setpoint).c1 isa Real
-        @test turn_rate_coeffs(fcs_ro.body_damping, fcs_ro.depower_final).c1 isa Real
+        @test turn_rate_coeffs(fcs_ro.run.body_damping, fcs_ro.course.depower_setpoint).c1 isa Real
+        @test turn_rate_coeffs(fcs_ro.run.body_damping, fcs_ro.reelout.depower_final).c1 isa Real
         # Every project flies the one table, identified at low elevation (2026-10-01): the
         # same depowers resolve there, entry included. Restores the default table afterwards.
         for pr in ("system_reelout_cabauw.yaml", "system_reelout_maasvlakte.yaml", "system_reelout_180m.yaml",
@@ -583,15 +583,15 @@ end
         end
         try
             reload_turn_rate_table!(project_file("system_reelout_maasvlakte.yaml"))
-            for dp in (fcs_ro.depower_setpoint, fcs_ro.depower_final, fcs_ro.entry_depower)
-                @test turn_rate_coeffs(fcs_ro.body_damping, dp).c1 isa Real
+            for dp in (fcs_ro.course.depower_setpoint, fcs_ro.reelout.depower_final, fcs_ro.course.entry_depower)
+                @test turn_rate_coeffs(fcs_ro.run.body_damping, dp).c1 isa Real
             end
         finally
             reload_turn_rate_table!()
         end
         # Phase 5 falls back to an install it can fly (2026-09-26); off unless set.
-        @test fcs_ro.final_margin_min == 1.5
-        @test fcs.final_margin_min == 0.0
+        @test fcs_ro.reelout.final_margin_min == 1.5
+        @test fcs.reelout.final_margin_min == 0.0
 
         # c1 decreases monotonically in depower, computed FROM the table -- a
         # physical invariant of any valid identification, not a pinned number.
@@ -771,25 +771,25 @@ end
 
     @testset "winch_force_gains" begin
         fcs = FC_Settings()
-        fcs.compliance = 1.0
+        fcs.winch.compliance = 1.0
         g = winch_force_gains(fcs)
         # Keys must match the winch controller's field names; the caller splats them.
         @test keys(g) == (:force_tau, :len_kp, :damp, :force_min)
-        @test g.len_kp == fcs.winch_len_kp
-        @test g.damp == fcs.winch_damp
+        @test g.len_kp == fcs.winch.winch_len_kp
+        @test g.damp == fcs.winch.winch_damp
 
         # Both gains scale together, so the length loop's time constant does not move.
-        fcs.compliance = 0.5
+        fcs.winch.compliance = 0.5
         h = winch_force_gains(fcs)
-        @test h.len_kp == fcs.winch_len_kp / 0.5
-        @test h.damp == fcs.winch_damp / 0.5
+        @test h.len_kp == fcs.winch.winch_len_kp / 0.5
+        @test h.damp == fcs.winch.winch_damp / 0.5
         @test h.damp / h.len_kp ≈ g.damp / g.len_kp
         # force_tau sets WHICH frequencies the drum yields to, not by how much.
-        @test h.force_tau == fcs.winch_force_tau
-        @test h.force_min == fcs.winch_force_min
+        @test h.force_tau == fcs.winch.winch_force_tau
+        @test h.force_min == fcs.winch.winch_force_min
 
         # compliance 0 is position mode and must not silently divide by zero.
-        fcs.compliance = 0.0
+        fcs.winch.compliance = 0.0
         @test_throws ErrorException winch_force_gains(fcs)
     end
 
@@ -867,9 +867,9 @@ end
         # NOT the entry guard's floor: that one is bounded by what a DEPOWERED
         # wing can pull, does not scale with the winch, and lives in FC_Settings.
         # Sharing one value crashed the 4 m/s run (2026-08-25).
-        @test hasfield(FC_Settings, :entry_f_min)
-        @test FC_Settings().entry_f_min == 350.0
-        @test !hasfield(FC_Settings, :f_low)
+        @test haskey(SimpleKiteControllers.FC_FIELD_PART, :entry_f_min)
+        @test FC_Settings().winch.entry_f_min == 350.0
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :f_low)
     end
 
     @testset "pattern_height" begin
@@ -1073,7 +1073,7 @@ end
         fcs = FC_Settings(; attractor_dist = 6.0, v_app_min = 10.0)
         # Off: the constant arc, whatever the kinematics.
         @test attractor_distance(fcs, 30.0, 150.0) == 6.0
-        fcs.attractor_lead_time = 0.8
+        fcs.pattern.attractor_lead_time = 0.8
         # 0.8 s at 20.9 m/s / 159 m (the 6 m/s lap 1) is the 6° it was tuned at.
         @test attractor_distance(fcs, 20.9, 159.0) ≈ 6.0 atol = 0.1
         # 10 m/s lap 1: 31.8 m/s / 172 m -> 8.5°.
@@ -1088,14 +1088,14 @@ end
         # wind_schedule: off by default, otherwise a ramp, rounded to 0.01 / 0.5°.
         fws = FC_Settings(; depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
         @test wind_schedule(fws, 12.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
-        fws.depower_high = 0.33
-        fws.f8_b_high = 16.0
+        fws.wind_ramp.depower_high = 0.33
+        fws.wind_ramp.f8_b_high = 16.0
         @test wind_schedule(fws, 4.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
         @test wind_schedule(fws, 7.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
         @test wind_schedule(fws, 8.5) == (depower_setpoint = 0.30, f8_a = 30.0, f8_b = 14.0)
         @test wind_schedule(fws, 10.0) == (depower_setpoint = 0.33, f8_a = 30.0, f8_b = 16.0)
         @test wind_schedule(fws, 14.0) == wind_schedule(fws, 10.0)
-        @test apply_wind_schedule!(fws, 10.0).f8_b == 16.0
+        @test apply_wind_schedule!(fws, 10.0).pattern.f8_b == 16.0
         for f in ("fc_settings.yaml", "fc_settings_fig8_150m.yaml")
             @test wind_schedule(FC_Settings(f), 10.0).depower_setpoint == 0.33
         end
@@ -1265,14 +1265,14 @@ end
         sys = settings_dict["system"]
         @test sys["sim_time"] > 0
         @test sys["sample_freq"] >= 60
-        @test !hasfield(FC_Settings, :sim_time)
-        @test !hasfield(FC_Settings, :dt)
-        @test !hasfield(FC_Settings, :project)
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :sim_time)
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :dt)
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :project)
         # The initial tether length is a plant condition (sim_settings' l_tethers), not FC_Settings.
-        @test !hasfield(FC_Settings, :tether_length)
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :tether_length)
         @test haskey(settings_dict["initial"], "l_tethers")
         # So is the wind speed: it is read from `environment.v_wind` alone.
-        @test !hasfield(FC_Settings, :v_wind)
+        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :v_wind)
         @test settings_dict["environment"]["v_wind"] > 0
         # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
@@ -1353,9 +1353,9 @@ end
             # length and at reelout_l_max with that c1 -- not a re-derivation, the
             # SAME computation the function itself did.
             @test feas.feas_start == check_pattern_feasible(fec, l_tether,
-                fcs.max_steering; c1 = feas.c1, prn = false)
-            @test feas.feas_end == check_pattern_feasible(fec, fcs.reelout_l_max,
-                fcs.max_steering; c1 = feas.c1, prn = false)
+                fcs.course.max_steering; c1 = feas.c1, prn = false)
+            @test feas.feas_end == check_pattern_feasible(fec, fcs.reelout.reelout_l_max,
+                fcs.course.max_steering; c1 = feas.c1, prn = false)
             # A fixed (azimuth, elevation) path only gets easier as the tether grows.
             @test feas.feas_end.margin > feas.feas_start.margin
 
@@ -1364,8 +1364,8 @@ end
             # el_offset_final at reelout_l_max.
             @test feas.c1_final == 0.21
             @test feas.feas_final == check_pattern_feasible(fec.az_path,
-                fec.el_path .+ fcs.el_offset_final, fcs.reelout_l_max,
-                fcs.max_steering; c1 = feas.c1_final, prn = false)
+                fec.el_path .+ fcs.reelout.el_offset_final, fcs.reelout.reelout_l_max,
+                fcs.course.max_steering; c1 = feas.c1_final, prn = false)
 
             # c1_at, exercised against a REAL result rather than a hand-built one.
             @test c1_at(feas, 4) == feas.c1
@@ -1375,7 +1375,7 @@ end
             # skipped (coeffs_final = coeffs), so c1_final equals the pattern's own
             # c1 -- by construction, not by a repeated table lookup.
             feas_same = check_reelout_feasibility(fec, fcs, tos; l_tether,
-                                                   depower = fcs.depower_final)
+                                                   depower = fcs.reelout.depower_final)
             @test feas_same.c1 == 0.21
             @test feas_same.c1_final == feas_same.c1
 

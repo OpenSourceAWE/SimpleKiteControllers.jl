@@ -2,76 +2,19 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Settings of the figure-of-eight FLIGHT CONTROLLER flown by
-`examples/simple_fig8.jl`: the simulation conditions, the pattern geometry, the
-entry state machine, the heading/course PID and the metrics window. Loaded from
-a YAML file (`fc_settings.yaml`).
+The heading/course loop of [`FC_Settings`](@ref), section `course:` of the YAML
+file: the entry state machine, the depower flown on the pattern, the heading PID and
+its gain schedule, the heading/course feedback blend and the entry descent limiter.
+[`CourseControllerSettings`](@ref) is built from it.
 
 # Fields
 
 $(TYPEDFIELDS)
 """
-@with_kw mutable struct FC_Settings @deftype Float64
-    "Steps between VSM aero updates"
-    vsm_interval::Int64 = 1
-    "Winch softness [-]: divides the winch gains; 0 = POSITION mode"
-    compliance = 0.5
-    "Run depower [-]; the turn-rate law's operating point"
-    depower_setpoint = 0.26
-    "Depower [-] from `wind_ramp_high`; `NaN` keeps `depower_setpoint`"
-    depower_high = NaN
-    "Pattern width [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_a`"
-    f8_a_high = NaN
-    "Pattern height [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_b`"
-    f8_b_high = NaN
-    "Wind speed [m/s] below which no `*_high` value is blended in"
-    wind_ramp_low = 7.0
-    "Wind [m/s] from which `*_high` apply; linear below"
-    wind_ramp_high = 10.0
-    "Settling elevation [deg]; NO EFFECT, not in `settle_wing`'s key"
-    elevation = 73.0
+@with_kw mutable struct FC_Course @deftype Float64
+    # ---- Entry state machine: park -> dive -> hold -> transition ---------------
     "Parking [s]: zero steering while init transients decay"
     park_time = 2.0
-    "Unlogged warm-up [s] inside `init` (V3Kite's `warmup!`); 0 = off"
-    warmup_time = 2.0
-
-    # ---- Force-mode winch, read only when `compliance > 0` and before it scales these #
-    "Force low-pass [s]; not scaled by `compliance`"
-    winch_force_tau = 10.0
-    "Length-error gain [N/m], before `compliance` scaling"
-    winch_len_kp = 100.0
-    "Drum damping [N·s/m], before `compliance`; required"
-    winch_damp = 500.0
-    "Floor on the reference force, keeps the tether taut [N]"
-    winch_force_min = 100.0
-
-    # ---- REEL_OUT winch; mutually exclusive with `compliance > 0` ----------- #
-    "Tether length [m] at which reel-out stops and is held"
-    reelout_l_max = 250.0
-    "Figures of eight until reel-out stops (or `reelout_l_max`); 0 = off"
-    n_fig_eight::Int64 = 0
-    "Phase-5 depower [-]; tuned for 350 m tether, 6 m/s wind"
-    depower_final = 0.328
-    "Phase-5 force-limiter ceiling [-]; `depower_final` = off"
-    depower_final_max = 0.328
-    "Phase-5 limiter force [N]: criterion - lobe swing"
-    depower_final_f_target = 7500.0
-    "Integrator gain [1/(N s)], phase-5 force limiter"
-    depower_final_f_gain = 2e-5
-    "`depower_final_f_gain` during the soft stop"
-    depower_final_f_gain_stop = 2e-5
-    "Ramp-up time [s] of the reel-out speed; 0 = off"
-    reelout_softstart = 0.0
-    "Soft-stop lead [s]: `v_set` -> 0 at `reelout_l_max`; 0 = off"
-    reelout_softstop = 0.0
-    "Delay [s] from phase 3 to the reel-out start"
-    reelout_delay = 0.0
-    "Latching force [N] that starts reel-out early; `Inf` = off"
-    reelout_f_trigger = Inf
-    "Time [s] in phase 5 before the run ends; `Inf` = full run"
-    final_time = Inf
-
-    # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
     "Dive course [deg]; beyond ±90 descends, < 0: rightmost entry"
     chi_dive = -85.0
     "Hold course [deg]: horizontal, so the kite arrives flat"
@@ -82,41 +25,18 @@ $(TYPEDFIELDS)
     hold_time = 0.8
     "Cross-track error [deg] for phase 3 -> 4; log only"
     fig8_d_gate = 5.0
+    "Factor on `heading_p` during the entry phases (dive and hold)"
+    entry_gain = 0.25
+    "Depower [-] held during the entry phases (dive and hold)"
+    entry_depower = 0.34
 
-    "Per-axis damping, [`turn_rate_coeffs`](@ref) key"
-    body_damping::Vector{Float64} = [0.0, 0.0, 40.0]
+    # ---- Depower on the pattern ------------------------------------------------
+    "Run depower [-]; the turn-rate law's operating point"
+    depower_setpoint = 0.26
+    "Ramp time [s] to a new depower target; 0 = hard switch"
+    depower_blend_time = 4.0
 
-    # ---- Pattern geometry [deg]; a SMALLER lemniscate is a TIGHTER one ------ #
-    "Width of the eight [deg] (azimuth spans +-`f8_a`)"
-    f8_a = 40.0
-    "Height of the eight [deg] (elevation spans +-`f8_b`/2)"
-    f8_b = 15.0
-    "Centre elevation [deg]; lower: more margin, less energy"
-    el_center = 26.0
-    "Arc Q -> attractor [deg]; the floor of a timed lead"
-    attractor_dist = 10.0
-    "Attractor lead [s], 1-2 × `attractor_dist`; 0 = fixed"
-    attractor_lead_time = 0.0
-    "How much closer [deg] a global point must be for Q to jump"
-    reacquire_margin = 3.0
-    "Fly up-loops, not down-loops (reverses the path direction)"
-    up_loops::Bool = false
-    "Path lift [deg] from the reel-out stop latch on"
-    el_offset_final = 0.0
-    "Min. phase-5 curvature margin [-], else blend back; 0 = off"
-    final_margin_min = 0.0
-    "Lead [s] of the `el_offset_final` lift before reel-out ends"
-    el_offset_lead = 0.0
-    "Lobe-only elevation lift [deg], ramped over azimuth; 0 = off"
-    el_offset_wing = 0.0
-    "Azimuth [deg] beyond which `el_offset_wing` is full"
-    el_offset_wing_az = 10.0
-    "Ramp width [deg] below `el_offset_wing_az`; gap 0-3"
-    el_offset_wing_blend = 8.0
-    "Wing-offset unit: `azimuth` [deg] or `azimuth_frac`"
-    el_offset_wing_mode::String = "azimuth"
-
-    # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED --------- #
+    # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED ------------
     "Gain at `v_app_ref`; only `heading_p * v_app_ref` matters"
     heading_p = 0.1941
     "Integral time [s], or `false` for none"
@@ -131,14 +51,37 @@ $(TYPEDFIELDS)
     v_app_min = 10.0
     "Extra `v_app` clamp [m/s] from phase 3 on; 0 = off"
     v_app_min_pattern = 0.0
-    "Factor on `heading_p` during the entry phases (dive and hold)"
-    entry_gain = 0.25
-    "Depower [-] held during the entry phases (dive and hold)"
-    entry_depower = 0.34
-    "Ramp time [s] to a new depower target; 0 = hard switch"
-    depower_blend_time = 4.0
 
-    # ---- Steering feed-forward from the reference path's curvature ---------- #
+    # ---- Feedback: heading when slow, course when fast, on |vel_kite| ----------
+    "[m/s] at/below: pure heading feedback"
+    v_kite_heading = 5.0
+    "[m/s] at/above: pure course feedback; blended below"
+    v_kite_course = 10.0
+    "Course-only feedback from phase 3 on, ignoring `v_kite_*`"
+    fig8_pure_course::Bool = false
+    "Steering limit [-]; unstable above ~0.33 (loop), 0.375 (plant)"
+    max_steering = 0.32
+
+    # ---- Entry descent limiter, active only while far off the path -------------
+    "Steepest off-path course [deg]; 90 = level, 180 = off"
+    entry_chi_max = 95.0
+    "Cross-track error [deg] below which the limiter is bypassed"
+    entry_d_gate = 12.0
+    "Blend band [deg] above `entry_d_gate`; 0 = hard switch"
+    entry_d_blend = 4.0
+    "Band around ±180° [deg] using the latched sign"
+    entry_cut_margin = 30.0
+end
+
+"""
+The steering feed-forward from the reference path's curvature, section
+`feedforward:` of [`FC_Settings`](@ref)'s YAML file. Active from phase 4 on.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_FeedForward @deftype Float64
     "Gain on `u_ff = psi_dot_path / (c1 * v_app)`; 0 = off"
     ff_gain = 0.0
     "Feed-forward look-ahead [s] past Q; ~ steering dead time"
@@ -151,37 +94,164 @@ $(TYPEDFIELDS)
     ff_d_fade = 6.0
     "Course error [deg] of full feed-forward fade-out"
     ff_err_fade = 60.0
+end
 
-    # ---- Feedback: heading when slow, course when fast, on |vel_kite| ------- #
-    "[m/s] at/below: pure heading feedback"
-    v_kite_heading = 5.0
-    "[m/s] at/above: pure course feedback; blended below"
-    v_kite_course = 10.0
-    "Course-only feedback from phase 3 on, ignoring `v_kite_*`"
-    fig8_pure_course::Bool = false
-    "Steering limit [-]; unstable above ~0.33 (loop), 0.375 (plant)"
-    max_steering = 0.32
+"""
+The pattern geometry and the attractor guidance, section `pattern:` of
+[`FC_Settings`](@ref)'s YAML file, all angles in degrees; a SMALLER lemniscate is a
+TIGHTER one. [`FigureEightController`](@ref) is built from it.
 
-    # ---- Entry descent limiter, active only while far off the path --------- #
-    "Steepest off-path course [deg]; 90 = level, 180 = off"
-    entry_chi_max = 95.0
-    "Cross-track error [deg] below which the limiter is bypassed"
-    entry_d_gate = 12.0
-    "Blend band [deg] above `entry_d_gate`; 0 = hard switch"
-    entry_d_blend = 4.0
-    "Band around ±180° [deg] using the latched sign"
-    entry_cut_margin = 30.0
+# Fields
 
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_Pattern @deftype Float64
+    "Width of the eight [deg] (azimuth spans +-`f8_a`)"
+    f8_a = 40.0
+    "Height of the eight [deg] (elevation spans +-`f8_b`/2)"
+    f8_b = 15.0
+    "Centre elevation [deg]; lower: more margin, less energy"
+    el_center = 26.0
+    "Arc Q -> attractor [deg]; the floor of a timed lead"
+    attractor_dist = 10.0
+    "Attractor lead [s], 1-2 × `attractor_dist`; 0 = fixed"
+    attractor_lead_time = 0.0
+    "How much closer [deg] a global point must be for Q to jump"
+    reacquire_margin = 3.0
+    "Fly up-loops, not down-loops (reverses the path direction)"
+    up_loops::Bool = false
+end
+
+"""
+The wind schedule, section `wind_ramp:` of [`FC_Settings`](@ref)'s YAML
+file: `course.depower_setpoint`, `pattern.f8_a` and `pattern.f8_b` are flown up to
+`wind_ramp_low`, the `*_high` values from `wind_ramp_high` on, linear in between. See
+[`wind_schedule`](@ref).
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_WindRamp @deftype Float64
+    "Wind speed [m/s] below which no `*_high` value is blended in"
+    wind_ramp_low = 7.0
+    "Wind [m/s] from which `*_high` apply; linear below"
+    wind_ramp_high = 10.0
+    "Depower [-] from `wind_ramp_high`; `NaN` keeps `depower_setpoint`"
+    depower_high = NaN
+    "Pattern width [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_a`"
+    f8_a_high = NaN
+    "Pattern height [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_b`"
+    f8_b_high = NaN
+end
+
+"""
+The winch settings of [`FC_Settings`](@ref), section `winch:` of its YAML
+file: the force-mode winch (see [`winch_force_gains`](@ref)) and the force guards of
+the entry and the first lap. The position-mode winch and the reel-out law are in
+`wc_settings.yaml`.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_Winch @deftype Float64
+    # ---- Force-mode winch, read only when `compliance > 0` ---------------------
+    "Winch softness [-]: divides the winch gains; 0 = POSITION mode"
+    compliance = 0.5
+    "Force low-pass [s]; not scaled by `compliance`"
+    winch_force_tau = 10.0
+    "Length-error gain [N/m], before `compliance` scaling"
+    winch_len_kp = 100.0
+    "Drum damping [N·s/m], before `compliance`; required"
+    winch_damp = 500.0
+    "Floor on the reference force, keeps the tether taut [N]"
+    winch_force_min = 100.0
+
+    # ---- Force guards ----------------------------------------------------------
     "Entry-guard force floor [N], phases 0-2; not `WCSettings.f_low`"
     entry_f_min = 350.0
-
     "First-lap force limit / `WCSettings.f_high`; 1 = off"
     first_lap_force_frac = 1.0
+end
 
+"""
+The reel-out run of [`FC_Settings`](@ref), section `reelout:` of its YAML
+file: when reel-out starts and stops, and the depower and path flown once it has
+stopped (phase 5). Only read by reel-out runs.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_Reelout @deftype Float64
+    # ---- REEL_OUT winch; mutually exclusive with `compliance > 0` --------------
+    "Tether length [m] at which reel-out stops and is held"
+    reelout_l_max = 250.0
+    "Figures of eight until reel-out stops (or `reelout_l_max`); 0 = off"
+    n_fig_eight::Int64 = 0
+    "Ramp-up time [s] of the reel-out speed; 0 = off"
+    reelout_softstart = 0.0
+    "Soft-stop lead [s]: `v_set` -> 0 at `reelout_l_max`; 0 = off"
+    reelout_softstop = 0.0
+    "Delay [s] from phase 3 to the reel-out start"
+    reelout_delay = 0.0
+    "Latching force [N] that starts reel-out early; `Inf` = off"
+    reelout_f_trigger = Inf
+    "Time [s] in phase 5 before the run ends; `Inf` = full run"
+    final_time = Inf
+
+    # ---- Phase-5 depower and force limiter -------------------------------------
+    "Phase-5 depower [-]; tuned for 350 m tether, 6 m/s wind"
+    depower_final = 0.328
+    "Phase-5 force-limiter ceiling [-]; `depower_final` = off"
+    depower_final_max = 0.328
+    "Phase-5 limiter force [N]: criterion - lobe swing"
+    depower_final_f_target = 7500.0
+    "Integrator gain [1/(N s)], phase-5 force limiter"
+    depower_final_f_gain = 2e-5
+    "`depower_final_f_gain` during the soft stop"
+    depower_final_f_gain_stop = 2e-5
+
+    # ---- Phase-5 path lift -----------------------------------------------------
+    "Path lift [deg] from the reel-out stop latch on"
+    el_offset_final = 0.0
+    "Lead [s] of the `el_offset_final` lift before reel-out ends"
+    el_offset_lead = 0.0
+    "Min. phase-5 curvature margin [-], else blend back; 0 = off"
+    final_margin_min = 0.0
+    "Lobe-only elevation lift [deg], ramped over azimuth; 0 = off"
+    el_offset_wing = 0.0
+    "Azimuth [deg] beyond which `el_offset_wing` is full"
+    el_offset_wing_az = 10.0
+    "Ramp width [deg] below `el_offset_wing_az`; gap 0-3"
+    el_offset_wing_blend = 8.0
+    "Wing-offset unit: `azimuth` [deg] or `azimuth_frac`"
+    el_offset_wing_mode::String = "azimuth"
+end
+
+"""
+The simulation conditions and the pass criteria of [`FC_Settings`](@ref),
+section `run:` of its YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
+@with_kw mutable struct FC_Run @deftype Float64
+    # ---- Simulation ------------------------------------------------------------
+    "Steps between VSM aero updates"
+    vsm_interval::Int64 = 1
+    "Settling elevation [deg]; NO EFFECT, not in `settle_wing`'s key"
+    elevation = 73.0
+    "Unlogged warm-up [s] inside `init` (V3Kite's `warmup!`); 0 = off"
+    warmup_time = 2.0
+    "Per-axis damping, [`turn_rate_coeffs`](@ref) key"
+    body_damping::Vector{Float64} = [0.0, 0.0, 40.0]
     "Abort the run above this apparent wind speed [m/s]"
     v_app_abort = 45.0
 
-    # ---- Metrics window ---------------------------------------------------- #
+    # ---- Metrics window and pass criteria --------------------------------------
     "Settle time [s] after `park_time` before statistics"
     entry_time = 52.0
     "Elevation floor criterion [deg], evaluated over the WHOLE run"
@@ -189,22 +259,158 @@ $(TYPEDFIELDS)
     "Min. size, fraction of `f8_a` (per side), `f8_b` (span)"
     min_span_frac = 0.7
 end
+
+# The field list is written out rather than `$(TYPEDFIELDS)`, so that each type links to
+# its docstring; keep it in step with the field docstrings.
+"""
+Settings of the flight controller of a run, flown by `examples/simple_fig8.jl`,
+`examples/simple_reelout.jl` and their variants, loaded from a YAML file such as
+`fc_settings.yaml`. The settings are split by what reads them; each part is its own
+struct and its own section of the YAML file.
+
+A field is reached through its part, e.g. `fcs.pattern.f8_a`. The field names are
+unique over all parts, so the constructors and [`apply_overrides!`](@ref) also take a
+field by its bare name: `FC_Settings(; f8_a = 25.0)`, `FC_Settings(fcs; f8_a = 25.0)`
+for a modified copy.
+
+# Fields
+
+- `course::`[`FC_Course`](@ref): Heading/course loop, entry state machine, depower on the pattern
+- `feedforward::`[`FC_FeedForward`](@ref): Steering feed-forward from the path's curvature
+- `pattern::`[`FC_Pattern`](@ref): Pattern geometry and attractor guidance
+- `wind_ramp::`[`FC_WindRamp`](@ref): Wind schedule of depower and pattern size
+- `winch::`[`FC_Winch`](@ref): Force-mode winch and force guards
+- `reelout::`[`FC_Reelout`](@ref): Reel-out start and stop, phase-5 depower and path
+- `run::`[`FC_Run`](@ref): Simulation conditions and pass criteria
+"""
+mutable struct FC_Settings
+    "Heading/course loop, entry state machine, depower on the pattern"
+    course::FC_Course
+    "Steering feed-forward from the path's curvature"
+    feedforward::FC_FeedForward
+    "Pattern geometry and attractor guidance"
+    pattern::FC_Pattern
+    "Wind schedule of depower and pattern size"
+    wind_ramp::FC_WindRamp
+    "Force-mode winch and force guards"
+    winch::FC_Winch
+    "Reel-out start and stop, phase-5 depower and path"
+    reelout::FC_Reelout
+    "Simulation conditions and pass criteria"
+    run::FC_Run
+end
+"""
+The parts of [`FC_Settings`](@ref): field name => type, in the order of the struct and
+of the sections of its YAML file.
+"""
+const FC_PARTS = (; course = FC_Course, feedforward = FC_FeedForward, pattern = FC_Pattern,
+                  wind_ramp = FC_WindRamp, winch = FC_Winch, reelout = FC_Reelout,
+                  run = FC_Run)
+
+"""
+Which part of [`FC_Settings`](@ref) holds a setting: setting name => part name, e.g.
+`:f8_a => :pattern`. Built from [`FC_PARTS`](@ref); a name in two parts is an error at
+load time, since the bare-name lookups of [`set_fc_field!`](@ref) rely on it.
+"""
+const FC_FIELD_PART = let parts = Dict{Symbol, Symbol}()
+    for (part, T) in pairs(FC_PARTS), name in fieldnames(T)
+        haskey(parts, name) &&
+            error("FC_Settings: \"$name\" is in both $(parts[name]) and $part.")
+        parts[name] = part
+    end
+    parts
+end
+
+"""
+    FC_Settings(; kwargs...) -> FC_Settings
+    FC_Settings(fcs::FC_Settings; kwargs...) -> FC_Settings
+
+Default settings, or a copy of `fcs`, with `kwargs` set on top. A keyword is either a
+part (`pattern = FC_Pattern(f8_a = 25.0)`) or a setting by its bare name
+(`f8_a = 25.0`), see [`set_fc_field!`](@ref). `fcs` itself is left unchanged.
+"""
+function FC_Settings(; kwargs...)
+    fcs = FC_Settings((T() for T in FC_PARTS)...)
+    for (key, value) in kwargs
+        set_fc_field!(fcs, key, value)
+    end
+    return fcs
+end
+
+function FC_Settings(fcs::FC_Settings; kwargs...)
+    copy = deepcopy(fcs)
+    for (key, value) in kwargs
+        set_fc_field!(copy, key, value)
+    end
+    return copy
+end
+
+"""
+    set_fc_field!(fcs::FC_Settings, key::Symbol, value) -> fcs
+
+Set the part `key` of `fcs`, or the setting `key` in whichever part holds it
+([`FC_FIELD_PART`](@ref)), converting `value` to the field's type. Errors for a `key`
+that is neither.
+"""
+function set_fc_field!(fcs::FC_Settings, key::Symbol, value)
+    if hasfield(FC_Settings, key)
+        setfield!(fcs, key, value)
+    else
+        part = get(FC_FIELD_PART, key, nothing)
+        isnothing(part) && error("\"$key\" is not a setting of FC_Settings.")
+        obj = getfield(fcs, part)
+        setfield!(obj, key, convert(fieldtype(typeof(obj), key), value))
+    end
+    return fcs
+end
+
+"""
+    get_fc_field(fcs::FC_Settings, key::Symbol)
+
+The setting `key` of `fcs` by its bare name, from whichever part holds it
+([`FC_FIELD_PART`](@ref)); the counterpart of [`set_fc_field!`](@ref).
+"""
+function get_fc_field(fcs::FC_Settings, key::Symbol)
+    part = get(FC_FIELD_PART, key, nothing)
+    isnothing(part) && error("\"$key\" is not a setting of FC_Settings.")
+    return getfield(getfield(fcs, part), key)
+end
+
 """
     FC_Settings(filename::String; path=skc_data_path()) -> FC_Settings
 
-Load figure-eight flight-controller settings from the YAML file `filename` under
-`path`, which defaults to this package's own [`skc_data_path`](@ref) rather than
+Load flight-controller settings from the YAML file `filename` under `path`, which
+defaults to this package's own [`skc_data_path`](@ref) rather than
 `KiteUtils.get_data_path()` — the latter points at the *kite model's* data
 directory during a run, and these settings belong to the controller. Pass `path`
 explicitly to load a variant from elsewhere; an absolute `filename` is used
 as-is.
 
-The file must have a top-level `fc_settings:` mapping whose keys are the field
-names of `FC_Settings`; any missing key falls back to the struct default, and an
-unknown key is an error. Built on [`load_yaml_fields!`](@ref).
+The file must have a top-level `fc_settings:` mapping with one section per part of
+`FC_Settings` (`course:`, `pattern:`, ...), each holding that part's settings; a
+section or setting the file omits keeps its default, an unknown one is an error. A
+setting directly under `fc_settings:` is accepted too: that is the layout of the
+files archived before the split into parts.
 """
 function FC_Settings(filename::String; path = skc_data_path())
-    load_yaml_fields!(FC_Settings(), filename, "fc_settings"; path)
+    file = isabspath(filename) ? filename : joinpath(path, filename)
+    fcs = FC_Settings()
+    for (key, value) in YAML.load_file(file)["fc_settings"]
+        sym = Symbol(key)
+        if hasfield(FC_Settings, sym)
+            value isa AbstractDict ||
+                error("Section \"$key\" in $filename must be a mapping of settings.")
+            set_yaml_fields!(getfield(fcs, sym), value, filename)
+        elseif haskey(FC_FIELD_PART, sym)
+            set_fc_field!(fcs, sym, value)
+        elseif key in RETIRED_YAML_KEYS
+            iszero(value) ||
+                error("Retired key \"$key\" in $filename must be 0, got $value.")
+        else
+            error("Unknown key \"$key\" in $filename — neither a part nor a setting of FC_Settings.")
+        end
+    end
+    return fcs
 end
 
 """
@@ -236,6 +442,17 @@ function load_yaml_fields!(obj, filename::AbstractString, section::AbstractStrin
                             path = skc_data_path())
     dict = YAML.load_file(isabspath(filename) ? filename :
                           joinpath(path, filename))[section]
+    return set_yaml_fields!(obj, dict, filename)
+end
+
+"""
+    set_yaml_fields!(obj, dict, filename) -> obj
+
+The body of [`load_yaml_fields!`](@ref): set each `key => value` of `dict` as a field
+of `obj`, with the same conversion, retired-key and unknown-key rules. `filename`
+only names the file in the errors.
+"""
+function set_yaml_fields!(obj, dict, filename)
     T = typeof(obj)
     for (key, value) in dict
         sym = Symbol(key)
@@ -257,7 +474,9 @@ end
 Set each `key => value` of `overrides` as a field of the settings struct `obj`,
 converted to the field's type, and log the ones in force as "`what` overrides in
 force". `label` is the name of the input that carried them and `typename` the
-type's name, both for the error of a key that is not a field of `obj`.
+type's name, both for the error of a key that is not a field of `obj`. For an
+[`FC_Settings`](@ref), a key is a setting by its bare name, in whichever part holds it
+([`set_fc_field!`](@ref)).
 """
 function apply_overrides!(obj, overrides, label, typename, what)
     for (key, value) in overrides
@@ -270,19 +489,30 @@ function apply_overrides!(obj, overrides, label, typename, what)
     return obj
 end
 
+function apply_overrides!(fcs::FC_Settings, overrides, label, typename, what)
+    for (key, value) in overrides
+        hasfield(FC_Settings, Symbol(key)) || haskey(FC_FIELD_PART, Symbol(key)) ||
+            error("$label: \"$key\" is not a setting of $typename.")
+        set_fc_field!(fcs, Symbol(key), value)
+    end
+    isempty(overrides) ||
+        @info "$what overrides in force: " * join(("$k = $v" for (k, v) in overrides), ", ")
+    return fcs
+end
+
 """
-    FigureEightController(fcs::FC_Settings; dt, A = fcs.f8_a, B = fcs.f8_b)
+    FigureEightController(fcs::FC_Settings; dt, A = fcs.pattern.f8_a, B = fcs.pattern.f8_b)
 
 The figure-eight controller of a run flown with `fcs`: the lemniscate `A` x `B` [deg]
-centred at azimuth 0 and `fcs.el_center`, with `fcs`'s attractor distance, loop direction
+centred at azimuth 0 and `fcs.pattern.el_center`, with `fcs`'s attractor distance, loop direction
 and reacquire margin, stepped at `dt` [s]. `A`/`B` default to the settings' own size; a
 sweep over the size passes its own.
 """
-FigureEightController(fcs::FC_Settings; dt, A = fcs.f8_a, B = fcs.f8_b) =
+FigureEightController(fcs::FC_Settings; dt, A = fcs.pattern.f8_a, B = fcs.pattern.f8_b) =
     FigureEightController(FigureEightSettings(;
-        dt, A, B, az_center = 0.0, el_center = fcs.el_center,
-        attractor_distance = fcs.attractor_dist, up_loops = fcs.up_loops,
-        reacquire_margin = fcs.reacquire_margin))
+        dt, A, B, az_center = 0.0, el_center = fcs.pattern.el_center,
+        attractor_distance = fcs.pattern.attractor_dist, up_loops = fcs.pattern.up_loops,
+        reacquire_margin = fcs.pattern.reacquire_margin))
 
 """
     project_file(project = "system_fig8_200m.yaml") -> String
@@ -364,7 +594,7 @@ kite model provides:
 
     wfc = WinchForceController(; winch_force_gains(fcs)...)
 
-`winch_len_kp` and `winch_damp` are both divided by `fcs.compliance`, so the
+`winch_len_kp` and `winch_damp` are both divided by `fcs.winch.compliance`, so the
 yield scales linearly with it while their ratio — the length loop's own time
 constant — is unchanged. `winch_force_tau` is passed through untouched: it sets
 WHICH frequencies the drum yields to, not by how much.
@@ -378,45 +608,45 @@ a force-mode winch (an infinitely stiff spring is not representable — see
 [`FC_Settings`](@ref)).
 """
 function winch_force_gains(fcs::FC_Settings)
-    fcs.compliance > 0 ||
+    fcs.winch.compliance > 0 ||
         error("winch_force_gains needs compliance > 0; at 0 use position mode.")
-    return (force_tau = fcs.winch_force_tau,
-            len_kp = fcs.winch_len_kp / fcs.compliance,
-            damp = fcs.winch_damp / fcs.compliance,
-            force_min = fcs.winch_force_min)
+    return (force_tau = fcs.winch.winch_force_tau,
+            len_kp = fcs.winch.winch_len_kp / fcs.winch.compliance,
+            damp = fcs.winch.winch_damp / fcs.winch.compliance,
+            force_min = fcs.winch.winch_force_min)
 end
 
 """
     wind_schedule(fcs::FC_Settings, v_wind) -> (; depower_setpoint, f8_a, f8_b)
 
 What to fly on the pattern at wind speed `v_wind` [m/s, reference height]: each of
-`depower_setpoint`, `f8_a`, `f8_b` as set up to `fcs.wind_ramp_low`, its `*_high`
-counterpart from `fcs.wind_ramp_high` on, linear in between; a `*_high` that is
+`depower_setpoint`, `f8_a`, `f8_b` as set up to `fcs.wind_ramp.wind_ramp_low`, its `*_high`
+counterpart from `fcs.wind_ramp.wind_ramp_high` on, linear in between; a `*_high` that is
 `NaN` leaves its value alone. The depower is rounded to 0.01, the angles to 0.5°:
 the settled-geometry cache is keyed on the depower, so this costs one settle per
 step, not one per wind speed. Applied by [`apply_wind_schedule!`](@ref).
 """
 function wind_schedule(fcs::FC_Settings, v_wind)
-    frac = clamp((v_wind - fcs.wind_ramp_low) / (fcs.wind_ramp_high - fcs.wind_ramp_low),
+    frac = clamp((v_wind - fcs.wind_ramp.wind_ramp_low) / (fcs.wind_ramp.wind_ramp_high - fcs.wind_ramp.wind_ramp_low),
                  0.0, 1.0)
     ramp(lo, hi, step) = isnan(hi) ? Float64(lo) : round((lo + frac * (hi - lo)) / step) * step
-    return (; depower_setpoint = round(ramp(fcs.depower_setpoint, fcs.depower_high, 0.01); digits = 2),
-            f8_a = ramp(fcs.f8_a, fcs.f8_a_high, 0.5),
-            f8_b = ramp(fcs.f8_b, fcs.f8_b_high, 0.5))
+    return (; depower_setpoint = round(ramp(fcs.course.depower_setpoint, fcs.wind_ramp.depower_high, 0.01); digits = 2),
+            f8_a = ramp(fcs.pattern.f8_a, fcs.wind_ramp.f8_a_high, 0.5),
+            f8_b = ramp(fcs.pattern.f8_b, fcs.wind_ramp.f8_b_high, 0.5))
 end
 
 """
     apply_wind_schedule!(fcs::FC_Settings, v_wind) -> FC_Settings
 
-Overwrite `fcs.depower_setpoint`, `fcs.f8_a` and `fcs.f8_b` with
+Overwrite `fcs.course.depower_setpoint`, `fcs.pattern.f8_a` and `fcs.pattern.f8_b` with
 [`wind_schedule`](@ref)`(fcs, v_wind)`. Call it once, before anything is built
 from `fcs`: applied twice, the second call ramps from the first one's result.
 """
 function apply_wind_schedule!(fcs::FC_Settings, v_wind)
     (; depower_setpoint, f8_a, f8_b) = wind_schedule(fcs, v_wind)
-    fcs.depower_setpoint = depower_setpoint
-    fcs.f8_a = f8_a
-    fcs.f8_b = f8_b
+    fcs.course.depower_setpoint = depower_setpoint
+    fcs.pattern.f8_a = f8_a
+    fcs.pattern.f8_b = f8_b
     return fcs
 end
 
@@ -424,17 +654,17 @@ end
     attractor_distance(fcs::FC_Settings, v_app, l_tether) -> Float64
 
 The attractor lead [deg] to fly at apparent wind `v_app` [m/s] and tether length
-`l_tether` [m]: a constant `fcs.attractor_dist` while `fcs.attractor_lead_time`
+`l_tether` [m]: a constant `fcs.pattern.attractor_dist` while `fcs.pattern.attractor_lead_time`
 is off, otherwise the arc that takes `attractor_lead_time` seconds to fly,
-`v_app` floored at `fcs.v_app_min` and the result clamped to
+`v_app` floored at `fcs.course.v_app_min` and the result clamped to
 `[attractor_dist, 2 * attractor_dist]`. Pure kinematics, no plant: the caller
 writes it into `FigureEightSettings.attractor_distance` before each
 `navigate_fig8`.
 """
 function attractor_distance(fcs::FC_Settings, v_app, l_tether)
-    fcs.attractor_lead_time > 0 || return fcs.attractor_dist
-    lead = rad2deg(fcs.attractor_lead_time * max(v_app, fcs.v_app_min) / l_tether)
-    return clamp(lead, fcs.attractor_dist, 2 * fcs.attractor_dist)
+    fcs.pattern.attractor_lead_time > 0 || return fcs.pattern.attractor_dist
+    lead = rad2deg(fcs.pattern.attractor_lead_time * max(v_app, fcs.course.v_app_min) / l_tether)
+    return clamp(lead, fcs.pattern.attractor_dist, 2 * fcs.pattern.attractor_dist)
 end
 
 """

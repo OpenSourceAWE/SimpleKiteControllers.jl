@@ -88,9 +88,14 @@ Not named by any project:
 
 ## Rules shared by the settings files
 
-- Every key of `fc_settings*.yaml`, `traj_opt.yaml` and `optimization.yaml` is a field
-  of the struct it is loaded into. A missing key falls back to the struct default; an
-  unknown key is an error (see [`load_yaml_fields!`](@ref)).
+- Every key of `traj_opt.yaml` and `optimization.yaml` is a field of the struct it is
+  loaded into. A missing key falls back to the struct default; an unknown key is an
+  error (see [`load_yaml_fields!`](@ref)).
+- `fc_settings*.yaml` has one section per part of [`FC_Settings`](@ref): `course`,
+  `feedforward`, `pattern`, `wind_ramp`, `winch`, `reelout` and `run`. Each key of a
+  section is a field of that part, with the same rules. A figure-of-eight run can leave
+  out the `reelout` section. Files archived before this layout, with all keys directly
+  under `fc_settings:`, still load.
 - The struct docstrings (on the [API](api/index.md) pages) say in one line what a field
   is. The comments in the YAML files give the longer notes and the reason for the value
   chosen there. The history of the tuning is in

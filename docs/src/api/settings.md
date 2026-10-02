@@ -16,6 +16,8 @@ turn_radius_lap_reelout
 ```@docs
 load_yaml_fields!
 apply_overrides!
+set_fc_field!
+get_fc_field
 ```
 
 ## Project and data files

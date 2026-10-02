@@ -20,7 +20,7 @@ import SimpleKiteControllers: GUI_STATE_FILE_OVERRIDE, FAILED_TRAJECTORY_DIR, se
 @isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
 const PROJECT = "system_reelout_maasvlakte.yaml"
-const UP_LOOPS = FC_Settings(fc_settings(project_file(PROJECT))).up_loops
+const UP_LOOPS = FC_Settings(fc_settings(project_file(PROJECT))).pattern.up_loops
 # Two 100-point figures of eight [deg]: TIGHT misses a 1.3 gate at 150 m (margin 1.24), WIDE clears it.
 function eight_path(a, b, c)
     r = range(0, 2pi; length = 101)[1:100]
@@ -72,11 +72,11 @@ function fly_startup(; tos = Dict{Symbol, Any}(), wind = "default", path_for = p
         inputs = merge(run_input_defaults(), (; output_path = mktempdir(), tos_overrides = overrides))
         setup = setup_run(inputs; init_model = stand_in_model)
         st = RunState(; l_set = setup.l_set, opt_r_scale = setup.opt_r_scale,
-                      opt_r_min = setup.opt_r_min, depower_flown_opt = setup.fcs.depower_setpoint)
+                      opt_r_min = setup.opt_r_min, depower_flown_opt = setup.fcs.course.depower_setpoint)
         merge_into!(setup, solve_startup_path!(setup, st))
         log_startup_reply(setup.fcs, st.opt_result, setup.opt_r_min)
         log_lobe_lift(setup.fcs, st.opt_result)
-        st.c1_startup = setup.c1_at_depower(setup.fcs.depower_setpoint)
+        st.c1_startup = setup.c1_at_depower(setup.fcs.course.depower_setpoint)
         adopt_startup_path!(setup, st)
         finish_startup!(setup, st)
         capture_startup_geometry!(setup, st)
@@ -209,7 +209,7 @@ end
         @test (@test_logs (:warn, r"No turn-rate coefficients") setup.c1_at_depower(5.0)) |> isnan
         @test (@test_logs setup.c1_at_depower(5.0)) |> isnan
         @test isnan(setup.c1_ctrl_at(5.0))
-        @test setup.c1_ctrl_at(setup.fcs.depower_setpoint) == setup.c1_setpoint > 0
+        @test setup.c1_ctrl_at(setup.fcs.course.depower_setpoint) == setup.c1_setpoint > 0
         @test !setup.power_gate_off(1000.0)
         @test setup.pattern_depower(st.opt_result) isa Float64
     end
@@ -232,13 +232,13 @@ end
             push!(phases, cmds.phase)
         end
         @test first(phases) == 0 && all(<(3), phases) && issorted(phases)
-        @test cmds.v_set == 0.0 && abs(cmds.rel_steering) <= setup.fcs.max_steering
+        @test cmds.v_set == 0.0 && abs(cmds.rel_steering) <= setup.fcs.course.max_steering
         @test ss.sys_state == phases[end] && ss.var_10 == st.l_set && ss.var_11 == 0.0
         @test ss.var_09 ≈ rad2deg(0.1) && ss.v_wind_200m ≈ [10.4, 0.0, 0.0]
         @test st.e_mech ≈ 200 * 3000.0 * 0.5 * dt / 3600 && ss.e_mech ≈ st.e_mech
         @test length(st.geom_t) == 200 && length(st.ff_log) == 200
         @test !check_overspeed(setup, (; ss))
-        ss.v_app = setup.fcs.v_app_abort + 1
+        ss.v_app = setup.fcs.run.v_app_abort + 1
         @test (@test_logs (:error, r"Overspeed") check_overspeed(setup, (; ss)))
     end
 

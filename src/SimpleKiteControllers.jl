@@ -48,7 +48,8 @@ export package_git_state, success_verdict, simulation_block, fig8_metrics_block,
 export performance_block, opt_cycle_max, run_input_files, archive_run_files
 
 # Flight-controller settings
-export FC_Settings, winch_force_gains, project_file, fc_settings, load_yaml_fields!
+export FC_Settings, FC_Course, FC_FeedForward, FC_Pattern, FC_WindRamp, FC_Winch, FC_Reelout, FC_Run
+export set_fc_field!, get_fc_field, winch_force_gains, project_file, fc_settings, load_yaml_fields!
 export apply_overrides!
 export attractor_distance, guidance_rate, wind_schedule, apply_wind_schedule!
 export turn_rate_coeffs_file, winch_table_file, traj_opt_settings_file

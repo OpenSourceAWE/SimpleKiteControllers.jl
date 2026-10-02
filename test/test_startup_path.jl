@@ -17,7 +17,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
 @testset verbose = true "startup_path" begin
     fcs = FC_Settings()
-    up_loops = fcs.up_loops
+    up_loops = fcs.pattern.up_loops
     n = 120
     s = range(0, 2pi; length = n + 1)[1:n]
     eight(a, b, c) = prepare_path(a .* sin.(s), c .+ b .* sin.(2 .* s); resample = n, up_loops)
@@ -33,9 +33,9 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         fec = new_fec(gentle)
         st = RunState(; c1_startup = c1)
         setup(; margin = 0.82, min_height = 50.0, el_floor = 13.0) =
-            (; fec, l_tether, fcs = (; max_steering = fcs.max_steering),
+            (; fec, l_tether, fcs = FC_Settings(; max_steering = fcs.course.max_steering),
              tos = (; min_feasibility_margin = margin, min_height), el_floor)
-        m = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1, prn = false).margin
+        m = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1, prn = false).margin
         r = score_installed(setup(), st)
         @test r.margin == m && r.el_ok && r.clr_ok && r.ok
         @test r.height ≈ path_min_height(fec, l_tether)
@@ -57,7 +57,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         function install(; margin, c1 = c1)
             fec = new_fec(gentle)
             setup = (; tos = (; resample_points = 361, min_feasibility_margin = margin),
-                     fcs = (; max_steering = fcs.max_steering, el_offset_wing = 2.0), fec,
+                     fcs = FC_Settings(; max_steering = fcs.course.max_steering, el_offset_wing = 2.0), fec,
                      l_tether, wing_lift, c1_at_depower = dp -> c1, pattern_depower = r -> 0.27)
             st = RunState()
             raw = install_optimized_path!(setup, st, reply)
@@ -69,7 +69,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
             set_path!(fec, az, el .+ fw .* lift; resample = 100)
             return fec
         end
-        margin_at(fw) = check_pattern_feasible(installed(fw), l_tether, fcs.max_steering;
+        margin_at(fw) = check_pattern_feasible(installed(fw), l_tether, fcs.course.max_steering;
                                                c1, prn = false).margin
         st, fec, raw = install(; margin = 0.0)       # gate off: the whole lift
         @test raw == (az, el) && st.startup_wing_frac == 1.0 && st.c1_startup == c1
@@ -89,7 +89,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
     @testset "capture_startup_geometry" begin
         fec = new_fec(gentle)
-        setup = (; fec, l_tether, fcs = (; up_loops))
+        setup = (; fec, l_tether, fcs = FC_Settings(; up_loops))
         st = RunState(; opt_power_pred = 18000.0, opt_downloops = !up_loops)
         capture_startup_geometry!(setup, st)
         @test st.n_path_initial == length(fec.az_path)
@@ -106,19 +106,19 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
     @testset "startup_feasibility" begin
         tos = TrajOptSettings()
-        c1_at_depower(dp) = turn_rate_coeffs(fcs.body_damping, dp).c1
+        c1_at_depower(dp) = turn_rate_coeffs(fcs.run.body_damping, dp).c1
         setup(path) = (; fec = new_fec(path), fcs, tos, l_tether, c1_at_depower,
-                       pattern_depower = r -> fcs.depower_setpoint)
+                       pattern_depower = r -> fcs.course.depower_setpoint)
         st = RunState(; depower_flown_opt = 0.27)
         r = startup_feasibility(setup(gentle), st)
         @test r.feas.feas_start.margin >= tos.min_feasibility_margin
         # The laws the loop reads: the table's c1 at a depower in phases 3-4, the phase-5 law in 5.
         @test r.c1_at_phase(4, 0.27) == c1_at(r.feas, 4, c1_at_depower(0.27))
         @test r.c1_at_phase(5, 0.27) == c1_at(r.feas, 5, NaN)
-        dp_st = tos.fly_opt_depower ? st.depower_flown_opt : fcs.depower_setpoint
+        dp_st = tos.fly_opt_depower ? st.depower_flown_opt : fcs.course.depower_setpoint
         @test r.c1_at_phase(4, st) == r.c1_at_phase(4, dp_st)
         @test r.phase5_margin_at(gentle...) ==
-              phase5_margin(r.feas, gentle[1], gentle[2], fcs.reelout_l_max, fcs.max_steering)
+              phase5_margin(r.feas, gentle[1], gentle[2], fcs.reelout.reelout_l_max, fcs.course.max_steering)
         @test r.margin5 isa Phase5MarginState
         @test_throws ErrorException startup_feasibility(setup(tight), st)   # the gate refuses it
     end
@@ -142,7 +142,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         tos = (; resample_points = 361)
         fec = new_fec(gentle)
         set_path!(fec, raw...; resample = n - 1)           # as install_optimized_path! does
-        setup = (; fcs = (; depower_setpoint = 0.274, up_loops), fec, tos)
+        setup = (; fcs = FC_Settings(; depower_setpoint = 0.274, up_loops), fec, tos)
         st = RunState(; opt_paths_raw = [raw], depower_flown_opt = 0.27)
         fec.last_idx = 7
         init_loop_state!(setup, st)
@@ -156,7 +156,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
     @testset "log_lobe_lift" begin
         reply = (; trajectory = (; azimuth = [-30.0, 0.0, 30.0]))
-        lift(mode; lift = 2.0) = (; el_offset_wing = lift, el_offset_wing_mode = mode,
+        lift(mode; lift = 2.0) = FC_Settings(; el_offset_wing = lift, el_offset_wing_mode = mode,
                                   el_offset_wing_az = 0.5, el_offset_wing_blend = 0.25)
         @test_logs (:info, r"beyond \|azimuth\| = 0\.5°") log_lobe_lift(lift("azimuth"), reply)
         # As fractions of the pattern's own amplitude, here ±30°: 15° and 7.5°.

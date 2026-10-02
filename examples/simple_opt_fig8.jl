@@ -6,7 +6,7 @@ Same plant, entry and inner loop as `simple_fig8.jl` — read that file first, i
 docstring covers the log slots, the parameters, the sign conventions and why the
 pattern must be flown low and wide, all of which apply here unchanged. What
 differs is where the reference path comes from: instead of the lemniscate
-`fcs.f8_a`/`f8_b` describe, the AWETrim optimizer is asked for the
+`fcs.pattern.f8_a`/`f8_b` describe, the AWETrim optimizer is asked for the
 power-optimal reel-out path under THIS run's wind and winch, and `set_path!`
 installs it. The lemniscate is still built — as the initial guess the optimizer
 starts from, and as the reference the result is plotted against.
@@ -36,7 +36,7 @@ times softer than the real one, is not the path for this run.
 
 The guess lemniscate seeds the solve and nothing else — it does not shape the
 flown path — and it has its own `guess_*` fields in `data/traj_opt.yaml` rather
-than reusing `fcs.f8_a`/`f8_b`/`el_center`, which size the pattern the OTHER runs
+than reusing `fcs.pattern.f8_a`/`f8_b`/`el_center`, which size the pattern the OTHER runs
 actually fly. It decides two things, both measured on 2026-08-18 at 150 m and
 6 m/s:
 **whether the solve converges at all** (the reel-out settings' 20°/11° at 18°
@@ -58,7 +58,7 @@ curve backwards — the same curve, but not the one that was optimized.
 
 # Geometry that no longer comes from `FC_Settings`
 
-`fcs.f8_a`/`f8_b` and `fcs.el_center` describe the guess, not what is flown, so
+`fcs.pattern.f8_a`/`f8_b` and `fcs.pattern.el_center` describe the guess, not what is flown, so
 the pattern's centre (the dive target, and `var_04`) and its extent (the size
 criteria of `fig8_metrics`) are measured off the installed path instead.
 
@@ -132,17 +132,17 @@ log_name = basename(project_set.log_file)
 # ======================== INIT =========================== #
 
 # Decided BEFORE init: the warm-up must relax against the winch the loop commands.
-fcs.compliance >= 0 || error("compliance must be >= 0, got $(fcs.compliance)")
+fcs.winch.compliance >= 0 || error("compliance must be >= 0, got $(fcs.winch.compliance)")
 # Both winch loops are the CALLER's now: V3Kite's `step!` takes a torque.
 wcs = load_wc_settings(wc_settings(project); dt = 1 / project_set.sample_freq)
 wpc = nothing
 wfc = nothing
-if fcs.compliance > 0
+if fcs.winch.compliance > 0
     # winch_force_gains returns plain numbers; the controller object is V3Kite's.
     wfc = WinchForceController(; winch_force_gains(fcs)...)
     @info @sprintf("Winch: FORCE mode at compliance = %.2f — len_kp %.0f N/m, \
                     damp %.0f N·s/m, tau %.1f s.",
-                   fcs.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
+                   fcs.winch.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)
 else
     # Perfectly stiff: the position feed-forward cancels the measured load exactly.
     wpc = WinchPosController(wcs; dt = 1 / project_set.sample_freq)
@@ -262,12 +262,12 @@ toc("Received the optimized path in: ")
 # the gap below is a real difference between the model that predicted the power
 # and the model that flies it, and it belongs next to the prediction.
 if !isnothing(opt_result.depower)
-    flown_l_dp = 0.6 + 5 * fcs.depower_setpoint
+    flown_l_dp = 0.6 + 5 * fcs.course.depower_setpoint
     @info @sprintf("Optimized at depower l_dp = %.3f m (mode %s), against %.3f m \
                     for the flown depower_setpoint = %.2f — a %+.3f m gap on the \
                     optimizer's tape scale.",
                    opt_result.depower.value, opt_result.depower.mode, flown_l_dp,
-                   fcs.depower_setpoint, opt_result.depower.value - flown_l_dp)
+                   fcs.course.depower_setpoint, opt_result.depower.value - flown_l_dp)
 end
 # The optimizer's own curvature diagnostic, in metres and physical: comparable
 # with the kite's 1/(c1*u_s) and with `min_feasibility_margin`, and read
@@ -285,7 +285,7 @@ n_opt = length(opt_result.trajectory.azimuth) - 1
 set_path!(fec, opt_result.trajectory.azimuth, opt_result.trajectory.elevation;
           resample = min(tos.resample_points, n_opt))
 
-# The pattern's own geometry: fcs.f8_* and fcs.el_center describe the GUESS now.
+# The pattern's own geometry: fcs.f8_* and fcs.pattern.el_center describe the GUESS now.
 az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))
 el_c_path = 0.5 * (maximum(fec.el_path) + minimum(fec.el_path))
 az_amp_path = 0.5 * (maximum(fec.az_path) - minimum(fec.az_path))
@@ -296,9 +296,9 @@ el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
 # but backwards, which is not the trajectory that was optimized.
 opt_table = opt_trajectory(; url = tos.base_url)
 opt_downloops = opt_table["spline"]["downloops"]
-opt_downloops == !fcs.up_loops ||
+opt_downloops == !fcs.pattern.up_loops ||
     error("The optimizer returned a downloops = $opt_downloops path while this run \
-           flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the optimizer's \
+           flies up_loops = $(fcs.pattern.up_loops). Change fcs.pattern.up_loops or the optimizer's \
            initial guess; do not fly it reversed.")
 @info @sprintf("Optimized path: %d points, azimuth %.1f°…%.1f°, elevation \
                 %.1f°…%.1f° (centre %.1f°), predicted mean power %.0f W.",
@@ -314,13 +314,13 @@ opt_downloops == !fcs.up_loops ||
 # Checked with `candidate_elevation_margin` on top, because this compares the
 # REFERENCE path while the criterion scores the FLOWN one, and the kite flies below
 # its reference near the lobe tips.
-el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
 minimum(fec.el_path) >= el_floor ||
     error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
                     %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
                     constrains height and not elevation, so this is not something \
                     the solve avoids on its own.",
-                   minimum(fec.el_path), fcs.min_elevation,
+                   minimum(fec.el_path), fcs.run.min_elevation,
                    tos.candidate_elevation_margin, el_floor))
 
 # The clearance floor, checked at the tether length this run flies. Independent of
@@ -357,7 +357,7 @@ else
     # On the OPTIMIZED path, at the length it is flown at, with the c1 of the
     # damping in use. The optimizer knows nothing of the V3's turn-rate law, so a
     # path the kite cannot turn along is a plausible thing for it to return.
-    feas = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
+    feas = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1)
     feas.margin >= tos.min_feasibility_margin ||
         error(@sprintf("The optimized path asks for a turn radius of %.1f° where the \
                         kite manages %.1f° at L = %.0f m: margin %.2f, below \
@@ -368,10 +368,10 @@ else
                        tos.min_feasibility_margin))
 
     # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
+    lead_time = deg2rad(fcs.pattern.attractor_dist) * l_tether / fcs.course.v_app_ref
     @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   fcs.pattern.attractor_dist, lead_time, fcs.course.v_app_ref, delay, lead_time / delay)
 end
 
 # The dive aims at the pattern centre, which is the OPTIMIZED path's now.
@@ -441,18 +441,18 @@ try
         if isnothing(wfc)
             step!(s; rel_depower, rel_steering,
                   set_torque = winch_torque!(wpc, s, l0),
-                  vsm_interval = fcs.vsm_interval)
+                  vsm_interval = fcs.run.vsm_interval)
         else
             step!(s; rel_depower, rel_steering,
                   set_torque = winch_force_hold!(wfc, s, l0),
-                  vsm_interval = fcs.vsm_interval)
+                  vsm_interval = fcs.run.vsm_interval)
         end
 
         # Report the overspeed rather than the opaque solver abort it causes later.
-        if Float64(s.sys_state.v_app) > fcs.v_app_abort
+        if Float64(s.sys_state.v_app) > fcs.run.v_app_abort
             @error @sprintf("Overspeed at t=%.2fs: v_app=%.1f m/s > %.1f (elevation %.1f°, AoA %.1f°). \
                              Stopping before the solver diverges.",
-                            s.sys_state.time, s.sys_state.v_app, fcs.v_app_abort,
+                            s.sys_state.time, s.sys_state.v_app, fcs.run.v_app_abort,
                             rad2deg(s.sys_state.elevation), rad2deg(s.sys_state.AoA))
             break
         end
@@ -468,7 +468,7 @@ try
         s.sys_state.var_05 = chi_set           # RAW guidance course [rad]
         s.sys_state.var_06 = rad2deg(err)      # REGULATED error [deg]
         # A weight, not a flag: a step here means entry_d_blend is too narrow.
-        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.entry_chi_max) ? w_lim : 0.0
+        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.course.entry_chi_max) ? w_lim : 0.0
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
@@ -494,10 +494,10 @@ sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 # From the flown path, not from fcs.f8_*. `az_center` is in RADIANS here (it is
 # compared against the logged azimuth), the two extents in degrees.
-print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = deg2rad(az_c_path),
+print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs.run.entry_time,
+                   min_elevation = fcs.run.min_elevation, az_center = deg2rad(az_c_path),
                    az_amplitude = az_amp_path, el_height = el_height_path,
-                   min_span_frac = fcs.min_span_frac)
+                   min_span_frac = fcs.run.min_span_frac)
 
 # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
 let fig8 = findall(x -> Int(x) == 4, sl.sys_state)
@@ -509,7 +509,7 @@ let fig8 = findall(x -> Int(x) == 4, sl.sys_state)
                  | v_app_ref = %.1f (%+.1f%%)\n",
                 sl.time[fig8[end]] - sl.time[fig8[1]],
                 mean(va), minimum(va), maximum(va),
-                fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
+                fcs.course.v_app_ref, 100 * (mean(va) / fcs.course.v_app_ref - 1))
     end
 end
 
@@ -518,7 +518,7 @@ if t_sim > 0
     @printf("  Performance: %.1f s sim in %.1f s wall = %.2f x realtime \
              (%.1f ms/step over %d steps at dt = %.4f s, vsm_interval = %d)\n",
             t_sim, t_wall, t_sim / t_wall, 1000 * t_wall / round(Int, t_sim / s.dt),
-            round(Int, t_sim / s.dt), s.dt, fcs.vsm_interval)
+            round(Int, t_sim / s.dt), s.dt, fcs.run.vsm_interval)
 else
     @warn "No simulated time elapsed — no performance figure."
 end

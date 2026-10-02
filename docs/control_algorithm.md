@@ -164,7 +164,7 @@ Three refinements around the ends of the reel-out window, all in `examples/simpl
   and force limiters still see the unramped value, so the engagement transient is shaped without
   lagging the force regulation.
 - **Soft-stop** latches once EITHER the remaining distance would be covered within
-  `reelout_softstop` seconds at the current rate, OR `fcs.n_fig_eight` complete figures of eight
+  `reelout_softstop` seconds at the current rate, OR `fcs.reelout.n_fig_eight` complete figures of eight
   have been flown — a second, independent stop criterion counted in laps (`n_fig_eight = 0`
   disables it, leaving `reelout_l_max` the only criterion). Whichever fires first decelerates
   linearly to exactly 0, landing at `reelout_l_max` for the length criterion or below it for the

@@ -133,10 +133,10 @@ the tape, and the bin is reported but left out of the rating.
 """
 const MAX_RATE_LIMITED = 0.2
 "Floor of the gain schedule from phase 3 on, as `calc_steering` applies it"
-const V_MIN_PATTERN = max(fcs.v_app_min, fcs.v_app_min_pattern)
-const DP_LO, DP_HI = turn_rate_depower_range(fcs.body_damping)
+const V_MIN_PATTERN = max(fcs.course.v_app_min, fcs.course.v_app_min_pattern)
+const DP_LO, DP_HI = turn_rate_depower_range(fcs.run.body_damping)
 "The turn authority the loop was tuned at, as `simple_opt_reelout.jl` computes it"
-const C1_SETPOINT = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
+const C1_SETPOINT = turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint).c1
 # The plant's turn-rate law is `c1(u_d)·v_a·u_s + c2(u_d)/v_a·sin(ψ)·cos(β)`, identified in the low
 # crosswind pattern (`plant_coeffs`, course_loop_model.jl); the controller keeps the table's c1, as
 # flown. The input `gravity_scale` scales the gravity term, 0 leaves it out.
@@ -159,7 +159,7 @@ if isfile(summary_file)
 end
 sl = load_log(log_name; path = output_path).syslog
 # On the path only: the guidance is linear for a cross-track error below the attractor's arc distance.
-in_pattern = findall(i -> 3 <= sl.sys_state[i] <= 5 && sl.var_01[i] <= fcs.attractor_dist,
+in_pattern = findall(i -> 3 <= sl.sys_state[i] <= 5 && sl.var_01[i] <= fcs.pattern.attractor_dist,
                      eachindex(sl.sys_state))
 isempty(in_pattern) && error("$log_name.arrow never reached the path in phases 3-5.")
 log_L = [Float64(sl.l_tether[i][1]) for i in in_pattern]
@@ -207,7 +207,7 @@ let p4 = findall(==(4), sl.sys_state)
     i1, i2 = p4[1] + round(Int, 10 / dt_log), p4[end]
     local id = identify_turn_rate_law(sl[i1:i2]; dt = dt_log)
     global τ_log, τ_corr, v_log = id.delay_sec, id.delay_corr, median(Float64.(sl.v_app[i1:i2]))
-    local tc = turn_rate_coeffs(fcs.body_damping, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
+    local tc = turn_rate_coeffs(fcs.run.body_damping, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
     global τ_table, T_table = kite_dead_time(tc, v_log), kite_lag(tc, v_log)
     global τ_pat, T_pat = pattern_dead_time_lag(tc, v_log, clamp(median(Float64.(sl.depower[i1:i2])), DP_LO, DP_HI))
 end
@@ -231,9 +231,9 @@ size is `c2(u_d)/v_a·cos(el_c)` ([`plant_coeffs`](@ref)) times `GRAVITY_EVAL`. 
 settings `f`; `inner = false` skips the inner loop (its field is then `nothing`).
 """
 function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = true)
-    tc = turn_rate_coeffs(f.body_damping, clamp(depower, DP_LO, DP_HI))
-    K = C1_SETPOINT / tc.c1 * f.heading_p * f.v_app_ref / max(v_app, V_MIN_PATTERN)
-    C = course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts)
+    tc = turn_rate_coeffs(f.run.body_damping, clamp(depower, DP_LO, DP_HI))
+    K = C1_SETPOINT / tc.c1 * f.course.heading_p * f.course.v_app_ref / max(v_app, V_MIN_PATTERN)
+    C = course_pid(K, f.course.heading_i, f.course.heading_d, f.course.heading_d_n, Ts)
     G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
     τp, Tp = pattern_dead_time_lag(tc, v_app, clamp(depower, DP_LO, DP_HI))
     function margins(Lp)
@@ -292,14 +292,14 @@ end
                 %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table: %.3f + %.3f = %.3f s), \
                 against the log's pure delay %.3f s there (correlation %.3f); plant c1, c2 from the low pattern, \
                 c2 = %.2f at depower_setpoint (gravity scale %.1f).",
-               PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d, fcs.heading_d_n,
-               fcs.heading_i, fcs.depower_setpoint, C1_SETPOINT, fcs.v_app_min,
-               fcs.v_app_min_pattern, fcs.attractor_dist, fcs.attractor_lead_time, tape_lag.T,
+               PROJECT, fcs.run.body_damping, Ts, fcs.course.heading_p, fcs.course.heading_d, fcs.course.heading_d_n,
+               fcs.course.heading_i, fcs.course.depower_setpoint, C1_SETPOINT, fcs.course.v_app_min,
+               fcs.course.v_app_min_pattern, fcs.pattern.attractor_dist, fcs.pattern.attractor_lead_time, tape_lag.T,
                100 * tape_lag.unexplained, KITE_CORR_ZERO, KITE_CORR_POLE,
                τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr,
-               plant_coeffs(fcs.depower_setpoint).c2, GRAVITY_EVAL)
+               plant_coeffs(fcs.course.depower_setpoint).c2, GRAVITY_EVAL)
 
-l_lo, l_hi = SET.l_tether, fcs.reelout_l_max
+l_lo, l_hi = SET.l_tether, fcs.reelout.reelout_l_max
 edges = collect(range(l_lo, l_hi; length = max(ceil(Int, (l_hi - l_lo) / BIN_M), 1) + 1))
 println(@sprintf("Phases 3-5 over tether length, %.0f – %.0f m in %d bins; worst case per bin over \
                   v_a (min, median, max) and depower (min, max), each v_a at the highest ω_g flown near it:", l_lo, l_hi, length(edges) - 1))

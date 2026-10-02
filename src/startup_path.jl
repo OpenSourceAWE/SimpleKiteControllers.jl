@@ -91,7 +91,7 @@ function log_startup_reply(fcs, opt_result, opt_r_min)
                         %.3f equivalent, against the flown depower_setpoint = %.3f — \
                         a %+.3f gap.",
                        opt_result.depower.value, opt_result.depower.mode, u_p_equiv,
-                       fcs.depower_setpoint, u_p_equiv - fcs.depower_setpoint)
+                       fcs.course.depower_setpoint, u_p_equiv - fcs.course.depower_setpoint)
     end
     # The optimizer's own curvature diagnostic, physical and comparable with `min_feasibility_margin`.
     isnothing(opt_result.metrics.turn_radius_min_m) ||
@@ -108,20 +108,20 @@ Say how the lobe lift reads on the startup pattern: in degrees of azimuth, or, f
 fractions of each path's own amplitude, so the degrees are the STARTUP pattern's.
 """
 function log_lobe_lift(fcs, opt_result)
-    if fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth"
+    if fcs.reelout.el_offset_wing != 0 && fcs.reelout.el_offset_wing_mode == "azimuth"
         @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.1f°, ramped over %.1f°, \
                         zero inside %.1f°.",
-                       fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
-                       fcs.el_offset_wing_az - fcs.el_offset_wing_blend)
-    elseif fcs.el_offset_wing != 0 && fcs.el_offset_wing_mode == "azimuth_frac"
+                       fcs.reelout.el_offset_wing, fcs.reelout.el_offset_wing_az, fcs.reelout.el_offset_wing_blend,
+                       fcs.reelout.el_offset_wing_az - fcs.reelout.el_offset_wing_blend)
+    elseif fcs.reelout.el_offset_wing != 0 && fcs.reelout.el_offset_wing_mode == "azimuth_frac"
         # Fractions of each path's own amplitude, so the degrees below are the STARTUP pattern's.
         amp0 = 0.5 * (maximum(opt_result.trajectory.azimuth) -
                       minimum(opt_result.trajectory.azimuth))
         @info @sprintf("Lobe lift: %+.2f° beyond |azimuth| = %.2f of the pattern's own \
                         amplitude, ramped over %.2f of it — %.1f° and %.1f° on the \
                         startup path's ±%.1f°.",
-                       fcs.el_offset_wing, fcs.el_offset_wing_az, fcs.el_offset_wing_blend,
-                       fcs.el_offset_wing_az * amp0, fcs.el_offset_wing_blend * amp0, amp0)
+                       fcs.reelout.el_offset_wing, fcs.reelout.el_offset_wing_az, fcs.reelout.el_offset_wing_blend,
+                       fcs.reelout.el_offset_wing_az * amp0, fcs.reelout.el_offset_wing_blend * amp0, amp0)
     end
 end
 
@@ -138,14 +138,14 @@ function install_optimized_path!(setup, st::RunState, reply)
         for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
             st.startup_wing_frac = fw
             set_path!(fec, az, el .+ fw .* lift; resample)
-            check_pattern_feasible(fec, l_tether, fcs.max_steering;
+            check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                    c1 = st.c1_startup, prn = false).margin >=
                 tos.min_feasibility_margin && break
         end
         st.startup_wing_frac < 1 &&
             @info @sprintf("Lobe lift held back on the startup path to fit the \
                             curvature gate: %.0f %% of %.2f°.",
-                           100 * st.startup_wing_frac, fcs.el_offset_wing)
+                           100 * st.startup_wing_frac, fcs.reelout.el_offset_wing)
     else
         set_path!(fec, az, el .+ lift; resample)
     end
@@ -194,7 +194,7 @@ end
 # All three startup gates on the path installed in `fec`, shared by the retries and the incumbent's record after them.
 function score_installed(setup, st::RunState)
     (; fec, l_tether, fcs, tos, el_floor) = setup
-    margin = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+    margin = check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                     c1 = st.c1_startup, prn = false).margin
     el_ok = minimum(fec.el_path) >= el_floor
     height = NaN
@@ -398,7 +398,7 @@ optimizer asked for, logged for the summary.
 """
 function finish_startup!(setup, st::RunState)
     (; fec, l_tether, fcs, tos, opt_r_on, opt_depower_log) = setup
-    margin_startup = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+    margin_startup = check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                             c1 = st.c1_startup, prn = false).margin
     if opt_r_on && !isnan(st.c1_startup) && margin_startup < tos.min_feasibility_margin
         retry_startup!(setup, st)
@@ -436,9 +436,9 @@ function capture_startup_geometry!(setup, st::RunState)
 
     # Which path was flown when, so the run is scored against the prediction of the path in the air.
     st.pred_timeline = [(t = 0.0, power = st.opt_power_pred)]
-    st.opt_downloops == !fcs.up_loops ||
+    st.opt_downloops == !fcs.pattern.up_loops ||
         error("The optimizer returned a downloops = $(st.opt_downloops) path while this run \
-               flies up_loops = $(fcs.up_loops). Change fcs.up_loops or the guess; do \
+               flies up_loops = $(fcs.pattern.up_loops). Change fcs.pattern.up_loops or the guess; do \
                not fly it reversed.")
 
     @info @sprintf("Optimized path: %d points, azimuth %.1f°…%.1f°, elevation \
@@ -465,10 +465,10 @@ function startup_feasibility(setup, st::RunState)
     c1_at_phase(phase::Integer, depower::Real) =
         c1_at(feas, phase, phase >= 5 ? NaN : c1_at_depower(depower))
     c1_at_phase(phase::Integer, st::RunState) =
-        c1_at_phase(phase, tos.fly_opt_depower ? st.depower_flown_opt : fcs.depower_setpoint)
+        c1_at_phase(phase, tos.fly_opt_depower ? st.depower_flown_opt : fcs.course.depower_setpoint)
     # NaN when the table could not serve depower_final. See phase5_margin's docstring for
     # why this is NOT comparable to the install's own margin early in the reel-out.
-    phase5_margin_at(az, el) = phase5_margin(feas, az, el, fcs.reelout_l_max, fcs.max_steering)
+    phase5_margin_at(az, el) = phase5_margin(feas, az, el, fcs.reelout.reelout_l_max, fcs.course.max_steering)
     return (; feas, margin5 = Phase5MarginState(), c1_at_phase, phase5_margin_at)
 end
 
@@ -488,10 +488,10 @@ function init_phase5_and_controller!(setup, st::RunState)
 
     @info @sprintf("Elevation lift: el_offset_final = %+.2f°, el_offset_lead = %.1f s \
                     (%s), reelout_softstop = %.1f s.",
-                   fcs.el_offset_final, fcs.el_offset_lead,
-                   fcs.el_offset_lead > 0 ? "anticipates the end of reel-out" :
+                   fcs.reelout.el_offset_final, fcs.reelout.el_offset_lead,
+                   fcs.reelout.el_offset_lead > 0 ? "anticipates the end of reel-out" :
                                             "starts at the stop latch / phase 5",
-                   fcs.reelout_softstop)
+                   fcs.reelout.reelout_softstop)
 
     # The dive aims at the pattern centre, which is the OPTIMIZED path's now.
     st.ccs = CourseControllerSettings(fcs; dt = s.dt)
@@ -508,14 +508,14 @@ ramp's start. The rest starts at the defaults of `RunState`.
 """
 function init_loop_state!(setup, st::RunState)
     (; fcs, fec, tos) = setup
-    st.rel_depower_prev = fcs.depower_setpoint  # the gain reads c1 there
+    st.rel_depower_prev = fcs.course.depower_setpoint  # the gain reads c1 there
     # fig_8 live lap count: 0 before phase 4, 1 at first entry, +1 per traversal; the post-run `fig8` is another thing.
     st.fig8_idx_prev = fec.last_idx
     st.n_path = length(fec.az_path)
     # The reference TRACKING is scored against: the optimizer's curve, canonicalized and blended like the flown one, never lifted.
     st.raw_az, st.raw_el = prepare_path(st.opt_paths_raw[1]...;
                                         resample = min(tos.resample_points, length(st.opt_paths_raw[1][1]) - 1),
-                                        up_loops = fcs.up_loops)
+                                        up_loops = fcs.pattern.up_loops)
     length(st.raw_az) == st.n_path ||
         error("scored reference has $(length(st.raw_az)) points, the flown path $(st.n_path)")
     # Resolution the path in the air is worth checking at (the reply's own, not `n_path`); updated per install.

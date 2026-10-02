@@ -160,12 +160,12 @@ function predict(point::Symbol; v_a = V1_POINTS[point].v_a_nominal, depower = no
     fcs_p = FC_Settings(fc_settings(project))
     reload_turn_rate_table!(project)
     Ts = 1 / Settings(project).sample_freq
-    dp = something(depower, fcs_p.depower_setpoint)
-    tc = turn_rate_coeffs(fcs_p.body_damping, dp)
-    v_min = point == :C ? fcs_p.v_app_min : max(fcs_p.v_app_min, fcs_p.v_app_min_pattern)
-    K = fcs_p.heading_p * fcs_p.v_app_ref / max(v_a, v_min)
-    C = course_pid(K, fcs_p.heading_i, fcs_p.heading_d, fcs_p.heading_d_n, Ts)
-    cos_beta = cosd(fcs_p.el_center)
+    dp = something(depower, fcs_p.course.depower_setpoint)
+    tc = turn_rate_coeffs(fcs_p.run.body_damping, dp)
+    v_min = point == :C ? fcs_p.course.v_app_min : max(fcs_p.course.v_app_min, fcs_p.course.v_app_min_pattern)
+    K = fcs_p.course.heading_p * fcs_p.course.v_app_ref / max(v_a, v_min)
+    C = course_pid(K, fcs_p.course.heading_i, fcs_p.course.heading_d, fcs_p.course.heading_d_n, Ts)
+    cos_beta = cosd(fcs_p.pattern.el_center)
     τ, T_kite = kite_dead_time(tc, v_a), kite_lag(tc, v_a)
     # The plant's c1 and gravity term c2/v_a·sin(ψ)·cos(β) of the low pattern (course_loop_model.jl).
     pc = plant_coeffs(dp)
@@ -258,11 +258,11 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     fcs_p = FC_Settings(fc_settings(project))
     # The feed-forward is fine for a feedback-only gain run (it lies outside the
     # loop), and for a baseline or delay run that belongs to one.
-    ff_ok = fcs_p.ff_gain == 0 || feedback_only || (gain_factor == 1.0)
-    (ff_ok && fcs_p.fig8_pure_course) ||
+    ff_ok = fcs_p.feedforward.ff_gain == 0 || feedback_only || (gain_factor == 1.0)
+    (ff_ok && fcs_p.course.fig8_pure_course) ||
         @warn @sprintf("V1 %s: ff_gain = %.2g, fig8_pure_course = %s — this run does \
                         not match V1's settings, see oldplans/Plan_model_validation.md#settings.",
-                       point, fcs_p.ff_gain, fcs_p.fig8_pure_course)
+                       point, fcs_p.feedforward.ff_gain, fcs_p.course.fig8_pure_course)
 
     src_output = normpath(joinpath(@__DIR__, "..", "output"))
     stamp = Dates.format(Dates.now(), "yyyymmdd_HHMMSS")
@@ -437,7 +437,7 @@ function loop_breakdown(r, f)
     U, S = dft_at(c.u, c.dt, f), dft_at(c.s, c.dt, f)
     Ψ, Χ, E = dft_at(c.heading, c.dt, f), dft_at(c.course, c.dt, f), dft_at(c.err, c.dt, f)
     project = project_file(V1_POINTS[r.point].project)
-    tc = turn_rate_coeffs(FC_Settings(fc_settings(project)).body_damping, r.depower)
+    tc = turn_rate_coeffs(FC_Settings(fc_settings(project)).run.body_damping, r.depower)
     ω = 2π * f
     kite_model = tc.c1 * r.v_a_mean * cis(-ω * kite_dead_time(tc, r.v_a_mean)) /
                  ((1 + im * ω * kite_lag(tc, r.v_a_mean)) * (im * ω))
@@ -514,7 +514,7 @@ function analyze(point, log_path; hook_settle = HOOK_SETTLE_V1, gain_factor = 1.
 
     # Commanded steering against the clamp: with the rate-limited fraction, the
     # gate for a baseline with small-signal headroom.
-    max_steering = FC_Settings(fc_settings(project_file(V1_POINTS[point].project))).max_steering
+    max_steering = FC_Settings(fc_settings(project_file(V1_POINTS[point].project))).course.max_steering
     peak_cmd_frac = maximum(abs.(Float64.(sl.set_steering[active]))) / max_steering
 
     result = (; point, label, gain_factor, extra_delay, hook_settle, test,
@@ -697,12 +697,12 @@ function course_controller_tf(point, v_a; depower = nothing)
     project = project_file(V1_POINTS[point].project)
     f = FC_Settings(fc_settings(project))
     Ts = 1 / Settings(project).sample_freq
-    K = f.heading_p * f.v_app_ref / max(v_a, max(f.v_app_min, f.v_app_min_pattern))
+    K = f.course.heading_p * f.course.v_app_ref / max(v_a, max(f.course.v_app_min, f.course.v_app_min_pattern))
     if V1_POINTS[point].script == "simple_opt_reelout.jl" && !isnothing(depower)
-        K *= turn_rate_coeffs(f.body_damping, f.depower_setpoint).c1 /
-             turn_rate_coeffs(f.body_damping, depower).c1
+        K *= turn_rate_coeffs(f.run.body_damping, f.course.depower_setpoint).c1 /
+             turn_rate_coeffs(f.run.body_damping, depower).c1
     end
-    return course_pid(K, f.heading_i, f.heading_d, f.heading_d_n, Ts), Ts
+    return course_pid(K, f.course.heading_i, f.course.heading_d, f.course.heading_d_n, Ts), Ts
 end
 
 """
@@ -752,18 +752,18 @@ function model_loops(r)
     project = project_file(p.project)
     f = FC_Settings(fc_settings(project))
     C, Ts = course_controller_tf(r.point, r.v_a_mean; depower = r.depower)
-    tc = turn_rate_coeffs(f.body_damping, r.depower)
+    tc = turn_rate_coeffs(f.run.body_damping, r.depower)
     # One model to set against the measurement: the stable sign of the gravity pole, with the
     # plant's c1 and c2 of the low pattern (plant_coeffs, course_loop_model.jl).
     pc = plant_coeffs(r.depower)
     c2 = pc.c2
     P = turn_rate_plant(pc.c1, c2, kite_dead_time(tc, r.v_a_mean), r.v_a_mean,
-                        -cosd(f.el_center), Ts; lag = v1_lag(r.point),
+                        -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
                         kite_lag = kite_lag(tc, r.v_a_mean))
     G = guidance_tf(run_guidance_rate(r).ω_g, Ts)
     # The corrected loop is the pattern model: the pattern law's dead time and lag, kite_correction.
     τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
-    Pp = turn_rate_plant(pc.c1, c2, τp, r.v_a_mean, -cosd(f.el_center), Ts; lag = v1_lag(r.point),
+    Pp = turn_rate_plant(pc.c1, c2, τp, r.v_a_mean, -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
                          kite_lag = Tp)
     return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))
 end

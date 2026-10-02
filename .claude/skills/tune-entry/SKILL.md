@@ -45,6 +45,10 @@ this.
    `laps`, `cross_track_deg.rms`, and `reelout` power for the regression check later.
 3. That folder's `fc_settings_reelout.yaml` is the copy that **produced** it — diff it
    against `data/fc_settings_reelout.yaml` to know what actually changed since.
+   Copies archived before the split of `FC_Settings` into parts have all keys directly
+   under `fc_settings:`; the current file has them in sections (`course:`, `pattern:`,
+   ...). A plain diff then shows every line, so compare the values instead: both load
+   with `FC_Settings(file)`, and `get_fc_field` reads a setting by its bare name.
 
 ## Step 1 — Diagnose: it is almost always the dive
 
@@ -90,7 +94,7 @@ One lever per screening run, so each is attributable.
 | 2 | `dive_el_margin` | up (e.g. 13 -> 17) | Dive -> hold threshold is `el_center + margin`; raising it ends the dive higher, so phase 3 has more altitude to spend. |
 
 **Non-obvious:** in `simple_opt_reelout.jl` the ladder's centre is the OPTIMIZED path's, not
-`fcs.el_center` (`ccs.el_center = el_c_path`, around `examples/simple_opt_reelout.jl:1076`),
+`fcs.pattern.el_center` (`ccs.el_center = el_c_path`, around `examples/simple_opt_reelout.jl:1076`),
 so `dive_el_margin` moves a threshold that itself moves with the optimizer's reply. Confirm
 the actual threshold against the log's `var_04`, and expect a different `el_c_path` at a
 different wind speed.

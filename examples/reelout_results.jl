@@ -53,17 +53,17 @@ function score_log(setup, st::RunState)
     # (`raw_az`/`raw_el` in the run script), not `var_01`, the guidance's own error
     # to the corrected path it steers for — see the comment at `raw_az`.
     d_raw_log = have_geom ? on_log(t_log, st.geom_t, st.geom_d_raw) : nothing
-    fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                       min_elevation = fcs.min_elevation, az_center = az_c_log,
+    fig8m = print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs.run.entry_time,
+                       min_elevation = fcs.run.min_elevation, az_center = az_c_log,
                        az_amplitude = az_amp_log, el_height = el_h_log,
-                       min_span_frac = fcs.min_span_frac, require_final = true,
+                       min_span_frac = fcs.run.min_span_frac, require_final = true,
                        max_force = project_set.max_force, cross_track = d_raw_log)
     st.fig8m = fig8m
     # A run that stopped before the metrics window scores nothing, and every line
     # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
     isnothing(fig8m) && error("No settled samples: the run ended at t = ", round(t_log[end], digits = 1),
                               " s, before the metrics window opens at park_time + entry_time = ",
-                              fcs.park_time + fcs.entry_time, " s. Nothing to score; the log is ",
+                              fcs.course.park_time + fcs.run.entry_time, " s. Nothing to score; the log is ",
                               joinpath(output_path, log_name * ".arrow"), ".")
 
     # What every lift costs on the OTHER axis. A pattern raised is a pattern flown
@@ -80,9 +80,9 @@ function score_log(setup, st::RunState)
                    ("azimuth_reach_neg", fig8m.az_fill_neg, az_amp_mean),
                    ("elevation_span", fig8m.el_fill, el_h_mean)]
     span_margins = [(; name, fill, flown = fill * ref,
-                     required = fcs.min_span_frac * ref,
-                     margin = (fill - fcs.min_span_frac) * ref,
-                     pct = 100 * (fill / fcs.min_span_frac - 1))
+                     required = fcs.run.min_span_frac * ref,
+                     margin = (fill - fcs.run.min_span_frac) * ref,
+                     pct = 100 * (fill / fcs.run.min_span_frac - 1))
                     for (name, fill, ref) in span_checks]
     span_worst = argmin(m -> m.margin, span_margins)
     i_final = findall(==(5), Int.(sl.sys_state))
@@ -94,7 +94,7 @@ function score_log(setup, st::RunState)
     @info @sprintf("Lift budget: %+.2f° of lift delivered (lobes up to %+.2f°); the \
                     tightest size criterion is %s with %+.2f° (%+.0f %%) to spare; min \
                     elevation %.1f° over the run, %.1f° in phase 5.",
-                   lift_mean, fcs.el_offset_wing,
+                   lift_mean, fcs.reelout.el_offset_wing,
                    replace(span_worst.name, "_" => " "), span_worst.margin,
                    span_worst.pct, fig8m.min_elevation_all, el_min_final)
     return (; sl, fig8m, laps_flown, az_amp_mean, el_h_mean, span_margins, span_worst,
@@ -304,7 +304,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                        @sprintf("optimizer's l_dp [m]; rel_depower equivalent %.3f \
                                  (awetrim_depower_to_v3kite), against the flown \
                                  depower_setpoint = %.3f",
-                                e.u_p_equiv, fcs.depower_setpoint)))
+                                e.u_p_equiv, fcs.course.depower_setpoint)))
             end),
             "depower_optimized_rel" => OrderedDict(time_keyed(opt_depower_log) do e
                 (e.t, (round(e.u_p_equiv; digits = 4),
@@ -370,15 +370,15 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                        @sprintf("at L = %.0f m", e.l)))
             end)),
         "el_lift" => OrderedDict(
-            "lift_deg" => (fcs.el_offset_final,
+            "lift_deg" => (fcs.reelout.el_offset_final,
                 "el_offset_final, the fixed lift of the path once reel-out ends [deg]"),
-            "lift_lead" => (fcs.el_offset_lead,
+            "lift_lead" => (fcs.reelout.el_offset_lead,
                 "el_offset_lead, how early the lift is allowed to latch; 0 = at the end [s]"),
-            "wing_deg" => (fcs.el_offset_wing,
+            "wing_deg" => (fcs.reelout.el_offset_wing,
                 "el_offset_wing, extra lift at the lobes, baked into every installed path [deg]"),
-            "wing_mode" => (fcs.el_offset_wing_mode,
+            "wing_mode" => (fcs.reelout.el_offset_wing_mode,
                 "el_offset_wing_mode, the units el_offset_wing_az/_blend are read in"),
-            "wing_az_deg" => (fcs.el_offset_wing_az,
+            "wing_az_deg" => (fcs.reelout.el_offset_wing_az,
                 "azimuth beyond which that lift is full; it ramps over \
                  el_offset_wing_blend below it [deg or fraction of A]"),
             "lift_t" => (isnan(st.lift_t) ? "never" : round(st.lift_t; digits = 1),
@@ -422,7 +422,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                       path's in traj_opt.path [deg]"),
                  "commanded_el_height_deg" => (round(el_h_mean; digits = 2),
                      "mean commanded pattern height [deg]"),
-                 "wing_deg" => (fcs.el_offset_wing,
+                 "wing_deg" => (fcs.reelout.el_offset_wing,
                      "el_offset_wing, the fixed lobe lift baked into every installed path [deg]"),
                  "el_min_run_deg" => (round(fig8m.min_elevation_all; digits = 1),
                      "lowest elevation over the whole run — usually set in PHASE 5 at 4 m/s \
@@ -434,7 +434,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                      (round(m.margin; digits = 2),
                       @sprintf("reach margin: flew %.2f° against the %.2f° required by \
                                 min_span_frac = %.2f, %+.0f %%", m.flown, m.required,
-                               fcs.min_span_frac, m.pct))
+                               fcs.run.min_span_frac, m.pct))
                  for m in span_margins],
                 ["tightest" => (replace(span_worst.name, "_" => " "),
                      @sprintf("the size criterion with the least room, %+.2f° (%+.0f %%) — \
@@ -506,7 +506,7 @@ function opt_performance(setup, st::RunState, timing, cycle)
     # startup solve holds the script before the loop exists, the blocking
     # re-optimizations freeze the loop itself.
     t_opt = opt_startup_solve_s + st.reopt_blocked_s
-    block = performance_block(t_sim, t_wall, s.dt, fcs.vsm_interval;
+    block = performance_block(t_sim, t_wall, s.dt, fcs.run.vsm_interval;
         blocked_s = st.reopt_blocked_s,
         extra = Pair{String, Any}[
             "total_wall_time" => (round(t_total; digits = 1),
@@ -587,17 +587,17 @@ function recap_block(setup, st::RunState, timing, run_time, scored, p4, power, c
         summary_block["av_depower_ro"] = (round(p4.depower_av; digits = 3), "mean KCU depower over phase four [-]")
         # The floor the limiter integrates above: depower_final, or the depower the
         # stop latched at when that is higher (simple_opt_reelout.jl's stop ramp).
-        dp_final_floor = isnan(st.stop_dp_entry) ? fcs.depower_final : max(fcs.depower_final, st.stop_dp_entry)
+        dp_final_floor = isnan(st.stop_dp_entry) ? fcs.reelout.depower_final : max(fcs.reelout.depower_final, st.stop_dp_entry)
         summary_block["max_depower_final"] = (round(min(dp_final_floor + st.dp_final_extra_peak,
-                                                        max(fcs.depower_final_max, dp_final_floor)); digits = 3),
+                                                        max(fcs.reelout.depower_final_max, dp_final_floor)); digits = 3),
             "highest depower the force limiter asked for, from the stop latch through phase 5; \
              the phase-5 floor itself when it never engaged or is off (depower_final_max == depower_final) [-]")
         # The phase-5 counterpart of feasibility.gain_scale_flown, at the limiter's
         # peak: what simple_opt_reelout.jl scaled heading_p by there, saturated at
         # the table's usable edge exactly as the run was.
         if isfinite(c1_setpoint) && isfinite(c1_depower_max)
-            dp5_peak = round(min(fcs.depower_final + st.dp_final_extra_peak,
-                                 fcs.depower_final_max, c1_depower_max); digits = 3)
+            dp5_peak = round(min(fcs.reelout.depower_final + st.dp_final_extra_peak,
+                                 fcs.reelout.depower_final_max, c1_depower_max); digits = 3)
             c1_5 = c1_at_depower(dp5_peak)
             summary_block["gain_scale_final_peak"] = (round(isfinite(c1_5) ? c1_setpoint / c1_5 : 1.0; digits = 3),
                 "heading_p factor phase 5 flew with at the limiter's peak, \

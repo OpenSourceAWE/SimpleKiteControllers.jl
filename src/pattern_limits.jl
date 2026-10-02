@@ -40,7 +40,7 @@ end
 
 The elevation floor [deg] to send with a request made for tether length
 `l_tether`: the highest of what the gates will demand there —
-`asind(tos.min_height/l_tether)` for the clearance one and `fcs.min_elevation +
+`asind(tos.min_height/l_tether)` for the clearance one and `fcs.run.min_elevation +
 tos.candidate_elevation_margin` for the elevation one — and
 `tos.pattern_elevation_min`, plus `extra`. `nothing` asks for nothing and leaves
 the optimizer's own 0.6°; `tos.elevation_min_from_gates = false` sends
@@ -60,7 +60,7 @@ length has it too.
 function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
     el_min = Float64(tos.pattern_elevation_min)
     if tos.elevation_min_from_gates
-        el_min = max(el_min, fcs.min_elevation + tos.candidate_elevation_margin)
+        el_min = max(el_min, fcs.run.min_elevation + tos.candidate_elevation_margin)
         tos.min_height > 0 && l_tether > tos.min_height &&
             (el_min = max(el_min, asind(tos.min_height / l_tether)))
     end

@@ -41,7 +41,7 @@ the winch's rating does not move with the wind, while the force a kite can
 produce goes with its square. A single value sized for strong wind takes over
 the run in weak wind — measured at 3 m/s, `f_low` 700 N put the limiter in
 control 63 % of the time against 21 % at 350 N. NOT the entry guard's floor,
-which is `FC_Settings.entry_f_min`; see `docs/fig8_tuning_log.md`.
+which is `FC_Settings.winch.entry_f_min`; see `docs/fig8_tuning_log.md`.
 """
 winch_f_low(v_wind; project = project_file()) =
     winch_table_lookup(v_wind, "f_low"; project)

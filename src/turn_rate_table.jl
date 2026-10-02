@@ -250,7 +250,7 @@ stack_fits(fits, field::Symbol; skip = 0) =
     try_turn_rate_coeffs(fcs; consequence = "flying WITHOUT the feasibility check",
                          info = true) -> NamedTuple or nothing
 
-[`turn_rate_coeffs`](@ref) at `fcs.body_damping` and `fcs.depower_setpoint`, or
+[`turn_rate_coeffs`](@ref) at `fcs.run.body_damping` and `fcs.course.depower_setpoint`, or
 `nothing`, with a warning ending in `consequence`, when the table cannot serve that
 cell. `turn_rate_coeffs` refuses to extrapolate (by design: c1 moves violently with
 both arguments), so a caller that can run on unadvised — a deliberate off-grid run —
@@ -260,17 +260,17 @@ uses this instead of aborting. Errors other than its `ArgumentError` are rethrow
 function try_turn_rate_coeffs(fcs; consequence = "flying WITHOUT the feasibility check",
                               info = true)
     coeffs = try
-        turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
+        turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint)
     catch exc
         exc isa ArgumentError || rethrow()
-        @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
-               depower = $(fcs.depower_setpoint) — $consequence. Identify this cell \
+        @warn "No turn-rate coefficients for body_damping = $(fcs.run.body_damping), \
+               depower = $(fcs.course.depower_setpoint) — $consequence. Identify this cell \
                with V3Kite.jl's steering_test_v3.jl to get it back.\n$(exc.msg)"
         return nothing
     end
     info && @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
                             c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                           fcs.body_damping, fcs.depower_setpoint,
+                           fcs.run.body_damping, fcs.course.depower_setpoint,
                            coeffs.interpolated ? " (INTERPOLATED)" : "",
                            coeffs.c1, coeffs.c2, coeffs.delay)
     return coeffs

@@ -121,10 +121,10 @@ function replay(log::V3Log; variant::Symbol = :model, min_phase = 3)
 
     # Clamped to the table's range: the log starts at 0 before the first step, and only
     # samples from phase `min_phase` on are scored.
-    dp_lo, dp_hi = turn_rate_depower_range(fcs.body_damping)
+    dp_lo, dp_hi = turn_rate_depower_range(fcs.run.body_damping)
     coeffs = Dict{Float64, Any}()
     tc_at(d) = get!(coeffs, round(clamp(d, dp_lo, dp_hi), digits = 3)) do
-        turn_rate_coeffs(fcs.body_damping, round(clamp(d, dp_lo, dp_hi), digits = 3))
+        turn_rate_coeffs(fcs.run.body_damping, round(clamp(d, dp_lo, dp_hi), digits = 3))
     end
     ωz, ωp = 2π * KITE_CORR_ZERO, 2π * KITE_CORR_POLE
 

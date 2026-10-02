@@ -276,8 +276,8 @@ This is the FULL correction — do not also subtract the 0.4 m calibration term
 separately. `TrajOptSettings.fly_opt_depower` (`false` by default) flies the
 optimizer's own depower from the transition phase (3, where reel-out begins)
 on, through this conversion, instead of the fixed
-`fcs.depower_setpoint` — installed by `simple_opt_reelout.jl` at
-startup and after every re-optimization; phase 5 always flies `fcs.depower_final`
+`fcs.course.depower_setpoint` — installed by `simple_opt_reelout.jl` at
+startup and after every re-optimization; phase 5 always flies `fcs.reelout.depower_final`
 regardless of the flag.
 
 **Historical caveat, since fixed:** both AWETrim columns above were originally solved

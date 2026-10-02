@@ -105,21 +105,21 @@ counterpart and keeps its default.
 """
 function CourseControllerSettings(fcs::FC_Settings; dt)
     CourseControllerSettings(; dt,
-        heading_p = fcs.heading_p, heading_i = fcs.heading_i,
-        heading_d = fcs.heading_d, heading_d_n = fcs.heading_d_n,
-        max_steering = fcs.max_steering, v_app_ref = fcs.v_app_ref,
-        v_app_min = fcs.v_app_min, v_app_min_pattern = fcs.v_app_min_pattern,
-        entry_gain = fcs.entry_gain,
-        v_kite_heading = fcs.v_kite_heading, v_kite_course = fcs.v_kite_course,
-        fig8_pure_course = fcs.fig8_pure_course,
-        entry_chi_max = fcs.entry_chi_max, entry_d_gate = fcs.entry_d_gate,
-        entry_d_blend = fcs.entry_d_blend, entry_cut_margin = fcs.entry_cut_margin,
-        chi_dive = fcs.chi_dive, chi_hold = fcs.chi_hold,
-        park_time = fcs.park_time, hold_time = fcs.hold_time,
-        dive_el_margin = fcs.dive_el_margin, el_center = fcs.el_center,
-        fig8_d_gate = fcs.fig8_d_gate,
-        depower_setpoint = fcs.depower_setpoint, entry_depower = fcs.entry_depower,
-        depower_final = fcs.depower_final, depower_blend_time = fcs.depower_blend_time)
+        heading_p = fcs.course.heading_p, heading_i = fcs.course.heading_i,
+        heading_d = fcs.course.heading_d, heading_d_n = fcs.course.heading_d_n,
+        max_steering = fcs.course.max_steering, v_app_ref = fcs.course.v_app_ref,
+        v_app_min = fcs.course.v_app_min, v_app_min_pattern = fcs.course.v_app_min_pattern,
+        entry_gain = fcs.course.entry_gain,
+        v_kite_heading = fcs.course.v_kite_heading, v_kite_course = fcs.course.v_kite_course,
+        fig8_pure_course = fcs.course.fig8_pure_course,
+        entry_chi_max = fcs.course.entry_chi_max, entry_d_gate = fcs.course.entry_d_gate,
+        entry_d_blend = fcs.course.entry_d_blend, entry_cut_margin = fcs.course.entry_cut_margin,
+        chi_dive = fcs.course.chi_dive, chi_hold = fcs.course.chi_hold,
+        park_time = fcs.course.park_time, hold_time = fcs.course.hold_time,
+        dive_el_margin = fcs.course.dive_el_margin, el_center = fcs.pattern.el_center,
+        fig8_d_gate = fcs.course.fig8_d_gate,
+        depower_setpoint = fcs.course.depower_setpoint, entry_depower = fcs.course.entry_depower,
+        depower_final = fcs.reelout.depower_final, depower_blend_time = fcs.course.depower_blend_time)
 end
 
 """
@@ -143,7 +143,7 @@ The fields from `chi_cmd` on hold values of the last `calc_steering` call.
 $(TYPEDFIELDS)
 """
 mutable struct CourseController
-    "The settings it was built from"
+    "The [`CourseControllerSettings`](@ref) it was built from"
     ccs::CourseControllerSettings
     "Heading/course PID"
     pid::DiscretePID
@@ -237,7 +237,7 @@ bypassed to `0.0` at `phase == 0` (park), though it is still stepped so
 engagement stays bumpless. 
 
 `u_ff` [-] is a feed-forward steering (the path's
-own curvature through the turn-rate law, see `FC_Settings.ff_gain`) added to
+own curvature through the turn-rate law, see `FC_Settings.feedforward.ff_gain`) added to
 the PID's output from `phase >= 4` on (the transition flies the descent limiter, off the path where the curvature means nothing) and clamped with it to `max_steering`;
 the PID itself never sees it. `chi_ff` [rad] is subtracted from the commanded
 course over the same phases: the attractor is a chord ahead of the kite, and on

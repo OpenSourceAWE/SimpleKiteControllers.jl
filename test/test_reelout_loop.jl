@@ -21,7 +21,7 @@ end
 
 @testset verbose = true "reelout_loop" begin
     fcs0 = FC_Settings()
-    up_loops = fcs0.up_loops
+    up_loops = fcs0.pattern.up_loops
     n = 120
     s = range(0, 2pi; length = n + 1)[1:n]
     eight(a, b, c) = prepare_path(a .* sin.(s), c .+ b .* sin.(2 .* s); resample = n, up_loops)
@@ -34,7 +34,7 @@ end
         fec = new_fec(path_a)
         np = length(fec.az_path)
         rcs = ForceLimits(7200.0)
-        setup = (; fcs = (; first_lap_force_frac = 0.8), fec, rcs, f_high_nominal = 7200.0)
+        setup = (; fcs = FC_Settings(; first_lap_force_frac = 0.8), fec, rcs, f_high_nominal = 7200.0)
         plant = (; ss = (; elevation = deg2rad(24.0)))
         st = RunState(; n_path = np)
         fec.last_idx = 1
@@ -60,7 +60,7 @@ end
     @testset "advance_blend" begin
         path_b = (path_a[1], path_a[2] .+ 2.0)   # 2° higher, aligned point by point
         fec = new_fec(path_a)
-        setup = (; tos = (; path_blend_time = 6.0), fcs = (; up_loops), fec)
+        setup = (; tos = (; path_blend_time = 6.0), fcs = FC_Settings(; up_loops), fec)
         st = RunState(; blend_from = path_a, blend_to = path_b, blend_t0 = 10.0,
                       raw_from = path_a, raw_to = path_b)
         advance_blend!(st, setup, 13.0)              # half way
@@ -81,7 +81,7 @@ end
         function lift_case(; c1 = NaN, margin_min = 0.82)
             fec = new_fec(path_a)
             setup = (; tos = merge(tos, (; min_feasibility_margin = margin_min)),
-                     fcs = (; up_loops, max_steering = fcs0.max_steering), fec,
+                     fcs = FC_Settings(; up_loops, max_steering = fcs0.course.max_steering), fec,
                      feas = (; c1), c1_at_phase = (phase, st) -> c1)
             st = RunState(; chk_points = 60, fig8_n = 3)
             return st, setup, fec
@@ -125,7 +125,7 @@ end
         st, setup, fec = lift_case(; c1 = 0.28, margin_min = 1.0)
         margin_at(fm) = check_pattern_feasible(
             prepare_path(fec.az_path, fec.el_path .+ fm * 40.0; resample = 60, up_loops)...,
-            200.0, fcs0.max_steering; c1 = 0.28, prn = false).margin
+            200.0, fcs0.course.max_steering; c1 = 0.28, prn = false).margin
         rungs = (1.0, 0.75, 0.5, 0.25)
         fm = rungs[findfirst(r -> margin_at(r) >= 1.0, rungs)]
         @test margin_at(1.0) < 1.0 && 0.25 <= fm < 1          # the case needs a rationed rung
@@ -149,7 +149,7 @@ end
             fec = new_fec(path_c)
             st = RunState(; n_path = n, el_applied = 1.0, raw_az = path_c[1], raw_el = path_c[2])
             push!(st.p5_history, record(0.0, path_a, margin_old), record(50.0, path_c, margin_now))
-            setup = (; fcs = (; final_margin_min, up_loops),
+            setup = (; fcs = FC_Settings(; final_margin_min, up_loops),
                      tos = (; blend_fold_margin = 0.5, blend_probe_points = 21), fec)
             # Q right of the path centre, and left of it on the step before: the crossing.
             fec.last_idx = findfirst(>(1.0), fec.az_path)
@@ -191,7 +191,7 @@ end
     end
 
     @testset "update_lift_target" begin
-        setup = (; fcs = (; el_offset_final = 1.0, el_offset_lead = 4.0, reelout_l_max = 380.0))
+        setup = (; fcs = FC_Settings(; el_offset_final = 1.0, el_offset_lead = 4.0, reelout_l_max = 380.0))
         plant = (; ss = (; v_reelout = [3.0]))
         st = RunState(; l_set = 370.0)
         @test update_lift_target!(st, setup, plant, 80.0, 3) == 0.0   # phase 4 on only
@@ -204,7 +204,7 @@ end
     end
 
     @testset "depower_command" begin
-        lim = (; depower_final = 0.35, depower_final_max = 0.35, depower_final_f_gain = 1e-5,
+        lim = FC_Settings(; depower_final = 0.35, depower_final_max = 0.35, depower_final_f_gain = 1e-5,
                depower_final_f_gain_stop = 4e-5, depower_final_f_target = 6000.0)
         cc() = CourseController(CourseControllerSettings(; dt = 0.01))
         plant(force = 5000.0) = (; force, dt = 0.01, ss = (; v_app = 25.0, v_reelout = [0.0]))
@@ -226,7 +226,7 @@ end
         dp, phase = depower_command!(st, setup, plant(), 102.0, 4, 4, 0.27)
         @test dp ≈ 0.28 + 0.07 / 2 && phase == 4
         # The force limiter from phase 5 on: depower above depower_final, at most depower_final_max.
-        setup = (; tos = (; fly_opt_depower = false), fcs = merge(lim, (; depower_final_max = 0.42)))
+        setup = (; tos = (; fly_opt_depower = false), fcs = FC_Settings(lim; depower_final_max = 0.42))
         st = RunState(; cc = cc(), final_start = 0.0)
         dp, _ = depower_command!(st, setup, plant(8000.0), 30.0, 5, 5, 0.3)
         @test st.dp_final_extra ≈ 1e-5 * 2000.0 * 0.01 && dp ≈ 0.35 + st.dp_final_extra
@@ -238,7 +238,7 @@ end
     @testset "steering_hooks" begin
         hooks = (; steer_disturbance = nothing, extra_steer_delay = 0, hook_settle = 5.0,
                  steer_gain_feedback_only = false, steer_gain_factor = 1.0,
-                 fcs = (; max_steering = 0.32))
+                 fcs = FC_Settings(; max_steering = 0.32))
         st = RunState()
         @test steering_hooks!(st, hooks, 1.0, 0.2, 0.0) == 0.2       # no hook set
         setup = merge(hooks, (; steer_disturbance = t -> 0.01))
@@ -261,7 +261,7 @@ end
     end
 
     @testset "release_reelout" begin
-        setup = (; fcs = (; reelout_delay = 2.0, reelout_f_trigger = 3000.0))
+        setup = (; fcs = FC_Settings(; reelout_delay = 2.0, reelout_f_trigger = 3000.0))
         st = RunState(; transition_start = 10.0)
         release_reelout!(st, setup, (; force = 100.0, ss = nothing), 11.0)
         @test !st.reelout_started
@@ -281,7 +281,7 @@ end
     wplant(v_reel, force) = (; v_reel, force, dt = 0.01, ss = nothing)
 
     @testset "reelout_speed_stops_at_the_length" begin
-        setup = winch((; reelout_l_max = 160.0, reelout_softstop = 2.0, n_fig_eight = 0,
+        setup = winch(FC_Settings(; reelout_l_max = 160.0, reelout_softstop = 2.0, n_fig_eight = 0,
                        reelout_softstart = 0.0))
         st = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0)
         v, t, l_latch = Float64[], 0.0, NaN
@@ -303,7 +303,7 @@ end
     end
 
     @testset "reelout_speed_stops_after_the_laps" begin
-        fcs = (; reelout_l_max = 400.0, reelout_softstop = 2.0, n_fig_eight = 2, reelout_softstart = 0.0)
+        fcs = FC_Settings(; reelout_l_max = 400.0, reelout_softstop = 2.0, n_fig_eight = 2, reelout_softstart = 0.0)
         setup = winch(fcs)
         st = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0, n_path = 100,
                       fig8_idx_progress = 200.0)      # two complete laps flown
@@ -319,7 +319,7 @@ end
         @test t - st.stop_start ≈ st.stop_T atol = 0.011   # the ramp has run out
         @test st.l_set < 400.0
         # Without a soft-stop the laps end the reel-out at once.
-        setup0 = winch(merge(fcs, (; reelout_softstop = 0.0)))
+        setup0 = winch(FC_Settings(fcs; reelout_softstop = 0.0))
         st0 = RunState(; l_set = 150.0, reelout_started = true, reelout_start_t = 0.0, n_path = 100,
                        fig8_idx_progress = 200.0)
         reelout_speed!(st0, setup0, wplant(0.0, 2000.0), 10.0, 0.3)
@@ -327,7 +327,7 @@ end
     end
 
     @testset "entry_force_guard" begin
-        setup = merge(winch((;)), (; fcs = (; entry_f_min = 350.0)))
+        setup = merge(winch(FC_Settings()), (; fcs = FC_Settings(; entry_f_min = 350.0)))
         st = RunState(; l_set = 150.0)
         # Force above the floor: inactive, the setpoint and the length are left alone.
         @test all(_ -> entry_force_guard!(st, setup, wplant(0.0, 2000.0), 0.0) == 0.0, 1:50)
@@ -385,7 +385,7 @@ end
     end
 
     @testset "check_overspeed" begin
-        setup = (; fcs = (; v_app_abort = 60.0))
+        setup = (; fcs = FC_Settings(; v_app_abort = 60.0))
         ss = (; v_app = 50.0, time = 12.0, elevation = 0.5, AoA = 0.1)
         @test !check_overspeed(setup, (; ss))
         @test (@test_logs (:error, r"Overspeed at t=12\.00s: v_app=61\.0 m/s > 60\.0") check_overspeed(

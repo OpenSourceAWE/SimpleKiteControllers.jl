@@ -89,7 +89,7 @@ after multiple runs); if absent and `project` is provided, searches for the
 one `.arrow` file. The flown curve leaves out phase 5 and the
 `hide_before_final` seconds [s] before it, where the pattern is already lifted
 by `el_offset_final` ahead of the end of reel-out; the default is the scenario's
-own `fcs.el_offset_lead`, which is exactly that window, and `0` hides phase 5
+own `fcs.reelout.el_offset_lead`, which is exactly that window, and `0` hides phase 5
 alone. `xlims`/`ylims` fix the azimuth/elevation axis ranges [deg] (e.g. for a pair of
 plots that must share the same scale); `nothing` (the default) autoscales as usual.
 """
@@ -129,11 +129,11 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     # Azimuth and elevation over the flight phase; phase 5 (final descent after
     # the winch stops) is masked out so it does not distort the pattern plot,
     # and so are the `hide_before_final` seconds before it: `el_offset_final`
-    # latches `fcs.el_offset_lead` seconds ahead of the end of reel-out, so the
+    # latches `fcs.reelout.el_offset_lead` seconds ahead of the end of reel-out, so the
     # last part of phase 4 already flies the lifted pattern and ends a lap
     # ~5° above the others at the crossing (measured 2026-09-20).
     i5 = findfirst(==(5), sl.sys_state)
-    hide_s = something(hide_before_final, fcs.el_offset_lead)
+    hide_s = something(hide_before_final, fcs.reelout.el_offset_lead)
     t_hide = isnothing(i5) ? Inf : sl.time[i5] - hide_s
     hidden(i) = sl.sys_state[i] == 5 || sl.time[i] >= t_hide
     az_deg = [hidden(i) ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
@@ -151,7 +151,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     ref_az, ref_el = if !isempty(live)
         Float64.(sl.var_02[live]), Float64.(sl.var_03[live])
     else
-        figure_eight_path(fcs.f8_a, fcs.f8_b, 0.0,
+        figure_eight_path(fcs.pattern.f8_a, fcs.pattern.f8_b, 0.0,
                           Float64(sl.var_04[end]), 0.0, 361)
     end
 

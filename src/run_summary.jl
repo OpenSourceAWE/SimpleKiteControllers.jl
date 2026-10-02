@@ -143,7 +143,7 @@ end
         -> (; block, rp, p4)
 
 The summary's `reelout` section of the log `sl`, printed as it is built: the
-apparent wind over phase 4 (against `fcs.v_app_ref`), the tether's reel-out from
+apparent wind over phase 4 (against `fcs.course.v_app_ref`), the tether's reel-out from
 `l_tether` and why it stopped (`stop_reason`, `""` when reel-out never stopped;
 `laps_reeled`, the laps completed by then), and the force, power, winch states and
 ringing over the reeling window. `window_means = true` adds the window's mean and
@@ -169,14 +169,14 @@ function reelout_block(sl, fcs::FC_Settings, l_tether; stop_reason::AbstractStri
         @printf("  v_app over phase 4 (%.1f s): mean %.2f m/s, range %.2f … %.2f m/s \
                  | v_app_ref = %.1f (%+.1f%%)\n",
                 duration, mean(va), minimum(va), maximum(va),
-                fcs.v_app_ref, 100 * (mean(va) / fcs.v_app_ref - 1))
+                fcs.course.v_app_ref, 100 * (mean(va) / fcs.course.v_app_ref - 1))
         reelout_summary["v_app_phase4"] = OrderedDict(
             "duration" => (round(duration; digits = 1), "phase-4 window length [s]"),
             "mean_m_s" => (round(mean(va); digits = 2), "mean apparent wind speed [m/s]"),
             "min_m_s" => (round(minimum(va); digits = 2), "min apparent wind speed [m/s]"),
             "max_m_s" => (round(maximum(va); digits = 2), "max apparent wind speed [m/s]"),
-            "v_app_ref_m_s" => (fcs.v_app_ref, "reference apparent wind speed [m/s]"),
-            "deviation_pct" => (round(100 * (mean(va) / fcs.v_app_ref - 1); digits = 1),
+            "v_app_ref_m_s" => (fcs.course.v_app_ref, "reference apparent wind speed [m/s]"),
+            "deviation_pct" => (round(100 * (mean(va) / fcs.course.v_app_ref - 1); digits = 1),
                 "mean v_app deviation from v_app_ref [%]"))
 
         # Same phase-4 window, for a recap's power/force/reel-out-speed/depower —
@@ -207,11 +207,11 @@ function reelout_block(sl, fcs::FC_Settings, l_tether; stop_reason::AbstractStri
     # Unconditional: the winch is gated on phase 3, which phase 4 may never follow.
     reelout_stop_reason = isempty(stop_reason) ? "none" : stop_reason
     @printf("  Tether: %.1f m -> %.1f m (target %.1f m, stopped by: %s).\n",
-            l_tether, sl.var_10[end], fcs.reelout_l_max, reelout_stop_reason)
+            l_tether, sl.var_10[end], fcs.reelout.reelout_l_max, reelout_stop_reason)
     reelout_summary["tether"] = OrderedDict(
         "start_m" => (l_tether, "tether length at run start [m]"),
         "end_m" => (round(Float64(sl.var_10[end]); digits = 1), "tether length at run end [m]"),
-        "target_m" => (fcs.reelout_l_max, "reelout_l_max target [m]"),
+        "target_m" => (fcs.reelout.reelout_l_max, "reelout_l_max target [m]"),
         "stop_reason" => (reelout_stop_reason, "criterion that ended reel-out: length, laps, or none"),
         "laps_reeled" => (round(laps_reeled; digits = 2),
             "figure-eight laps completed by the time reel-out ended"))

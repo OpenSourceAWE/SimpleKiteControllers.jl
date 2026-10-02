@@ -112,7 +112,7 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
             KiteUtils.set_data_path(skc_data_path())
             project = project_file("system_reelout_maasvlakte.yaml")
             set = KiteUtils.Settings(project)
-            (; wc, wpc, dt0) = build_winch(project, set, (; compliance = 0.0))
+            (; wc, wpc, dt0) = build_winch(project, set, FC_Settings(; compliance = 0.0))
             @test dt0 == 1 / set.sample_freq && wc.dt == dt0
             # The wind-dependent tables override the file's flat values; kv is not one of them.
             @test wc.kv == SimpleKiteControllers._wc_settings_value(project, "kv")
@@ -120,8 +120,8 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
             @test wc.force_limit == winch_force_limit(set.v_wind; project)
             @test wpc isa WinchPosController
             # REEL_OUT holds the drum in POSITION mode: any compliance is refused.
-            @test_throws ErrorException build_winch(project, set, (; compliance = 0.5))
-            @test_throws ErrorException build_winch(project, set, (; compliance = -1.0))
+            @test_throws ErrorException build_winch(project, set, FC_Settings(; compliance = 0.5))
+            @test_throws ErrorException build_winch(project, set, FC_Settings(; compliance = -1.0))
         finally
             KiteUtils.set_data_path(data_path)
         end

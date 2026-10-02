@@ -19,7 +19,7 @@
 #              4.0    700        1.1 %      —      2043 W   all 9 passed
 #
 #          The 3 m/s row is therefore 350 and everything from 4 m/s up is 700.
-#          NOT the entry guard's floor: that is `FC_Settings.entry_f_min`, which
+#          NOT the entry guard's floor: that is `FC_Settings.winch.entry_f_min`, which
 #          is bounded by what a DEPOWERED wing can pull and does not scale here.
 #
 # force_limit — `WCSettings.force_limit`, read by `winch_force_limit(v_wind)`.

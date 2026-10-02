@@ -49,7 +49,7 @@ guard is no longer tested.
 | 1 dive | 2 hold | `elevation <= ccs.el_center + ccs.dive_el_margin` — the kite has descended to within `dive_el_margin` (7°) of the pattern-centre elevation. `hold_start` is latched to the current time here. | [course_controller.jl:210](../src/course_controller.jl#L210) |
 | 2 hold | 3 transition | `t - hold_start >= ccs.hold_time` — the horizontal hold has lasted `hold_time` (0.8 s), so the kite arrives flat rather than still descending. This script separately latches its own `transition_start` on the same edge (comparing the phase `calc_steering` returns against the phase before the call); `reelout_delay` counts from it. | [course_controller.jl:213](../src/course_controller.jl#L213), [simple_reelout.jl:351](../examples/simple_reelout.jl#L351) |
 | 3 transition | 4 fig8 | `dmin < ccs.fig8_d_gate` — the cross-track error to the pattern drops below 5° for the **first** time. Purely a milestone: it changes nothing in how the kite is flown or how the winch behaves; it only marks the start of the window the results section reports `v_app` over. | [course_controller.jl:215](../src/course_controller.jl#L215) |
-| 3 or 4 | 5 final | `reelout_done` — either `l_set >= fcs.reelout_l_max` (the length setpoint has reached the reel-out target) or `fcs.n_fig_eight` complete laps have been flown, whichever fires first. `n_fig_eight = 0` disables the lap criterion. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
+| 3 or 4 | 5 final | `reelout_done` — either `l_set >= fcs.reelout.reelout_l_max` (the length setpoint has reached the reel-out target) or `fcs.reelout.n_fig_eight` complete laps have been flown, whichever fires first. `n_fig_eight = 0` disables the lap criterion. | [simple_reelout.jl:354](../examples/simple_reelout.jl#L354) |
 
 Two details of the 3/4 -> 5 transition:
 
@@ -104,7 +104,7 @@ branches runs:
 
 | branch | condition | effect |
 |:-------|:----------|:-------|
-| **reel-out** | `phase >= 3` **and** `t - transition_start >= fcs.reelout_delay` **and** `!reelout_done` | `v_set` from the `kv*sqrt(force)` law (with ramps, below); `l_set` integrates it, clamped at `reelout_l_max`; `rc` is stepped (`on_timer`). |
+| **reel-out** | `phase >= 3` **and** `t - transition_start >= fcs.reelout.reelout_delay` **and** `!reelout_done` | `v_set` from the `kv*sqrt(force)` law (with ramps, below); `l_set` integrates it, clamped at `reelout_l_max`; `rc` is stepped (`on_timer`). |
 | **force-floor guard** | `phase < 3` | `guard_lfc`, a standalone `LowerForceController`, reels **in** (its output is clamped to `<= 0`) if the measured force sags below `rcs.f_low`; only when `guard_lfc.active`. Otherwise `v_set = 0` and `l_set` stays flat. |
 | **frozen** | neither — i.e. phase 3/4 before `reelout_delay` has elapsed, or phase 5 | `v_set = 0`, `l_set` unchanged. |
 
@@ -129,15 +129,15 @@ Within the reel-out branch, the commanded speed passes through three regimes
   lagging the steady-state force regulation.
 - **Soft-stop** latches once, on whichever of TWO independent criteria fires
   first:
-  - **Length**: `remaining <= v_cmd * fcs.reelout_softstop` with `v_cmd > 0` and
+  - **Length**: `remaining <= v_cmd * fcs.reelout.reelout_softstop` with `v_cmd > 0` and
     `reelout_softstop > 0`. At that instant `stop_start = t`,
     `stop_v_entry = v_cmd`, and `stop_T = 2 * remaining / v_cmd` (a linear ramp's
     area is `v_entry * T / 2`, so the time is solved exactly, not guessed — it
     comes out at roughly 2x `reelout_softstop`), landing exactly at
     `reelout_l_max`.
-  - **Laps**: `fig8_idx_progress >= fcs.n_fig_eight * n_path` (`n_fig_eight = 0`
+  - **Laps**: `fig8_idx_progress >= fcs.reelout.n_fig_eight * n_path` (`n_fig_eight = 0`
     disables this criterion). There is no remaining distance to solve a duration
-    from, so `stop_T = 2 * fcs.reelout_softstop` directly — the same nominal
+    from, so `stop_T = 2 * fcs.reelout.reelout_softstop` directly — the same nominal
     duration as the length case — and the final length lands wherever that puts
     it, below `reelout_l_max`.
 

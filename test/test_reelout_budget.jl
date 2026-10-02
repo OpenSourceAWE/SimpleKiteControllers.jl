@@ -19,8 +19,8 @@ import KiteUtils
         @test apply_overrides!(fcs, Dict(:reelout_l_max => 300, :compliance => 0),
                                "fcs_overrides", "FC_Settings", "fcs") === fcs
         # Converted to the field's type, not stored as the Int that was passed.
-        @test fcs.reelout_l_max === 300.0
-        @test fcs.compliance == 0
+        @test fcs.reelout.reelout_l_max === 300.0
+        @test fcs.winch.compliance == 0
         # No overrides leave the struct as it was.
         @test apply_overrides!(fcs, Dict{Symbol, Any}(), "fcs_overrides", "FC_Settings",
                                "fcs").reelout_l_max == 300.0
@@ -76,7 +76,7 @@ import KiteUtils
             # kv, wind factor and reel-out length, from its own sim_time when none is asked for.
             for wind in (8.25, 3.5)
                 b = reelout_budget(wind, set.v_wind, set.sim_time;
-                                   l_reel = fcs.reelout_l_max - set.l_tether,
+                                   l_reel = fcs.reelout.reelout_l_max - set.l_tether,
                                    kv = SimpleKiteControllers._wc_settings_value(project, "kv"),
                                    v_cap = _drum_speed_limit(project), wind_factor)
                 @test sim_budget(project, set, fcs, nothing, wind, set.v_wind) ≈ b.time

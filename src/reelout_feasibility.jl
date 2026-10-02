@@ -95,32 +95,32 @@ verdicts; the caller decides what refuses the run and what only warns.
 Checks performed (all reported via `@info`/`@warn` here):
 
 * elevation floor — the path's lowest elevation against
-  `fcs.min_elevation + tos.candidate_elevation_margin`;
+  `fcs.run.min_elevation + tos.candidate_elevation_margin`;
 * ground clearance — [`check_pattern_height`](@ref) at `l_tether`, when
   `tos.min_height > 0`;
-* turn-rate coefficients for `(fcs.body_damping, depower)` — `depower` is the
-  one the pattern is FLOWN at, `fcs.depower_setpoint` unless the caller flies the
+* turn-rate coefficients for `(fcs.run.body_damping, depower)` — `depower` is the
+  one the pattern is FLOWN at, `fcs.course.depower_setpoint` unless the caller flies the
   optimizer's own (`fly_opt_depower`), where a reply judged at the setpoint's c1
   is off by `c1(flown)/c1(setpoint)`, ~22 % at 0.33 against 0.274 (Cabauw 8 m/s,
   2026-09-18); a cell the table cannot serve costs the diagnosis, not the run
   (warned, coefficients become `NaN`);
 * curvature at the STARTING length (the worst case for one fixed path) and at
-  `fcs.reelout_l_max`, plus the dead-time context for `fcs.attractor_dist`;
-* phase 5 — the same path lifted by `fcs.el_offset_final`, scored at
+  `fcs.reelout.reelout_l_max`, plus the dead-time context for `fcs.pattern.attractor_dist`;
+* phase 5 — the same path lifted by `fcs.reelout.el_offset_final`, scored at
   `depower_final`'s own `c1` (looked up separately; warned, not refused).
 """
 function check_reelout_feasibility(fec::FigureEightController,
                                    fcs::FC_Settings, tos::TrajOptSettings;
-                                   l_tether::Real, depower::Real = fcs.depower_setpoint)
+                                   l_tether::Real, depower::Real = fcs.course.depower_setpoint)
     # The ELEVATION floor, which is not the clearance floor and does not follow
     # from it: `min_height` is satisfied at ever lower elevations as the tether
     # grows. Checked with `candidate_elevation_margin` on top, because this
     # compares the REFERENCE path while `fig8_metrics` scores the FLOWN one, and
     # the kite flies below its reference near the lobe tips.
-    el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
     @info @sprintf("Elevation floor for re-optimized replies: %.2f° \
                     (min_elevation %.2f° + candidate_elevation_margin %.2f°).",
-                   el_floor, fcs.min_elevation, tos.candidate_elevation_margin)
+                   el_floor, fcs.run.min_elevation, tos.candidate_elevation_margin)
 
     # The clearance floor, checked at the tether length this run flies.
     if tos.min_height > 0
@@ -136,10 +136,10 @@ function check_reelout_feasibility(fec::FigureEightController,
     # identifies both. The coefficients are DIAGNOSTIC here — a damping/depower
     # the table cannot serve costs the diagnosis, not the run.
     coeffs = try
-        turn_rate_coeffs(fcs.body_damping, depower)
+        turn_rate_coeffs(fcs.run.body_damping, depower)
     catch e
         e isa ArgumentError || rethrow()
-        @warn "No turn-rate coefficients for body_damping = $(fcs.body_damping), \
+        @warn "No turn-rate coefficients for body_damping = $(fcs.run.body_damping), \
                depower = $(depower) — flying WITHOUT the feasibility \
                check.\n$(e.msg)"
         nothing
@@ -151,39 +151,39 @@ function check_reelout_feasibility(fec::FigureEightController,
     c1, c2, delay = coeffs.c1, coeffs.c2, coeffs.delay
     @info @sprintf("Turn-rate law at body_damping=%s, depower=%.2f%s: \
                     c1 = %.4f 1/m, c2 = %.4f m/s^2, delay = %.3f s",
-                   fcs.body_damping, depower,
+                   fcs.run.body_damping, depower,
                    coeffs.interpolated ? " (INTERPOLATED)" : "", c1, c2, delay)
 
     # At l_tether (the START) this is the WORST case for one fixed path: a longer
     # tether only ever shrinks the kite's minimum angular turn radius.
-    feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering;
+    feas_start = check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                         c1, prn = false)
     @info @sprintf("Pattern feasibility at the STARTING length: margin %.2f — path \
                     radius %.1f°, kite %.1f° at L = %.0f m, u_s = %.3f. %s \
                     min_feasibility_margin = %.2f.",
                    feas_start.margin, feas_start.path_radius, feas_start.kite_radius,
-                   l_tether, fcs.max_steering,
+                   l_tether, fcs.course.max_steering,
                    feas_start.margin >= tos.min_feasibility_margin ? "Clears" :
                        "BELOW the demanded",
                    tos.min_feasibility_margin)
-    feas_end = check_pattern_feasible(fec, fcs.reelout_l_max, fcs.max_steering;
+    feas_end = check_pattern_feasible(fec, fcs.reelout.reelout_l_max, fcs.course.max_steering;
                                       c1, prn = false)
     @info @sprintf("The same path at reelout_l_max = %.0f m: margin %.2f — a fixed \
                     (azimuth, elevation) curve only gets easier as the tether grows.",
-                   fcs.reelout_l_max, feas_end.margin)
+                   fcs.reelout.reelout_l_max, feas_end.margin)
 
     # Phase 5 flies `depower_final`, and c1 falls steeply with depower, so the
     # final laps have a margin the gates above never looked at. Evaluated at
     # `reelout_l_max`, on the path lifted by the fixed `el_offset_final`.
-    coeffs_final = if isapprox(fcs.depower_final, depower; atol = 1e-6)
+    coeffs_final = if isapprox(fcs.reelout.depower_final, depower; atol = 1e-6)
         coeffs
     else
         try
-            turn_rate_coeffs(fcs.body_damping, fcs.depower_final)
+            turn_rate_coeffs(fcs.run.body_damping, fcs.reelout.depower_final)
         catch e
             e isa ArgumentError || rethrow()
             @warn "No turn-rate coefficients at depower_final = \
-                   $(fcs.depower_final) — phase 5 flies UNCHECKED.\n$(e.msg)"
+                   $(fcs.reelout.depower_final) — phase 5 flies UNCHECKED.\n$(e.msg)"
             nothing
         end
     end
@@ -192,34 +192,34 @@ function check_reelout_feasibility(fec::FigureEightController,
     if !isnothing(coeffs_final)
         c1_final = coeffs_final.c1
         feas_final = check_pattern_feasible(fec.az_path,
-            fec.el_path .+ fcs.el_offset_final, fcs.reelout_l_max, fcs.max_steering;
+            fec.el_path .+ fcs.reelout.el_offset_final, fcs.reelout.reelout_l_max, fcs.course.max_steering;
             c1 = c1_final, prn = false)
         @info @sprintf("Phase 5 at depower=%.3f%s: c1 = %.4f 1/m (%+.0f %% vs the \
                         pattern), curvature margin %.2f at %.0f m with the %.2f° \
                         lift (pattern margin there: %.2f).",
-                       fcs.depower_final,
+                       fcs.reelout.depower_final,
                        coeffs_final.interpolated ? " (INTERPOLATED)" : "",
                        c1_final, 100 * (c1_final / c1 - 1), feas_final.margin,
-                       fcs.reelout_l_max, fcs.el_offset_final, feas_end.margin)
+                       fcs.reelout.reelout_l_max, fcs.reelout.el_offset_final, feas_end.margin)
         # A warning, not a refusal: phase 5 is a handful of laps at the end of a
         # run that has already produced its power.
         feas_final.margin >= tos.min_feasibility_margin || @warn @sprintf(
             "Phase 5 asks for a turn radius of %.1f° where the kite manages %.1f° \
              at depower_final = %.3f: margin %.2f, below \
              min_feasibility_margin = %.2f.",
-            feas_final.path_radius, feas_final.kite_radius, fcs.depower_final,
+            feas_final.path_radius, feas_final.kite_radius, fcs.reelout.depower_final,
             feas_final.margin, tos.min_feasibility_margin)
     end
 
     # Dead-time context for the attractor lead: how long the lead arc takes to
     # fly, at the starting length and v_app_ref (the lead itself follows the
     # flown v_app / L when attractor_lead_time is set).
-    lead_deg = attractor_distance(fcs, fcs.v_app_ref, l_tether)
-    lead_time = deg2rad(lead_deg) * l_tether / fcs.v_app_ref
+    lead_deg = attractor_distance(fcs, fcs.course.v_app_ref, l_tether)
+    lead_time = deg2rad(lead_deg) * l_tether / fcs.course.v_app_ref
     @info @sprintf("Attractor lead %.1f°%s ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   lead_deg, fcs.attractor_lead_time > 0 ? " (lead time)" : "",
-                   lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   lead_deg, fcs.pattern.attractor_lead_time > 0 ? " (lead time)" : "",
+                   lead_time, fcs.course.v_app_ref, delay, lead_time / delay)
 
     return ReeloutFeasibility(; c1, c2, delay, feas_start, feas_end,
                               c1_final, feas_final)
@@ -239,14 +239,14 @@ c1_at(f::ReeloutFeasibility, phase::Integer, c1::Real) =
     phase >= 5 ? c1_at(f, phase) : (isnan(c1) ? f.c1 : Float64(c1))
 
 """
-    check_startup_path(fec, fcs, tos; l_tether, depower = fcs.depower_setpoint)
+    check_startup_path(fec, fcs, tos; l_tether, depower = fcs.course.depower_setpoint)
         -> ReeloutFeasibility
 
 The abort policy on the startup path installed in `fec`: the gates of
 [`check_reelout_feasibility`](@ref) that REFUSE a reel-out run rather than only warn,
 each an `error` that says why. Returns the verdicts when the path passes.
 
-* The ELEVATION floor, `fcs.min_elevation + tos.candidate_elevation_margin`: this
+* The ELEVATION floor, `fcs.run.min_elevation + tos.candidate_elevation_margin`: this
   repo's own criterion is an angle and `fig8_metrics` fails a run that breaks it.
   AWETrim constrains height and not elevation, so this is not something the solve
   avoids on its own.
@@ -261,14 +261,14 @@ each an `error` that says why. Returns the verdicts when the path passes.
 """
 function check_startup_path(fec::FigureEightController, fcs::FC_Settings,
                             tos::TrajOptSettings; l_tether::Real,
-                            depower::Real = fcs.depower_setpoint)
-    el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+                            depower::Real = fcs.course.depower_setpoint)
+    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
     minimum(fec.el_path) >= el_floor ||
         error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
                         %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
                         constrains height and not elevation, so this is not something \
                         the solve avoids on its own.",
-                       minimum(fec.el_path), fcs.min_elevation,
+                       minimum(fec.el_path), fcs.run.min_elevation,
                        tos.candidate_elevation_margin, el_floor))
     if tos.min_height > 0
         clr = check_pattern_height(fec, l_tether, tos.min_height)

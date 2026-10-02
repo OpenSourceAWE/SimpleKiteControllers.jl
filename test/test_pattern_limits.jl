@@ -47,7 +47,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
     end
 
     @testset "elevation_min_request" begin
-        fcs = (; min_elevation = 20.0)
+        fcs = FC_Settings(; min_elevation = 20.0)
         @test isnothing(elevation_min_request(fcs, off, 150.0))
         @test elevation_min_request(fcs, merge(off, (; pattern_elevation_min = 12.0)), 150.0) == 12.0
         gates = merge(off, (; elevation_min_from_gates = true, min_height = 100.0))

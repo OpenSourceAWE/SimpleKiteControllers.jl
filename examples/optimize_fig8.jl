@@ -112,7 +112,7 @@ sweep_project = project_file(selected_reelout_project())
 sweep_fcs = FC_Settings(fc_settings(sweep_project))
 l_tether_start = Settings(sweep_project).l_tether
 c1_sweep = try
-    turn_rate_coeffs(sweep_fcs.body_damping, sweep_fcs.depower_setpoint).c1
+    turn_rate_coeffs(sweep_fcs.run.body_damping, sweep_fcs.course.depower_setpoint).c1
 catch err
     err isa ArgumentError || rethrow()
     @warn "No turn-rate coefficients for this damping/depower — filtering the grid \

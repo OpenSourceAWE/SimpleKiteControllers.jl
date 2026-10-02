@@ -53,7 +53,7 @@ old model.
 
       ψ̇ = c1·v_a·u_s(t - τ_kite) + c2/v_a·cos(ψ0)·cos(β)·δψ
 
-  - `c1` and `c2` come from `turn_rate_coeffs(fcs.body_damping, depower)`
+  - `c1` and `c2` come from `turn_rate_coeffs(fcs.run.body_damping, depower)`
     (`data/turn_rate_coeffs.yaml`).
   - The kite answers the applied steering with a dead time and a first-order
     lag, both scaling with the apparent wind speed:

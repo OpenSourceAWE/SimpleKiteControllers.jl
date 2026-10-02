@@ -17,7 +17,7 @@ and `simple_opt_reelout.jl`, into the same module; the last one hands `init_mode
 The model, initialized and settled: `init` at the project's wind and tether length,
 `sim_time` long, with `warmup_torque` holding the length during the warm-up (by default
 the winch loop `wpc`; pass the force hold when the run flies the winch in FORCE mode).
-With `pad_final_time` the run gets room for a full phase 5 (`fcs.final_time`) past
+With `pad_final_time` the run gets room for a full phase 5 (`fcs.reelout.final_time`) past
 `sim_time`; a `sim_time` of `nothing` falls back to the project's own value, unpadded.
 `set_overrides` are applied to the model's own `Settings` afterwards, e.g. `v_steering`,
 the tape's rate limit. `aero_mode` is `ContinuousAero()` or `AeroDirect()`;
@@ -30,18 +30,18 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_ov
     # Room for a full phase 5 past the budget: the budget ends a run only BEFORE phase 5,
     # which then always flies `final_time` (see the loop). At 10 m/s the budget cut it at 19.7 s.
     if pad_final_time && !isnothing(sim_time)
-        sim_time += isfinite(fcs.final_time) ? fcs.final_time : 0.0
+        sim_time += isfinite(fcs.reelout.final_time) ? fcs.reelout.final_time : 0.0
     end
     # No dt: init takes it from the project's settings (sample_freq). project_set.v_wind
     # keeps the mean wind and the turbulent field (which init builds for it) at the same speed.
     # No cache_path either: V3Kite's default is where its own precompile workload
     # compiled the model, and a different model binary costs 40 s of re-JIT in init.
-    s = init(project_set.v_wind, project_set.l_tether; body_start_damping = fcs.body_damping,
-        body_sim_damping = 0.8 .* fcs.body_damping,
+    s = init(project_set.v_wind, project_set.l_tether; body_start_damping = fcs.run.body_damping,
+        body_sim_damping = 0.8 .* fcs.run.body_damping,
         damping_per_stiffness = damping_per_stiffness,
-        elevation = fcs.elevation, depower_setpoint = fcs.depower_setpoint,
+        elevation = fcs.run.elevation, depower_setpoint = fcs.course.depower_setpoint,
         system_yaml = project, use_turbulence = turbulence, aero_mode = aero_mode,
-        sim_time = sim_time, warmup_time = fcs.warmup_time,
+        sim_time = sim_time, warmup_time = fcs.run.warmup_time,
         # The warm-up must relax against the winch the loop will command.
         warmup_torque = warmup_torque, remake_model = false)
     @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)

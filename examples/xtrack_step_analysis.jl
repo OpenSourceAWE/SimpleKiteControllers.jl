@@ -190,9 +190,9 @@ end
 
 "Model T = (1 - 1/G)·L/(1 + L) from δ to d at one operating point, per sign of the gravity pole (`plant_coeffs`)."
 function model_T(Lt, v_app, v_kite, depower, el_c, lag)
-    tc = turn_rate_coeffs(fcs.body_damping, clamp(depower, DP_LO, DP_HI))
-    K = C1_SETPOINT / tc.c1 * fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
-    C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
+    tc = turn_rate_coeffs(fcs.run.body_damping, clamp(depower, DP_LO, DP_HI))
+    K = C1_SETPOINT / tc.c1 * fcs.course.heading_p * fcs.course.v_app_ref / max(v_app, V_MIN_PATTERN)
+    C = course_pid(K, fcs.course.heading_i, fcs.course.heading_d, fcs.course.heading_d_n, Ts)
     ωg = guidance_rate(fcs, v_app, Lt, v_kite)
     G = 1 + ωg * Ts / (tf("z", Ts) - 1)
     τd = kite_dead_time(tc, v_app)

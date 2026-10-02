@@ -107,7 +107,7 @@ el_c_end = Float64(sl.var_04[end])
 ref_az, ref_el = if @isdefined(REF_PATH) && REF_PATH isa Tuple
     REF_PATH
 else
-    figure_eight_path(fcs.f8_a, fcs.f8_b, 0.0, el_c_end, 0.0, 361)
+    figure_eight_path(fcs.pattern.f8_a, fcs.pattern.f8_b, 0.0, el_c_end, 0.0, 361)
 end
 
 # --- angles for the psi/chi panel, plotted UNWRAPPED (unwrap_angle, unwrap_onto) --- #

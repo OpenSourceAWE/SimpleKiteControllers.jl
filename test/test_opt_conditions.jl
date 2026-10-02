@@ -66,7 +66,7 @@ using KiteUtils: KiteUtils
                z0 = 0.0002)
         rcs = WCSettings(; dt = 0.01)
         rcs.f_high_awe_trim = 6000.0
-        fcs = (; first_lap_force_frac = 0.8)
+        fcs = FC_Settings(; first_lap_force_frac = 0.8)
         c = @test_logs (:info, r"Optimizer conditions") optimizer_conditions(tos, fcs, set, rcs, 7200.0)
         @test c.inflow.wind_speed == 8.0 && c.inflow.wind_direction == 270.0 && c.cap_wind == 8.0
         # The startup solve at the plain ceiling, lap 1 below it, the re-optimizations at the de-rating.
@@ -75,7 +75,7 @@ using KiteUtils: KiteUtils
         @test c.opt_awe_trim == (tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim)
         @test c.winch.use_awe_trim == c.opt_awe_trim
         @test isnothing(c.opt_winch_mode) && isnothing(c.winch.winch_mode)
-        c = optimizer_conditions(tos, (; first_lap_force_frac = 1.0), set, rcs, 7200.0)
+        c = optimizer_conditions(tos, FC_Settings(; first_lap_force_frac = 1.0), set, rcs, 7200.0)
         @test c.winch_first_lap === c.winch                  # no first-lap reduction
         tos.opt_winch_mode = "free_speed"
         @test optimizer_conditions(tos, fcs, set, rcs, 7200.0).winch_reopt.winch_mode == "free_speed"

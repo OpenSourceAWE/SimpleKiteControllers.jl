@@ -9,6 +9,13 @@ into a commanded course, the course controller turns that course into steering a
 
 ```@docs
 FC_Settings
+FC_Course
+FC_FeedForward
+FC_Pattern
+FC_WindRamp
+FC_Winch
+FC_Reelout
+FC_Run
 fc_settings
 wind_schedule
 apply_wind_schedule!

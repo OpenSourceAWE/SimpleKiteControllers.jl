@@ -95,7 +95,7 @@ function steering_command!(st::RunState, setup, plant, t, chi_set, dmin)
     phase_before = st.cc.phase
     # Loop gain is heading_p * c1, so every phase flies heading_p * c1(setpoint)/c1(u_d), u_d rounded for the memo.
     gain_scale = loop_gain_scale(c1_setpoint, st.rel_depower_prev, c1_depower_max, c1_ctrl_at)
-    # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.ff_gain.
+    # Curvature feed-forward plus chord correction, low-passed over ff_tau; see FC_Settings.feedforward.ff_gain.
     u_ff, chi_ff, ff_u_next, ff_chi_next =
         feedforward_step(fcs, dt0, fec, st.cc.phase, st.cc.err, Float64(ss.v_app),
                          Float64(ss.l_tether[1]), v_kite, dmin, c1_setpoint,
@@ -149,16 +149,16 @@ function depower_command!(st::RunState, setup, plant, t, phase_before, phase, re
     if !isnan(st.stop_start)
         rel_depower = stop_depower(fcs, st.stop_dp_entry, st.stop_start, st.stop_T, t)
     elseif phase == 5
-        rel_depower = fcs.depower_final
+        rel_depower = fcs.reelout.depower_final
     end
     # Force limiter from the STOP LATCH on: integrates on the force the stopped drum is about to see.
-    if fcs.depower_final_max > fcs.depower_final && (phase == 5 || !isnan(st.stop_start))
+    if fcs.reelout.depower_final_max > fcs.reelout.depower_final && (phase == 5 || !isnan(st.stop_start))
         ramping = !isnan(st.stop_start) && t - st.stop_start < st.stop_T
         st.dp_final_extra = final_force_extra(fcs, st.dp_final_extra, plant.force,
                                               Float64(ss.v_app),
                                               Float64(ss.v_reelout[1]),
                                               ramping, plant.dt)
-        rel_depower = min(rel_depower + st.dp_final_extra, fcs.depower_final_max)
+        rel_depower = min(rel_depower + st.dp_final_extra, fcs.reelout.depower_final_max)
         st.dp_final_extra > st.dp_final_extra_peak && (st.dp_final_extra_peak = st.dp_final_extra)
     end
     return rel_depower, phase
@@ -177,13 +177,13 @@ function update_lift_target!(st::RunState, setup, plant, t, phase)
         if lift_should_start(fcs, st.stop_start, phase, Float64(ss.v_reelout[1]), st.l_set)
             st.lift_on = true
             st.lift_t = t
-            st.lift_remaining = fcs.reelout_l_max - st.l_set
+            st.lift_remaining = fcs.reelout.reelout_l_max - st.l_set
             @info @sprintf("Elevation lift of %+.2f° starting at t = %.1f s \
                             (%.1f m of reel-out left, phase %d).",
-                           fcs.el_offset_final, t, fcs.reelout_l_max - st.l_set, phase)
+                           fcs.reelout.el_offset_final, t, fcs.reelout.reelout_l_max - st.l_set, phase)
         end
     end
-    return st.lift_on ? fcs.el_offset_final : 0.0
+    return st.lift_on ? fcs.reelout.el_offset_final : 0.0
 end
 
 """
@@ -199,12 +199,12 @@ function count_laps!(st::RunState, setup, plant, t)
         st.fig8_n = 1
         st.fig8_idx_prev = fec.last_idx
         st.t_phase4 = t   # V1 hook: this run's phase-4 start
-        if fcs.first_lap_force_frac < 1
-            rcs.f_high = f_high_nominal * fcs.first_lap_force_frac
+        if fcs.winch.first_lap_force_frac < 1
+            rcs.f_high = f_high_nominal * fcs.winch.first_lap_force_frac
             st.first_lap_f_high_applied = true
             @info @sprintf("Lap 1: upper force limit held at %.0f N \
                             (%.0f %% of %.0f N) for this lap.",
-                           rcs.f_high, 100 * fcs.first_lap_force_frac,
+                           rcs.f_high, 100 * fcs.winch.first_lap_force_frac,
                            f_high_nominal)
         end
     else
@@ -214,7 +214,7 @@ function count_laps!(st::RunState, setup, plant, t)
         # Never counted DOWN: Q can slip a fraction of a point backwards at an install.
         st.fig8_n = max(st.fig8_n, 1 + floor(Int, st.fig8_idx_progress / st.n_path))
         # Lap 1 only: the upper force limit is held down; `f_high_nominal` goes back on lap 2.
-        if fcs.first_lap_force_frac < 1 && st.fig8_n > 1 && st.first_lap_f_high_applied
+        if fcs.winch.first_lap_force_frac < 1 && st.fig8_n > 1 && st.first_lap_f_high_applied
             rcs.f_high = f_high_nominal
             st.first_lap_f_high_applied = false
             @info @sprintf("Lap %d: upper force limit back to %.0f N.",
@@ -574,13 +574,13 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     cand_c1 = c1_at_phase(phase, tos.fly_opt_depower ?
         awetrim_depower_to_v3kite(
             Float64(tab["optimized_parameters"]["input_depower"])) :
-        fcs.depower_setpoint)
+        fcs.course.depower_setpoint)
     lifted(fw) = new_el .+ el_target .+ fw .* wing_delta
     function lifted_margin(el_try)
         isnan(feas.c1) && return Inf
         az_chk, el_chk = prepare_path(new_az, el_try; resample = n_native,
-                                      up_loops = fcs.up_loops)
-        check_pattern_feasible(az_chk, el_chk, l_now, fcs.max_steering;
+                                      up_loops = fcs.pattern.up_loops)
+        check_pattern_feasible(az_chk, el_chk, l_now, fcs.course.max_steering;
                                c1 = cand_c1, prn = false).margin
     end
     wing_frac = 1.0
@@ -593,20 +593,20 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     wing_frac < 1 &&
         @info @sprintf("Lobe lift held back on the path for L = %.0f m \
                         to fit the curvature gate: %.0f %% of %.2f°.",
-                       l_now, 100 * wing_frac, fcs.el_offset_wing)
+                       l_now, 100 * wing_frac, fcs.reelout.el_offset_wing)
     # TWO resolutions: the CHECKS at the reply's own, what is FLOWN at `n_path` so the lap counter holds.
     chk_az, chk_el = prepare_path(new_az, new_el;
-        resample = n_native, up_loops = fcs.up_loops)
+        resample = n_native, up_loops = fcs.pattern.up_loops)
     st.chk_points = n_native
     cand_az, cand_el = prepare_path(new_az, new_el;
-        resample = st.n_path, up_loops = fcs.up_loops)
+        resample = st.n_path, up_loops = fcs.pattern.up_loops)
     # Canonicalized like `cand_az`/`cand_el`, so `blend_folds` and `blend_paths` pair the same points.
     cand_from = prepare_path(fec.az_path, fec.el_path;
-        resample = st.n_path, up_loops = fcs.up_loops)
+        resample = st.n_path, up_loops = fcs.pattern.up_loops)
     # At the CURRENT length, which is what it will be flown at.
     margin = isnan(feas.c1) ? Inf :
         check_pattern_feasible(chk_az, chk_el, l_now,
-            fcs.max_steering; c1 = cand_c1, prn = false).margin
+            fcs.course.max_steering; c1 = cand_c1, prn = false).margin
     clearance = path_min_height(chk_az, chk_el, l_now)
     # Gated against BOTH the startup prediction and the previous install's (`min_power_frac*`).
     new_pred = Float64(tab["metrics"]["avg_power_W"])
@@ -681,9 +681,9 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
     st.blend_to = (cand_az, cand_el)
     # The scored reference follows the same ramp, unlifted curve to unlifted curve.
     st.raw_from = prepare_path(st.raw_az, st.raw_el;
-        resample = st.n_path, up_loops = fcs.up_loops)
+        resample = st.n_path, up_loops = fcs.pattern.up_loops)
     st.raw_to = prepare_path(cand_raw[1], cand_raw[2];
-        resample = st.n_path, up_loops = fcs.up_loops)
+        resample = st.n_path, up_loops = fcs.pattern.up_loops)
     st.raw_az, st.raw_el = st.raw_from
     # Here, not before the gates: a REJECTED reply is not a path the kite ever flies.
     push!(st.opt_paths_raw, cand_raw)
@@ -708,7 +708,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
     st.el_shift_warned = false
     # Install the aligned OLD path (w = 0, new point indices) and re-base the lap counter on it.
     set_path!(fec, st.blend_from[1], st.blend_from[2];
-              up_loops = fcs.up_loops)
+              up_loops = fcs.pattern.up_loops)
     st.fig8_idx_prev = fec.last_idx
     # A no-op while paths are resampled to `n_path`; `fig8_idx_progress` counts POINTS.
     n_path_new = length(fec.az_path)
@@ -741,7 +741,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
                               isnan(margin5.margin) ? "" :
                                   @sprintf(" (phase 5: %.2f at %.0f m)",
                                            margin5.margin,
-                                           fcs.reelout_l_max),
+                                           fcs.reelout.reelout_l_max),
                               clearance, cand_size.growth, new_pred))
 end
 
@@ -760,7 +760,7 @@ function advance_blend!(st::RunState, setup, t)
     weight = clamp((t - st.blend_t0) / tos.path_blend_time, 0.0, 1.0)
     b_az, b_el = blend_paths(st.blend_from[1], st.blend_from[2],
                              st.blend_to[1], st.blend_to[2], weight)
-    set_path!(fec, b_az, b_el; up_loops = fcs.up_loops)
+    set_path!(fec, b_az, b_el; up_loops = fcs.pattern.up_loops)
     if !isnothing(st.raw_to)
         st.raw_az, st.raw_el = blend_paths(st.raw_from[1], st.raw_from[2],
                                             st.raw_to[1], st.raw_to[2], weight)
@@ -796,9 +796,9 @@ function deliver_lift_in_air!(st::RunState, setup, plant, t, phase, el_target)
     function shift_margin(el_try)
         isnan(feas.c1) && return Inf
         az_chk, el_chk = prepare_path(fec.az_path, el_try; resample = chk_n,
-                                      up_loops = fcs.up_loops)
+                                      up_loops = fcs.pattern.up_loops)
         check_pattern_feasible(az_chk, el_chk, Float64(ss.l_tether[1]),
-            fcs.max_steering; c1 = c1_at_phase(phase, st), prn = false).margin
+            fcs.course.max_steering; c1 = c1_at_phase(phase, st), prn = false).margin
     end
     # Rationed down to a quarter of the shift, never below.
     # A rung that clears the margin can still fold `blend_paths` in between, so that is checked too.
@@ -858,7 +858,7 @@ behind it and spun an extra loop (Maasvlakte 8.25 m/s, 2026-09-26).
 """
 function phase5_fallback!(st::RunState, setup, t, phase)
     (; fcs, tos, fec) = setup
-    (fcs.final_margin_min > 0 && !st.p5_fallback_done) || return nothing
+    (fcs.reelout.final_margin_min > 0 && !st.p5_fallback_done) || return nothing
     p5_crossing = false
     if !isnan(st.stop_start) || phase >= 5
         az_q = fec.az_path[fec.last_idx] - (minimum(fec.az_path) + maximum(fec.az_path)) / 2
@@ -870,20 +870,20 @@ function phase5_fallback!(st::RunState, setup, t, phase)
     # Native margins, as each install computed them: on the 360-point resampled path a
     # 100-point reply reads about half its margin, an artefact of the resampling's kinks.
     m_now = st.p5_history[end].margin
-    (!isnan(m_now) && m_now < fcs.final_margin_min) || return nothing
-    i_ok = findlast(entry -> !isnan(entry.margin) && entry.margin >= fcs.final_margin_min, st.p5_history)
+    (!isnan(m_now) && m_now < fcs.reelout.final_margin_min) || return nothing
+    i_ok = findlast(entry -> !isnan(entry.margin) && entry.margin >= fcs.reelout.final_margin_min, st.p5_history)
     if isnothing(i_ok)
         @warn @sprintf("Phase-5 margin %.2f < final_margin_min %.2f and no earlier \
                         install meets it: flying phase 5 on the current path.",
-                       m_now, fcs.final_margin_min)
+                       m_now, fcs.reelout.final_margin_min)
         return nothing
     end
     install = st.p5_history[i_ok]
     # The lift the kite carries now, not the one that install was made with.
     to = prepare_path(install.az, install.el .+ (st.el_applied - install.el_applied);
-                      resample = st.n_path, up_loops = fcs.up_loops)
+                      resample = st.n_path, up_loops = fcs.pattern.up_loops)
     from = prepare_path(fec.az_path, fec.el_path;
-                        resample = st.n_path, up_loops = fcs.up_loops)
+                        resample = st.n_path, up_loops = fcs.pattern.up_loops)
     m_to = install.margin
     if blend_folds(tos, from..., to...)
         @warn @sprintf("Phase-5 fallback to the path installed at t = %.1f s \
@@ -894,18 +894,18 @@ function phase5_fallback!(st::RunState, setup, t, phase)
     st.blend_to = to
     st.blend_t0 = t
     st.raw_from = prepare_path(st.raw_az, st.raw_el; resample = st.n_path,
-                                   up_loops = fcs.up_loops)
+                                   up_loops = fcs.pattern.up_loops)
     st.raw_to = prepare_path(install.raw[1], install.raw[2]; resample = st.n_path,
-                                 up_loops = fcs.up_loops)
+                                 up_loops = fcs.pattern.up_loops)
     st.raw_az, st.raw_el = st.raw_from
     # Install the aligned current path (w = 0) and re-base the lap counter, as an install does.
-    set_path!(fec, st.blend_from[1], st.blend_from[2]; up_loops = fcs.up_loops)
+    set_path!(fec, st.blend_from[1], st.blend_from[2]; up_loops = fcs.pattern.up_loops)
     st.fig8_idx_prev = fec.last_idx
     st.p5_fallback = (; t, from_margin = m_now, to_margin = m_to, to_t = install.t)
     @info @sprintf("Phase-5 fallback at t = %.1f s: the flown path has a \
                     phase-5 margin of %.2f, below final_margin_min = %.2f; \
                     blending to the path installed at t = %.1f s \
-                    (margin %.2f).", t, m_now, fcs.final_margin_min,
+                    (margin %.2f).", t, m_now, fcs.reelout.final_margin_min,
                    install.t, m_to)
     return nothing
 end
@@ -951,9 +951,9 @@ function release_reelout!(st::RunState, setup, plant, t)
             @info @sprintf("  ... reel-out released EARLY at t = %.1f s by \
                             force %.0f N >= %.0f N (%.1f s before the \
                             %.1f s delay would have).",
-                           t, plant.force, fcs.reelout_f_trigger,
-                           st.transition_start + fcs.reelout_delay - t,
-                           fcs.reelout_delay)
+                           t, plant.force, fcs.reelout.reelout_f_trigger,
+                           st.transition_start + fcs.reelout.reelout_delay - t,
+                           fcs.reelout.reelout_delay)
     end
     return nothing
 end
@@ -975,34 +975,34 @@ function reelout_speed!(st::RunState, setup, plant, t, rel_depower)
     v_cmd = reelout_command(fcs, v_raw, t, st.reelout_start_t, plant.force,
                             rcs.f_low, rcs.f_high)
 
-    remaining = fcs.reelout_l_max - st.l_set
+    remaining = fcs.reelout.reelout_l_max - st.l_set
     # Soft-stop: latch once `reelout_softstop` seconds would cover the rest, then decelerate linearly to 0.
-    if isnan(st.stop_start) && fcs.reelout_softstop > 0 && v_cmd > 0 &&
-       remaining <= v_cmd * fcs.reelout_softstop
+    if isnan(st.stop_start) && fcs.reelout.reelout_softstop > 0 && v_cmd > 0 &&
+       remaining <= v_cmd * fcs.reelout.reelout_softstop
         st.stop_start = t
         st.stop_v_entry = v_cmd
         st.stop_dp_entry = rel_depower
         st.stop_T = 2 * remaining / v_cmd
     end
     # Second stop criterion: N COMPLETE laps by `fig8_idx_progress` (`fig8_n` reads 1 during the first lap).
-    if isnan(st.stop_start) && fcs.n_fig_eight > 0 &&
-       st.fig8_idx_progress >= fcs.n_fig_eight * st.n_path
+    if isnan(st.stop_start) && fcs.reelout.n_fig_eight > 0 &&
+       st.fig8_idx_progress >= fcs.reelout.n_fig_eight * st.n_path
         st.stop_reason = "laps"
-        if fcs.reelout_softstop > 0 && v_cmd > 0
+        if fcs.reelout.reelout_softstop > 0 && v_cmd > 0
             st.stop_start = t
             st.stop_v_entry = v_cmd
             st.stop_dp_entry = rel_depower
             # No remaining distance to solve T from: same nominal duration instead.
-            st.stop_T = 2 * fcs.reelout_softstop
+            st.stop_T = 2 * fcs.reelout.reelout_softstop
         else
             st.reelout_done = true   # hard stop, as reelout_l_max does today
         end
     end
     v_set = isnan(st.stop_start) ? v_cmd :
         soft_stop_speed(st.stop_v_entry, t, st.stop_start, st.stop_T)
-    st.l_set = min(st.l_set + v_set * plant.dt, fcs.reelout_l_max)
+    st.l_set = min(st.l_set + v_set * plant.dt, fcs.reelout.reelout_l_max)
     on_timer(rc)
-    if st.l_set >= fcs.reelout_l_max
+    if st.l_set >= fcs.reelout.reelout_l_max
         st.reelout_done = true
         isempty(st.stop_reason) && (st.stop_reason = "length")
     elseif !isnan(st.stop_start) && st.stop_reason == "laps" && t - st.stop_start >= st.stop_T
@@ -1021,8 +1021,8 @@ function entry_force_guard!(st::RunState, setup, plant, v_set)
     (; guard_lfc, fcs, rcs) = setup
     ss = plant.ss
     set_reset(guard_lfc, false)
-    set_f_set(guard_lfc, fcs.entry_f_min)
-    set_v_sw(guard_lfc, calc_vro(rcs, fcs.entry_f_min) * 1.05)
+    set_f_set(guard_lfc, fcs.winch.entry_f_min)
+    set_v_sw(guard_lfc, calc_vro(rcs, fcs.winch.entry_f_min) * 1.05)
     set_v_act(guard_lfc, plant.v_reel)
     set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
     set_force(guard_lfc, plant.force)
@@ -1088,7 +1088,7 @@ function steering_hooks!(st::RunState, setup, t, rel_steering, u_ff)
         # re-clamp here too, or a gain factor > 1 commands the tape angles
         # it was never calibrated for instead of just saturating earlier,
         # as scaling heading_p itself would.
-        rel_steering = clamp(u_scaled, -fcs.max_steering, fcs.max_steering)
+        rel_steering = clamp(u_scaled, -fcs.course.max_steering, fcs.course.max_steering)
     end
     return rel_steering
 end
@@ -1102,10 +1102,10 @@ it causes later.
 function check_overspeed(setup, plant)
     (; fcs) = setup
     ss = plant.ss
-    Float64(ss.v_app) > fcs.v_app_abort || return false
+    Float64(ss.v_app) > fcs.run.v_app_abort || return false
     @error @sprintf("Overspeed at t=%.2fs: v_app=%.1f m/s > %.1f (elevation %.1f°, AoA %.1f°). \
                      Stopping before the solver diverges.",
-                    ss.time, ss.v_app, fcs.v_app_abort,
+                    ss.time, ss.v_app, fcs.run.v_app_abort,
                     rad2deg(ss.elevation), rad2deg(ss.AoA))
     return true
 end
@@ -1132,7 +1132,7 @@ function record_step!(st::RunState, setup, plant, t, commands)
     ss.var_05 = chi_set           # RAW guidance course [rad]
     ss.var_06 = rad2deg(cmd.err)  # REGULATED error [deg]
     # A weight, not a flag: a step here means entry_d_blend is too narrow.
-    ss.var_07 = abs(chi_set) > deg2rad(fcs.entry_chi_max) ? cmd.w_lim : 0.0
+    ss.var_07 = abs(chi_set) > deg2rad(fcs.course.entry_chi_max) ? cmd.w_lim : 0.0
     ss.var_08 = cmd.w_course      # course/heading blend weight [-]
     # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
     ss.var_09 = rad2deg(plant.aoa)

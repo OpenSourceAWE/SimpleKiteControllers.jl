@@ -6,7 +6,7 @@ Figure-of-eight path following of the V3 kite, extended with a `REEL_OUT` winch:
 tether starts at `l_tether` (150 m by default), flies the same four-phase entry as
 `simple_fig8.jl` (park -> dive -> hold -> transition), and from the moment the
 guidance engages (phase 3) reels out under WinchControllers.jl's
-`v_set = kv * sqrt(force)` law until `fcs.reelout_l_max` or `fcs.n_fig_eight`
+`v_set = kv * sqrt(force)` law until `fcs.reelout.reelout_l_max` or `fcs.reelout.n_fig_eight`
 figures of eight, whichever comes first, then holds that length for the rest of
 the run. Once reel-out stops, a fifth phase (final) takes over:
 the pattern keeps flying, but depower switches from `depower_setpoint` to
@@ -18,7 +18,7 @@ No pumping cycle: there is no reel-in phase here.
 The guidance and its settings are unchanged from `simple_fig8.jl` — see that
 script's docstring for the guidance, the entry state machine and the plant/data
 path conventions, all of which apply here too. What differs is the winch: instead
-of V3Kite's own FORCE/POSITION winch (`fcs.compliance`), this script layers
+of V3Kite's own FORCE/POSITION winch (`fcs.winch.compliance`), this script layers
 WinchControllers.jl's `WinchController` on top of V3Kite's POSITION mode. Each
 step it turns the measured `reel_out_speed(s)`/`winch_force(s)` into a speed
 `v_set`, integrates that into a length setpoint `l_set`, and passes `l_set` to
@@ -31,7 +31,7 @@ back out there is a first-order lag of `1/winch_pos_kp` = 2 s — measured at 1.
 of delay and 0.49 of the commanded amplitude on the 5.7 s reel-out oscillation
 before `v_ff` existed, plus a standing `v_ro/winch_pos_kp` ≈ 5 m length error.
 Feeding the speed forward leaves the P loop only the error to correct.
-`fcs.compliance` must be `0` (POSITION mode): `REEL_OUT` and V3Kite's own FORCE mode
+`fcs.winch.compliance` must be `0` (POSITION mode): `REEL_OUT` and V3Kite's own FORCE mode
 both drive `set_length`/`set_torque`, and only one winch can hold the drum at a
 time — this script errors at startup otherwise, rather than silently picking
 one. That is why `fcs` here is loaded from `data/fc_settings_reelout.yaml`, a
@@ -54,7 +54,7 @@ It can now.
 
 `check_pattern_feasible` is printed at both `l_tether` (the START of the run,
 before any reel-out — the worst case, since a longer tether only ever shrinks the
-kite's minimum angular turn radius) and `fcs.reelout_l_max` (the end). Measured
+kite's minimum angular turn radius) and `fcs.reelout.reelout_l_max` (the end). Measured
 with `fc_settings_reelout.yaml`'s defaults at 150 m the margin is 1.22, growing
 to 1.63 at 200 m and 2.04 at 250 m, so no pattern change is needed to start at
 150 m — see `Plan.md`.
@@ -90,8 +90,8 @@ from phase 3 to 5 without ever touching 4, and the counter must still start.
 `sys_state` carries the same entry state machine as `simple_fig8.jl` (0 park,
 1 dive, 2 hold, 3 transition, 4 fig8), plus a fifth phase this script adds: 5 final,
 entered from either 3 or 4 the moment reel-out stops, i.e. `l_set` reaches
-`fcs.reelout_l_max` OR `fcs.n_fig_eight` laps have been flown, whichever fires
-first. Reel-out begins `fcs.reelout_delay` seconds after phase 3 is reached and
+`fcs.reelout.reelout_l_max` OR `fcs.reelout.n_fig_eight` laps have been flown, whichever fires
+first. Reel-out begins `fcs.reelout.reelout_delay` seconds after phase 3 is reached and
 stops at whichever of the two triggers phase 5. Phase 4 still marks the first
 close tracking of the pattern, it just no longer gates the winch, and does not
 gate phase 5 either — a run that never settles still reaches final once
@@ -198,13 +198,7 @@ fcs = FC_Settings(fc_settings(project))
 
 # Per-run overrides of the settings just loaded, for a SWEEP (the input `fcs_overrides`);
 # `examples/optimize_fig8.jl` passes them per run.
-for (key, value) in fcs_overrides
-    hasfield(FC_Settings, key) ||
-        error("fcs_overrides: \"$key\" is not a field of FC_Settings.")
-    setfield!(fcs, key, convert(fieldtype(FC_Settings, key), value))
-end
-isempty(fcs_overrides) ||
-    @info "fcs overrides in force: " * join(("$k = $v" for (k, v) in fcs_overrides), ", ")
+apply_overrides!(fcs, fcs_overrides, "fcs_overrides", "FC_Settings", "fcs")
 
 project_set = Settings(project)
 apply_windspeed_override!(project_set, WIND_SPEED)
@@ -219,9 +213,9 @@ log_name = basename(project_set.log_file)
 
 # ======================== INIT =========================== #
 
-fcs.compliance >= 0 ||
-    error("compliance must be >= 0, got $(fcs.compliance)")
-fcs.compliance == 0 ||
+fcs.winch.compliance >= 0 ||
+    error("compliance must be >= 0, got $(fcs.winch.compliance)")
+fcs.winch.compliance == 0 ||
     error("REEL_OUT needs compliance = 0 (POSITION mode) — REEL_OUT and V3Kite's own \
            FORCE mode both drive the winch and only one can hold the drum at a time.")
 # ONE settings object for BOTH winch loops, and BOTH are ours now: V3Kite's
@@ -270,18 +264,18 @@ else
     # c1 must match the damping in use; that is what makes this check meaningful.
     # At l_tether (the START, before any reel-out) this is the WORST case: a longer
     # tether only ever shrinks the kite's minimum angular turn radius.
-    feas_start = check_pattern_feasible(fec, l_tether, fcs.max_steering; c1)
+    feas_start = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1)
     feas_start.feasible ||
         @warn "Pattern is tighter than the kite's minimum turn radius AT THE START \
                (l_tether = $l_tether m) — expect curvature-limited tracking during \
                the entry, not a tuning problem."
-    feas_end = check_pattern_feasible(fec, fcs.reelout_l_max, fcs.max_steering; c1)
+    feas_end = check_pattern_feasible(fec, fcs.reelout.reelout_l_max, fcs.course.max_steering; c1)
 
     # Dead-time context for attractor_dist: how long the lead arc takes to fly.
-    lead_time = deg2rad(fcs.attractor_dist) * l_tether / fcs.v_app_ref
+    lead_time = deg2rad(fcs.pattern.attractor_dist) * l_tether / fcs.course.v_app_ref
     @info @sprintf("Attractor lead %.1f° ≈ %.1f s of flight at v_app %.1f m/s, \
                     vs %.2f s steering dead time (ratio %.1f).",
-                   fcs.attractor_dist, lead_time, fcs.v_app_ref, delay, lead_time / delay)
+                   fcs.pattern.attractor_dist, lead_time, fcs.course.v_app_ref, delay, lead_time / delay)
 end
 
 cc = CourseController(CourseControllerSettings(fcs; dt = s.dt))
@@ -292,7 +286,7 @@ stop_v_entry = NaN          # [m/s] v_set at the moment it latched
 stop_T = NaN                # [s] duration of the linear decel to reach 0 at reelout_l_max
 reelout_done = false        # true once either stop criterion has ended reel-out
 stop_reason = ""            # "length", "laps", or "" if reel-out never stopped
-final_start = NaN           # [s] time phase 5 began; the run ends `fcs.final_time` after it
+final_start = NaN           # [s] time phase 5 began; the run ends `fcs.reelout.final_time` after it
 e_mech = 0.0                # [Wh] running mechanical energy, logged for the viewer
 
 # fig_8 (SysState field, live lap count): 0 before phase >= 4, 1 at first entry,
@@ -312,7 +306,7 @@ t_wall_start = time()
 try
     for _ in 1:s.steps
         t = s.sys_state.time
-        t - final_start >= fcs.final_time && break
+        t - final_start >= fcs.reelout.final_time && break
 
         # L0 attractor guidance -> commanded course [rad]. The lead is a flight
         # TIME when attractor_lead_time is set, so it is re-read every step.
@@ -339,7 +333,7 @@ try
             set_phase!(cc, 5)
             phase = 5
             isnan(final_start) && (global final_start = t)
-            rel_depower = fcs.depower_final
+            rel_depower = fcs.reelout.depower_final
         end
         chi_cmd = cc.chi_cmd
         w_lim = cc.w_lim
@@ -371,7 +365,7 @@ try
         # reelout_l_max. Once it does, l_set simply stops growing and the rest of
         # the run is flown exactly like the constant-length example.
         local v_set = 0.0
-        if phase >= 3 && t - transition_start >= fcs.reelout_delay &&
+        if phase >= 3 && t - transition_start >= fcs.reelout.reelout_delay &&
            !reelout_done
             # The INSTANTANEOUS force: reeling out faster exactly when the kite
             # pulls harder is what regulates the force. Lagging it is closed, see
@@ -381,8 +375,8 @@ try
             # force limiters) sees the true v_raw throughout, only the value
             # handed to l_set/v_ff is scaled. `t_startup` does not do this — see
             # its docstring in `src/fc_settings.jl`.
-            ramp = fcs.reelout_softstart > 0 ?
-                clamp((t - transition_start - fcs.reelout_delay) / fcs.reelout_softstart,
+            ramp = fcs.reelout.reelout_softstart > 0 ?
+                clamp((t - transition_start - fcs.reelout.reelout_delay) / fcs.reelout.reelout_softstart,
                       0.0, 1.0) : 1.0
             # ...but the soft-start must not override the tether's own protection:
             # at 8 m/s ground wind the entry swoop drives the force to 10.7 kN
@@ -398,7 +392,7 @@ try
                                   (rcs.f_high - rcs.f_low), 0.0, 1.0)
             v_cmd = max(ramp, force_release) * v_raw
 
-            remaining = fcs.reelout_l_max - l_set
+            remaining = fcs.reelout.reelout_l_max - l_set
             # Soft-stop: a hard cut of v_set to 0 the instant l_set clamps to
             # reelout_l_max leaves the drum with the old command's momentum —
             # the POSITION loop then brakes it with a transient reel-IN (a power
@@ -415,32 +409,32 @@ try
             # CURRENT RATE, then decelerate LINEARLY from `v_cmd` to 0. A linear
             # ramp's area is `v_entry*T/2`, so `stop_T` (usually ~2x
             # `reelout_softstop`) is solved for exactly, not just guessed.
-            if isnan(stop_start) && fcs.reelout_softstop > 0 && v_cmd > 0 &&
-               remaining <= v_cmd * fcs.reelout_softstop
+            if isnan(stop_start) && fcs.reelout.reelout_softstop > 0 && v_cmd > 0 &&
+               remaining <= v_cmd * fcs.reelout.reelout_softstop
                 global stop_start = t
                 global stop_v_entry = v_cmd
                 global stop_T = 2 * remaining / v_cmd
             end
             # Second stop criterion: N COMPLETE laps since the counter started at phase 4.
             # `fig8_idx_progress`, not `fig8_n`, which reads 1 during the first lap.
-            if isnan(stop_start) && fcs.n_fig_eight > 0 &&
-               fig8_idx_progress >= fcs.n_fig_eight * n_path
+            if isnan(stop_start) && fcs.reelout.n_fig_eight > 0 &&
+               fig8_idx_progress >= fcs.reelout.n_fig_eight * n_path
                 global stop_reason = "laps"
-                if fcs.reelout_softstop > 0 && v_cmd > 0
+                if fcs.reelout.reelout_softstop > 0 && v_cmd > 0
                     global stop_start = t
                     global stop_v_entry = v_cmd
                     # No remaining distance to solve T from — unlike the reelout_l_max
                     # latch, the length is the free variable here. Same nominal duration.
-                    global stop_T = 2 * fcs.reelout_softstop
+                    global stop_T = 2 * fcs.reelout.reelout_softstop
                 else
                     global reelout_done = true   # hard stop, as reelout_l_max does today
                 end
             end
             v_set = isnan(stop_start) ? v_cmd :
                 stop_v_entry * (1 - clamp((t - stop_start) / stop_T, 0.0, 1.0))
-            global l_set = min(l_set + v_set * s.dt, fcs.reelout_l_max)
+            global l_set = min(l_set + v_set * s.dt, fcs.reelout.reelout_l_max)
             on_timer(rc)
-            if l_set >= fcs.reelout_l_max
+            if l_set >= fcs.reelout.reelout_l_max
                 global reelout_done = true
                 isempty(stop_reason) && (global stop_reason = "length")
             elseif !isnan(stop_start) && stop_reason == "laps" && t - stop_start >= stop_T
@@ -454,8 +448,8 @@ try
             # above, deliberately NOT `rc` — see the comment there) is stepped
             # by hand through the same setters `calc_v_set` uses internally.
             set_reset(guard_lfc, false)
-            set_f_set(guard_lfc, fcs.entry_f_min)
-            set_v_sw(guard_lfc, calc_vro(rcs, fcs.entry_f_min) * 1.05)
+            set_f_set(guard_lfc, fcs.winch.entry_f_min)
+            set_v_sw(guard_lfc, calc_vro(rcs, fcs.winch.entry_f_min) * 1.05)
             set_v_act(guard_lfc, reel_out_speed(s))
             set_tracking(guard_lfc, 0.0)   # bumpless: l_set is otherwise flat here
             set_force(guard_lfc, winch_force(s))
@@ -483,16 +477,16 @@ try
         # never the binding constraint, and tightening it to 4 only made the drum
         # lag the `t_startup` ramp harder — the engagement ring grew from 0.88 to
         # 0.98 m/s and the peak force rose slightly. See Plan.md.
-        step!(s; rel_depower, rel_steering, vsm_interval = fcs.vsm_interval,
+        step!(s; rel_depower, rel_steering, vsm_interval = fcs.run.vsm_interval,
               set_torque = winch_torque!(wpc, s, l_set; v_ff = v_set,
                                          speed_limit = rcs.v_sat,
                                          acceleration_limit = rcs.max_acc))
 
         # Report the overspeed rather than the opaque solver abort it causes later.
-        if Float64(s.sys_state.v_app) > fcs.v_app_abort
+        if Float64(s.sys_state.v_app) > fcs.run.v_app_abort
             @error @sprintf("Overspeed at t=%.2fs: v_app=%.1f m/s > %.1f (elevation %.1f°, AoA %.1f°). \
                              Stopping before the solver diverges.",
-                            s.sys_state.time, s.sys_state.v_app, fcs.v_app_abort,
+                            s.sys_state.time, s.sys_state.v_app, fcs.run.v_app_abort,
                             rad2deg(s.sys_state.elevation), rad2deg(s.sys_state.AoA))
             break
         end
@@ -504,11 +498,11 @@ try
         s.sys_state.var_01 = dmin              # cross-track error [deg]
         s.sys_state.var_02 = az_attr           # attractor azimuth [deg]
         s.sys_state.var_03 = el_attr           # attractor elevation [deg]
-        s.sys_state.var_04 = fcs.el_center     # pattern-centre elevation [deg]
+        s.sys_state.var_04 = fcs.pattern.el_center     # pattern-centre elevation [deg]
         s.sys_state.var_05 = chi_set           # RAW guidance course [rad]
         s.sys_state.var_06 = rad2deg(err)      # REGULATED error [deg]
         # A weight, not a flag: a step here means entry_d_blend is too narrow.
-        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.entry_chi_max) ? w_lim : 0.0
+        s.sys_state.var_07 = abs(chi_set) > deg2rad(fcs.course.entry_chi_max) ? w_lim : 0.0
         s.sys_state.var_08 = w_course          # course/heading blend weight [-]
         # Whole wing; sys_state.AoA is the centre panel only, which a turn twists away from.
         s.sys_state.var_09 = rad2deg(span_mean_aoa(s.sys))
@@ -545,10 +539,10 @@ sl = syslog.syslog
 # The geometry is passed in too: without it the criteria are blind to pattern SIZE.
 # require_final: this script's own phase 5, unlike simple_fig8.jl's sys_state
 # (which never goes past 4) — checks reel-out actually finished within the run.
-fig8m = print_fig8_metrics(sl; t_start = fcs.park_time, settle_time = fcs.entry_time,
-                   min_elevation = fcs.min_elevation, az_center = 0.0,
-                   az_amplitude = fcs.f8_a, el_height = fcs.f8_b,
-                   min_span_frac = fcs.min_span_frac, require_final = true,
+fig8m = print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs.run.entry_time,
+                   min_elevation = fcs.run.min_elevation, az_center = 0.0,
+                   az_amplitude = fcs.pattern.f8_a, el_height = fcs.pattern.f8_b,
+                   min_span_frac = fcs.run.min_span_frac, require_final = true,
                    max_force = project_set.max_force)
 
 summary = OrderedDict{String, Any}()
@@ -571,7 +565,7 @@ reelout_sections = reelout_block(sl, fcs, l_tether; stop_reason,
                                  laps_reeled = fig8_idx_progress / n_path, window_means = true)
 rp = reelout_sections.rp
 summary["reelout"] = reelout_sections.block
-performance_section = performance_block(t_sim, t_wall, s.dt, fcs.vsm_interval)
+performance_section = performance_block(t_sim, t_wall, s.dt, fcs.run.vsm_interval)
 isnothing(performance_section) || (summary["performance"] = performance_section)
 
 # A recap of the numbers scattered above; last key, so `success_criteria` stays

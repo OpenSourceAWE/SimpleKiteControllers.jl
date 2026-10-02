@@ -113,7 +113,7 @@ const V_K_OVER_V_A = 0.96
 guidance_corner(v_app) = guidance_rate(fcs, v_app, SET.l_tether, V_K_OVER_V_A * v_app)
 
 """
-    loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false) -> NamedTuple
+    loop_margins(depower, K_phase, v_app; v_min = fcs.course.v_app_min, pattern = false) -> NamedTuple
 
 Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `L = C·P` at one operating point, worst case over the sign of the gravity pole
@@ -122,12 +122,12 @@ Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `pattern = true` multiplies in the guidance and the kite correction, and takes
 the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
 """
-function loop_margins(depower, K_phase, v_app; v_min = fcs.v_app_min, pattern = false)
-    tc = turn_rate_coeffs(fcs.body_damping, depower)
+function loop_margins(depower, K_phase, v_app; v_min = fcs.course.v_app_min, pattern = false)
+    tc = turn_rate_coeffs(fcs.run.body_damping, depower)
     pc = plant_coeffs(depower)   # the plant's c1 and c2; the delays below stay the table's scaling
-    K = K_phase * fcs.v_app_ref / max(v_app, v_min)
-    C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
-    cos_beta = cosd(fcs.el_center)
+    K = K_phase * fcs.course.v_app_ref / max(v_app, v_min)
+    C = course_pid(K, fcs.course.heading_i, fcs.course.heading_d, fcs.course.heading_d_n, Ts)
+    cos_beta = cosd(fcs.pattern.el_center)
     # In the pattern the kite's response time follows the pattern law (V4), elsewhere the table.
     τ, T_kite = pattern ?
         pattern_dead_time_lag(tc, v_app, depower) :
@@ -163,13 +163,13 @@ The turn-rate law is identified up to `|u| = 0.175`; in the fig8 log the turn
 rate at the `max_steering` clamp was only 0.6 – 0.75 of what it predicts, so the
 overshoot of a large turn is overstated here.
 """
-function step_response(err0_deg, v_app; depower = fcs.depower_setpoint, K_phase = fcs.heading_p,
+function step_response(err0_deg, v_app; depower = fcs.course.depower_setpoint, K_phase = fcs.course.heading_p,
                        v_min = V_MIN_PATTERN, t_end = 40.0)
-    tc = turn_rate_coeffs(fcs.body_damping, depower)
+    tc = turn_rate_coeffs(fcs.run.body_damping, depower)
     n = round(Int, kite_dead_time(tc, v_app) / Ts)
     a_kite = exp(-Ts / kite_lag(tc, v_app))
-    K = K_phase * fcs.v_app_ref / max(v_app, v_min)
-    Td, N = fcs.heading_d, fcs.heading_d_n
+    K = K_phase * fcs.course.v_app_ref / max(v_app, v_min)
+    Td, N = fcs.course.heading_d, fcs.course.heading_d_n
     ad = Td / (Td + N * Ts)
     bd = K * N * ad
     gain, v_s = SET.steering_gain, SET.v_steering
@@ -184,7 +184,7 @@ function step_response(err0_deg, v_app; depower = fcs.depower_setpoint, K_phase 
         # calc_steering calls pid(0, err, 0): P = -K·err, D filters -err
         D = ad * D - bd * (err - yold)
         yold = err
-        u_cmd = clamp(-K * err + D, -fcs.max_steering, fcs.max_steering)
+        u_cmd = clamp(-K * err + D, -fcs.course.max_steering, fcs.course.max_steering)
         du = gain * (u_cmd - u)
         abs(du) > v_s && (limited += 1)
         u += clamp(du, -v_s, v_s) * Ts
@@ -213,36 +213,36 @@ end
                 tape lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f; \
                 pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz, \
                 response time %.2f s·(%.0f/v_app)^%.2f.",
-               PROJECT, fcs.body_damping, Ts, fcs.heading_p, fcs.heading_d,
-               fcs.heading_d_n, fcs.heading_i, fcs.v_app_min, fcs.v_app_min_pattern,
+               PROJECT, fcs.run.body_damping, Ts, fcs.course.heading_p, fcs.course.heading_d,
+               fcs.course.heading_d_n, fcs.course.heading_i, fcs.course.v_app_min, fcs.course.v_app_min_pattern,
                TAPE_LAG, KITE_DEAD_TIME_EXP, KITE_LAG_EXP,
-               guidance_corner(fcs.v_app_ref), SET.l_tether, KITE_CORR_ZERO, KITE_CORR_POLE,
+               guidance_corner(fcs.course.v_app_ref), SET.l_tether, KITE_CORR_ZERO, KITE_CORR_POLE,
                PATTERN_DELAY_REF, PATTERN_V_REF, PATTERN_DELAY_EXP)
 
 v_apps = [5.0, 10.0, 15.0, 20.0, 27.0, 35.0, 45.0]
 "Floor of the gain schedule from phase 3 on, as `calc_steering` applies it"
-const V_MIN_PATTERN = max(fcs.v_app_min, fcs.v_app_min_pattern)
+const V_MIN_PATTERN = max(fcs.course.v_app_min, fcs.course.v_app_min_pattern)
 
-println("Pattern (phase ≥ 3), depower = $(fcs.depower_setpoint), full gain, over v_app [m/s], \
+println("Pattern (phase ≥ 3), depower = $(fcs.course.depower_setpoint), full gain, over v_app [m/s], \
          with guidance and kite correction:")
-pattern = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
+pattern = [loop_margins(fcs.course.depower_setpoint, fcs.course.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
            for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, pattern)
 rate_disk_margin("Pattern", [r.α for r in pattern])
 println("  the same, inner loop C·P alone:")
-inner = [loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN) for v in v_apps]
+inner = [loop_margins(fcs.course.depower_setpoint, fcs.course.heading_p, v; v_min = V_MIN_PATTERN) for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, inner)
 
-println("Entry (phases 1-2), depower = $(fcs.entry_depower), entry_gain = $(fcs.entry_gain), over v_app [m/s]:")
-entry = [loop_margins(fcs.entry_depower, fcs.entry_gain * fcs.heading_p, v) for v in v_apps]
+println("Entry (phases 1-2), depower = $(fcs.course.entry_depower), entry_gain = $(fcs.course.entry_gain), over v_app [m/s]:")
+entry = [loop_margins(fcs.course.entry_depower, fcs.course.entry_gain * fcs.course.heading_p, v) for v in v_apps]
 foreach((v, r) -> print_row("v_app", v, r), v_apps, entry)
 rate_disk_margin("Entry", [r.α for r in entry])
 
-dp_lo, dp_hi = turn_rate_depower_range(fcs.body_damping)
+dp_lo, dp_hi = turn_rate_depower_range(fcs.run.body_damping)
 depowers = collect(range(dp_lo, dp_hi; length = 13))
-println("Full gain at v_app = v_app_ref = $(fcs.v_app_ref) m/s, over depower [-], \
+println("Full gain at v_app = v_app_ref = $(fcs.course.v_app_ref) m/s, over depower [-], \
          with guidance and kite correction:")
-sweep = [loop_margins(dp, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN, pattern = true)
+sweep = [loop_margins(dp, fcs.course.heading_p, fcs.course.v_app_ref; v_min = V_MIN_PATTERN, pattern = true)
          for dp in depowers]
 foreach((dp, r) -> print_row("depower", dp, r), depowers, sweep)
 rate_disk_margin("Depower sweep", [r.α for r in sweep])
@@ -263,9 +263,9 @@ off. The `pattern = true` loop of the tables is the conservative one. The gravit
 """
 function pattern_frd_margins(v_app; fs = 0.25:0.005:3.9)
     tabs = load_course_correction()
-    tc = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint)
-    K = fcs.heading_p * fcs.v_app_ref / max(v_app, V_MIN_PATTERN)
-    C = course_pid(K, fcs.heading_i, fcs.heading_d, fcs.heading_d_n, Ts)
+    tc = turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint)
+    K = fcs.course.heading_p * fcs.course.v_app_ref / max(v_app, V_MIN_PATTERN)
+    C = course_pid(K, fcs.course.heading_i, fcs.course.heading_d, fcs.course.heading_d_n, Ts)
     τ, T_kite, ω_g = kite_dead_time(tc, v_app), kite_lag(tc, v_app), guidance_corner(v_app)
     L = map(fs) do f
         ω = 2π * f
@@ -279,7 +279,7 @@ println("Pattern with the MEASURED course correction (realistic; measured at v_a
          against the conservative loop of the tables:")
 for v in (25.0, 34.0, 40.0)
     local m = pattern_frd_margins(v)
-    local r = loop_margins(fcs.depower_setpoint, fcs.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
+    local r = loop_margins(fcs.course.depower_setpoint, fcs.course.heading_p, v; v_min = V_MIN_PATTERN, pattern = true)
     @printf("  v_app %4.1f m/s: measured correction α = %.2f  DM = %.3f s  GM = %.2f at %.2f Hz | \
              kite_correction α = %.2f  DM = %.3f s\n", v, m.α, m.dm, m.gm, m.f_pc, r.α, r.delay_margin)
 end
@@ -303,12 +303,12 @@ else
 end
 
 # Nominal loop: the pattern at v_app_ref, for `diskmargin(L)` and the plots.
-L = loop_margins(fcs.depower_setpoint, fcs.heading_p, fcs.v_app_ref; v_min = V_MIN_PATTERN,
+L = loop_margins(fcs.course.depower_setpoint, fcs.course.heading_p, fcs.course.v_app_ref; v_min = V_MIN_PATTERN,
                  pattern = true).L
 
 if show_plots
     display(bode_plot(L; from = -2, to = log10(0.5 / Ts),
-                      title = "Course loop L = C·P·K·G, depower = $(fcs.depower_setpoint), v_app = $(fcs.v_app_ref) m/s"))
+                      title = "Course loop L = C·P·K·G, depower = $(fcs.course.depower_setpoint), v_app = $(fcs.course.v_app_ref) m/s"))
     MakieControlPlots.plot(depowers, [r.α for r in sweep], [r.delay_margin for r in sweep];
          xlabel = "relative depower [-]",
          ylabels = ["disk margin α [-]", "delay margin [s]"],

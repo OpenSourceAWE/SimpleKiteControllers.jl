@@ -114,7 +114,7 @@ Base.@kwdef mutable struct RunState
     reelout_done::Bool = false
     "\"length\", \"laps\", or \"\" if reel-out never stopped"
     stop_reason::String = ""
-    "[s] time phase 5 began; the run ends `fcs.final_time` after it"
+    "[s] time phase 5 began; the run ends `fcs.reelout.final_time` after it"
     final_start::Float64 = NaN
     "[Wh] running mechanical energy, logged for the viewer"
     e_mech::Float64 = 0.0

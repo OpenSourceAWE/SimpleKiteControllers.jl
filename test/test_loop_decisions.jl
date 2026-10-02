@@ -12,7 +12,7 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
     soft_stop_speed
 
 @testset verbose = true "loop_decisions" begin
-    fcs = (; depower_final = 0.35, depower_final_max = 0.42, depower_final_f_gain = 1e-5,
+    fcs = FC_Settings(; depower_final = 0.35, depower_final_max = 0.42, depower_final_f_gain = 1e-5,
            depower_final_f_gain_stop = 4e-5, depower_final_f_target = 6000.0,
            el_offset_lead = 4.0, reelout_l_max = 380.0, reelout_delay = 2.0,
            reelout_f_trigger = 3000.0, reelout_softstart = 4.0)
@@ -29,11 +29,11 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
     end
 
     @testset "feedforward_off_before_phase_4_or_without_gain" begin
-        f = (; ff_gain = 0.7, v_app_min = 10.0, ff_lead_time = 0.35, ff_smooth = 6.0,
+        f = FC_Settings(; ff_gain = 0.7, v_app_min = 10.0, ff_lead_time = 0.35, ff_smooth = 6.0,
              ff_d_fade = 6.0, ff_err_fade = 60.0, ff_tau = 0.2)
         r = feedforward_step(f, 0.011, nothing, 3, 0.0, 25.0, 200.0, 30.0, 0.0, 0.25, 1.0, 0.1, 0.2)
         @test r == (0.0, 0.0, 0.1, 0.2)                  # phase 3: nothing, filters untouched
-        f0 = merge(f, (; ff_gain = 0.0))
+        f0 = FC_Settings(f; ff_gain = 0.0)
         @test feedforward_step(f0, 0.011, nothing, 5, 0.0, 25.0, 200.0, 30.0, 0.0, 0.25, 1.0, 0.1, 0.2) ==
               (0.0, 0.0, 0.1, 0.2)
         # Unknown turn-rate coefficient, or a kite that does not move: also nothing.
@@ -56,7 +56,7 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
         # Below the target force it winds down to zero, above it winds up, both within the limits.
         @test final_force_extra(fcs, 0.0, 1000.0, 20.0, 0.0, false, 0.011) == 0.0
         up = final_force_extra(fcs, 0.0, 8000.0, 20.0, 0.0, false, 0.011)
-        @test 0 < up < fcs.depower_final_max - fcs.depower_final
+        @test 0 < up < fcs.reelout.depower_final_max - fcs.reelout.depower_final
         # The force the stopped drum will see is higher than the one now, by the wind ratio squared.
         @test final_force_extra(fcs, 0.0, 6000.0, 20.0, 5.0, false, 0.011) > 0.0
         @test final_force_extra(fcs, 0.0, 6000.0, 20.0, -5.0, false, 0.011) == 0.0   # reel-in ignored
@@ -87,7 +87,7 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
         @test reelout_command(fcs, 2.0, 10.0, 10.0, 500.0, 500.0, 7000.0) == 0.0
         @test reelout_command(fcs, 2.0, 12.0, 10.0, 500.0, 500.0, 7000.0) ≈ 1.0
         @test reelout_command(fcs, 2.0, 10.0, 10.0, 3750.0, 500.0, 7000.0) ≈ 0.5 * 2.0
-        @test reelout_command(merge(fcs, (; reelout_softstart = 0.0)), 2.0, 10.0, 10.0, 0.0, 500.0, 7000.0) == 2.0
+        @test reelout_command(FC_Settings(fcs; reelout_softstart = 0.0), 2.0, 10.0, 10.0, 0.0, 500.0, 7000.0) == 2.0
         @test soft_stop_speed(2.0, 10.0, 10.0, 4.0) == 2.0
         @test soft_stop_speed(2.0, 12.0, 10.0, 4.0) ≈ 1.0
         @test soft_stop_speed(2.0, 15.0, 10.0, 4.0) == 0.0

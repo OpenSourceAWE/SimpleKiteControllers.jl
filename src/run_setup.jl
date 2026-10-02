@@ -305,23 +305,23 @@ function setup_run(inputs; init_model)
     opt_depower_log = NamedTuple[]
 
     # The LOBE lift, applied to every installed path on the reply AS IT ARRIVED, before `el_offset_final`.
-    wing_lift(az, el) = lobe_lift(az, el; lift = fcs.el_offset_wing,
-                                  mode = fcs.el_offset_wing_mode,
-                                  az_full = fcs.el_offset_wing_az,
-                                  az_blend = fcs.el_offset_wing_blend)
+    wing_lift(az, el) = lobe_lift(az, el; lift = fcs.reelout.el_offset_wing,
+                                  mode = fcs.reelout.el_offset_wing_mode,
+                                  az_full = fcs.reelout.el_offset_wing_az,
+                                  az_blend = fcs.reelout.el_offset_wing_blend)
 
     # The turn-rate gain at a depower, NaN off the table; memoized because a blend asks every step.
     c1_memo = Dict{Float64, Float64}()
     c1_at_depower(depower) = get!(c1_memo, Float64(depower)) do
         try
-            turn_rate_coeffs(fcs.body_damping, depower).c1
+            turn_rate_coeffs(fcs.run.body_damping, depower).c1
         catch exc
             exc isa ArgumentError || rethrow()
             # Once per run: a blend ramping off the grid would repeat it every step.
             any(isnan, values(c1_memo)) ||
                 @warn @sprintf("No turn-rate coefficients at depower %.3f (body_damping \
                                 %s): gates and gain fall back to the startup law there.",
-                               depower, fcs.body_damping)
+                               depower, fcs.run.body_damping)
             NaN
         end
     end
@@ -329,21 +329,21 @@ function setup_run(inputs; init_model)
     c1_ctrl_memo = Dict{Float64, Float64}()
     c1_ctrl_at(depower) = get!(c1_ctrl_memo, Float64(depower)) do
         try
-            turn_rate_coeffs(fcs.body_damping, depower; table = ctrl_tr_table).c1
+            turn_rate_coeffs(fcs.run.body_damping, depower; table = ctrl_tr_table).c1
         catch exc
             exc isa ArgumentError || rethrow()
             NaN
         end
     end
     # The turn authority the loop was TUNED at; the sim loop rescales heading_p by c1_setpoint/c1(u_d) in every phase.
-    c1_setpoint = c1_ctrl_at(fcs.depower_setpoint)
+    c1_setpoint = c1_ctrl_at(fcs.course.depower_setpoint)
     # Phase 4 must fly with the curvature feed-forward, which silently drops out on either of these.
-    fcs.ff_gain > 0 || @warn "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
-        but ff_gain = $(fcs.ff_gain)"
+    fcs.feedforward.ff_gain > 0 || @warn "simple_opt_reelout.jl needs the curvature feed-forward in phase 4, \
+        but ff_gain = $(fcs.feedforward.ff_gain)"
     @assert isfinite(c1_setpoint) && c1_setpoint > 0 "the curvature feed-forward needs the turn-rate \
-        coefficient c1 at depower_setpoint = $(fcs.depower_setpoint), got $c1_setpoint"
+        coefficient c1 at depower_setpoint = $(fcs.course.depower_setpoint), got $c1_setpoint"
     c1_depower_max = try
-        last(turn_rate_depower_range(fcs.body_damping; table = ctrl_tr_table))
+        last(turn_rate_depower_range(fcs.run.body_damping; table = ctrl_tr_table))
     catch exc
         exc isa ArgumentError || rethrow()
         NaN
@@ -351,9 +351,9 @@ function setup_run(inputs; init_model)
     # The depower a reply is FLOWN at, which is what every gate and request must read c1 at.
     pattern_depower(reply) =
         tos.fly_opt_depower && !isnothing(reply.depower) ?
-            awetrim_depower_to_v3kite(reply.depower.value) : fcs.depower_setpoint
+            awetrim_depower_to_v3kite(reply.depower.value) : fcs.course.depower_setpoint
     # The elevation floor of every candidate path, the startup gates' and `check_startup_path`'s.
-    el_floor = fcs.min_elevation + tos.candidate_elevation_margin
+    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
 
     return RunSetup(; inputs, show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance,
             steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths,

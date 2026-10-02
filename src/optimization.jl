@@ -118,7 +118,7 @@ end
 Curvature margin of one shape: the tightest radius of the (`f8_a`, `f8_b`)
 lemniscate over the kite's minimum turn radius at `l_tether`, from
 [`check_pattern_feasible`](@ref). Below 1.0 the path asks for a turn the kite
-cannot fly at `fcs.max_steering`.
+cannot fly at `fcs.course.max_steering`.
 
 Everything except the two swept sizes comes from `fcs`, so the margin describes
 the same run the sweep would fly. Evaluate it at the STARTING tether length: a
@@ -128,7 +128,7 @@ the worst case (see `examples/simple_reelout.jl`).
 function pattern_margin(fcs::FC_Settings, f8_a, f8_b, l_tether; c1 = V3_TURN_RATE_C1)
     # dt does not enter the geometry; the controller is built only to be measured.
     fec = FigureEightController(fcs; dt = 0.01, A = f8_a, B = f8_b)
-    return check_pattern_feasible(fec, l_tether, fcs.max_steering; c1, prn = false).margin
+    return check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1, prn = false).margin
 end
 
 """

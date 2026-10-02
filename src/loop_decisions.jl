@@ -29,8 +29,8 @@ end
     feedforward_step(fcs, dt, fec, phase, err, v_app, l_tether, v_kite, dmin, c1_setpoint,
                      gain_scale, u_filt, chi_filt) -> (u_ff, chi_ff, u_filt, chi_filt)
 
-Curvature feed-forward plus chord correction of one step, low-passed over `fcs.ff_tau` (see
-`FC_Settings.ff_gain`), from the path `fec` in the air. Active from phase 4 on, and while the
+Curvature feed-forward plus chord correction of one step, low-passed over `fcs.feedforward.ff_tau` (see
+`FC_Settings.feedforward.ff_gain`), from the path `fec` in the air. Active from phase 4 on, and while the
 turn-rate coefficient at the flown depower and the kite's speed are known; otherwise `(0, 0)` and
 the filters are returned unchanged. It is faded out when the kite is off this branch of the path,
 by the cross-track error `dmin` and the course error `err` [rad]; `u_filt` and `chi_filt` are the
@@ -40,19 +40,19 @@ function feedforward_step(fcs, dt, fec, phase, err, v_app, l_tether, v_kite, dmi
                           gain_scale, u_filt, chi_filt)
     u_ff = 0.0
     chi_ff = 0.0
-    if fcs.ff_gain > 0 && phase >= 4
+    if fcs.feedforward.ff_gain > 0 && phase >= 4
         c1_ff = c1_setpoint / gain_scale     # c1 at the flown depower
-        v_app_ff = max(v_app, fcs.v_app_min)
+        v_app_ff = max(v_app, fcs.course.v_app_min)
         speed_ff = rad2deg(v_kite / l_tether)  # [deg/s]
         if isfinite(c1_ff) && c1_ff > 0 && speed_ff > 0
-            psi_dot_ff = path_turn_rate(fec, fcs.ff_lead_time * speed_ff, speed_ff;
-                                        smooth = fcs.ff_smooth)
+            psi_dot_ff = path_turn_rate(fec, fcs.feedforward.ff_lead_time * speed_ff, speed_ff;
+                                        smooth = fcs.feedforward.ff_smooth)
             # Faded out when the kite is not on this branch (a Q swap hands it the other lobe's curvature).
-            fade_d = clamp((fcs.ff_d_fade - dmin) / (0.5 * fcs.ff_d_fade), 0.0, 1.0)
-            fade_e = clamp((deg2rad(fcs.ff_err_fade) - abs(err)) /
-                           (0.5 * deg2rad(fcs.ff_err_fade)), 0.0, 1.0)
-            g_ff = fcs.ff_gain * fade_d * fade_e
-            alpha_ff = fcs.ff_tau > 0 ? dt / (dt + fcs.ff_tau) : 1.0
+            fade_d = clamp((fcs.feedforward.ff_d_fade - dmin) / (0.5 * fcs.feedforward.ff_d_fade), 0.0, 1.0)
+            fade_e = clamp((deg2rad(fcs.feedforward.ff_err_fade) - abs(err)) /
+                           (0.5 * deg2rad(fcs.feedforward.ff_err_fade)), 0.0, 1.0)
+            g_ff = fcs.feedforward.ff_gain * fade_d * fade_e
+            alpha_ff = fcs.feedforward.ff_tau > 0 ? dt / (dt + fcs.feedforward.ff_tau) : 1.0
             u_filt += alpha_ff * (g_ff * psi_dot_ff / (c1_ff * v_app_ff) - u_filt)
             chi_filt += alpha_ff * (g_ff * path_chord_offset(fec) - chi_filt)
             u_ff = u_filt
@@ -79,10 +79,10 @@ end
     stop_depower(fcs, dp_entry, stop_start, stop_T, t) -> Float64
 
 Depower during the soft stop of the reel-out: a ramp over `stop_T` seconds from the depower the
-stop latched at (`dp_entry`) to `fcs.depower_final`, never below `dp_entry`.
+stop latched at (`dp_entry`) to `fcs.reelout.depower_final`, never below `dp_entry`.
 """
 function stop_depower(fcs, dp_entry, stop_start, stop_T, t)
-    dp_stop_target = max(fcs.depower_final, dp_entry)
+    dp_stop_target = max(fcs.reelout.depower_final, dp_entry)
     return dp_entry + (dp_stop_target - dp_entry) * clamp((t - stop_start) / stop_T, 0.0, 1.0)
 end
 
@@ -91,27 +91,27 @@ end
 
 Extra depower [-] of the force limiter after the stop latch: `extra` integrated on the force the
 stopped drum is about to see (`f_now` scaled up by the apparent-wind ratio of the reel-out speed
-going to zero) against `fcs.depower_final_f_target`, at the higher gain while the stop `ramping`, and
-kept within `0..fcs.depower_final_max - fcs.depower_final`.
+going to zero) against `fcs.reelout.depower_final_f_target`, at the higher gain while the stop `ramping`, and
+kept within `0..fcs.reelout.depower_final_max - fcs.reelout.depower_final`.
 """
 function final_force_extra(fcs, extra, f_now, v_app, v_reelout, ramping, dt)
     v_ro = max(v_reelout, 0.0)
     f_stopped = v_app > 0 ? f_now * ((v_app + v_ro) / v_app)^2 : f_now
-    f_gain = ramping ? fcs.depower_final_f_gain_stop : fcs.depower_final_f_gain
-    return clamp(extra + f_gain * (f_stopped - fcs.depower_final_f_target) * dt,
-                 0.0, fcs.depower_final_max - fcs.depower_final)
+    f_gain = ramping ? fcs.reelout.depower_final_f_gain_stop : fcs.reelout.depower_final_f_gain
+    return clamp(extra + f_gain * (f_stopped - fcs.reelout.depower_final_f_target) * dt,
+                 0.0, fcs.reelout.depower_final_max - fcs.reelout.depower_final)
 end
 
 """
     lift_should_start(fcs, stop_start, phase, v_reelout, l_set) -> Bool
 
 Whether the elevation lift `el_offset_final` starts now: at the stop latch or in phase 5, or
-`fcs.el_offset_lead` seconds before the reel-out would end at the current speed.
+`fcs.reelout.el_offset_lead` seconds before the reel-out would end at the current speed.
 """
 lift_should_start(fcs, stop_start, phase, v_reelout, l_set) =
     !isnan(stop_start) || phase >= 5 ||
-    (fcs.el_offset_lead > 0 && v_reelout > 0 &&
-     fcs.reelout_l_max - l_set <= v_reelout * fcs.el_offset_lead)
+    (fcs.reelout.el_offset_lead > 0 && v_reelout > 0 &&
+     fcs.reelout.reelout_l_max - l_set <= v_reelout * fcs.reelout.el_offset_lead)
 
 """
     lap_index_step(last_idx, idx_prev, n_path) -> Int
@@ -131,22 +131,22 @@ end
 """
     reelout_release(fcs, t, transition_start, f_now) -> (by_timer, by_force)
 
-Why the reel-out gate opens now, if it does: `fcs.reelout_delay` seconds after the transition began,
-or earlier once the tether force reaches `fcs.reelout_f_trigger`.
+Why the reel-out gate opens now, if it does: `fcs.reelout.reelout_delay` seconds after the transition began,
+or earlier once the tether force reaches `fcs.reelout.reelout_f_trigger`.
 """
 reelout_release(fcs, t, transition_start, f_now) =
-    (t - transition_start >= fcs.reelout_delay, f_now >= fcs.reelout_f_trigger)
+    (t - transition_start >= fcs.reelout.reelout_delay, f_now >= fcs.reelout.reelout_f_trigger)
 
 """
     reelout_command(fcs, v_raw, t, start_t, f_now, f_low, f_high) -> Float64
 
-The reel-out speed command from the winch law's `v_raw`: ramped up over `fcs.reelout_softstart`
+The reel-out speed command from the winch law's `v_raw`: ramped up over `fcs.reelout.reelout_softstart`
 from when the gate opened at `start_t`, but released in proportion to the tether load, so the
 soft start never overrides the force limiter.
 """
 function reelout_command(fcs, v_raw, t, start_t, f_now, f_low, f_high)
-    ramp = fcs.reelout_softstart > 0 ?
-        clamp((t - start_t) / fcs.reelout_softstart, 0.0, 1.0) : 1.0
+    ramp = fcs.reelout.reelout_softstart > 0 ?
+        clamp((t - start_t) / fcs.reelout.reelout_softstart, 0.0, 1.0) : 1.0
     force_release = clamp((f_now - f_low) / (f_high - f_low), 0.0, 1.0)
     return max(ramp, force_release) * v_raw
 end

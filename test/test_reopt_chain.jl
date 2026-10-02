@@ -18,7 +18,7 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
 
 @testset verbose = true "reopt_chain" begin
     fcs = FC_Settings()
-    up_loops = fcs.up_loops
+    up_loops = fcs.pattern.up_loops
     n = 120
     s = range(0, 2pi; length = n + 1)[1:n]
     eight(a, b, c; m = n) = (r = range(0, 2pi; length = m + 1)[1:m];

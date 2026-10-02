@@ -142,12 +142,12 @@ Plant `:A`: the table's `c1` and `C3`; `:B`: `c1` and `c2/v_a` of the low flight
 function model_point(point, L, v_a; plant = :A)
     f = FC_Settings(fc_settings(project_file(V1_POINTS[point].project)))
     C, Ts = course_controller_tf(point, v_a)
-    dp = f.depower_setpoint
-    tc = turn_rate_coeffs(f.body_damping, dp)
+    dp = f.course.depower_setpoint
+    tc = turn_rate_coeffs(f.run.body_damping, dp)
     ω_g = guidance_rate(f, v_a, L, 0.96 * v_a)
     τp, Tp = pattern_dead_time_lag(tc, v_a, dp)
     c1, c2 = plant === :A ? (tc.c1, c2_at(v_a)) : (low_interp(gt_low.c1, dp), low_interp(gt_low.c2, dp))
-    P = turn_rate_plant(c1, c2, τp, v_a, -cosd(f.el_center), Ts; lag = v1_lag(point), kite_lag = Tp)
+    P = turn_rate_plant(c1, c2, τp, v_a, -cosd(f.pattern.el_center), Ts; lag = v1_lag(point), kite_lag = Tp)
     m = tf_margins(C * P * guidance_tf(ω_g, Ts) * kite_correction(Ts))
     return (; dm = m.dm, gm = m.gm, c3_eff = c2 / v_a)
 end

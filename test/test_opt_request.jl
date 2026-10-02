@@ -36,16 +36,16 @@ import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_
     end
 
     fcs = FC_Settings()
-    c1_setpoint = turn_rate_coeffs(fcs.body_damping, fcs.depower_setpoint).c1
+    c1_setpoint = turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint).c1
 
     @testset "min_turn_radius_request" begin
         tos = (; min_feasibility_margin = 0.8)
         # margin / (c1 * max_steering), scaled; the passed c1 wins over the table's.
-        @test min_turn_radius_request(fcs, tos; c1 = 0.25) ≈ 0.8 / (0.25 * fcs.max_steering)
+        @test min_turn_radius_request(fcs, tos; c1 = 0.25) ≈ 0.8 / (0.25 * fcs.course.max_steering)
         @test min_turn_radius_request(fcs, tos; c1 = 0.25, scale = 1.5, margin = 1.0) ≈
-              1.5 / (0.25 * fcs.max_steering)
+              1.5 / (0.25 * fcs.course.max_steering)
         # No c1, or an unusable one: the table's at the setpoint.
-        r_table = 0.8 / (c1_setpoint * fcs.max_steering)
+        r_table = 0.8 / (c1_setpoint * fcs.course.max_steering)
         @test min_turn_radius_request(fcs, tos) ≈ r_table
         @test min_turn_radius_request(fcs, tos; c1 = NaN) ≈ r_table
         # Margin 0 is where the gate is off: no constraint.
@@ -53,7 +53,7 @@ import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_
         @test_throws ErrorException min_turn_radius_request(fcs, tos; scale = -1.0)
         # Off the table's grid it sends no constraint and warns, as the gate degrades.
         off_grid = deepcopy(fcs)
-        off_grid.depower_setpoint = 0.9
+        off_grid.course.depower_setpoint = 0.9
         @test isnothing(@test_logs (:warn,) min_turn_radius_request(off_grid, tos))
     end
 
@@ -65,10 +65,10 @@ import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_
         @test rc.turn_radius_reel == turn_radius_lap_reelout(tos, 8.0)
         @test rc.opt_r_scale ≈ (1 + rc.turn_radius_reel / l_opt) * tos.turn_radius_headroom
         # Sized at the setpoint when the reply is not flown at its own depower.
-        @test rc.depower_request == fcs.depower_setpoint
+        @test rc.depower_request == fcs.course.depower_setpoint
         @test rc.c1_request == c1_setpoint
         @test rc.opt_r_min ≈ rc.opt_r_scale * tos.min_feasibility_margin /
-                             (c1_setpoint * fcs.max_steering)
+                             (c1_setpoint * fcs.course.max_steering)
         @test rc.opt_r_on
         @test rc.opt_r_sent == rc.opt_r_min
         box = pattern_limits_from(tos; elevation_min = elevation_min_request(fcs, tos, l_opt),
@@ -82,11 +82,11 @@ import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_
         own.fly_opt_depower = true
         rc = request_constraints(own, fcs, inflow, 10.0, l_opt)
         @test rc.depower_request ≈ awetrim_depower_to_v3kite(depower_seed(own, 8.0))
-        @test rc.c1_request == turn_rate_coeffs(fcs.body_damping, rc.depower_request).c1
+        @test rc.c1_request == turn_rate_coeffs(fcs.run.body_damping, rc.depower_request).c1
 
         # Off the grid: no c1, no radius constraint, and the gate's warning.
         off_grid = deepcopy(fcs)
-        off_grid.depower_setpoint = 0.9
+        off_grid.course.depower_setpoint = 0.9
         rc = @test_logs (:warn,) match_mode = :any request_constraints(tos, off_grid, inflow, 10.0,
                                                                        l_opt)
         @test isnothing(rc.c1_request)
