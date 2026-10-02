@@ -26,11 +26,12 @@ wc_settings:
   winch_ff_scale:     1.0    # Force feed-forward [-]; 1.0 is a perfectly stiff drum
   winch_acc_ff:       1.0    # Acceleration feed-forward J*a*G/r [-]; 0.0 = off
 
-  # --- TORQUE: force mode; unused here, at compliance > 0 fc_settings.yaml supplies these via winch_force_gains
-  winch_force_tau:  10.0     # Reference-force low-pass time constant [s]
+  # --- TORQUE: force mode (winch_force_torque!), flown when fc_settings' compliance > 0;
+  # --- winch_force_gains divides winch_len_kp and winch_damp by that compliance
+  winch_force_tau:  10.0     # Reference-force low-pass time constant; NOT scaled by compliance [s]
   winch_len_kp:     100.0    # Length trim, length error [m] -> reference force [N/m]
-  winch_damp:       500.0    # Viscous damping, reel-out speed -> force [N*s/m]
-  winch_force_min:  100.0    # Floor on the reference force [N]
+  winch_damp:       500.0    # Viscous damping, reel-out speed -> force; not optional, the drum free-wheels [N*s/m]
+  winch_force_min:  100.0    # Floor on the reference force, keeps the tether taut [N]
 
   # --- SPEED: WinchControllers.jl's WinchController (simple_reelout.jl) ------
   dt:            0.02      # overwritten with the plant's dt after loading      [s]

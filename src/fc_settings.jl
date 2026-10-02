@@ -147,26 +147,18 @@ end
 
 """
 The winch settings of [`FC_Settings`](@ref), section `winch:` of its YAML
-file: the force-mode winch (see [`winch_force_gains`](@ref)) and the force guards of
-the entry and the first lap. The position-mode winch and the reel-out law are in
-`wc_settings.yaml`.
+file: how compliant the force-mode winch is (see [`winch_force_gains`](@ref)) and the
+force guards of the entry and the first lap. The winch gains themselves, of both
+modes, and the reel-out law are in `wc_settings.yaml`.
 
 # Fields
 
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct FC_Winch @deftype Float64
-    # ---- Force-mode winch, read only when `compliance > 0` ---------------------
-    "Winch softness [-]: divides the winch gains; 0 = POSITION mode"
+    # ---- Force-mode winch ------------------------------------------------------
+    "Winch softness [-]: divides the force-mode gains; 0 = POSITION mode"
     compliance = 0.5
-    "Force low-pass [s]; not scaled by `compliance`"
-    winch_force_tau = 10.0
-    "Length-error gain [N/m], before `compliance` scaling"
-    winch_len_kp = 100.0
-    "Drum damping [N·s/m], before `compliance`; required"
-    winch_damp = 500.0
-    "Floor on the reference force, keeps the tether taut [N]"
-    winch_force_min = 100.0
 
     # ---- Force guards ----------------------------------------------------------
     "Entry-guard force floor [N], phases 0-2; not `WCSettings.f_low`"
@@ -242,7 +234,7 @@ $(TYPEDFIELDS)
     # ---- Simulation ------------------------------------------------------------
     "Steps between VSM aero updates"
     vsm_interval::Int64 = 1
-    "Settling elevation [deg]; NO EFFECT, not in `settle_wing`'s key"
+    "Elevation [deg] init settles at; in the settled-state cache key"
     elevation = 73.0
     "Unlogged warm-up [s] inside `init` (V3Kite's `warmup!`); 0 = off"
     warmup_time = 2.0
@@ -390,7 +382,8 @@ The file must have a top-level `fc_settings:` mapping with one section per part 
 `FC_Settings` (`course:`, `pattern:`, ...), each holding that part's settings; a
 section or setting the file omits keeps its default, an unknown one is an error. A
 setting directly under `fc_settings:` is accepted too: that is the layout of the
-files archived before the split into parts.
+files archived before the split into parts. Such a file may still carry the keys
+of [`MOVED_FC_KEYS`](@ref), which are skipped.
 """
 function FC_Settings(filename::String; path = skc_data_path())
     file = isabspath(filename) ? filename : joinpath(path, filename)
@@ -406,12 +399,21 @@ function FC_Settings(filename::String; path = skc_data_path())
         elseif key in RETIRED_YAML_KEYS
             iszero(value) ||
                 error("Retired key \"$key\" in $filename must be 0, got $value.")
+        elseif key in MOVED_FC_KEYS
+            continue
         else
             error("Unknown key \"$key\" in $filename — neither a part nor a setting of FC_Settings.")
         end
     end
     return fcs
 end
+
+"""
+The force-mode winch gains, which moved from `FC_Settings` to `wc_settings.yaml`
+(`WCSettings`). Settings files archived before still carry them; [`FC_Settings`](@ref)
+skips them when it loads such a file.
+"""
+const MOVED_FC_KEYS = ("winch_force_tau", "winch_len_kp", "winch_damp", "winch_force_min")
 
 """
 Keys that were removed from the settings structs together with the shape
@@ -585,18 +587,19 @@ function traj_opt_settings_file(project = project_file())
 end
 
 """
-    winch_force_gains(fcs::FC_Settings) -> NamedTuple
+    winch_force_gains(fcs::FC_Settings, wcs) -> NamedTuple
 
-Force-mode winch gains with the `compliance` scaling applied, as a NamedTuple
-keyed to match a force-mode winch controller's fields
-(`force_tau`, `len_kp`, `damp`, `force_min`). Splat it into whichever winch the
-kite model provides:
+The force-mode winch gains of the winch settings `wcs` (a `WCSettings`, loaded from
+the project's `wc_settings.yaml`) with the `compliance` of `fcs` applied, as a
+NamedTuple keyed to match a force-mode winch controller's fields (`force_tau`,
+`len_kp`, `damp`, `force_min`). Splat it into whichever winch the kite model
+provides:
 
-    wfc = WinchForceController(; winch_force_gains(fcs)...)
+    wfc = WinchForceController(; winch_force_gains(fcs, wcs)...)
 
-`winch_len_kp` and `winch_damp` are both divided by `fcs.winch.compliance`, so the
+`wcs.winch_len_kp` and `wcs.winch_damp` are both divided by `fcs.winch.compliance`, so the
 yield scales linearly with it while their ratio — the length loop's own time
-constant — is unchanged. `winch_force_tau` is passed through untouched: it sets
+constant — is unchanged. `wcs.winch_force_tau` is passed through untouched: it sets
 WHICH frequencies the drum yields to, not by how much.
 
 Plain numbers on purpose. The scaling is the part worth keeping in this package;
@@ -607,13 +610,13 @@ Errors at `compliance == 0`: that is position mode and must not be flown through
 a force-mode winch (an infinitely stiff spring is not representable — see
 [`FC_Settings`](@ref)).
 """
-function winch_force_gains(fcs::FC_Settings)
+function winch_force_gains(fcs::FC_Settings, wcs)
     fcs.winch.compliance > 0 ||
         error("winch_force_gains needs compliance > 0; at 0 use position mode.")
-    return (force_tau = fcs.winch.winch_force_tau,
-            len_kp = fcs.winch.winch_len_kp / fcs.winch.compliance,
-            damp = fcs.winch.winch_damp / fcs.winch.compliance,
-            force_min = fcs.winch.winch_force_min)
+    return (force_tau = wcs.winch_force_tau,
+            len_kp = wcs.winch_len_kp / fcs.winch.compliance,
+            damp = wcs.winch_damp / fcs.winch.compliance,
+            force_min = wcs.winch_force_min)
 end
 
 """

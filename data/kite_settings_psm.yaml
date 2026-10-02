@@ -1,24 +1,31 @@
-# Local override of V3Kite's data/kite_settings_psm.yaml, forced onto the
-# monolith backend regardless of what the upstream package ships (see
-# examples/simple_auto_parking.jl and examples/simple_opt_reelout.jl, which
-# always point their project's `kite_settings:` at this file instead of
-# V3Kite's own copy).
+# Local copy of V3Kite's data/kite_settings_psm.yaml (V3Kite v1.5.0, branch
+# delay-lag-fit, 2026-10-02), named by the system_fig8_*.yaml and
+# system_reelout_180m.yaml projects next to it. V3Kite looks for a project's
+# `kite_settings:` file beside the project first and in its own data directory
+# after, so this copy is the one flown, and a change upstream does not reach these
+# runs unnoticed. Keep it in step with V3Kite's file on purpose, not by accident.
+#
+# `vsm_interval` below is NOT read by this package's runs: V3Kite's `init` and
+# `step!` ignore it, and every example passes `fc_settings`' `run.vsm_interval` to
+# `step!` instead. It is kept so the file stays a faithful copy.
+#
+# The V3 as a particle lattice: the wing is a net of DYNAMIC point masses joined
+# by springs. Loaded into a `V3KiteConfig` via a project file's `kite_settings:`.
+#
+# `analytic_jacobian: false` is required here, not a tuning choice: under
+# `continuous` aero the `aero_panel` kernel's analytical Jacobian evaluates to
+# NaN, which stalls the implicit solver at t = 0 and fails settling outright.
+# See `docs/failure.md`. Drop the key once that is fixed upstream.
 kite_settings:
   wing_type: particle_dynamics   # particle_dynamics | rigid_dynamics
   aero_mode: continuous          # direct | continuous | pressure
   backend: kernel                # monolith | kernel model assembly
-  analytic_jacobian: true        # null takes the backend default (kernel: true)
-  vsm_interval: 10               # NOT read by this package's runs: they pass fc_settings' run.vsm_interval to step!
+  analytic_jacobian: false       # null takes the backend default (kernel: true)
+  vsm_interval: 5                # steps between VSM aero solves
 
-  body_sim_damping: [0.0, 0.0, 38.0]   # per-axis wing-frame damping in flight
-  world_sim_damping: [0.0, 0.0, 0.0]  # per-axis world-frame damping in flight
+  body_sim_damping: [0.0, 0.0, 20.0]   # per-axis wing-frame damping in flight
+  world_sim_damping: [0.0, 0.0, 0.0]   # per-axis world-frame damping in flight
 
-  # INERT in this run path, despite the name: the only consumer of `wing_mass` in
-  # V3Kite is examples/flight_replay.jl, guarded by `wing_mass > 0`. The wing mass
-  # that actually reaches the model is `mass` in settings_reelout_150m.yaml, which
-  # SymbolicAWEModels distributes over the wing points because their own extra_mass
-  # is 0. Left at 0.0 so it cannot be mistaken for the live value; `0` also means
-  # "keep what the geometry carries" if this path ever does read it.
   wing_mass: 0.0                 # [kg] mass redistributed over the wing nodes
   wing_mass_le_frac: 0.75        # leading-edge share of `wing_mass`
   wing_drag_coeff: 0.0           # parasitic drag spread over the wing nodes
@@ -29,7 +36,7 @@ kite_settings:
   init_state: null               # relaxed state settling starts from
 
   remake_model: false            # true rebuilds the serialized model bin
-  remake_settled_state: false   # true re-runs settling instead of loading the arrow
+  remake_settled_state: false    # true re-runs settling instead of loading the arrow
   brake: true                    # winch brake engaged after bring-up
 
   geom:

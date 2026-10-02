@@ -11,9 +11,10 @@
 # `system_fig8_200m.yaml`, not this file, is the project `__init__` reads it
 # against by default (`project_file()`'s own default).
 # `kite_settings`/`structural_geometry`/`aero_geometry`/`vsm_settings`/
-# `settle_settings`/`heading_settings` are V3Kite's own project keys, resolved
-# against ITS data path (not this file's), so they name V3Kite's particle-model
-# defaults (`system_psm.yaml`'s own values) unchanged.
+# `settle_settings`/`heading_settings` are V3Kite's own project keys. V3Kite looks
+# for each file beside this one first and in its own data directory after, so the
+# local `kite_settings` file next to this one is flown, while the others name
+# V3Kite's particle-model defaults (`system_psm.yaml`'s own values) unchanged.
 system:
     sim_settings: "settings_fig8_150m.yaml"
     wc_settings: "wc_settings.yaml"

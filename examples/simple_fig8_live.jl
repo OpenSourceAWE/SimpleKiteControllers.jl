@@ -340,7 +340,7 @@ wpc = nothing
 wfc = nothing
 if fcs.winch.compliance > 0
     # winch_force_gains returns plain numbers; the controller object is V3Kite's.
-    wfc = WinchForceController(; winch_force_gains(fcs)...)
+    wfc = WinchForceController(; winch_force_gains(fcs, wcs)...)
     @info @sprintf("Winch: FORCE mode at compliance = %.2f — len_kp %.0f N/m, \
                     damp %.0f N·s/m, tau %.1f s.",
                    fcs.winch.compliance, wfc.len_kp, wfc.damp, wfc.force_tau)

@@ -16,12 +16,12 @@
 # initial tether length (l_tethers) — describe what is being flown, not how it is
 # controlled.
 #
-# The POSITION-mode winch gains are NOT here — they live in wc_settings.yaml
-# next to this file and are read straight from there. The
-# FORCE-mode winch parameters ARE here, because how compliant the winch is during
-# a figure-eight is a choice of the run, not a property of the model; `compliance`
-# below scales them, and the controller they feed is V3Kite's
-# WinchForceController. The dated record of how these values were arrived at is in
+# The winch gains are NOT here, neither the POSITION-mode nor the FORCE-mode ones —
+# they live in wc_settings.yaml next to this file and are read straight from there.
+# Only `compliance` is here, because how compliant the winch is during a
+# figure-eight is a choice of the run, not a property of the model: it divides the
+# force-mode gains (see `winch_force_gains`), and the controller they feed is
+# WinchControllers.jl's WinchForceController. The dated record of how these values were arrived at is in
 # docs/fig8_tuning_log.md.
 fc_settings:
   course:  # heading/course loop: entry state machine, depower, PID, feedback, descent limiter
@@ -72,16 +72,12 @@ fc_settings:
     f8_a_high:          45.0     # f8_a from wind_ramp_high on: margin 1.59 at depower 0.33 [deg]
     f8_b_high:          24.0     # f8_b from wind_ramp_high on                      [deg]
 
-  winch:  # force-mode winch (winch_len_kp and winch_damp are divided by compliance) and force guards
+  winch:  # compliance of the force-mode winch (its gains are in wc_settings.yaml) and force guards
     compliance:         0.5      # Winch softness; exactly 0 is POSITION mode          [-]
-    winch_force_tau:    10.0     # Compliance timescale; NOT scaled by compliance      [s]
-    winch_len_kp:       100.0    # Length trim, length error -> reference force     [N/m]
-    winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
-    winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
 
   run:  # simulation conditions and pass criteria
     vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
-    elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
+    elevation:          73.0     # Where init settles the kite; in the settled-state cache key [deg]
     warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
     body_damping:       [0.0, 0.0, 40.0]  # Per axis; settling starts here and decays to
                                           # 0.8x it, so this is the turn_rate_coeffs key

@@ -70,14 +70,19 @@ name is given, and the turn-rate table is loaded against it when the package loa
   [`winch_force_limit`](@ref): wind-dependent winch-law parameters. Reel-out projects only.
 - `turn_rate_coeffs` → `turn_rate_coeffs.yaml`, read by [`turn_rate_coeffs`](@ref): the
   identified turn-rate law (`c1`, `c2`, `delay`) per body damping and depower.
-- `kite_settings`, `structural_geometry`, `aero_geometry`, `vsm_settings`,
-  `settle_settings`, `heading_settings` → V3Kite's own files: geometry, polars, VSM and
-  settling settings, read from V3Kite's data directory.
+- `kite_settings` → `kite_settings_psm*.yaml` in this package, read into V3Kite's
+  `V3KiteConfig`: wing model, aerodynamics mode, backend and in-flight damping.
+- `structural_geometry`, `aero_geometry`, `vsm_settings`, `settle_settings`,
+  `heading_settings` → V3Kite's own files: geometry, polars, VSM and settling settings,
+  read from V3Kite's data directory.
 
-`system_reelout_maasvlakte.yaml` and `system_reelout_cabauw.yaml` point `kite_settings` at
-`kite_settings_psm_kernel.yaml` in this package, a local copy of V3Kite's file that
-selects the `kernel` backend. All other projects use V3Kite's
-`kite_settings_psm.yaml`.
+V3Kite looks for each of these files beside the project first and in its own data
+directory after. The figure-of-eight projects and `system_reelout_180m.yaml` name
+`kite_settings_psm.yaml`, a local copy of V3Kite's file, so an upstream change does not
+reach these runs unnoticed. `system_reelout_maasvlakte.yaml` and
+`system_reelout_cabauw.yaml` name `kite_settings_psm_kernel.yaml`, an older local variant
+of it. The `vsm_interval` in these files is not read by the runs of
+this package: they pass `run.vsm_interval` of `fc_settings` to `step!`.
 
 Not named by any project:
 - `optimization.yaml`: the settings of the pattern-shape sweep of

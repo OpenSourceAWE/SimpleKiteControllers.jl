@@ -56,13 +56,8 @@ fc_settings:
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
-  winch:  # force-mode winch (winch_len_kp and winch_damp are divided by compliance) and force guards
-    # unused here (compliance = 0), kept for a complete struct
+  winch:  # compliance of the force-mode winch (its gains are in wc_settings.yaml) and force guards
     compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
-    winch_force_tau:    10.0     # Compliance timescale; NOT scaled by compliance      [s]
-    winch_len_kp:       100.0    # Length trim, length error -> reference force     [N/m]
-    winch_damp:         500.0    # Drum damping; not optional, the drum free-wheels [N·s/m]
-    winch_force_min:    100.0    # Floor on the reference force, keeps the tether taut [N]
     entry_f_min:        350.0    # Force floor of the entry guard (guard_lfc), phases 0-2; deliberately not wc's f_low [N]
     first_lap_force_frac: 0.93   # f_high x this in lap 1 AND for the startup solve; 1.0 = no lap-1 de-rating [-]
 
@@ -89,7 +84,7 @@ fc_settings:
 
   run:  # simulation conditions and pass criteria
     vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
-    elevation:          73.0     # Settling elevation; no effect, see the cache key  [deg]
+    elevation:          73.0     # Where init settles the kite; in the settled-state cache key [deg]
     warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
     body_damping:       [0.0, 0.0, 40.0]  # Per axis; the turn_rate_coeffs key (settles to 0.8x)
     v_app_abort:        55.0     # Stop the run above this apparent wind speed      [m/s]

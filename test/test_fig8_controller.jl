@@ -771,26 +771,27 @@ end
 
     @testset "winch_force_gains" begin
         fcs = FC_Settings()
+        wcs = SimpleKiteControllers.WCSettings(; dt = 0.02)
         fcs.winch.compliance = 1.0
-        g = winch_force_gains(fcs)
+        g = winch_force_gains(fcs, wcs)
         # Keys must match the winch controller's field names; the caller splats them.
         @test keys(g) == (:force_tau, :len_kp, :damp, :force_min)
-        @test g.len_kp == fcs.winch.winch_len_kp
-        @test g.damp == fcs.winch.winch_damp
+        @test g.len_kp == wcs.winch_len_kp
+        @test g.damp == wcs.winch_damp
 
         # Both gains scale together, so the length loop's time constant does not move.
         fcs.winch.compliance = 0.5
-        h = winch_force_gains(fcs)
-        @test h.len_kp == fcs.winch.winch_len_kp / 0.5
-        @test h.damp == fcs.winch.winch_damp / 0.5
+        h = winch_force_gains(fcs, wcs)
+        @test h.len_kp == wcs.winch_len_kp / 0.5
+        @test h.damp == wcs.winch_damp / 0.5
         @test h.damp / h.len_kp ≈ g.damp / g.len_kp
         # force_tau sets WHICH frequencies the drum yields to, not by how much.
-        @test h.force_tau == fcs.winch.winch_force_tau
-        @test h.force_min == fcs.winch.winch_force_min
+        @test h.force_tau == wcs.winch_force_tau
+        @test h.force_min == wcs.winch_force_min
 
         # compliance 0 is position mode and must not silently divide by zero.
         fcs.winch.compliance = 0.0
-        @test_throws ErrorException winch_force_gains(fcs)
+        @test_throws ErrorException winch_force_gains(fcs, wcs)
     end
 
     @testset "winch_table" begin
