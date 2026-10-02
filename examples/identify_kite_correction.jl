@@ -11,7 +11,9 @@ lag, and
    `stability_opt_reelout.jl` evaluates the guided loop's margins with
    ([`load_course_correction`](@ref), [`course_correction`](@ref));
 2. check that the lag-lead [`kite_correction`](@ref), `(1 + s/ω_z)/(1 + s/ω_p)`, the causal
-   stand-in for the table in the transfer-function models, stays conservative against it:
+   stand-in for the table in the transfer-function models, stays conservative against it at
+   the measured `v_a` (zero and pole scale with `v_a`, as the table does, so it then is at
+   every `v_a`, and `kite_corr_v_ref` is set to the measured `v_a`):
    its gain not lower than measured below `F_SPLIT`, around the gain crossover, and its
    phase not less lagging than measured from `F_SPLIT` on, around the phase crossover. If
    the current `kite_corr_zero` and `kite_corr_pole` of the course-loop model file do, they
@@ -179,9 +181,11 @@ in_band = filter(line -> BAND[1] <= line.f <= BAND[2], frf)
 freqs = [line.f for line in in_band]
 ratio = [line.heading / line.tape / kite_model(line.f) for line in in_band]
 clm = course_loop_model()
-keep = conservative(freqs, ratio, clm.kite_corr_zero, clm.kite_corr_pole)
-fit = keep ? (; zero = clm.kite_corr_zero, pole = clm.kite_corr_pole,
-               log_rms = log_rms(freqs, ratio, clm.kite_corr_zero, clm.kite_corr_pole)) :
+# The current zero and pole, moved to the measured v_a (they scale with v_a, see kite_correction).
+scale = kc_run.v_a_mean / clm.kite_corr_v_ref
+zero_now, pole_now = clm.kite_corr_zero * scale, clm.kite_corr_pole * scale
+keep = conservative(freqs, ratio, zero_now, pole_now)
+fit = keep ? (; zero = zero_now, pole = pole_now, log_rms = log_rms(freqs, ratio, zero_now, pole_now)) :
              fit_conservative(freqs, ratio)
 isnothing(fit) && error("No lag-lead on the grid is conservative against the measured kite correction.")
 
@@ -197,8 +201,8 @@ if keep
     @printf(" The lag-lead %.2f / %.2f Hz is conservative against the measurement; kept (log-RMS %.3f).\n",
             fit.zero, fit.pole, fit.log_rms)
 else
-    @printf(" The lag-lead %.2f / %.2f Hz is not conservative against the measurement.\n",
-            clm.kite_corr_zero, clm.kite_corr_pole)
+    @printf(" The lag-lead %.2f / %.2f Hz (at %.1f m/s) is not conservative against the measurement.\n",
+            zero_now, pole_now, kc_run.v_a_mean)
     @printf(" kite_corr_zero = %.2f Hz, kite_corr_pole = %.2f Hz: the best conservative one (log-RMS %.3f).\n",
             fit.zero, fit.pole, fit.log_rms)
 end
@@ -232,7 +236,8 @@ if save
         @sprintf("from %.1f to %.1f Hz; log-RMS against the table %.3f. ", F_SPLIT, F_PHASE_MAX, fit.log_rms) *
         "identify_kite_correction.jl, $(Dates.today()).")
     update_yaml_values!(file, ["kite_corr_zero" => @sprintf("%.2f", fit.zero),
-                               "kite_corr_pole" => @sprintf("%.2f", fit.pole)];
+                               "kite_corr_pole" => @sprintf("%.2f", fit.pole),
+                               "kite_corr_v_ref" => @sprintf("%.1f", kc_run.v_a_mean)];
                         comments = Dict("kite_corr_zero" => comment))
     reload_course_loop_model!(project)
     @info "identify_kite_correction: wrote kite_corr_zero and kite_corr_pole to data/$(basename(file))."

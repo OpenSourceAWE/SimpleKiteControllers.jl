@@ -34,8 +34,8 @@ simulation at 200 and 300 m (`oldplans/Plan_model_validation.md`, V1 step 1):
 
 - the attractor guidance, `guidance_tf(ω_g)` = `1 + ω_g/s`, `ω_g = v_k/(L·D)`,
   with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;
-- `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
-  identified law says, a lag-lead identified at `v_a` ≈ 34 m/s;
+- `kite_correction`: from ~0.9 Hz up the kite turns less than the turn-rate
+  law says, a lag-lead chosen at `v_a` ≈ 33 m/s and scaled with `v_a`;
 - the kite's response time from the pattern law, `τ + T =
   pattern_delay_ref · (pattern_v_ref/v_a)^pattern_delay_exp`
   (`pattern_dead_time_lag`, the values in `data/course_loop_model.yaml`),
@@ -132,7 +132,7 @@ function loop_margins(depower, K_phase, v_app; v_min = fcs.course.v_app_min, pat
     results = map((-cos_beta, cos_beta)) do gravity
         L = C * turn_rate_plant(tc.c1, tc.c2, τ, v_app, gravity, Ts; lag = TAPE_LAG,
                                 kite_lag = T_kite)
-        pattern && (L = L * kite_correction(Ts) * guidance_tf(guidance_corner(v_app), Ts))
+        pattern && (L = L * kite_correction(Ts, v_app) * guidance_tf(guidance_corner(v_app), Ts))
         dm = try
             diskmargin(L)
         catch
@@ -209,12 +209,12 @@ const CLM = course_loop_model()
                 heading_p = %.3f, heading_d = %.3f s, heading_d_n = %.1f, heading_i = %s, \
                 v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
                 tape lag = %.2f s, kite dead time and lag = table's · (sweep v_app / v_app)^%.2f and ^%.2f; \
-                pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz, \
+                pattern: guidance corner %.2f rad/s at v_app_ref (L = %.0f m), kite correction %.2f/%.2f Hz at %.1f m/s (scaled with v_a), \
                 response time %.2f s·(%.0f/v_app)^%.2f.",
                PROJECT, fcs.run.body_damping, Ts, fcs.course.heading_p, fcs.course.heading_d,
                fcs.course.heading_d_n, fcs.course.heading_i, fcs.course.v_app_min, fcs.course.v_app_min_pattern,
                TAPE_LAG, CLM.kite_dead_time_exp, CLM.kite_lag_exp,
-               guidance_corner(fcs.course.v_app_ref), SET.l_tether, CLM.kite_corr_zero, CLM.kite_corr_pole,
+               guidance_corner(fcs.course.v_app_ref), SET.l_tether, CLM.kite_corr_zero, CLM.kite_corr_pole, CLM.kite_corr_v_ref,
                CLM.pattern_delay_ref, CLM.pattern_v_ref, CLM.pattern_delay_exp)
 
 v_apps = [5.0, 10.0, 15.0, 20.0, 27.0, 35.0, 45.0]

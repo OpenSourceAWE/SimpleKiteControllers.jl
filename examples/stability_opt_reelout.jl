@@ -33,8 +33,8 @@ schedule uses. Four things differ in the reel-out:
   steps, and its own split read 0 s + 0.27 s. It checks their sum instead: the
   pure delay identified on settled phase 4 (`identify_turn_rate_law`) against
   the pattern law's and the table's at the same `v_a` and depower.
-  `kite_correction` was measured at `v_a` ≈ 34 m/s; at the reel-out's
-  11 – 20 m/s it is extrapolated.
+  `kite_correction` was measured at `v_a` ≈ 33 m/s and is scaled with `v_a`
+  to the reel-out's 11 – 20 m/s, like the measured table.
 
 - **The gain schedule.** `simple_opt_reelout.jl` rescales the gain by
   `gain_scale = c1(depower_setpoint)/c1(depower)` in every phase, so the loop
@@ -238,7 +238,7 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = tr
     tc = turn_rate_coeffs(f.run.body_damping, clamp(depower, DP_LO, DP_HI))
     K = C1_SETPOINT / tc.c1 * f.course.heading_p * f.course.v_app_ref / max(v_app, V_MIN_PATTERN)
     C = course_pid(K, f.course.heading_i, f.course.heading_d, f.course.heading_d_n, Ts)
-    G = guidance_tf(ω_g, Ts) * kite_correction(Ts)
+    G = guidance_tf(ω_g, Ts) * kite_correction(Ts, v_app)
     τp, Tp = pattern_dead_time_lag(tc, v_app, clamp(depower, DP_LO, DP_HI))
     function margins(Lp)
         dm = try
@@ -254,7 +254,7 @@ function reelout_margins(L, v_app, ω_g, depower, el_c, lag; f = fcs, inner = tr
     results = [begin
                    Pp = turn_rate_plant(tc.c1, c2, τp, v_app, gravity, Ts; lag, kite_lag = Tp)
                    # The same plant for both; the inner loop without the guidance.
-                   (; inner = inner ? margins(C * kite_correction(Ts) * Pp) : nothing, guided = margins(C * G * Pp))
+                   (; inner = inner ? margins(C * kite_correction(Ts, v_app) * Pp) : nothing, guided = margins(C * G * Pp))
                end for gravity in (-cosd(el_c), cosd(el_c))]
     worst_inner = inner ? argmin(r -> r.α, [r.inner for r in results]) : nothing
     guided = argmin(r -> r.α, [r.guided for r in results])
@@ -271,7 +271,7 @@ frequency points (`frd_diskmargin`). `NaN` without a table.
 """
 function measured_kite_margin(loop, v_app)
     isnothing(kite_corr_table) && return NaN
-    lag_lead = kite_correction(Ts)
+    lag_lead = kite_correction(Ts, v_app)
     points = map(0.02:0.005:min(4.0, 0.45 / Ts)) do freq
         z = cis(2π * freq * Ts)
         evalfr(loop, z)[1] / evalfr(lag_lead, z)[1] * course_correction(kite_corr_table, freq, v_app)
@@ -311,7 +311,7 @@ end
                 depower_setpoint = %.3f (c1 = %.4f), v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
                 attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag %.3f s fitted on the whole log \
                 (unexplained %.0f %%), \
-                guided loop: kite correction %.2f/%.2f Hz, kite dead time + lag from the pattern law \
+                guided loop: kite correction %.2f/%.2f Hz at %.1f m/s, scaled with v_a, kite dead time + lag from the pattern law \
                 %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table: %.3f + %.3f = %.3f s), \
                 against the log's pure delay %.3f s there (correlation %.3f); plant c1, c2 from the low pattern, \
                 c2 = %.2f at depower_setpoint (gravity scale %.1f).",
@@ -319,6 +319,7 @@ end
                fcs.course.heading_i, fcs.course.depower_setpoint, C1_SETPOINT, fcs.course.v_app_min,
                fcs.course.v_app_min_pattern, fcs.pattern.attractor_dist, fcs.pattern.attractor_lead_time, tape_lag.T,
                100 * tape_lag.unexplained, course_loop_model().kite_corr_zero, course_loop_model().kite_corr_pole,
+               course_loop_model().kite_corr_v_ref,
                τ_pat, T_pat, τ_pat + T_pat, v_log, τ_table, T_table, τ_table + T_table, τ_log, τ_corr,
                turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_setpoint).c2, GRAVITY_EVAL)
 

@@ -45,6 +45,8 @@ $(TYPEDFIELDS)
     kite_corr_zero = NaN
     "Pole [Hz] of [`kite_correction`](@ref)"
     kite_corr_pole = NaN
+    "Apparent wind speed [m/s] at which `kite_corr_zero` and `kite_corr_pole` hold; they scale with `v_a`"
+    kite_corr_v_ref = NaN
 end
 
 """
@@ -196,9 +198,12 @@ Needs `using ControlSystemsBase`, which loads the method.
 function guidance_tf end
 
 """
-    kite_correction(Ts; fz = course_loop_model().kite_corr_zero, fp = course_loop_model().kite_corr_pole) -> StateSpace
+    kite_correction(Ts, v_app; clm = course_loop_model()) -> StateSpace
 
-Lag-lead `(1 + s/ω_z)/(1 + s/ω_p)` that brings the turn-rate law's steering →
+Lag-lead `(1 + s/ω_z)/(1 + s/ω_p)` at the apparent wind speed `v_app` [m/s], with the
+zero and pole `kite_corr_zero`, `kite_corr_pole` of [`CourseLoopModel`](@ref) scaled by
+`v_app / kite_corr_v_ref`: like the measured kite correction ([`course_correction`](@ref)),
+its features sit at a fixed distance flown, so they move in frequency with `v_a`. It brings the turn-rate law's steering →
 heading response to what an injected multisine measures in the simulation:
 from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
 1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it,

@@ -760,7 +760,7 @@ function model_loops(r)
     τp, Tp = pattern_dead_time_lag(tc, r.v_a_mean, r.depower)
     Pp = turn_rate_plant(tc.c1, c2, τp, r.v_a_mean, -cosd(f.pattern.el_center), Ts; lag = v1_lag(r.point),
                          kite_lag = Tp)
-    return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts))
+    return (; inner = C * P, guided = C * P * G, corrected = C * Pp * G * kite_correction(Ts, r.v_a_mean))
 end
 
 "Delay margin, crossovers and gain margin of a model loop, in the same fields as `frd_margins`."

@@ -39,3 +39,4 @@ course_loop_model:
   # log-RMS against the table 0.293. identify_kite_correction.jl, 2026-10-02.
   kite_corr_zero:      1.37   # [Hz]
   kite_corr_pole:      0.99   # [Hz]
+  kite_corr_v_ref:     33.3   # v_a of the measurement; zero and pole scale with v_a [m/s]

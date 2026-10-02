@@ -43,7 +43,10 @@ end
 
 guidance_tf(ω_g, Ts) = 1 + ω_g * Ts / (tf("z", Ts) - 1)
 
-kite_correction(Ts; fz = course_loop_model().kite_corr_zero, fp = course_loop_model().kite_corr_pole) =
-    c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
+function kite_correction(Ts, v_app; clm = course_loop_model())
+    scale = v_app / clm.kite_corr_v_ref
+    fz, fp = clm.kite_corr_zero * scale, clm.kite_corr_pole * scale
+    return c2d(ss(tf([1 / (2π * fz), 1], [1 / (2π * fp), 1])), Ts)
+end
 
 end

@@ -79,7 +79,7 @@ function frf_point(p)
                         kite_lag = kite_lag(tc, v_a))
     τp, Tp = pattern_dead_time_lag(tc, v_a, FRF_DEPOWER)
     Pp = turn_rate_plant(tc.c1, c2, τp, v_a, gravity, Ts; lag, kite_lag = Tp)
-    model = C * Pp * guidance_tf(ω_g, Ts) * kite_correction(Ts)
+    model = C * Pp * guidance_tf(ω_g, Ts) * kite_correction(Ts, v_a)
     inner = C * P
     # Measured loop: the PD and the guidance applied to each measured line, as `measured_loop`.
     L_meas = [evalfr(C, cis(2π * fi * Ts))[1] * Gi * (1 + ω_g / (im * 2π * fi)) for (fi, Gi) in zip(f, G)]
