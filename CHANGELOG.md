@@ -4,6 +4,12 @@
 
 ### Changed
 
+- `attractor_lead_time` of `fc_settings_reelout.yaml` is 1.05 s (was 0.96 s). At high
+  wind the lead time sets the attractor arc, and with it the guidance corner `ω_g`; the
+  longer lead lifts the guided disk margin of Cabauw 10 m/s from 0.48 to 0.53 and of
+  7 m/s from 0.58 to 0.62, with a slightly lower RMS cross-track error and 1-1.5 % less
+  mean reel-out power. Below about 5 m/s the arc stays at `attractor_dist` and nothing
+  changes.
 - The turn-rate table is identified at low elevation only: `build_turn_rate_table.jl`
   flies, per depower, the three crosswind relay flights at fixed amplitudes that
   `plot_turn_rate_identification.jl` flew (`_fly_low_flights`, elevation held near

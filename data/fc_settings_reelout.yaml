@@ -57,8 +57,9 @@ fc_settings:
     # scenarios 0.332 -> 0.401 (weak winds, where this floor sets the attractor); replays at
     # maasvlakte 3.5/8.0 and cabauw 3.0 m/s pass all criteria, RMS d +20 - 29 %, power unchanged.
     attractor_dist:      9.75    # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
-    # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28).
-    attractor_lead_time: 0.96    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
+    # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28);
+    # 0.96 -> 1.05 (2026-10-03): Cabauw 10 m/s guided disk margin 0.477 -> 0.534, RMS cross-track error 1.27 -> 1.21°.
+    attractor_lead_time: 1.05    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
