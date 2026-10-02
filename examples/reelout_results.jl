@@ -659,14 +659,14 @@ function archive_run(setup, run_time, opt_paths_file)
     end
     input_files = [
         run_input_files(project, project_set);
-        joinpath(skc_data_path(), winch_table_file(project)), # f_low/force_limit(v_wind) table
+        joinpath(skc_data_path(), winch_table_file(project)); # f_low/force_limit(v_wind) table
         # The identified c1/c2/delay: they set the steering response and the
         # curvature gate, and a re-identification replaces the rows in place.
-        joinpath(skc_data_path(), turn_rate_coeffs_file(project)), # turn-rate law
+        joinpath(skc_data_path(), turn_rate_coeffs_file(project)); # turn-rate law
         # Without this the archive cannot reproduce its own run: the guess decides
         # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin
         # decide what is re-anchored and what is flown.
-        joinpath(skc_data_path(), traj_opt_settings_file(project)), # optimizer guess and knobs
+        joinpath(skc_data_path(), traj_opt_settings_file(project))  # optimizer guess and knobs
     ]
     output_files = [
         joinpath(output_path, log_name * ".arrow"),

@@ -37,5 +37,7 @@ using Test
     include("test_run_log.jl")
     # V5 of oldplans/Plan_model_validation.md: course_loop_model.jl, no simulation.
     include("test_course_loop_model.jl")
+    # Also the examples, which the tests do not run: a syntax error there shows up late otherwise.
+    include("test_parse_files.jl")
 end
 nothing
