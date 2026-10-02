@@ -4,7 +4,8 @@
 """
 Disk-based stability analysis of the course-control loop flown by
 `simple_opt_reelout.jl`, over the full range of tether length, from the
-project's `l_tether` to `reelout_l_max`.
+project's `l_tether` (or the low-wind schedule's at the log's wind speed,
+[`low_wind_schedule`](@ref)) to `reelout_l_max`.
 
 The plant and the controller are those of `stability_fig8.jl`
 (shared in `course_loop_model.jl`): the steering tape as a first-order lag, the
@@ -17,7 +18,9 @@ schedule uses. Four things differ in the reel-out:
 - **The tape's lag.** Off its rate limit it is `1/steering_gain`, the lag of the
   KCU's P controller. On the rate limit it is longer, so the lag is fitted on
   the log instead, once on every
-  on-path sample off the rate limit ([`fit_actuator_lag`](@ref)); the column
+  on-path sample off the rate limit ([`fit_actuator_lag`](@ref), with the lag's
+  exact discretization, so a compressed scenario log reads the same lag as the
+  full one; [`rate_limit_frac`](@ref) does the same for the rate limit); the column
   "bin lag" is each bin's own fit, for diagnosis only. In phase 4 the lag
   is about 0.20 s at 6 m/s wind, the small-signal `1/steering_gain`, with the
   tape rate-limited ~4 % of the time; phase 5 steers harder (about 0.24 s,
@@ -114,6 +117,13 @@ fcs = FC_Settings(fc_settings(project))
 reload_turn_rate_table!(project)
 reload_course_loop_model!(project)
 SET = Settings(project)
+# As the log was flown: the low-wind schedule (`fcs.low_wind`) at the log's wind speed, from its run
+# summary, moves the starting length (the first bin) and `v_app_min` (the gain schedule's floor).
+let summary = joinpath(something(inputs.log_dir, normpath(joinpath(@__DIR__, "..", "output"))),
+                       basename(SET.log_file) * "_opt.yaml")
+    wind = isfile(summary) ? get(get(YAML.load_file(summary), "simulation", Dict()), "wind_speed", nothing) : nothing
+    isnothing(wind) || (apply_windspeed_override!(SET, Float64(wind)); apply_low_wind_schedule!(fcs, nothing, SET))
+end
 Ts = 1 / SET.sample_freq
 
 "Width of a tether-length bin [m]"
@@ -175,31 +185,53 @@ log_dp = Float64.(sl.depower[in_pattern])
 log_elc = Float64.(sl.var_04[in_pattern])
 
 """
+    rate_limit_frac(h) -> Float64
+
+Fraction of `v_steering` above which a log interval of `h` [s] counts as on the tape's
+rate limit. A compressed scenario log keeps every 3rd row, so its rate is the mean over
+three steps and hides a partial saturation: 0.8 there gives the per-bin fractions that
+0.975 gives on the full log, within 0.02 (2026-10-02, Maasvlakte 4 m/s; at 0.975 the
+compressed log read them a quarter low and rated 18 bins as linear instead of 13).
+"""
+rate_limit_frac(h) = h <= 1.5 * Ts ? 0.975 : 0.8
+
+"Whether the log interval `k -> k + 1` is on the tape's rate limit ([`rate_limit_frac`](@ref))"
+function on_rate_limit(sl, k)
+    1 <= k < length(sl.time) || return false
+    h = sl.time[k + 1] - sl.time[k]
+    return abs(Float64(sl.steering[k + 1]) - Float64(sl.steering[k])) / h > rate_limit_frac(h) * SET.v_steering
+end
+
+"""
     fit_actuator_lag(sl, idx) -> NamedTuple
 
 Equivalent first-order lag [s] of the steering tape, `set_steering` ->
-`steering`, least-squares fitted on the log samples `idx`: `ẏ = (u - y)/T`.
-Also returns the fraction of those samples on the tape's rate limit and the
-fit's unexplained variance of `ẏ`.
+`steering`, least-squares fitted on the log samples `idx` with the lag's exact
+discretization, `y[k+1] - y[k] = (1 - exp(-h/T))·(ū - y[k])`, `ū` the input averaged
+over the interval `h`. Also returns the fraction of those samples on the tape's rate
+limit ([`on_rate_limit`](@ref)) and the fit's unexplained variance of the step.
+
+Exact rather than `ẏ = (u - y)/T` on finite differences: at the compressed log's 3x
+sample time those read the 0.1 s lag 50 % long (0.170 s against 0.111 s on the full
+log of the same flight, 2026-10-02); exact, the two read 0.096 s and 0.091 s.
 """
 function fit_actuator_lag(sl, idx)
     idx = filter(k -> k < length(sl.time), idx)
-    u, y, t = Float64.(sl.set_steering), Float64.(sl.steering), sl.time
-    dy = [(y[k + 1] - y[k]) / (t[k + 1] - t[k]) for k in idx]
-    e = [u[k] - y[k] for k in idx]
-    a = sum(dy .* e) / sum(abs2, e)
-    return (; T = 1 / a, rate_limited = count(x -> abs(x) > 0.975 * SET.v_steering, dy) / length(dy),
-            unexplained = sum(abs2, dy .- a .* e) / sum(abs2, dy))
+    u, y = Float64.(sl.set_steering), Float64.(sl.steering)
+    h = median(diff(Float64.(sl.time)))
+    dy = [y[k + 1] - y[k] for k in idx]
+    e = [(u[k] + u[k + 1]) / 2 - y[k] for k in idx]
+    b = sum(dy .* e) / sum(abs2, e)
+    return (; T = b > 0 ? -h / log1p(-min(b, 1 - 1e-9)) : Inf,
+            rate_limited = count(k -> on_rate_limit(sl, k), idx) / length(idx),
+            unexplained = sum(abs2, dy .- b .* e) / sum(abs2, dy))
 end
 
 # The lag is the tape's, not the operating point's: one fit on every on-path sample off the rate
 # limit. A quiet bin's own fit explains little of ẏ and reads the lag high (2026-09-27, Cabauw
-# 10 m/s at 355 m: 2.25 s at 99.8 % unexplained, against 0.09 s in the clean bins).
-off_limit = filter(in_pattern) do k
-    k < length(sl.time) || return false
-    rate = (Float64(sl.steering[k + 1]) - Float64(sl.steering[k])) / (sl.time[k + 1] - sl.time[k])
-    abs(rate) <= 0.975 * SET.v_steering
-end
+# 10 m/s at 355 m: 2.25 s at 99.8 % unexplained, against 0.09 s in the clean bins). The neighbours
+# of an interval on the limit are left out too: in a compressed log they hold part of the saturation.
+off_limit = filter(k -> k < length(sl.time) && !any(j -> on_rate_limit(sl, j), k - 1:k + 1), in_pattern)
 tape_lag = fit_actuator_lag(sl, off_limit)
 
 # Cross-check of the table's dead time + lag: the pure delay identified on settled phase 4 (from 10 s
