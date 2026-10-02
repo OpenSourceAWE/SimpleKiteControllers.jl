@@ -23,7 +23,7 @@ import KiteUtils
         @test fcs.winch.compliance == 0
         # No overrides leave the struct as it was.
         @test apply_overrides!(fcs, Dict{Symbol, Any}(), "fcs_overrides", "FC_Settings",
-                               "fcs").reelout_l_max == 300.0
+                               "fcs").reelout.reelout_l_max == 300.0
         @test_throws ErrorException apply_overrides!(fcs, Dict(:no_such_field => 1),
                                                      "fcs_overrides", "FC_Settings", "fcs")
     end
