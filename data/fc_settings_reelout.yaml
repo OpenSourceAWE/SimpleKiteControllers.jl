@@ -3,7 +3,8 @@
 # A copy of fc_settings.yaml (simple_fig8.jl) with `compliance: 0`: REEL_OUT and
 # V3Kite's FORCE mode both drive the winch, and simple_reelout.jl errors rather
 # than picking one. Every key is a field of `FC_Settings` (src/fc_settings.jl),
-# where each value is explained; a missing key falls back to the struct default,
+# whose docstrings stay on one line, the comments below carry the longer notes;
+# a missing key falls back to the struct default,
 # an unknown key is an error. The plant (sim_time, sample_freq, v_wind,
 # l_tethers) is in the system project's settings file, the winch gains in
 # wc_settings.yaml. Tuning history: docs/fig8_tuning_log.md.
@@ -71,7 +72,7 @@ fc_settings:
   heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
   # 0.7 with the 73° relay sweeps' table (deleted 2026-10-01); x1.084 = 0.76 with the low-elevation
   # table, turn_rate_coeffs.yaml, whose c1 at depower_setpoint is 1.084 x higher, so u_ff stays as tuned (2026-09-29).
-  ff_gain:            0.76     # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off [-]
+  ff_gain:            0.76     # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off, 1 = the law's value [-]
   ff_lead_time:       0.35     # Read the path's course rate this far ahead of Q; ~the dead time [s]
   ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
   ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
@@ -97,7 +98,7 @@ fc_settings:
   entry_cut_margin:   30.0     # Distance from ±180° where chi_set's sign is noise [deg]
 
   # --- guards and metrics ---------------------------------------------------
-  entry_f_min:        350.0    # Force floor of the entry guard, phases 0-2; not wc's f_low [N]
+  entry_f_min:        350.0    # Force floor of the entry guard (guard_lfc), phases 0-2; deliberately not wc's f_low [N]
   first_lap_force_frac: 0.93   # f_high x this in lap 1 AND for the startup solve; 1.0 = no lap-1 de-rating [-]
   v_app_abort:        55.0     # Stop the run above this apparent wind speed      [m/s]
   entry_time:         62.0     # Settle time after park_time before the metrics     [s]

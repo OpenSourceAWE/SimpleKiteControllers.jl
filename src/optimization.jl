@@ -20,7 +20,7 @@ interactive `simple_reelout.jl` run would; only `f8_a` and `f8_b` are overridden
 $(TYPEDFIELDS)
 """
 @with_kw mutable struct OptSettings @deftype Float64
-    "Number of worker processes run in parallel; one simulation each at a time"
+    "Parallel worker processes, one simulation each"
     max_processes::Int64 = 6
     "Lower bound of the pattern width sweep [deg], inclusive"
     min_f8_a = 20.0

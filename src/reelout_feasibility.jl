@@ -78,7 +78,7 @@ Mutable state for the in-air phase-5 margin tracking during a run.
 $(TYPEDFIELDS)
 """
 mutable struct Phase5MarginState
-    "Phase-5 margin of the path currently installed, `NaN` when the table could not serve `depower_final`"
+    "Phase-5 margin of the installed path; `NaN` if not in the table"
     margin::Float64
     "Whether the one warning per run has been spent"
     warned::Bool

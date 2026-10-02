@@ -125,7 +125,7 @@ $(TYPEDFIELDS)
     up_loops::Bool = true
     "Candidates within dmin + branch_tol are disambiguated [deg]"
     branch_tol = 3.0
-    "How much better aligned a candidate must be to take Q [deg]"
+    "Alignment advantage [deg] a candidate needs to take Q"
     branch_hysteresis = 10.0
     "Q may advance this many times the kite's own arc per step [-]"
     q_rate_gain = 2.0
@@ -135,7 +135,7 @@ $(TYPEDFIELDS)
     course_tau = 0.5
     "Arc half-width of the local Q search [deg]"
     search_window = 45.0
-    "Cap on that half-width, as a fraction of the path [-]"
+    "Cap on that half-width, fraction of the path [-]"
     search_window_max_frac = 0.125
     "Cross-track error above which the search goes global [deg]"
     reacquire_dist = 25.0

@@ -14,76 +14,76 @@ $(TYPEDFIELDS)
 @with_kw mutable struct FC_Settings @deftype Float64
     "Steps between VSM aero updates"
     vsm_interval::Int64 = 1
-    "How soft the winch is [-]: divides `winch_len_kp` and `winch_damp`; exactly 0 switches to POSITION mode"
+    "Winch softness [-]: divides the winch gains; 0 = POSITION mode"
     compliance = 0.5
-    "Depower held during the run [-]; sets the operating point of the turn-rate law"
+    "Run depower [-]; the turn-rate law's operating point"
     depower_setpoint = 0.26
-    "Depower [-] held at and above `wind_ramp_high`: `NaN` (the default) keeps `depower_setpoint`"
+    "Depower [-] from `wind_ramp_high`; `NaN` keeps `depower_setpoint`"
     depower_high = NaN
     "Pattern width [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_a`"
     f8_a_high = NaN
     "Pattern height [deg] held from `wind_ramp_high` on; `NaN` keeps `f8_b`"
     f8_b_high = NaN
-    "Wind speed [m/s] up to which `depower_setpoint`, `f8_a` and `f8_b` are flown unchanged"
+    "Wind speed [m/s] below which no `*_high` value is blended in"
     wind_ramp_low = 7.0
-    "Wind speed [m/s] from which the `*_high` values are flown; linear in between"
+    "Wind [m/s] from which `*_high` apply; linear below"
     wind_ramp_high = 10.0
-    "Settling elevation [deg]; currently has NO EFFECT, `settle_wing`'s cache key does not include it"
+    "Settling elevation [deg]; NO EFFECT, not in `settle_wing`'s key"
     elevation = 73.0
-    "Parking phase [s]: zero steering while the init/settling transients decay"
+    "Parking [s]: zero steering while init transients decay"
     park_time = 2.0
-    "Warm-up [s] run inside `init` and discarded (V3Kite's `warmup!`), so transients miss the log; 0 disables"
+    "Unlogged warm-up [s] inside `init` (V3Kite's `warmup!`); 0 = off"
     warmup_time = 2.0
 
     # ---- Force-mode winch, read only when `compliance > 0` and before it scales these #
-    "Low-pass time constant [s] from measured winch force to reference force; not scaled by `compliance`"
+    "Force low-pass [s]; not scaled by `compliance`"
     winch_force_tau = 10.0
-    "Length-trim gain, length error [m] -> reference force [N/m], before `compliance` scaling"
+    "Length-error gain [N/m], before `compliance` scaling"
     winch_len_kp = 100.0
-    "Drum damping, reel-out speed [m/s] -> reference force [N·s/m], before `compliance` scaling; required"
+    "Drum damping [N·s/m], before `compliance`; required"
     winch_damp = 500.0
     "Floor on the reference force, keeps the tether taut [N]"
     winch_force_min = 100.0
 
     # ---- REEL_OUT winch; mutually exclusive with `compliance > 0` ----------- #
-    "Tether length [m] at which reel-out stops and the run holds the final length"
+    "Tether length [m] at which reel-out stops and is held"
     reelout_l_max = 250.0
-    "Figures of eight [-] after which reel-out stops (besides `reelout_l_max`, first wins); 0 disables"
+    "Figures of eight until reel-out stops (or `reelout_l_max`); 0 = off"
     n_fig_eight::Int64 = 0
-    "Depower [-] flown once reel-out stops (phase 5); tuned for `reelout_l_max = 350` at 6 m/s wind"
+    "Phase-5 depower [-]; tuned for 350 m tether, 6 m/s wind"
     depower_final = 0.328
-    "Ceiling [-] of the phase-5 force limiter on `rel_depower`; equal to `depower_final` (default) = off"
+    "Phase-5 force-limiter ceiling [-]; `depower_final` = off"
     depower_final_max = 0.328
-    "Winch force [N] the phase-5 force limiter holds; set below the force criterion by the lobe-to-lobe swing"
+    "Phase-5 limiter force [N]: criterion - lobe swing"
     depower_final_f_target = 7500.0
-    "Integrator gain [1/(N s)] of the phase-5 force limiter"
+    "Integrator gain [1/(N s)], phase-5 force limiter"
     depower_final_f_gain = 2e-5
-    "Integrator gain [1/(N s)] of the phase-5 force limiter during the reel-out soft-stop ramp"
+    "`depower_final_f_gain` during the soft stop"
     depower_final_f_gain_stop = 2e-5
-    "Soft-start time [s]: ramp the commanded reel-out speed up from 0 after reel-out engages; 0 disables"
+    "Ramp-up time [s] of the reel-out speed; 0 = off"
     reelout_softstart = 0.0
-    "Soft-stop trigger [s]: decelerate `v_set` linearly to 0 at `reelout_l_max` once this close; 0 disables"
+    "Soft-stop lead [s]: `v_set` -> 0 at `reelout_l_max`; 0 = off"
     reelout_softstop = 0.0
-    "Delay [s] between the guidance engaging (phase 3) and reel-out starting; 0 starts at phase 3"
+    "Delay [s] from phase 3 to the reel-out start"
     reelout_delay = 0.0
-    "Force [N] that engages reel-out regardless of `reelout_delay` (latching); `Inf` disables"
+    "Latching force [N] that starts reel-out early; `Inf` = off"
     reelout_f_trigger = Inf
-    "Time [s] flown in phase 5 before the run ends; `Inf` flies until the configured run length"
+    "Time [s] in phase 5 before the run ends; `Inf` = full run"
     final_time = Inf
 
     # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
-    "Course commanded during the dive [deg]; |chi| > 90 is descending, negative for the rightmost-point entry"
+    "Dive course [deg]; beyond ±90 descends, < 0: rightmost entry"
     chi_dive = -85.0
-    "Course commanded during the hold [deg]: horizontal, so the kite arrives flat"
+    "Hold course [deg]: horizontal, so the kite arrives flat"
     chi_hold = -90.0
-    "Margin above `el_center` [deg] at which the dive ends and the hold begins"
+    "Dive ends this far above `el_center` [deg]"
     dive_el_margin = 7.0
     "Duration of the hold [s]"
     hold_time = 0.8
-    "Cross-track error [deg] below which phase 3 advances to phase 4 (a log milestone only)"
+    "Cross-track error [deg] for phase 3 -> 4; log only"
     fig8_d_gate = 5.0
 
-    "Body damping settling starts from, per axis; the key [`turn_rate_coeffs`](@ref) is looked up with"
+    "Per-axis damping, [`turn_rate_coeffs`](@ref) key"
     body_damping::Vector{Float64} = [0.0, 0.0, 40.0]
 
     # ---- Pattern geometry [deg]; a SMALLER lemniscate is a TIGHTER one ------ #
@@ -91,102 +91,102 @@ $(TYPEDFIELDS)
     f8_a = 40.0
     "Height of the eight [deg] (elevation spans +-`f8_b`/2)"
     f8_b = 15.0
-    "Pattern-centre elevation [deg]: lower improves the curvature margin but costs energy"
+    "Centre elevation [deg]; lower: more margin, less energy"
     el_center = 26.0
-    "Arc distance Q -> attractor [deg]; the floor of the lead when `attractor_lead_time` is on"
+    "Arc Q -> attractor [deg]; the floor of a timed lead"
     attractor_dist = 10.0
-    "Attractor lead as a time [s], clamped to `[attractor_dist, 2 * attractor_dist]`; 0 = constant arc"
+    "Attractor lead [s], 1-2 × `attractor_dist`; 0 = fixed"
     attractor_lead_time = 0.0
-    "How much closer [deg] the global nearest path point must be than the local one before Q jumps to it"
+    "How much closer [deg] a global point must be for Q to jump"
     reacquire_margin = 3.0
-    "Fly up-loops instead of down-loops (reverses the traversal direction of the path)"
+    "Fly up-loops, not down-loops (reverses the path direction)"
     up_loops::Bool = false
-    "Extra elevation [deg] the path is lifted by from the reel-out stop latch on"
+    "Path lift [deg] from the reel-out stop latch on"
     el_offset_final = 0.0
-    "Minimum phase-5 curvature margin [-]; a path below it is blended back to the last one meeting it; 0 = off"
+    "Min. phase-5 curvature margin [-], else blend back; 0 = off"
     final_margin_min = 0.0
-    "Time [s] before reel-out ends at which the `el_offset_final` lift starts; 0 starts it at the end"
+    "Lead [s] of the `el_offset_final` lift before reel-out ends"
     el_offset_lead = 0.0
-    "Extra elevation [deg] added to the path's lobes only, ramped in over azimuth; 0 = off"
+    "Lobe-only elevation lift [deg], ramped over azimuth; 0 = off"
     el_offset_wing = 0.0
-    "Azimuth beyond which `el_offset_wing` is applied in full [deg]"
+    "Azimuth [deg] beyond which `el_offset_wing` is full"
     el_offset_wing_az = 10.0
-    "Ramp width [deg] of `el_offset_wing` below `el_offset_wing_az`; keep their difference in 0 … 3 deg"
+    "Ramp width [deg] below `el_offset_wing_az`; gap 0-3"
     el_offset_wing_blend = 8.0
-    "Units of `el_offset_wing_az`/`_blend`: azimuth [deg] or azimuth_frac [fraction of path amplitude]"
+    "Wing-offset unit: `azimuth` [deg] or `azimuth_frac`"
     el_offset_wing_mode::String = "azimuth"
 
     # ---- Heading PID; output is rel_steering (-1..1), fed UNNEGATED --------- #
-    "Heading gain at `v_app == v_app_ref` (phase 3); only `heading_p * v_app_ref` is physical"
+    "Gain at `v_app_ref`; only `heading_p * v_app_ref` matters"
     heading_p = 0.1941
-    "Integral time [s], or `false` for no integral action (the default)"
+    "Integral time [s], or `false` for none"
     heading_i::Union{Bool, Float64} = false
     "Derivative time [s], damps the initial transient"
     heading_d = 0.12
-    "Derivative filter: maximum gain N of the D path, `K*Td*s/(1 + s*Td/N)`"
+    "Derivative filter N: `K*Td*s/(1 + s*Td/N)`"
     heading_d_n = 2.0
-    "Apparent wind speed [m/s] flown in phase 3; anchors the 1/v_app gain schedule and attractor lead"
+    "Phase-3 apparent wind [m/s]; anchors gain schedule, lead"
     v_app_ref = 27.0
     "Lower clamp on v_app, limits the gain boost [m/s]"
     v_app_min = 10.0
-    "Lower clamp on v_app [m/s] in the gain schedule from phase 3 on, on top of `v_app_min`; 0 = off"
+    "Extra `v_app` clamp [m/s] from phase 3 on; 0 = off"
     v_app_min_pattern = 0.0
     "Factor on `heading_p` during the entry phases (dive and hold)"
     entry_gain = 0.25
     "Depower [-] held during the entry phases (dive and hold)"
     entry_depower = 0.34
-    "Time [s] over which `rel_depower` ramps to a new phase target; 0 = hard switch"
+    "Ramp time [s] to a new depower target; 0 = hard switch"
     depower_blend_time = 4.0
 
     # ---- Steering feed-forward from the reference path's curvature ---------- #
-    "Gain on the curvature feed-forward `u_ff = psi_dot_path / (c1 * v_app)`; 0 = off, 1 = the law's value"
+    "Gain on `u_ff = psi_dot_path / (c1 * v_app)`; 0 = off"
     ff_gain = 0.0
-    "Flight time [s] ahead of Q at which the feed-forward reads the course rate; ~ the steering dead time"
+    "Feed-forward look-ahead [s] past Q; ~ steering dead time"
     ff_lead_time = 0.45
-    "Arc [deg] over which the path's tangent change is averaged for the feed-forward"
+    "Arc [deg] the feed-forward averages the tangent over"
     ff_smooth = 3.0
-    "Low-pass time constant [s] on the feed-forward steering and its chord correction; 0 = none"
+    "Feed-forward low-pass [s], incl. chord term; 0 = none"
     ff_tau = 0.2
-    "Cross-track error [deg] at which the feed-forward is fully faded out (fading starts at half)"
+    "Cross-track error [deg] of full feed-forward fade-out"
     ff_d_fade = 6.0
-    "Course error [deg] at which the feed-forward is fully faded out (fading starts at half)"
+    "Course error [deg] of full feed-forward fade-out"
     ff_err_fade = 60.0
 
     # ---- Feedback: heading when slow, course when fast, on |vel_kite| ------- #
     "[m/s] at/below: pure heading feedback"
     v_kite_heading = 5.0
-    "[m/s] at/above: pure course feedback; linearly blended in between"
+    "[m/s] at/above: pure course feedback; blended below"
     v_kite_course = 10.0
-    "From phase 3 on, feed back course alone, ignoring the `v_kite_*` schedule; `false` keeps the schedule"
+    "Course-only feedback from phase 3 on, ignoring `v_kite_*`"
     fig8_pure_course::Bool = false
-    "Steering command limit [-]; above ~0.33 the loop, and above 0.375 the plant itself, goes unstable"
+    "Steering limit [-]; unstable above ~0.33 (loop), 0.375 (plant)"
     max_steering = 0.32
 
     # ---- Entry descent limiter, active only while far off the path --------- #
-    "Steepest commanded course while off-path [deg]; 90 = level, above 90 descending, 180 disables"
+    "Steepest off-path course [deg]; 90 = level, 180 = off"
     entry_chi_max = 95.0
     "Cross-track error [deg] below which the limiter is bypassed"
     entry_d_gate = 12.0
-    "Band [deg] above `entry_d_gate` over which limited and raw courses are blended; 0 = hard switch"
+    "Blend band [deg] above `entry_d_gate`; 0 = hard switch"
     entry_d_blend = 4.0
-    "Distance from ±180° [deg] within which `chi_set`'s sign is replaced by the latched tangent sign"
+    "Band around ±180° [deg] using the latched sign"
     entry_cut_margin = 30.0
 
-    "Force floor [N] of the entry guard (`guard_lfc`, phases 0-2); deliberately not `WCSettings.f_low`"
+    "Entry-guard force floor [N], phases 0-2; not `WCSettings.f_low`"
     entry_f_min = 350.0
 
-    "Fraction of `WCSettings.f_high` used as upper force limit during the first lap; 1.0 = off"
+    "First-lap force limit / `WCSettings.f_high`; 1 = off"
     first_lap_force_frac = 1.0
 
     "Abort the run above this apparent wind speed [m/s]"
     v_app_abort = 45.0
 
     # ---- Metrics window ---------------------------------------------------- #
-    "Settle time [s] after `park_time` before the tracking statistics start"
+    "Settle time [s] after `park_time` before statistics"
     entry_time = 52.0
     "Elevation floor criterion [deg], evaluated over the WHOLE run"
     min_elevation = 10.0
-    "Minimum pattern size as fraction of `f8_a` (azimuth reach per side) and `f8_b` (elevation span)"
+    "Min. size, fraction of `f8_a` (per side), `f8_b` (span)"
     min_span_frac = 0.7
 end
 """

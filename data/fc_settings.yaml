@@ -1,7 +1,8 @@
 # Settings of the figure-of-eight flight controller flown by
 # examples/simple_fig8.jl. Loaded into an `FC_Settings` struct via
 # `FC_Settings("fc_settings.yaml")`; every key below is a field of that struct
-# (src/fc_settings.jl), where the full rationale for each value is documented.
+# (src/fc_settings.jl), whose docstrings stay on one line; the comments below
+# carry the longer notes.
 # A missing key falls back to the struct default, an unknown key is an error.
 #
 # The PLANT is not here either: the system project (system_fig8_200m.yaml next to
@@ -72,7 +73,7 @@ fc_settings:
   max_steering:       0.32     # Command limit; raising it is CLOSED, see the log    [-]
 
   # --- steering feed-forward from the path's curvature, phase 4 only --------
-  ff_gain:            1.0      # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off [-]
+  ff_gain:            1.0      # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off, 1 = the law's value [-]
   ff_lead_time:       0.3     # Read the path's course rate this far ahead of Q; ~the dead time [s]
   ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
   ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]

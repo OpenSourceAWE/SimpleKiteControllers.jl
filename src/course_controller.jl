@@ -21,9 +21,9 @@ $(TYPEDFIELDS)
 @with_kw mutable struct CourseControllerSettings @deftype Float64
     "Time step [s]"
     dt
-    "Gain at `v_app == v_app_ref` — see `data/fc_settings.yaml`'s `heading_p`"
+    "Gain at `v_app_ref`; see `fc_settings.yaml`"
     heading_p = 0.1941
-    "Integral time [s], or `false` for no integral action"
+    "Integral time [s], or `false` for none"
     heading_i::Union{Bool, Float64} = false
     "Derivative time [s]"
     heading_d = 0.12
@@ -35,15 +35,15 @@ $(TYPEDFIELDS)
     v_app_ref = 27.0
     "Lower clamp on `v_app`, limits the gain boost [m/s]"
     v_app_min = 10.0
-    "Lower clamp on `v_app` from phase 3 on, on top of `v_app_min` [m/s]; 0 = off"
+    "Extra `v_app` clamp [m/s] from phase 3 on; 0 = off"
     v_app_min_pattern = 0.0
     "Factor on `heading_p` while `phase < 3`"
     entry_gain = 0.25
     "[m/s] at/below: pure heading feedback"
     v_kite_heading = 5.0
-    "[m/s] at/above: pure course feedback; linearly blended in between"
+    "[m/s] at/above: pure course feedback; blended below"
     v_kite_course = 10.0
-    "From `phase >= 3`, feed back course alone and ignore the `v_kite_*` schedule"
+    "Course-only feedback from `phase >= 3`"
     fig8_pure_course::Bool = false
     """
     `SysState.course` has its zero pointing away from zenith; 0 for a source
@@ -52,13 +52,13 @@ $(TYPEDFIELDS)
     course_offset = π
 
     # ---- Entry descent limiter, active only while far off the path --------- #
-    "Steepest commanded course while off-path [deg]; 180 disables the limiter"
+    "Steepest off-path course [deg]; 180 = off"
     entry_chi_max = 95.0
     "Cross-track error [deg] below which the limiter is bypassed"
     entry_d_gate = 12.0
-    "Width of the band [deg] above `entry_d_gate` over which the limited and raw courses are blended"
+    "Blend band [deg] above `entry_d_gate`"
     entry_d_blend = 4.0
-    "How close to ±180° [deg] `chi_set` must be before the latched tangent sign is used instead"
+    "Band around ±180° [deg] using the latched sign"
     entry_cut_margin = 30.0
 
     # ---- Open-loop entry: overrides the guidance for the dive and the hold - #
@@ -68,11 +68,11 @@ $(TYPEDFIELDS)
     chi_hold = -90.0
 
     # ---- Entry state machine: park -> dive -> hold -> transition ----------- #
-    "Parking phase [s]: hold zero steering while settling transients decay"
+    "Parking [s]: zero steering while transients decay"
     park_time = 2.0
     "Duration of the hold [s]"
     hold_time = 0.8
-    "Margin above `el_center` [deg] at which the dive ends and the hold begins"
+    "Dive ends this far above `el_center` [deg]"
     dive_el_margin = 7.0
     "Pattern-centre elevation [deg], the ladder's 1->2 threshold"
     el_center = 26.0
@@ -87,7 +87,7 @@ $(TYPEDFIELDS)
     depower_setpoint = 0.26
     "Depower held during the ENTRY phases (dive and hold) [-]"
     entry_depower = 0.34
-    "Depower flown once phase 5 (\"final\", reel-out finished) is reached [-]"
+    "Depower [-] flown in phase 5 (reel-out done)"
     depower_final = 0.328
     """
     Seconds over which `rel_depower` ramps to a new phase-ladder target
@@ -126,8 +126,17 @@ end
     CourseController(ccs::CourseControllerSettings)
 
 Stateful inner loop of the figure-of-eight flight controller: holds the
-heading/course PID and the entry state machine (0 park, 1 dive, 2 hold,
-3 transition, 4 fig8; 5 "final" is set from outside — see [`set_phase!`](@ref)).
+heading/course PID and the entry state machine.
+
+**Entry state machine** (0 park, 1 dive, 2 hold, 3 transition, 4 fig8),
+advanced at the start of each [`calc_steering`](@ref) call, never backwards:
+park -> dive at `t >= ccs.park_time`, dive -> hold at
+`elevation <= ccs.el_center + ccs.dive_el_margin`, hold -> transition
+`ccs.hold_time` later, transition -> fig8 at `dmin < ccs.fig8_d_gate`. Phase 5
+("final") is winch-triggered and set from outside with [`set_phase!`](@ref);
+this ladder never reaches it on its own.
+
+The fields from `chi_cmd` on hold values of the last `calc_steering` call.
 
 # Fields
 
@@ -144,7 +153,7 @@ mutable struct CourseController
     hold_start::Float64
     "Latched sign of the entry descent limiter at the ±180° cut; 0 = unset"
     entry_sign::Int
-    "[rad] course actually commanded (post-limiter, post-override) of the last `calc_steering` call"
+    "[rad] commanded course (post-limiter, post-override)"
     chi_cmd::Float64
     "[-] descent-limiter blend weight of the last `calc_steering` call"
     w_lim::Float64
@@ -154,13 +163,13 @@ mutable struct CourseController
     w_course::Float64
     "[rad] regulated error (`psi_prime - chi_cmd`) of the last `calc_steering` call"
     err::Float64
-    "Phase-ladder depower TARGET of the last `calc_steering` call, `NaN` before the first one"
+    "Phase-ladder depower target, `NaN` before the first call"
     depower_target::Float64
     "[-] depower value the current blend started from"
     depower_from::Float64
     "[s] sim time the current depower blend started"
     depower_t0::Float64
-    "[-] rel_depower actually commanded (post-blend) of the last `calc_steering` call"
+    "[-] `rel_depower` commanded (post-blend)"
     depower_cmd::Float64
     "[-] feed-forward steering added to the PID output in the last `calc_steering` call"
     u_ff::Float64
@@ -203,12 +212,8 @@ cross-track error] also come from `SysState`/the guidance, and `tangent`
 `tangent` as scalars, so the controller never sees a `FigureEightController`.
 `t` is the sim time [s].
 
-**Entry state machine** (0 park, 1 dive, 2 hold, 3 transition, 4 fig8),
-advanced first, never backwards: park -> dive at `t >= ccs.park_time`, dive ->
-hold at `elevation <= ccs.el_center + ccs.dive_el_margin`, hold -> transition
-`ccs.hold_time` later, transition -> fig8 at `dmin < ccs.fig8_d_gate`. Phase 5
-("final") is winch-triggered and set from outside with [`set_phase!`](@ref);
-this ladder never reaches it on its own.
+It first advances the entry state machine (`cc.phase`, see
+[`CourseController`](@ref)), whose phase drives everything below.
 
 `chi_set` then passes the descent limiter — active only while `dmin` is above
 `ccs.entry_d_gate`, clamping steepness to `ccs.entry_chi_max` with the sign
@@ -217,9 +222,11 @@ open-loop override for `phase in (1, 2)` (`ccs.chi_dive`/`ccs.chi_hold`,
 constant regardless of guidance). The result becomes the feedback loop's
 reference `chi_cmd`.
 
-The feedback angle ψ' blends `heading` and `course` by `v_kite` [m/s] between
-`ccs.v_kite_heading` (pure heading) and `ccs.v_kite_course` (pure course);
-`ccs.fig8_pure_course` forces pure course from `phase >= 3`. The gain is
+The PID regulates `err = ψ' - chi_cmd`, where the feedback angle
+`ψ' = heading + w_course * (course - heading)` blends `heading` and `course`,
+with `w_course` going from 0 at `ccs.v_kite_heading` to 1 at
+`ccs.v_kite_course` by `v_kite` [m/s]; `ccs.fig8_pure_course` forces
+`w_course = 1` from `phase >= 3`. The gain is
 scheduled by `v_app` [m/s] as `K = heading_p * v_app_ref / max(v_app, v_app_min)`
 (from phase 3 on also floored at `v_app_min_pattern`),
 by phase (`entry_gain` below 3, full gain from 3), and by `gain_scale` (default
@@ -227,7 +234,9 @@ by phase (`entry_gain` below 3, full gain from 3), and by `gain_scale` (default
 the turn-rate gain `c1` moving with the depower actually flown, when that is
 not `ccs.depower_setpoint` the loop was tuned at; the PID output is
 bypassed to `0.0` at `phase == 0` (park), though it is still stepped so
-engagement stays bumpless. `u_ff` [-] is a feed-forward steering (the path's
+engagement stays bumpless. 
+
+`u_ff` [-] is a feed-forward steering (the path's
 own curvature through the turn-rate law, see `FC_Settings.ff_gain`) added to
 the PID's output from `phase >= 4` on (the transition flies the descent limiter, off the path where the curvature means nothing) and clamped with it to `max_steering`;
 the PID itself never sees it. `chi_ff` [rad] is subtracted from the commanded

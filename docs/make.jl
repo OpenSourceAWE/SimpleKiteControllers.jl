@@ -23,6 +23,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Settings" => "settings.md",
         "Examples - general" => "examples_general.md",
         "Examples - identification" => "examples_identification.md",
         "Examples - figure-of-eight" => "examples_fig8.md",

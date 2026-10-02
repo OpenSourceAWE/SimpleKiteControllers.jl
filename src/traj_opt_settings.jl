@@ -46,7 +46,7 @@ $(TYPEDFIELDS)
     # ---- The initial guess the solve starts from ------------------------- #
     "Width of the guess lemniscate; azimuth spans ±`guess_a` [deg]"
     guess_a = 30.0
-    "Height of the guess lemniscate; elevation spans `guess_b` peak to peak [deg]"
+    "Guess height; elevation spans `guess_b` peak to peak [deg]"
     guess_b = 12.0
     "Centre elevation of the guess [deg]"
     guess_el_center = 26.0
@@ -615,7 +615,7 @@ $(TYPEDFIELDS)
     is where a path swap is cheapest, and never while a solve is still running.
     """
     reopt_every_n_laps::Int64 = 2
-    "Maximum re-optimizations per run; a bound on both wall time and surprise"
+    "Max re-optimizations per run; bounds wall time"
     max_reopt::Int64 = 4
     """
     Seconds over which a new path replaces the old one ([`blend_paths`](@ref)).

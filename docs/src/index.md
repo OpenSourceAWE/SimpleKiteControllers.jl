@@ -41,6 +41,8 @@ Planned:
 The examples are described on four pages: [general](examples_general.md), [identification](examples_identification.md),
 [figure-of-eight](examples_fig8.md) and [reel-out](examples_reelout.md);
 and the docstrings of all exported types and functions are on the [API](api/index.md) page.
+The YAML files that make up a run, and how a system project ties them together, are
+explained on the [Settings](settings.md) page.
 
 ## Further documentation
 
