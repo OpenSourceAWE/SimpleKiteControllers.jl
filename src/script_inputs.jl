@@ -20,7 +20,8 @@ const SCRIPT_INPUTS = Ref{Any}(nothing)
 `include` the example script `file` (relative to the package's `examples/`, or
 absolute) into `Main` with the keyword `inputs`, which the script reads with
 [`script_inputs`](@ref); a plain `include` of the same script runs with its
-defaults. Returns what the `include` returns.
+defaults. Returns what the `include` returns. A script started this way may itself
+`run_example` another one before it reads its own inputs: they are restored afterwards.
 
     run_example("simple_opt_reelout.jl"; show_plots = false,
                 tos_overrides = Dict{Symbol, Any}(:reopt_enabled => false))
@@ -28,11 +29,12 @@ defaults. Returns what the `include` returns.
 function run_example(file::AbstractString; inputs...)
     path = abspath(isabspath(file) ? file : joinpath(dirname(@__DIR__), "examples", file))
     isfile(path) || error("run_example: no script $path")
+    outer = SCRIPT_INPUTS[]
     SCRIPT_INPUTS[] = (; file = path, inputs = NamedTuple(inputs))
     try
         return Base.include(Main, path)
     finally
-        SCRIPT_INPUTS[] = nothing
+        SCRIPT_INPUTS[] = outer
     end
 end
 

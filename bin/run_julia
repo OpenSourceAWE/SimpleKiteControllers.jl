@@ -24,9 +24,10 @@ else
     GCT=""
 fi
 
-# Without arguments an interactive session starts with menu() defined, which
-# brings up examples/menu.jl. With arguments they are passed to julia unchanged.
-julia_init='function menu(); include("examples/menu.jl"); end'
+# Without arguments an interactive session starts with menu() and menu2() defined,
+# which bring up examples/menu.jl and the identification menu examples/menu2.jl.
+# With arguments they are passed to julia unchanged.
+julia_init='function menu(); include("examples/menu.jl"); end; function menu2(); include("examples/menu2.jl"); end'
 
 if [[ $# -gt 0 ]]; then
     JULIA_ARGS=("$@")

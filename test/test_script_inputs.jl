@@ -33,5 +33,10 @@ using SimpleKiteControllers
     # Another script than the one run_example was called on gets its defaults.
     @test script_inputs(joinpath(dir, "other.jl"), (; a = 5)) == (; a = 5)
     @test_throws ErrorException run_example(joinpath(dir, "missing.jl"))
+    # A script that runs another one before reading its own inputs still gets them.
+    outer = joinpath(dir, "outer.jl")
+    write(outer, "run_example(\"$script\"; a = 7)\nscript_inputs(@__FILE__, (; x = 0))\n")
+    @test run_example(outer; x = 2) == (; x = 2)
+    @test Base.include(Main, script) == (; a = 1, b = "two")
 end
 nothing

@@ -86,7 +86,7 @@ fc_settings:
     el_offset_wing_mode: "azimuth"  # azimuth (deg) | azimuth_frac (of the path's own A)
 
   run:  # simulation conditions and pass criteria
-    vsm_interval:       10       # Steps between VSM aero updates, 1 = tightest        [-]
+    vsm_interval:       5        # Steps between VSM aero updates, 1 = tightest; at 10 the identification flights sink at depower 0.375 (2026-10-02) [-]
     elevation:          73.0     # Where init settles the kite; in the settled-state cache key [deg]
     warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
     body_damping:       [0.0, 0.0, 40.0]  # Per axis; the turn_rate_coeffs key (settles to 0.8x)

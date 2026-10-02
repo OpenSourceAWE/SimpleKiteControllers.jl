@@ -60,7 +60,7 @@ csv_header = ["time", "heading", "band_center", "elevation", "set_steering", "st
 
 if !from_csv
     # `_fly_relay`, `_fit_window`, `FLIGHT_SETTINGS`, `DT`.
-    include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
+    run_example("build_turn_rate_table.jl"; identify = false)
     # The middle flight of `FLIGHT_SETTINGS`, which flies the full time at every depower
     # from 0.25 to 0.325 (2026-09-29).
     (; a, az_reverse, el_hold_tilt) = FLIGHT_SETTINGS[2]

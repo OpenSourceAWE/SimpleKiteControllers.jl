@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Fill `data/turn_rate_coeffs.yaml` with the depower cells this package needs, so
+Fill the turn-rate table of the selected project (`select_project()`; the table is
+the project's `turn_rate_coeffs` file) with the depower cells this package needs, so
 [`turn_rate_coeffs`](@ref) can interpolate instead of throwing. The turn-rate law is
 identified LOW in the wind window, where the kite flies its patterns: per depower,
 one relay flight per entry of `FLIGHT_SETTINGS`, each at a fixed steering amplitude
@@ -17,28 +18,35 @@ hold `EL_HOLD`: a lazy-eight-like pattern at `v_a` ≈ 20 – 50 m/s (depower 0.
 `v_a` ≈ 11 – 16 m/s; their table and its fixed-`c3` variant were deleted on
 2026-10-01.
 
-It flies THIS package's project: the identification must see the same plant the
-runs do — same wing mass, tether diameter and KCU rate limits — or it identifies a
-kite nobody flies.
+It flies the selected project of THIS package: the identification must see the same
+plant the runs do — same wing mass, tether diameter and KCU rate limits — or it
+identifies a kite nobody flies. It flies the project's time step (`1/sample_freq`)
+and VSM interval (`run.vsm_interval` of its `fc_settings`) too. The table's
+`conditions:` must name that project (`system`) and time step (`dt`); for a new kite,
+copy the table, name the copy in the kite's project and set both before the first
+run.
 
 Writes incrementally: after every depower the whole file is re-read, that cell's
 row inserted or replaced, and the file rewritten, so a diverged run costs one cell
-and not the grid. `remake = false` (the default) skips a cell whose row already
-passed at the table's current `conditions`, and `_write_turn_rate_entry!`
-separately refuses to let a failed re-run demote a row that passed. Once this
+and not the grid. `remake = true` (the default) re-identifies every cell;
+`remake = false` skips a cell whose row already passed at the table's current
+`conditions`, and `_write_turn_rate_entry!` then refuses to let a failed re-run
+demote a row that passed. Once this
 script has written to the YAML its formatting is `YAML.write_file`'s, not the
 hand-authored layout.
 
-`include` only loads the definitions — this script is called repeatedly with
-different arguments rather than once with fixed ones. Call it yourself:
+Running the script re-identifies the whole grid. The inputs `remake` and `depowers`
+are passed with `run_example` (`src/script_inputs.jl`); `identify = false` only loads
+the definitions, which is how the plotting scripts that fly the same flights use it:
 
-    build_turn_rate_table()                       # the whole grid
-    build_turn_rate_table(depowers = [0.30])      # one cell
-    build_turn_rate_table(remake = true)          # re-identify every cell
+    include("examples/build_turn_rate_table.jl")                                # every cell
+    run_example("build_turn_rate_table.jl"; depowers = [0.30])                  # one cell
+    run_example("build_turn_rate_table.jl"; remake = false)                     # only missing or failed cells
+    run_example("build_turn_rate_table.jl"; identify = false)                   # definitions only
 
-Expect about 5 – 10 minutes per depower and a settling-cache miss on every new
-depower. Expect some cells to fail too: at depower 0.40 no flight stayed airborne
-(2026-09-29). Afterwards the table is reloaded into the running session, so
+The whole grid took about 12 minutes (six depowers, 1/90 s time step, VSM interval 10,
+2026-10-02), with a settling-cache miss on every new depower. The grid ends at 0.375: at 0.40 no
+flight stayed airborne (2026-09-29 and 2026-10-02). Afterwards the table is reloaded into the running session, so
 `test/test_fig8_controller.jl` can be re-run without restarting.
 """
 
@@ -51,6 +59,7 @@ using V3Kite
 using V3Kite: init, step!
 using SimpleKiteControllers
 using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using SimpleKiteControllers: run_example, script_inputs
 using WinchControllers: WCSettings, WinchPosController
 import KiteUtils   # for KiteUtils.syslog; V3Kite does not re-export it
 using YAML
@@ -69,19 +78,30 @@ include(joinpath(@__DIR__, "winch_adapter.jl"))
 # Only the depower varies across the grid. These must agree with the file's
 # `conditions:` block, which `_check_conditions` enforces.
 #
+# The project flown is not one of them: it is the menu's selection, see `sweep_project`.
+# The time step and the VSM interval come from it, see `DT`.
+#
 # `SWEEP_`-prefixed where every run script assigns the bare name as a plain
 # global (`PROJECT`, `SIM_TIME`, `AERO_MODE`): this file is meant to be included
 # into the SAME session those scripts run in (its docstring: the table is reloaded
 # there afterwards), and a `const` of the same name makes their next `include`
 # die on "invalid assignment to constant" (2026-09-18, simple_opt_reelout.jl).
 
-const SWEEP_PROJECT    = project_file("system_reelout_maasvlakte.yaml")
+# The project flown: the example menu's selection (`select_project()`), read when it is
+# needed, so a project with its own kite is identified on its own plant.
+sweep_project() = project_file(selected_project())
+# The turn-rate table that project names.
+out_file() = turn_rate_coeffs_file(sweep_project())
+
 const V_WIND           = 9.51
 const TETHER_LENGTH    = 150.0
-const DT               = 0.05 / 3
 const SWEEP_SIM_TIME   = 200.0
 const SWEEP_AERO_MODE  = ContinuousAero()
-const VSM_INTERVAL     = 5
+# The time step [s] and the VSM update interval of the selected project's runs, read when
+# this file is included: the flights must see the plant the runs fly, and the dead time and
+# lag are fitted on this grid. The table's `conditions: dt` must agree.
+const DT               = 1 / KiteUtils.Settings(sweep_project()).sample_freq
+const VSM_INTERVAL     = FC_Settings(fc_settings(sweep_project())).run.vsm_interval
 
 # Settling starts at the first and decays to the second, which is what the flights
 # are FLOWN at — the same pair every run here uses (`0.8 .* fcs.run.body_damping`).
@@ -119,7 +139,9 @@ const DELAY_BLOCK_TMAX = 3.0
 # [s] length of the blocks the standard errors of a row are taken over (`block_standard_errors`).
 const BLOCK_LENGTH     = 20.0
 
-const OUT_FILE = "turn_rate_coeffs.yaml"
+# The grid the reel-out run needs, see `build_turn_rate_table`. Not 0.40: no flight stays
+# airborne there.
+const TABLE_DEPOWERS = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375]
 
 """
     _check_conditions(dict)
@@ -129,13 +151,13 @@ script's constants. A row written under conditions the block does not describe
 is unusable data that looks like data.
 """
 function _check_conditions(dict)
-    want = Dict{String, Any}("system" => basename(SWEEP_PROJECT), "v_wind" => V_WIND,
+    want = Dict{String, Any}("system" => basename(sweep_project()), "v_wind" => V_WIND,
                 "l_tether" => TETHER_LENGTH, "elevation" => START_ELEVATION, "dt" => DT)
     for (k, v) in want
         have = get(dict["conditions"], k, missing)
         isapprox_ok = have isa Real && v isa Real ? isapprox(have, v; rtol = 1e-4) : have == v
         isapprox_ok || error("build_turn_rate_table: conditions[$k] is $have, this script " *
-                             "flies at $v. Update the conditions block of data/$OUT_FILE " *
+                             "flies at $v. Update the conditions block of data/$(out_file()) " *
                              "(or this script) before writing rows against it.")
     end
 end
@@ -173,7 +195,7 @@ function _fly_relay(depower, a; az_reverse::Real, el_hold_tilt::Real, v_wind::Re
     s = init(v_wind, TETHER_LENGTH; body_start_damping = BODY_START_DAMPING,
         body_sim_damping = BODY_SIM_DAMPING, elevation,
         depower_setpoint = depower, sim_time = SWEEP_SIM_TIME, dt = DT,
-        system_yaml = SWEEP_PROJECT, aero_mode = SWEEP_AERO_MODE, remake_model = false)
+        system_yaml = sweep_project(), aero_mode = SWEEP_AERO_MODE, remake_model = false)
 
     l_set = s.sys_state.l_tether[1]
     wpc = WinchPosController(WCSettings(true; dt = s.dt); dt = s.dt)
@@ -402,11 +424,11 @@ function _write_turn_rate_entry!(path, entry::Dict; remake::Bool = false)
 end
 
 """
-    build_turn_rate_table(; depowers, remake=false) -> Vector{NamedTuple}
+    build_turn_rate_table(; depowers = TABLE_DEPOWERS, remake = true) -> Vector{NamedTuple}
 
-Identify every depower in `depowers` that is not already a passing row in
-`data/turn_rate_coeffs.yaml` (`_fly_low_flights`), writing each result as it
-completes and reloading the table at the end. See this file's docstring for the
+Identify every depower in `depowers` (`_fly_low_flights`); with `remake = false` only
+those that are not already a passing row of the table. Each result is written as it
+completes, and the table is reloaded at the end. See this file's docstring for the
 resume behaviour and wall-time.
 
 `depowers` defaults to the grid the reel-out run needs: it brackets the flown
@@ -423,9 +445,9 @@ windows, the residual RMS [rad/s] with and without the lag, `n_runs` (the
 flights fitted) and `n_flights`, and the standard errors `*_se` of
 `block_standard_errors`.
 """
-function build_turn_rate_table(; depowers = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40],
-                               remake::Bool = false)
-    path = joinpath(skc_data_path(), OUT_FILE)
+function build_turn_rate_table(; depowers = TABLE_DEPOWERS, remake::Bool = true)
+    @info "build_turn_rate_table: project $(basename(sweep_project())), table data/$(out_file())."
+    path = joinpath(skc_data_path(), out_file())
     _check_conditions(YAML.load_file(path))
 
     results = NamedTuple[]
@@ -484,5 +506,7 @@ function build_turn_rate_table(; depowers = [0.25, 0.275, 0.30, 0.325, 0.35, 0.3
     return results
 end
 
-@info "build_turn_rate_table.jl: definitions loaded -- call build_turn_rate_table() " *
-      "yourself (see this file's docstring for the full-grid vs. single-cell forms)."
+# The caller's inputs (`run_example`); a plain `include` re-identifies every cell.
+(; identify, remake, depowers) =
+    script_inputs(@__FILE__, (; identify = true, remake = true, depowers = TABLE_DEPOWERS))
+identify && build_turn_rate_table(; depowers, remake)

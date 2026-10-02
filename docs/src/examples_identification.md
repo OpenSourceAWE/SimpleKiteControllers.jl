@@ -6,7 +6,9 @@ and the elevation `β`, and the dead time and lag between the commanded steering
 rate. The scripts on this page identify these coefficients from simulated flights of the V3 kite,
 and check the linear course-loop model used by the stability analyses against flown logs.
 How to install and start the examples is described on
-[Examples - general](examples_general.md).
+[Examples - general](examples_general.md). `menu2()`, in a REPL started with `bin/run_julia`,
+offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl` and
+`identify_kite_delay_scaling.jl`.
 
 ## Turn-rate law
 
@@ -16,24 +18,27 @@ each depower it flies three relay flights low in the wind window, at fixed steer
 each flight relays about a crosswind heading, reverses at a given azimuth and holds an elevation
 of about 30°, so the kite flies a lazy-eight-like pattern at 20 – 50 m/s of apparent wind, as in
 its figures of eight. The turn-rate law, dead time and lag are fitted on the steady flights
-together. It flies this package's project, so the identification sees the same plant the runs
-do, and it rewrites the file after every depower, so a diverged run costs only one cell.
+together. It flies the selected project, so the identification sees the same plant the runs
+do, and it rewrites the file after every depower, so a diverged run costs only one cell. Running
+the script re-identifies every depower; `run_example("build_turn_rate_table.jl"; remake = false)`
+flies only the missing or failed ones.
+
+### [`identify_kite_delay_scaling.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_kite_delay_scaling.jl)
+Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower and two or more
+wind speeds, fits how the kite's dead time and lag scale with the apparent wind speed,
+`x ∝ v_a^-exp`, and writes the two exponents, with their provenance, into the course-loop model
+file of the selected project.
 
 ### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
-Plots `c1` and the steering delay, split into dead time and lag, against the depower with error
-bars, one figure per `body_damping` in the table.
+Plots the turn-rate table: `c1`, `c2`, the dead time and the lag against the depower with error
+bars, one figure per `body_damping`. It writes the paper's figure of the turn-rate law,
+`turn_rate_low_pattern.pdf`.
 
 ### [`plot_turn_rate_identification.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_turn_rate_identification.jl)
 Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower, without writing
 the table, and compares the fit with the table's row and with an extended law. Each flight is
 fitted on its own and all steady flights together, and turn rate, apparent wind speed, kite speed
 and elevation are plotted over time.
-
-### [`plot_turn_rate_vs_depower.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_turn_rate_vs_depower.jl)
-Runs the low-elevation identification of `plot_turn_rate_identification.jl` at every depower of
-the table and plots `c1`, `c2`, the dead time and the lag over the depower with error bars. The
-fits are saved to `output/turn_rate_low_flights.csv` after every depower, so the plot can be
-redrawn without flying again.
 
 ### [`plot_relay_low_elevation.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_relay_low_elevation.jl)
 Draws the relay excitation of one low-elevation identification flight as a figure for the paper:
@@ -53,21 +58,22 @@ project, so a changed kite can get its own copies:
 After a change of the kite (mass, geometry, bridle, damping, aerodynamics), copy both files
 under new names, enter the new names in the `system:` section of the kite's project, select
 that project and re-identify in the order below; each step uses the results of the steps
-before it. Update the comment above each value in `course_loop_model.yaml` with where the new
-value came from. The steering tape's lag needs no identification: it is `1/steering_gain`
-of the KCU's P controller, from the project's settings file. Only the first step has a script that writes its file; for the others the
-scripts fly and measure, and the fit is done in the REPL.
+before it. The steering tape's lag needs no identification: it is `1/steering_gain` of the
+KCU's P controller, from the project's settings file. Steps 1 and 2 have scripts that write
+their files. For the others the scripts fly and measure, the fit is done in the REPL, and
+the comment above each new value in `course_loop_model.yaml` has to say where it came from.
 
-1. **The turn-rate law.** Run `build_turn_rate_table(remake = true)` from
-   `build_turn_rate_table.jl`; it rewrites the turn-rate table of the selected project. Check
+1. **The turn-rate law.** Set `conditions: system` in the copied turn-rate table to the
+   kite's project and `conditions: dt` to its time step (`1/sample_freq`), then run `build_turn_rate_table.jl`; it flies the selected project,
+   re-identifies every depower and rewrites the turn-rate table the project names. Check
    the result with `plot_c1_c2.jl`.
 
 2. **`kite_dead_time_exp` and `kite_lag_exp`**, how the kite's dead time and lag scale with
-   the apparent wind speed. Run `plot_turn_rate_identification.jl` at one depower and two
-   wind speeds, for example `run_example("plot_turn_rate_identification.jl"; v_wind = 6.5)`
-   and the same at the table's wind speed. It prints the joint dead time `τ` and lag `T`
-   of each run and the apparent wind speed `v_a` the flights flew at. Then
-   `exp = log(x₁/x₂) / log(v_a₂/v_a₁)` for `x` = `τ` and `x` = `T`.
+   the apparent wind speed. Run `identify_kite_delay_scaling.jl`: it flies the flights of
+   step 1 at depower 0.275 and two wind speeds (6.5 and 9.51 m/s), fits `x ∝ v_a^-exp` to the
+   joint dead time `τ` and lag `T` of each, and writes both exponents and their provenance
+   into the course-loop model file. `run_example("identify_kite_delay_scaling.jl"; save = false)`
+   only prints them.
 
 3. **The pattern law** (`pattern_delay_ref`, `pattern_v_ref`, `pattern_delay_exp`,
    `pattern_v_floor`), the kite's response time `τ + T` in pattern flight. Fly

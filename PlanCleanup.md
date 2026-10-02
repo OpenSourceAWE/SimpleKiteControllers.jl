@@ -61,8 +61,6 @@ Move both into `examples/viewer_replay.jl` with these as keywords; the
 - The `trim(x) = x[dmax + 1:end]` closure is still in V3Kite's `joint_delay_lag_fit`
   and `plot_turn_rate_identification.jl` for the shifted
   inputs `us = reduce(vcat, [trim(shift_delay(u, d)) for u in ufs])`.
-- `col` is defined in `plot_relay_low_elevation.jl` and `plot_turn_rate_vs_depower.jl`
-  (check whether they really do the same thing).
 - `verdict` is in `stability_global.jl` and `validate_margins.jl` (likely different
   semantics; check before merging).
 

@@ -134,6 +134,10 @@ These files are not run on their own; the examples on the other pages `include` 
 Defines `menu()`, the interactive menu shown above. The chosen script is `include`d, so it runs
 exactly as it would by hand.
 
+### [`menu2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/menu2.jl)
+Defines `menu2()`, the menu for the model identification: the project selection,
+`build_turn_rate_table.jl` and `plot_c1_c2.jl`, see [Examples - identification](examples_identification.md).
+
 ### [`model_setup.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/model_setup.jl)
 The model side of the runs, which the package cannot hold because it does not depend on V3Kite:
 `init_model` initializes the V3 model at the project's wind and tether length and settles it,

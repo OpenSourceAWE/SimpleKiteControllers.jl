@@ -27,7 +27,8 @@ The turn-rate panel shows the measured rate, `calc_turn_rate(sl; source =
 :heading)`, and the joint model, which starts where the flight's fit window does.
 The elevation panel carries `MAX_ELEVATION`.
 
-About two to three minutes per flight. The inputs `depower`, `v_wind` (the wind speed,
+Under a minute per flight (the 18 flights of `build_turn_rate_table.jl` took about
+12 minutes, 2026-10-02). The inputs `depower`, `v_wind` (the wind speed,
 default the table's `V_WIND`) and `v_reelout` (the reel-out speed, default 0) are
 passed with `run_example` (`src/script_inputs.jl`):
 
@@ -45,11 +46,10 @@ using MakieControlPlots
 using LaTeXStrings
 using LinearAlgebra: norm
 using Statistics: median, var
-using DelimitedFiles: writedlm
 
-# `_fly_low_flights`, the fixed conditions of the flights, `OUT_FILE` and `_entry_key`.
-include(joinpath(@__DIR__, "build_turn_rate_table.jl"))
 using SimpleKiteControllers: run_example, script_inputs
+# `_fly_low_flights`, the fixed conditions of the flights, `out_file` and `_entry_key`.
+run_example("build_turn_rate_table.jl"; identify = false)
 
 # ==================== USER PARAMETERS ==================== #
 
@@ -58,17 +58,13 @@ using SimpleKiteControllers: run_example, script_inputs
 # v_a 13 – 36 m/s, 39 % of it below 20 m/s where V3 found the law too fast; at 5.0 it drifts out
 # of the window (2026-09-29). `v_reelout` [m/s]: reel-out speed of the flights from T_START on, up
 # to REELOUT_L_MAX; 0 holds the length. `show_plots`, `fit_laws`: plots, and the comparison of the
-# current law with the extended law (~1 – 2 min); `plot_turn_rate_vs_depower.jl` switches both
-# off. `windows_dir`: where the fit windows are saved, see below.
-(; depower, v_wind, v_reelout, show_plots, fit_laws, windows_dir) =
+# current law with the extended law (~1 – 2 min).
+(; depower, v_wind, v_reelout, show_plots, fit_laws) =
     script_inputs(@__FILE__, (; depower = 0.275, v_wind = V_WIND, v_reelout = 0.0,
-                               show_plots = true, fit_laws = true, windows_dir = nothing))
+                               show_plots = true, fit_laws = true))
 depower, v_wind, v_reelout = Float64(depower), Float64(v_wind), Float64(v_reelout)
 
 # ==================== JOINT FIT ========================== #
-
-# `joint_delay_lag_fit` is in V3Kite, so `plot_turn_rate_vs_depower.jl` can refit
-# saved fit windows without flying.
 
 "The model's turn rate [°/s] of `fit`'s window for the delay-lag fit `dl`"
 model_rate(fit, dl, d = round(Int, dl.dead_time / DT + 0.5)) =
@@ -149,31 +145,14 @@ end
 # ======================== FLIGHTS ======================== #
 
 # The table's row for this cell, if any, to compare with.
-row = let entries = YAML.load_file(joinpath(skc_data_path(), OUT_FILE))["entries"]
+row = let entries = YAML.load_file(joinpath(skc_data_path(), out_file()))["entries"]
     k = findfirst(e -> _entry_key(e) == (BODY_START_DAMPING, depower), entries)
     isnothing(k) ? nothing : entries[k]
 end
-isnothing(row) && @warn "No row for depower $depower in $OUT_FILE: nothing to compare with."
+isnothing(row) && @warn "No row for depower $depower in $(out_file()): nothing to compare with."
 
 (; flights, joint_flights, joint) = _fly_low_flights(depower; v_wind, v_reelout)
 isnothing(joint) && error("No flight came below MAX_ELEVATION; nothing to fit.")
-
-# The fit windows of the steady flights, one row per sample, for refitting without flying
-# (`plot_turn_rate_vs_depower.jl`, `from_raw`). Only when the caller passes `windows_dir`.
-if !isnothing(windows_dir)
-    mkpath(windows_dir)
-    let file = joinpath(windows_dir, @sprintf("depower_%.3f.csv", depower))
-        open(file, "w") do io
-            writedlm(io, permutedims(["flight", "amplitude", "time", "us", "rate", "v_app", "psi", "beta"]), ',')
-            for (i, f) in enumerate(joint_flights)
-                n = length(f.fit.time)
-                writedlm(io, hcat(fill(i, n), fill(f.a, n), f.fit.time, f.fit.us, f.fit.rate,
-                                  f.fit.v_app, f.fit.psi, f.fit.beta), ',')
-            end
-        end
-        @info "Saved the fit windows to $file."
-    end
-end
 
 # ======================== REPORT ========================= #
 

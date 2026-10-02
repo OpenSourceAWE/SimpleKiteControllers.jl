@@ -2,16 +2,14 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Plot the turn-rate-law coefficient `c1` and the steering `delay`,
-together with its split into `dead_time` and `kite_lag`, against relative
-depower `u_d`, with error bars, one figure per `body_damping`
-present in the table — the quantities are only comparable across rows
-swept at the same damping.
+Plot the turn-rate law of the table — `c1`, `c2`, the dead time and the kite's lag —
+against relative depower `u_d`, with error bars, one figure per `body_damping`
+present in the table — the quantities are only comparable across rows swept at the
+same damping. This is the paper's figure of the turn-rate law
+(`LearningControl/figures/turn_rate_low_pattern.pdf`).
 
-`c2` is not plotted here; `plot_turn_rate_vs_depower.jl` plots it with the
-others.
-
-Read straight from `data/turn_rate_coeffs.yaml` rather than from
+Read straight from the turn-rate table of the selected project (`select_project()`,
+`data/turn_rate_coeffs.yaml` in every project so far) rather than from
 [`V3_TURN_RATE_COEFFS`](@ref): the lookup dict carries only `c1`, `c2` and
 `delay`, while the `*_se` columns `examples/build_turn_rate_table.jl` writes
 live in the file alone. A row without them simply plots without bars.
@@ -25,7 +23,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using MakieControlPlots
-using SimpleKiteControllers: skc_data_path, turn_rate_coeffs_file, project_file
+using SimpleKiteControllers: skc_data_path, turn_rate_coeffs_file, project_file, selected_project
 using LaTeXStrings
 using YAML
 
@@ -68,11 +66,10 @@ end
     plot_c1_c2()
 
 For each `body_damping` in `data/turn_rate_coeffs.yaml`, sort its rows by
-depower `u_d` and plot `c1`, `delay`, and the dead time `τ_d` and lag `T_k`
-the delay is split into (`fit_delay_lag`), against it in a stacked, four-panel
-figure with error bars from the `c1_se`, `dead_time_se` and `kite_lag_se`
-columns. The `delay` has no bars: the table records no standard error for the
-sum. A row without the split plots it as `NaN`, i.e. not at all. One panel each,
+depower `u_d` and plot `c1`, `c2`, and the dead time `τ_d` and lag `T_k` of the
+delay (`fit_delay_lag`), against it in a stacked, four-panel figure with error bars
+from the `c1_se`, `c2_se`, `dead_time_se` and `kite_lag_se` columns. A row without
+the split plots it as `NaN`, i.e. not at all. One panel each,
 not the three times in one with a legend: dead time and lag cross, so a legend
 covers data in every corner.
 
@@ -85,13 +82,15 @@ bars carry that too. All are drawn at `±K_SIGMA` times the recorded sigma.
 The figures carry no title: they are meant to be included in a document whose
 caption says what they show. That caption is the only place `K_SIGMA` is now
 stated, so it has to say `±2σ` (or whatever `K_SIGMA` is set to) itself. Each
-figure is also written to `$FIG_DIR` as a PDF, one per damping.
+figure is also written to `$FIG_DIR` as a PDF, `turn_rate_low_pattern.pdf`, with the
+damping appended when the table holds more than one.
 """
 function plot_c1_c2()
-    path = joinpath(skc_data_path(), turn_rate_coeffs_file(project_file()))
-    # A diverged cell is written without c1/c2/delay (`build_turn_rate_table.jl`
-    # records the outcome but no coefficients), so there is nothing to plot for it.
-    entries = [e for e in YAML.load_file(path)["entries"] if haskey(e, "c1")]
+    path = joinpath(skc_data_path(), turn_rate_coeffs_file(project_file(selected_project())))
+    # Only the rows `turn_rate_coeffs` uses: a cell whose flights all sank keeps the fit of
+    # those flights (`outcome: low_elevation`), and a diverged one no coefficients at all.
+    entries = [e for e in YAML.load_file(path)["entries"]
+               if haskey(e, "c1") && get(e, "outcome", "") in ("time_limit", "sweep_done")]
     if isempty(entries)
         @warn "plot_c1_c2: no entries in $path -- identify some with " *
               "examples/build_turn_rate_table.jl first"
@@ -104,14 +103,15 @@ function plot_c1_c2()
                     by = e -> Float64(e["depower"]))
         u_s = [Float64(e["depower"]) for e in rows]
         c1 = [Float64(e["c1"]) for e in rows]
-        delay = [Float64(e["delay"]) for e in rows]
+        c2 = [Float64(e["c2"]) for e in rows]
         dead_time = [Float64(get(e, "dead_time", NaN)) for e in rows]
         kite_lag = [Float64(get(e, "kite_lag", NaN)) for e in rows]
 
         pad = X_MARGIN * (maximum(u_s) - minimum(u_s))
 
-        fig_name = "c1_delay_" * join(round.(bd; digits = 1), "_")
-        plotx(u_s, c1, delay, dead_time, kite_lag;
+        fig_name = "turn_rate_low_pattern" *
+                   (length(dampings) > 1 ? "_" * join(round.(bd; digits = 1), "_") : "")
+        plotx(u_s, c1, c2, dead_time, kite_lag;
               xlims = (minimum(u_s) - pad, maximum(u_s) + pad),
               # Round ticks at the table's own 0.05 grid: the padded range makes
               # Makie pick 0.27/0.30/0.33/... otherwise, which reads as if the
@@ -124,9 +124,10 @@ function plot_c1_c2()
               # relative steering as u_s and the relative depower as u_d, and
               # this axis is the depower.
               xlabel = L"\mathrm{relative\ depower}\ u_\mathrm{d}\ [-]",
-              ylabels = [L"c_1\ [\mathrm{1/m}]", L"\tau\ [\mathrm{s}]",
+              ylabels = [L"c_1\ [\mathrm{1/m}]", L"c_2\ [-]",
                          L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
-              yerr = [_std_column(rows, "c1_se"), nothing, _std_column(rows, "dead_time_se"),
+              yerr = [_std_column(rows, "c1_se"), _std_column(rows, "c2_se"),
+                      _std_column(rows, "dead_time_se"),
                       _std_column(rows, "kite_lag_se")],
               scatter = true, disp = true, labelsize = LABEL_SIZE,
               fig = fig_name)
