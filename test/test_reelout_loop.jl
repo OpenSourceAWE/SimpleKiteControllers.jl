@@ -77,7 +77,7 @@ end
     end
 
     @testset "deliver_lift_in_air" begin
-        tos = (; min_feasibility_margin = 0.82, blend_fold_margin = 0.5, blend_probe_points = 21)
+        tos = (; min_feasibility_margin = 0.82, blend_fold_margin = 0.5)
         function lift_case(; c1 = NaN, margin_min = 0.82)
             fec = new_fec(path_a)
             setup = (; tos = merge(tos, (; min_feasibility_margin = margin_min)),
@@ -150,7 +150,7 @@ end
             st = RunState(; n_path = n, el_applied = 1.0, raw_az = path_c[1], raw_el = path_c[2])
             push!(st.p5_history, record(0.0, path_a, margin_old), record(50.0, path_c, margin_now))
             setup = (; fcs = FC_Settings(; final_margin_min, up_loops),
-                     tos = (; blend_fold_margin = 0.5, blend_probe_points = 21), fec)
+                     tos = (; blend_fold_margin = 0.5), fec)
             # Q right of the path centre, and left of it on the step before: the crossing.
             fec.last_idx = findfirst(>(1.0), fec.az_path)
             st.p5_q_az_prev = -1.0

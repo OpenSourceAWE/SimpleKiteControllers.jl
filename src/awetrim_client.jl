@@ -1300,9 +1300,9 @@ function optimizer_session(tos, inflow, replay_paths, log_name)
     startup_seed_offset = 0.0
     guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
                                            0.0, el_center_seed,
-                                           0.0, tos.guess_points)
+                                           0.0, GUESS_POINTS)
     @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-                   tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
+                   tos.guess_a, tos.guess_b, el_center_seed, GUESS_POINTS)
     ensure_server(tos.base_url)
     opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
                          failures = tos.opt_failure_cache,
@@ -1354,7 +1354,7 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
                                    at %.5f m, guess centred at %.0f°.",
                                   get(cached, "reason", "no reason recorded"),
                                   get(cached, "when", "at an unknown time"),
-                                  tos.name, l_set, el_center)
+                                  OPT_NAME, l_set, el_center)
             @warn cached_msg
             continue
         end
@@ -1445,11 +1445,11 @@ function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
     solved = NamedTuple[]
     for l in probes
         try
-            params = InitParams(; name = tos.name * "-fsref", length = l,
+            params = InitParams(; name = OPT_NAME * "-fsref", length = l,
                                 winch_params = ref_winch, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                                 input_depower = depower_seed(tos, inflow.wind_speed),
-                                reg_weight = tos.reg_weight,
+                                reg_weight = REG_WEIGHT,
                                 min_turn_radius, pattern_limits)
             reply = chain_init(ref_chain, params)
             result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))

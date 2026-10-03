@@ -96,6 +96,7 @@ include(joinpath(@__DIR__, "model_setup.jl"))
 # The optimizer client, part of the package but not exported (src/awetrim_client.jl), and
 # `HTTP.StatusError` for a 422.
 using HTTP
+using SimpleKiteControllers: OPT_NAME, GUESS_POINTS, RESAMPLE_POINTS, REG_WEIGHT
 using SimpleKiteControllers: Trajectory, InitParams, StepParams, ensure_server, opt_init,
     opt_step, opt_trajectory, inflow_from_settings, winch_from_wc, cap_wind_speed,
     depower_seed, elevation_min_request, min_turn_radius_request, pattern_limits_from,
@@ -188,9 +189,9 @@ winch = winch_from_wc(wcs)
 el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
 guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
                                        0.0, el_center_seed,
-                                       0.0, tos.guess_points)
+                                       0.0, GUESS_POINTS)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-               tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
+               tos.guess_a, tos.guess_b, el_center_seed, GUESS_POINTS)
 
 # What the solve must respect, as opposed to what it is scored against
 # afterwards: both are off unless data/traj_opt.yaml turns them on.
@@ -220,11 +221,11 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
 ensure_server(tos.base_url)
-opt_reply = opt_init(InitParams(; name = tos.name, length = l0,
+opt_reply = opt_init(InitParams(; name = OPT_NAME, length = l0,
                                 winch_params = winch, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                                 input_depower = depower_seed(tos, inflow.wind_speed),
-                                reg_weight = tos.reg_weight,
+                                reg_weight = REG_WEIGHT,
                                 min_turn_radius = opt_r_min,
                                 pattern_limits = opt_box);
                      url = tos.base_url)
@@ -282,7 +283,7 @@ isnothing(opt_result.metrics.turn_radius_min_m) ||
 # makes path_radius_profile report a far tighter pattern than the curve is.
 n_opt = length(opt_result.trajectory.azimuth) - 1
 set_path!(fec, opt_result.trajectory.azimuth, opt_result.trajectory.elevation;
-          resample = min(tos.resample_points, n_opt))
+          resample = min(RESAMPLE_POINTS, n_opt))
 
 # The pattern's own geometry: fcs.f8_* and fcs.pattern.el_center describe the GUESS now.
 az_c_path = 0.5 * (maximum(fec.az_path) + minimum(fec.az_path))

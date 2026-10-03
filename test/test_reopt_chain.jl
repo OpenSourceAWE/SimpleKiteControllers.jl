@@ -12,7 +12,7 @@ retries, which send `/init`, are served by the fake server of `fake_awetrim_serv
 
 using Test
 using SimpleKiteControllers
-import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchParams,
+import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, InflowConditions, WinchParams,
     TrajOptSettings, awetrim_depower_to_v3kite, opt_request_key, min_turn_radius_request
 @isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
@@ -47,15 +47,15 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
     # Phase 4, one lap flown on the startup path, the replies waiting in the replay or, with a
     # `server`, on that server, the chain as `chain_init` left it.
     function cycle(replies; max_reopt = 3, server = nothing, blocking = false, retries = 0,
-                   poll = 0.5, power = 18000.0)
+                   power = 18000.0)
         tos = TrajOptSettings()
-        tos.reopt_blocking = blocking; tos.reopt_poll_interval = poll
+        tos.reopt_blocking = blocking
         tos.reopt_every_n_laps = 1; tos.max_reopt = max_reopt; tos.blend_max_retries = retries
         fec = FigureEightController(fcs; dt = 0.02)
         set_path!(fec, flown...; up_loops)
         oc = isnothing(server) ? OptChain("http://127.0.0.1:1"; dir = mktempdir(), replay = replies) :
                                  OptChain(server.url; dir = mktempdir())
-        oc.config = SimpleKiteControllers.InitParams(; name = tos.name, length = l_tether,
+        oc.config = SimpleKiteControllers.InitParams(; name = SimpleKiteControllers.OPT_NAME, length = l_tether,
             winch_params = WinchParams("reelout", 0.04, 700.0, 7200.0),
             inflow_conditions = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0,
                                                  profile_law = 3),
@@ -177,16 +177,16 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         fs = fake_server(; instant = true, table = reply_table)
         try
             # 1000 W, below 30 % of 5000 W, is re-asked; the cold retry's 2000 W passes.
-            st, setup = cycle(nothing; server = fs, retries = 1, poll = 0.05, power = 5000.0)
+            st, setup = cycle(nothing; server = fs, retries = 1, power = 5000.0)
             # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
             setup.tos.size_box_growth = 0.0
             reoptimize!(st, setup, plant, 30.0, 4, 0.0)
             @test st.reopt_pending
             @test_logs (:info, r"rejected \(1000 W predicted.*cold-restarting from guess el 32°") match_mode = :any reoptimize!(
-                st, setup, plant, 30.05, 4, 0.0)
+                st, setup, plant, 30.0 + REOPT_POLL_INTERVAL, 4, 0.0)
             @test paths(fs) == ["/step", "/status", "/trajectory", "/init", "/step", "/status",
                                 "/trajectory"]
-            @test mean_el(fs.log[4][2]) ≈ 32.0 atol = 0.5   # the guess moved up by reopt_retry_el_offset
+            @test mean_el(fs.log[4][2]) ≈ 32.0 atol = 0.5   # the guess moved up by REOPT_RETRY_EL_OFFSET
             @test st.blend_retries_total == 1 && st.reopt_n == 1
             @test st.reopt_events[end].status == "installed"
             @test st.pred_timeline[end].power == 2000.0
@@ -304,12 +304,12 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         # The rejected reply's cold retry fails on the server: the cycle gives up, nothing flown.
         fs = fake_server(; table = reply_table)
         try
-            st, setup = cycle(nothing; server = fs, retries = 1, poll = 0.05, power = 5000.0)
+            st, setup = cycle(nothing; server = fs, retries = 1, power = 5000.0)
             reoptimize!(st, setup, plant, 30.0, 4, 0.0)
             fs.state[] = "converged"                     # 1000 W: below 30 % of 5000 W
             retry_fails = @async (sleep(0.3); fs.state[] = "failed")
             @test_logs (:warn, r"Blend-fold retry 1 of 1 .* did not converge \(failed\)") match_mode = :any reoptimize!(
-                st, setup, plant, 30.05, 4, 0.0)
+                st, setup, plant, 30.0 + REOPT_POLL_INTERVAL, 4, 0.0)
             wait(retry_fails)
             ev = st.reopt_events[end]
             @test ev.status == "rejected" && occursin("retry 1 did not converge", ev.detail)

@@ -299,7 +299,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                  startup_retry_el_offsets entry, or a whole degree walked outward past \
                  them when the failure cache rejected the listed ones; 0 means the \
                  shipped guess converged [deg]"),
-            "points" => (tos.guess_points, "points the guess was sent with"),
+            "points" => (GUESS_POINTS, "points the guess was sent with"),
             "depower_seed_m" => (round(depower_seed(tos, inflow.wind_speed); digits = 3),
                 "power-tape length the solve started from, input_depower ramped with \
                  the wind above input_depower_wind_ref; only a seed, the server \

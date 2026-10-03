@@ -301,7 +301,7 @@ function setup_run(inputs; init_model)
         optimizer_session(tos, inflow, replay_paths, log_name)
     # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
     (; opt_r_scale, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
-        request_constraints(tos, fcs, inflow, cap_wind, opt_length(tos, l_set))
+        request_constraints(tos, fcs, inflow, cap_wind, opt_length(l_set))
     # `startup_params` fits the guess into that box; a guess outside it ends in local infeasibility.
     let (guess_a, guess_b, guess_el) = guess_in_box(tos.guess_a, tos.guess_b, el_center_seed, opt_box)
         (guess_a, guess_b, guess_el) == (tos.guess_a, tos.guess_b, el_center_seed) ||

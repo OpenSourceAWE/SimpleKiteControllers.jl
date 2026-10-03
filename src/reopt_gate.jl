@@ -50,7 +50,7 @@ function gate_candidate(tos, c)
         deficit = asind(min(1.0, tos.min_height / c.l_now)) - c.chk_el_min
         if retry_room
             return (; verdict = :retry, reason, detail = "",
-                    raise = deficit + tos.elevation_min_retry_margin, low = true)
+                    raise = deficit + ELEVATION_MIN_RETRY_MARGIN, low = true)
         end
         return (; verdict = :reject, reason, detail = reason * retried(c.blend_attempt),
                 raise = nothing, low = false)
@@ -60,7 +60,7 @@ function gate_candidate(tos, c)
                           c.chk_el_min, c.el_floor)
         if retry_room
             return (; verdict = :retry, reason, detail = "",
-                    raise = c.el_floor - c.chk_el_min + tos.elevation_min_retry_margin, low = true)
+                    raise = c.el_floor - c.chk_el_min + ELEVATION_MIN_RETRY_MARGIN, low = true)
         end
         return (; verdict = :reject, reason, detail = reason * retried(c.blend_attempt),
                 raise = nothing, low = false)
@@ -112,7 +112,7 @@ wants_challenge(tos, c) =
 
 Does `blend_paths` between these two closed curves collapse `path_min_radius`
 anywhere across `w` in `[0, 1]`, relative to the smaller of the two endpoints'
-own radius? Sampled at `tos.blend_probe_points` points; a fold shows up as a
+own radius? Sampled at `BLEND_PROBE_POINTS` points; a fold shows up as a
 near-zero radius against endpoints that are not, so a coarse sweep catches it —
 see the tuning log entry on why this replaced a runtime hold/jump-cap instead.
 """
@@ -121,5 +121,5 @@ function blend_folds(tos, az0, el0, az1, el1)
     r0 <= 0 && return false   # degenerate endpoint; not this check's job
     any(w -> path_min_radius(blend_paths(az0, el0, az1, el1, w)...) <
              tos.blend_fold_margin * r0,
-        range(0.0, 1.0; length = tos.blend_probe_points))
+        range(0.0, 1.0; length = BLEND_PROBE_POINTS))
 end

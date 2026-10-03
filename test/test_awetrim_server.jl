@@ -250,7 +250,7 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
             # Interpolated between the two, sample by sample: 1000, 1200, ..., 2000 W.
             @test r.weighted ≈ 1500.0
             inits = [b for (p, b) in fs.log if p == "/init"]
-            @test length(inits) == 3 && all(b -> b["name"] == tos.name * "-fsref", inits)
+            @test length(inits) == 3 && all(b -> b["name"] == SimpleKiteControllers.OPT_NAME * "-fsref", inits)
             @test all(b -> b["winch_params"]["winch_mode"] == "free_speed", inits)
             # Below 1 m of span the probes are spread over 1 m; off or without samples: nothing.
             r = free_speed_reference(tos, wc, INFLOW, guess..., [160.0])

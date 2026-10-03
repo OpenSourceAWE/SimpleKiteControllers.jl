@@ -1,7 +1,6 @@
 # Externally optimized path settings; each key is a `TrajOptSettings` field (src/traj_opt_settings.jl, rationale there), tuning record in docs/fig8_tuning_log.md
 traj_opt:
     base_url: "http://127.0.0.1:8000"  # address of the AWETrim server
-    name: "simple_opt_fig8"  # name the optimization is registered under
 
     # --- Initial guess (seeds a multi-modal solve: changes the answer, not the run time) --- #
     guess_a:          30.0   # width of the guess; azimuth spans ±guess_a    [deg]
@@ -9,19 +8,15 @@ traj_opt:
     guess_el_center:  29.0   # centre elevation of the guess; first knob to move on a 422 [deg]
     guess_el_center_high:      30.0   # centre elevation at/above the ref wind (a step, not a ramp) [deg]
     guess_el_center_wind_ref:   8.0   # wind at/above which guess_el_center_high applies [m/s]
-    guess_points:      361   # points sent; the reply has as many              [-]
 
     # --- Solver knobs ----------------------------------------------------- #
     input_depower:     1.6   # depower SEED in metres of tape (server bounds 1.1-2.3), not depower_setpoint [m]
     input_depower_wind_ref:  7.0   # wind at which input_depower IS the seed  [m/s]
     input_depower_per_wind:  0.25  # tape added per m/s above that; one-sided [m/(m/s)]
     input_depower_seed_max:  1.85  # ramp ceiling, below the server's 2.3 m  [m]
-    reg_weight:        1.0   # regularization weight                           [-]
-    resample_points:   361   # points the path is resampled to                 [-]
     opt_failure_cache: true  # skip requests recorded as failing; see the docstring
     opt_success_cache: true  # replay applied results of an identical request chain; clear after an AWETrim change
     opt_warm_start_awe_trim: 1.0   # use_awe_trim of the seeding solve; 0.0 = off  [-]
-    opt_length_round:  1.0   # round the REQUEST's tether length to this; 0.0 = off [m]
     opt_awe_trim:      1.0 # use_awe_trim sent to the server; < 0 follows wc_settings [-]
     free_speed_reference_points: 6  # free_speed solves for the reference power AFTER the run; 0 = off [-]
     min_feasibility_margin: 0.82  # curvature gate AND request (as min_turn_radius); 0.0 = off; an 8 m/s number [-]
@@ -29,7 +24,6 @@ traj_opt:
     min_height: 40.0              # clearance gate at the anchor radius; 40 not 50 because AWETrim's floor is at the END of the reel-out [m]
 
     # --- Pattern box the optimizer solves UNDER; 0.0 keeps the server default (|az| <= 45.8, 0.6 <= el <= 51.6) [deg] --- #
-    elevation_min_retry_margin: 0.5   # extra elevation on a re-ask after a clearance/elevation rejection [deg]
     pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
     pattern_azimuth_max_high: 32.0    # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
                                       # limit Cabauw 10 needs ±28.4-28.8° at 150 m and IPOPT 2-3° of room: 422 under
@@ -54,19 +48,13 @@ traj_opt:
     max_reopt: 7             # bound on re-optimizations per run                 [-]
     path_blend_time: 6.0     # seconds over which the new path replaces the old  [s]
     blend_fold_margin: 0.5   # blend_folds: fraction of the endpoints' own radius [-]
-    blend_probe_points: 21   # values of w that blend_folds samples              [-]
     blend_max_retries: 3     # fresh solves per rejected reply                   [-]
-    startup_retries_max: 4   # corrected startup re-solves under a raised turn radius [-]
-    startup_retry_el_cap_step: 2.0     # each retry caps elevation this far below the incumbent's top [deg]
-    startup_retry_az_widen_step: 2.0   # once the ceiling cannot go lower, widen the figure instead [deg]
     min_power_frac: 0.3      # fraction of the startup install's power           [-]
     min_power_frac_prev: 0.85 # fraction of the previous install's power; 0 is off [-]
     power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses  [m/s]
     max_size_growth: 1.3     # largest size ratio vs the previous install; 0 is off [-]
     size_box_growth: 1.3     # box SENT with a re-opt: this x the previous install's size; 0 is off [-]
     challenge_growth: 1.1    # growth above which a reply predicting less than the previous install is cross-checked by a cold solve; 0 is off [-]
-    reopt_poll_interval: 0.5 # seconds between /status polls (simulated when non-blocking) [s]
     reopt_blocking: true     # freeze the simulation until the reply lands       [-]
-    reopt_retry_el_offset: 2.0 # guess_el_center offset for one retry           [deg]
     startup_retry_el_offsets: [-1.0, 2.0]   # seeds tried in order on a startup 422; [] never retries [deg]
     candidate_elevation_margin: 3.0   # gate margin above fc_settings' min_elevation [deg]

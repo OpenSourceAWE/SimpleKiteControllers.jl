@@ -17,12 +17,12 @@ first-lap winch.
 function startup_params(setup, el_center)
     (; tos, l_set, winch_first_lap, inflow, opt_r_min, opt_box) = setup
     guess_a, guess_b, guess_el = guess_in_box(tos.guess_a, tos.guess_b, el_center, opt_box)
-    az, el = figure_eight_path(guess_a, guess_b, 0.0, guess_el, 0.0, tos.guess_points)
-    InitParams(; name = tos.name, length = opt_length(tos, l_set),
+    az, el = figure_eight_path(guess_a, guess_b, 0.0, guess_el, 0.0, GUESS_POINTS)
+    InitParams(; name = OPT_NAME, length = opt_length(l_set),
                winch_params = winch_first_lap, inflow_conditions = inflow,
                trajectory = Trajectory(collect(az), collect(el)),
                input_depower = depower_seed(tos, inflow.wind_speed),
-               reg_weight = tos.reg_weight,
+               reg_weight = REG_WEIGHT,
                min_turn_radius = opt_r_min, pattern_limits = opt_box)
 end
 
@@ -43,10 +43,10 @@ function startup_solve(setup, params)
                         request at %.3f; see opt_warm_start_awe_trim.",
                        tos.opt_warm_start_awe_trim, winch.use_awe_trim)
         warm_winch = winch_from_wc(rcs; use_awe_trim = tos.opt_warm_start_awe_trim)
-        seed_trajectory = chain_step(opt_chain, StepParams(opt_length(tos, l_set), warm_winch,
+        seed_trajectory = chain_step(opt_chain, StepParams(opt_length(l_set), warm_winch,
                                                            reply.trajectory)).trajectory
     end
-    result = chain_step(opt_chain, StepParams(opt_length(tos, l_set), winch_first_lap,
+    result = chain_step(opt_chain, StepParams(opt_length(l_set), winch_first_lap,
                                               seed_trajectory))
     return result, seed_trajectory
 end
@@ -130,7 +130,7 @@ function install_optimized_path!(setup, st::RunState, reply)
     az = collect(Float64.(reply.trajectory.azimuth))
     el = collect(Float64.(reply.trajectory.elevation))
     lift = wing_lift(az, el)
-    resample = min(tos.resample_points, length(az) - 1)
+    resample = min(RESAMPLE_POINTS, length(az) - 1)
     st.c1_startup = c1_at_depower(pattern_depower(reply))
     st.startup_wing_frac = 1.0
     if !isnan(st.c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
@@ -244,7 +244,7 @@ function retry_startup!(setup, st::RunState)
     st.inc_result, st.inc_table, st.inc_raw = st.opt_result, st.opt_table, st.opt_paths_raw[1]
     ladder = RetryLadder(; m_reply = st.incumbent_score.margin)  # what the answers so far imply
     t_retries = time()
-    for attempt in 1:max(Int(tos.startup_retries_max), 0)
+    for attempt in 1:STARTUP_RETRIES_MAX
         ask = next_lever(ladder, tos, st.inc_raw[1], st.inc_raw[2], opt_r_sent,
                          isnothing(opt_box) ? nothing : opt_box.elevation_min, el_floor,
                          margin -> min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
@@ -254,7 +254,7 @@ function retry_startup!(setup, st::RunState)
                             %.2f m that 422'd can reach past margin %.3f (the \
                             gate wants %.2f), and the ceiling and width levers \
                             are spent.",
-                           attempt, Int(tos.startup_retries_max), ladder.bisect_hi,
+                           attempt, STARTUP_RETRIES_MAX, ladder.bisect_hi,
                            ladder.m_reply * ladder.bisect_hi / ask.prev_ask,
                            tos.min_feasibility_margin)
             break
@@ -272,7 +272,7 @@ function retry_startup!(setup, st::RunState)
                         L = %.1f m, turn radius %.2f m (was %.2f m)%s, targeting \
                         margin %.3f%s.",
                        st.incumbent_score.margin, tos.min_feasibility_margin,
-                       attempt, Int(tos.startup_retries_max), lever, st.l_set,
+                       attempt, STARTUP_RETRIES_MAX, lever, st.l_set,
                        r_ask, prev_ask,
                        (isnothing(el_cap) ? ", no elevation ceiling" :
                            @sprintf(", elevation ceiling %.1f° (the incumbent \
@@ -292,7 +292,7 @@ function retry_startup!(setup, st::RunState)
         local att_result, att_table, att_raw, att_score
         try
             att_result = chain_step(opt_chain,
-                                    StepParams(; length = opt_length(tos, st.l_set),
+                                    StepParams(; length = opt_length(st.l_set),
                                                winch_params = winch_first_lap,
                                                min_turn_radius = r_ask,
                                                pattern_limits = box_ask))
@@ -511,7 +511,7 @@ function init_loop_state!(setup, st::RunState)
     st.n_path = length(fec.az_path)
     # The reference TRACKING is scored against: the optimizer's curve, canonicalized and blended like the flown one, never lifted.
     st.raw_az, st.raw_el = prepare_path(st.opt_paths_raw[1]...;
-                                        resample = min(tos.resample_points, length(st.opt_paths_raw[1][1]) - 1),
+                                        resample = min(RESAMPLE_POINTS, length(st.opt_paths_raw[1][1]) - 1),
                                         up_loops = fcs.pattern.up_loops)
     length(st.raw_az) == st.n_path ||
         error("scored reference has $(length(st.raw_az)) points, the flown path $(st.n_path)")

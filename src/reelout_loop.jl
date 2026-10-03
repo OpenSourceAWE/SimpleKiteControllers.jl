@@ -283,7 +283,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
         # The floor moves with the length: box rebuilt per request, `size_box_growth` x the previous install.
         st.opt_box_now = with_size_box(
             pattern_limits_from(tos;
-                elevation_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
+                elevation_min = elevation_min_request(fcs, tos, opt_length(l_now);
                                                       extra = st.el_min_extra),
                 wind_speed = cap_wind),
             st.opt_paths_raw[end]..., tos.size_box_growth)
@@ -291,7 +291,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
             if isnothing(el_seed)
                 # `min_turn_radius` is re-sent because it MOVES with the length; `nothing` means "keep".
                 chain_step(opt_chain,
-                           StepParams(; length = opt_length(tos, l_now), winch_params = winch_reopt,
+                           StepParams(; length = opt_length(l_now), winch_params = winch_reopt,
                                       min_turn_radius = st.opt_r_min,
                                       pattern_limits = st.opt_box_now);
                            wait = false)
@@ -306,27 +306,27 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                 guess_az_r, guess_el_r =
                     figure_eight_path(guess_a, guess_b,
                                       0.0, guess_el,
-                                      0.0, tos.guess_points)
-                reopt_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
+                                      0.0, GUESS_POINTS)
+                reopt_params = InitParams(; name = OPT_NAME, length = opt_length(l_now),
                                           winch_params = winch_reopt,
                                           inflow_conditions = inflow,
                                           trajectory = Trajectory(collect(guess_az_r),
                                                                   collect(guess_el_r)),
                                           input_depower = depower_seed(tos, inflow.wind_speed),
-                                          reg_weight = tos.reg_weight,
+                                          reg_weight = REG_WEIGHT,
                                           min_turn_radius = st.opt_r_min,
                                           pattern_limits = st.opt_box_now)
                 # A known failure is served by `opt_chain`, not skipped here: skipping would leave
                 # the chain on the warm lineage, and every later step would miss the cache.
                 reopt_reply = chain_init(opt_chain, reopt_params)
                 chain_step(opt_chain,
-                           StepParams(opt_length(tos, l_now), winch_reopt, reopt_reply.trajectory);
+                           StepParams(opt_length(l_now), winch_reopt, reopt_reply.trajectory);
                            wait = false)
             end
             st.reopt_pending = true
             st.reopt_t_request = t
             st.reopt_lap = st.fig8_idx_progress / st.n_path
-            st.reopt_next_poll = t + tos.reopt_poll_interval
+            st.reopt_next_poll = t + REOPT_POLL_INTERVAL
             @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
                             (lap %.1f, request %d of %d, %s)%s%s.",
                            l_now, t, st.reopt_lap, st.reopt_n + 1, tos.max_reopt,
@@ -353,7 +353,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                               holding; will retry." exception = exc
                        "solving"
                    end) == "solving"
-                sleep(tos.reopt_poll_interval)
+                sleep(REOPT_POLL_INTERVAL)
             end
             st.reopt_last_solve_s = time() - t_block
             st.reopt_blocked_s += st.reopt_last_solve_s
@@ -390,7 +390,7 @@ Poll the optimizer for the pending reply; once the solve is over, gate and insta
 """
 function collect_reopt!(st::RunState, setup, t, phase, l_now, el_target)
     (; tos, opt_chain) = setup
-    st.reopt_next_poll = t + tos.reopt_poll_interval
+    st.reopt_next_poll = t + REOPT_POLL_INTERVAL
     state = try
         chain_status(opt_chain)["state"]
     catch exc
@@ -405,7 +405,7 @@ function collect_reopt!(st::RunState, setup, t, phase, l_now, el_target)
         event = gate_and_install!(st, setup, t, phase, l_now, el_target, event)
     end
     push!(st.reopt_events, event)
-    # Non-blocking: an upper bound on the solve, by at most one `reopt_poll_interval`.
+    # Non-blocking: an upper bound on the solve, by at most one `REOPT_POLL_INTERVAL`.
     push!(st.reopt_cycles, (; t, l = l_now, status = event.status,
                          wall_s = time() - st.reopt_t_wall_request))
     # Blocking collects on the SAME step as the request, so the wall time is the figure that counts.
@@ -542,17 +542,17 @@ end
     cold_retry!(st, setup, l_now, blend_attempt, reject_low, reject_reason) -> state
 
 A fresh COLD solve for `l_now` after a rejected candidate, from the guess moved by
-`reopt_retry_el_offset` (up after a height shortfall, else alternating) and under the floor raised
+`REOPT_RETRY_EL_OFFSET` (up after a height shortfall, else alternating) and under the floor raised
 by `el_min_extra`. Holds the simulation until the solve is over; returns the optimizer's state.
 """
 function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reject_reason)
     (; tos, fcs, el_center_seed, cap_wind) = setup
     st.blend_retries_total += 1
-    # Alternating +/- `reopt_retry_el_offset`, never scaled UP by `blend_attempt`.
+    # Alternating +/- `REOPT_RETRY_EL_OFFSET`, never scaled UP by `blend_attempt`.
     retry_el_seed = el_center_seed +
         (reject_low || isodd(blend_attempt) ? 1 : -1) *
-        tos.reopt_retry_el_offset
-    retry_el_min = elevation_min_request(fcs, tos, opt_length(tos, l_now);
+        REOPT_RETRY_EL_OFFSET
+    retry_el_min = elevation_min_request(fcs, tos, opt_length(l_now);
                                          extra = st.el_min_extra)
     @info @sprintf("  ... candidate at L = %.0f m rejected \
                     (%s); cold-restarting from guess el \
@@ -586,21 +586,21 @@ function solve_cold!(st::RunState, setup, l_now, el_seed, box)
     # Started inside the size box, as in `request_reopt!`.
     guess_a, guess_b, guess_el_center = guess_in_box(tos.guess_a, tos.guess_b, el_seed, box)
     guess_az, guess_el = figure_eight_path(guess_a, guess_b, 0.0, guess_el_center, 0.0,
-                                           tos.guess_points)
-    params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
+                                           GUESS_POINTS)
+    params = InitParams(; name = OPT_NAME, length = opt_length(l_now),
         winch_params = winch_reopt, inflow_conditions = inflow,
         trajectory = Trajectory(collect(guess_az), collect(guess_el)),
         input_depower = depower_seed(tos, inflow.wind_speed),
-        reg_weight = tos.reg_weight,
+        reg_weight = REG_WEIGHT,
         min_turn_radius = st.opt_r_min,
         pattern_limits = box)
     reply = chain_init(opt_chain, params)
-    chain_step(opt_chain, StepParams(opt_length(tos, l_now), winch_reopt, reply.trajectory);
+    chain_step(opt_chain, StepParams(opt_length(l_now), winch_reopt, reply.trajectory);
                wait = false)
     t_cold = time()
     state = "solving"
     while state == "solving"
-        sleep(tos.reopt_poll_interval)
+        sleep(REOPT_POLL_INTERVAL)
         state = try
             chain_status(opt_chain)["state"]
         catch exc
@@ -639,7 +639,7 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     cand_raw = (copy(new_az), copy(new_el))
     # The rigid lift goes in whole; the lobe lift is rationed to fit the curvature gate.
     wing_delta = wing_lift(new_az, new_el)
-    n_native = min(tos.resample_points, length(new_az) - 1)
+    n_native = min(RESAMPLE_POINTS, length(new_az) - 1)
     # The turn authority THIS reply will be flown with, read off `tab`.
     cand_c1 = c1_at_phase(phase, awetrim_depower_to_v3kite(
         Float64(tab["optimized_parameters"]["input_depower"])))

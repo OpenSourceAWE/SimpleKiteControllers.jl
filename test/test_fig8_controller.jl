@@ -1138,8 +1138,6 @@ end
         @test fro.low_wind.low_wind_guess_el_center[end] == TrajOptSettings("traj_opt.yaml").guess_el_center
         @test low_wind_schedule(fro, 4.51).v_app_min == 8.0
         tos = TrajOptSettings("traj_opt.yaml")
-        @test tos.guess_points == 361
-        @test tos.resample_points == 361
         # Below the struct's 1.0, but no longer for the old reason: the request is
         # scaled from this number and the optimizer honours it, so what the gate
         # reads back is ~1.2x of it (0.78 -> ~0.95 flown, 2026-08-20). It moves with
@@ -1171,7 +1169,6 @@ end
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
         @test tos.candidate_elevation_margin == 3.0
-        @test tos.elevation_min_retry_margin >= 0
         # The identity the per-request floor inverts: ask for asind(min_height/L)
         # and `path_min_height` reads back exactly min_height at that length. This
         # is the whole reason the request and the gate can be made the same
@@ -1219,15 +1216,15 @@ end
             bad = joinpath(dir, "b.yaml")
             write(bad, "traj_opt:\n    guess_with_a_typo: 1.0\n")
             @test_throws ErrorException TrajOptSettings(bad)
+            # A former field now a constant loads only at the constant's value.
             tiny = joinpath(dir, "s.yaml")
+            write(tiny, "traj_opt:\n    guess_points: 361\n    startup_retries_max: 4\n")
+            @test TrajOptSettings(tiny) isa TrajOptSettings
             write(tiny, "traj_opt:\n    guess_points: 4\n")
             @test_throws ErrorException TrajOptSettings(tiny)
             neg = joinpath(dir, "n.yaml")
             write(neg, "traj_opt:\n    candidate_elevation_margin: -1.0\n")
             @test_throws ErrorException TrajOptSettings(neg)
-            low = joinpath(dir, "l.yaml")
-            write(low, "traj_opt:\n    elevation_min_retry_margin: -0.5\n")
-            @test_throws ErrorException TrajOptSettings(low)
             steep = joinpath(dir, "d.yaml")
             write(steep, "traj_opt:\n    input_depower_per_wind: -0.1\n")
             @test_throws ErrorException TrajOptSettings(steep)

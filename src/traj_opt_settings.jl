@@ -34,8 +34,6 @@ $(TYPEDFIELDS)
 @with_kw mutable struct TrajOptSettings @deftype Float64
     "Address of the AWETrim server"
     base_url::String = "http://127.0.0.1:8000"
-    "Name the optimization is registered under on the server"
-    name::String = "simple_opt_fig8"
 
     # ---- The initial guess the solve starts from ------------------------- #
     "Width of the guess lemniscate; azimuth spans ±`guess_a` [deg]"
@@ -48,8 +46,6 @@ $(TYPEDFIELDS)
     guess_el_center_high = 0.0
     "Wind speed at and above which `guess_el_center_high` is used [m/s]"
     guess_el_center_wind_ref = 0.0
-    "Points the guess is sent with; also the resolution of the reply"
-    guess_points::Int64 = 361
 
     # ---- Solver knobs the API exposes ------------------------------------ #
     "Power-tape length seed `l_dp` on AWETrim's scale [m]"
@@ -60,20 +56,14 @@ $(TYPEDFIELDS)
     input_depower_per_wind = 0.0
     "Soft ceiling on the ramped depower seed [m]; `0.0` = AWETrim's hard bound only"
     input_depower_seed_max = 0.0
-    "Regularization weight of the solve [-]"
-    reg_weight = 1.0
 
     # ---- What is done with the path that comes back ---------------------- #
-    "Upper bound on the points the optimized path is resampled to"
-    resample_points::Int64 = 361
     "Skip optimizer requests recorded as failed before (`OPT_FAILURE_CACHE`)"
     opt_failure_cache::Bool = true
     "Replay previously applied optimizer results (`OPT_CHAIN_CACHE`)"
     opt_success_cache::Bool = true
     "`use_awe_trim` of a warm-up solve sent before the startup request; `0.0` = off"
     opt_warm_start_awe_trim::Float64 = 0.0
-    "Round the tether length sent to the optimizer to a multiple of this [m]; `0.0` = off"
-    opt_length_round::Float64 = 0.0
     "`use_awe_trim` sent to AWETrim; negative follows `wc.use_awe_trim`"
     opt_awe_trim::Float64 = -1.0
     "Lengths of the post-run `free_speed` reference power solve; `0` = off"
@@ -82,16 +72,6 @@ $(TYPEDFIELDS)
     min_feasibility_margin = 1.0
     "Factor on the turn radius requested from the optimizer, on top of the gate's [-]"
     turn_radius_headroom = 1.0
-    "Corrected startup re-solves allowed when the first reply's margin is too small"
-    startup_retries_max = 2
-    "First startup retry target, as a multiple of the installed path's margin [-]"
-    startup_retry_step = 1.05
-    "Floor on a retry's target margin, as a factor on `min_feasibility_margin` [-]"
-    startup_retry_slack = 1.03
-    "Elevation cap below the incumbent's top for each startup retry [deg]; `0.0` = off"
-    startup_retry_el_cap_step = 2.0
-    "Extra azimuth half-width a startup width retry asks for [deg]; `0.0` = off"
-    startup_retry_az_widen_step = 2.0
     "Ground clearance the returned path must have [m]; `0.0` = off"
     min_height = 50.0
 
@@ -108,8 +88,6 @@ $(TYPEDFIELDS)
     # solve lands on the best branch less often than a free one (11/18 lengths
     # against 16/18, measured by AWETrim on the LEI-V3 reference), so a 422 where
     # there used to be a rejected reply is the expected new failure mode.
-    "Extra elevation on top of the shortfall when re-asking a rejected reply [deg]"
-    elevation_min_retry_margin = 0.5
     "Azimuth half-width limit of the optimized pattern [deg]; `0.0` = optimizer's 45.8°"
     pattern_azimuth_max = 0.0
     "Azimuth half-width limit at and above the high-wind step [deg]; `0.0` = off"
@@ -136,8 +114,6 @@ $(TYPEDFIELDS)
     path_blend_time = 4.0
     "Fraction of the endpoints' min radius every blended path must clear [-]"
     blend_fold_margin = 0.5
-    "Points at which a prospective blend is sampled for folds"
-    blend_probe_points::Int64 = 21
     "Fresh solves allowed when a reply is rejected by the blend or power gates"
     blend_max_retries::Int64 = 3
     "Min fraction of the startup install's predicted power a reply must reach [-]"
@@ -152,17 +128,57 @@ $(TYPEDFIELDS)
     size_box_growth = 1.3
     "Growth above which a power-losing reply is challenged by a cold solve; `0` = off"
     challenge_growth = 1.1
-    "Interval between `/status` polls while a solve runs [s]"
-    reopt_poll_interval = 0.5
     "Halt the simulation while a re-optimization runs"
     reopt_blocking::Bool = true
-    "Guess elevation offset for one retry of a failed re-optimization [deg]; `0.0` = off"
-    reopt_retry_el_offset = 2.0
     "Guess elevation offsets tried in order when the startup solve fails [deg]"
     startup_retry_el_offsets::Vector{Float64} = Float64[]
     "Margin above `min_elevation` a path's lowest point must have [deg]"
     candidate_elevation_margin = 3.0
 end
+
+# ---- Fixed parameters of the optimizer client ---------------------------- #
+# Former `TrajOptSettings` fields that no run ever changed. Settings files that
+# still carry them load only at these values, see `RETIRED_YAML_KEYS`.
+
+"Name the optimization is registered under on the server"
+const OPT_NAME = "simple_opt_fig8"
+"Points the guess is sent with; also the resolution of the reply"
+const GUESS_POINTS = 361
+"Upper bound on the points the optimized path is resampled to"
+const RESAMPLE_POINTS = 361
+"Regularization weight of the solve [-]"
+const REG_WEIGHT = 1.0
+"Interval between `/status` polls while a solve runs [s]"
+const REOPT_POLL_INTERVAL = 0.5
+"The tether length sent to the optimizer is rounded to a multiple of this [m]"
+const OPT_LENGTH_ROUND = 1.0
+"Points at which a prospective blend is sampled for folds"
+const BLEND_PROBE_POINTS = 21
+"Corrected startup re-solves allowed when the first reply's margin is too small"
+const STARTUP_RETRIES_MAX = 4
+"First startup retry target, as a multiple of the installed path's margin [-]"
+const STARTUP_RETRY_STEP = 1.05
+"Floor on a retry's target margin, as a factor on `min_feasibility_margin` [-]"
+const STARTUP_RETRY_SLACK = 1.03
+"Elevation cap below the incumbent's top for each startup retry [deg]"
+const STARTUP_RETRY_EL_CAP_STEP = 2.0
+"Extra azimuth half-width a startup width retry asks for [deg]"
+const STARTUP_RETRY_AZ_WIDEN_STEP = 2.0
+"Guess elevation offset for one retry of a failed re-optimization [deg]"
+const REOPT_RETRY_EL_OFFSET = 2.0
+"Extra elevation on top of the shortfall when re-asking a rejected reply [deg]"
+const ELEVATION_MIN_RETRY_MARGIN = 0.5
+
+merge!(RETIRED_YAML_KEYS, Dict{String, Any}(
+    "name" => OPT_NAME, "guess_points" => GUESS_POINTS, "resample_points" => RESAMPLE_POINTS,
+    "reg_weight" => REG_WEIGHT, "reopt_poll_interval" => REOPT_POLL_INTERVAL,
+    "opt_length_round" => OPT_LENGTH_ROUND, "blend_probe_points" => BLEND_PROBE_POINTS,
+    "startup_retries_max" => STARTUP_RETRIES_MAX, "startup_retry_step" => STARTUP_RETRY_STEP,
+    "startup_retry_slack" => STARTUP_RETRY_SLACK,
+    "startup_retry_el_cap_step" => STARTUP_RETRY_EL_CAP_STEP,
+    "startup_retry_az_widen_step" => STARTUP_RETRY_AZ_WIDEN_STEP,
+    "reopt_retry_el_offset" => REOPT_RETRY_EL_OFFSET,
+    "elevation_min_retry_margin" => ELEVATION_MIN_RETRY_MARGIN))
 
 """
     TrajOptSettings(filename::String; path = skc_data_path())
@@ -172,10 +188,6 @@ an error; a missing one keeps the struct default.
 """
 function TrajOptSettings(filename::String; path = skc_data_path())
     tos = load_yaml_fields!(TrajOptSettings(), filename, "traj_opt"; path)
-    tos.guess_points >= 8 ||
-        error("guess_points must be >= 8, got $(tos.guess_points).")
-    tos.resample_points >= 4 ||
-        error("resample_points must be >= 4, got $(tos.resample_points).")
     tos.min_height >= 0 || error("min_height must be >= 0, got $(tos.min_height).")
     tos.reopt_every_n_laps >= 1 ||
         error("reopt_every_n_laps must be >= 1, got $(tos.reopt_every_n_laps).")
@@ -207,15 +219,10 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.candidate_elevation_margin >= 0 ||
         error("candidate_elevation_margin must be >= 0, got "*
               "$(tos.candidate_elevation_margin).")
-    tos.elevation_min_retry_margin >= 0 ||
-        error("elevation_min_retry_margin must be >= 0, got "*
-              "$(tos.elevation_min_retry_margin).")
     tos.path_blend_time > 0 ||
         error("path_blend_time must be > 0, got $(tos.path_blend_time).")
     0 < tos.blend_fold_margin <= 1 ||
         error("blend_fold_margin must be in (0, 1], got $(tos.blend_fold_margin).")
-    tos.blend_probe_points >= 3 ||
-        error("blend_probe_points must be >= 3, got $(tos.blend_probe_points).")
     tos.blend_max_retries >= 0 ||
         error("blend_max_retries must be >= 0, got $(tos.blend_max_retries).")
     0 < tos.min_power_frac <= 1 ||
@@ -255,10 +262,10 @@ function turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
 end
 
 """
-    opt_length(tos, l) -> Float64
+    opt_length(l) -> Float64
 
-Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` [m]
-(`0.0` sends `l` unchanged). The flown `l_set` is never rounded.
+Tether length to SEND to the optimizer, rounded to [`OPT_LENGTH_ROUND`](@ref) [m].
+The flown `l_set` is never rounded.
 
 Every constraint that depends on the length is sized at this one too, not at the
 flown length: the settled `l_set` moves in the 5th decimal with the plant
@@ -267,5 +274,4 @@ flown length: the settled `l_set` moves in the 5th decimal with the plant
 which startup seed converges, and so which of two optima the run flew
 (2026-09-26, 10 m/s: path centre 26.7° or 40.8°).
 """
-opt_length(tos, l) = tos.opt_length_round > 0 ?
-    round(l / tos.opt_length_round) * tos.opt_length_round : l
+opt_length(l; step = OPT_LENGTH_ROUND) = step > 0 ? round(l / step) * step : l

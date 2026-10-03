@@ -49,8 +49,8 @@ end
                radius_for_margin) -> NamedTuple
 
 The next ask of the ladder, one lever per attempt, from the path `(inc_az, inc_el)` [deg] of
-the incumbent. `tos` supplies `min_feasibility_margin` and the `startup_retry_step`, `_slack`,
-`_el_cap_step` and `_az_widen_step`; `opt_r_sent` is the radius the startup solve was SENT (the
+the incumbent. `tos` supplies `min_feasibility_margin`, the step sizes are the
+`STARTUP_RETRY_*` constants; `opt_r_sent` is the radius the startup solve was SENT (the
 last ask that converged, before any retry did); `box_el_min` the elevation floor of the request's
 box (`nothing`: none, `el_floor_start` is used) and `radius_for_margin(target)` the turn radius
 the request builder asks for a margin `target`.
@@ -66,8 +66,8 @@ function next_lever(ladder::RetryLadder, tos, inc_az, inc_el, opt_r_sent, box_el
                     el_floor_start, radius_for_margin)
     (; r_asked, m_reply, bisect_hi, cap_ok, cap_bad, relax_cap, width_ok, width_bad,
        relax_width) = ladder
-    target = max(tos.startup_retry_step * m_reply,
-                 tos.startup_retry_slack * tos.min_feasibility_margin)
+    target = max(STARTUP_RETRY_STEP * m_reply,
+                 STARTUP_RETRY_SLACK * tos.min_feasibility_margin)
     # The last CONVERGED ask; before any retry converged (`r_asked` NaN) the radius the startup solve
     # was SENT. It must be one that converged, or the bisection walks an interval with no solution at
     # either end — the request's own radius is re-measured off the reply by then and is NOT that number.
@@ -77,16 +77,14 @@ function next_lever(ladder::RetryLadder, tos, inc_az, inc_el, opt_r_sent, box_el
     inc_height = inc_top - minimum(inc_el)
     el_min_box = something(box_el_min, el_floor_start)
     cap_from = isnothing(cap_ok) ? inc_top : min(inc_top, cap_ok)
-    cap_next = max(cap_from - tos.startup_retry_el_cap_step,
+    cap_next = max(cap_from - STARTUP_RETRY_EL_CAP_STEP,
                    el_min_box + inc_height + RETRY_CAP_SLACK)
-    cap_room = tos.startup_retry_el_cap_step > 0 &&
-               cap_next <= cap_from - RETRY_CAP_MIN_STEP &&
+    cap_room = cap_next <= cap_from - RETRY_CAP_MIN_STEP &&
                (isnan(cap_bad) || cap_next > cap_bad)
     # The width floor a width step would send, in the server's RMS measure, never at a floor that 422'd.
     inc_amp = azimuth_amplitude(inc_az)
-    width_next = max(inc_amp, something(width_ok, 0.0)) + tos.startup_retry_az_widen_step
-    width_room = tos.startup_retry_az_widen_step > 0 &&
-                 (isnan(width_bad) || width_next < width_bad)
+    width_next = max(inc_amp, something(width_ok, 0.0)) + STARTUP_RETRY_AZ_WIDEN_STEP
+    width_room = isnan(width_bad) || width_next < width_bad
     # What a bisection can still REACH: the radius lever is proportional (the radius step scales the
     # ask by target/measured), so no radius below the 422'd `bisect_hi` beats
     # `m_reply * bisect_hi / prev_ask`. Once that ceiling is under the gate, bisecting only walks back

@@ -9,11 +9,10 @@ each attempt pulls and what the ladder learns from an answer. Pure numbers, no o
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
-    azimuth_amplitude, RETRY_GAIN_MAX, startup_seed_offsets
+    azimuth_amplitude, RETRY_GAIN_MAX, startup_seed_offsets, STARTUP_RETRY_STEP, STARTUP_RETRY_SLACK
 
 @testset verbose = true "startup_retry" begin
-    tos = (; startup_retry_step = 1.05, startup_retry_slack = 1.0, min_feasibility_margin = 1.0,
-           startup_retry_el_cap_step = 2.0, startup_retry_az_widen_step = 2.0)
+    tos = (; min_feasibility_margin = 1.0)
     # An incumbent 10° wide and 4° tall, top at 22°, with a box floor at 10°: room to lower the ceiling.
     az = 10 .* sin.(range(0, 2pi; length = 100))
     el = 20 .+ 2 .* sin.(range(0, 4pi; length = 100))
@@ -31,7 +30,7 @@ import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_conve
         L = RetryLadder(; m_reply = 0.8)
         a = ask(L)
         @test a.lever == "radius correction"
-        @test a.target == max(1.05 * 0.8, 1.0)              # the slack floor wins
+        @test a.target == max(STARTUP_RETRY_STEP * 0.8, STARTUP_RETRY_SLACK)   # the slack floor wins
         @test a.r_ask == radius_for(a.target)
         @test a.prev_ask == 8.0                              # the radius the startup solve was sent
         @test a.el_cap ≈ maximum(el) - 2.0                   # room to lower the ceiling: taken at once

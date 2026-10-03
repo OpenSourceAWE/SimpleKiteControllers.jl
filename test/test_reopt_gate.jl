@@ -8,11 +8,12 @@ order, and whether it asks for a fresh reply or gives up. Pure numbers, no optim
 
 using Test
 using SimpleKiteControllers
-import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge
+import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge,
+    ELEVATION_MIN_RETRY_MARGIN
 
 @testset verbose = true "reopt_gate" begin
     tos = (; min_feasibility_margin = 1.0, min_height = 40.0,
-           blend_max_retries = 2, elevation_min_retry_margin = 1.0, min_power_frac = 0.5,
+           blend_max_retries = 2, min_power_frac = 0.5,
            min_power_frac_prev = 0.85, max_size_growth = 1.3)
     # A candidate that passes everything; each test spoils one thing.
     good = (; margin = 1.2, clearance = 80.0, l_now = 200.0, chk_el_min = 15.0, el_floor = 10.0,
@@ -37,7 +38,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
     @testset "clearance_raises_the_floor_then_gives_up" begin
         g = gate(clearance = 30.0, chk_el_min = 9.0)
         @test g.verdict == :retry && g.low
-        @test g.raise ≈ asind(40.0 / 200.0) - 9.0 + 1.0
+        @test g.raise ≈ asind(40.0 / 200.0) - 9.0 + ELEVATION_MIN_RETRY_MARGIN
         @test g.reason == "clearance 30.0 m"
         g2 = gate(clearance = 30.0, blend_attempt = 2)
         @test g2.verdict == :reject && g2.detail == "clearance 30.0 m" * retried(2)
@@ -46,7 +47,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
 
     @testset "elevation_floor" begin
         g = gate(chk_el_min = 8.0)
-        @test g.verdict == :retry && g.low && g.raise ≈ 10.0 - 8.0 + 1.0
+        @test g.verdict == :retry && g.low && g.raise ≈ 10.0 - 8.0 + ELEVATION_MIN_RETRY_MARGIN
         @test occursin("descends to 8.0°", g.reason)
         @test gate(chk_el_min = 8.0, blend_attempt = 2).verdict == :reject
     end
@@ -99,7 +100,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
     end
 
     @testset "blend_folds" begin
-        fold_tos = (; blend_fold_margin = 0.3, blend_probe_points = 21)
+        fold_tos = (; blend_fold_margin = 0.3)
         az0, el0 = figure_eight_path(20.0, 8.0, 0.0, 30.0, 0.0, 100)
         az1, el1 = figure_eight_path(24.0, 9.0, 0.0, 32.0, 0.0, 100)
         @test !blend_folds(fold_tos, az0, el0, az0, el0)
@@ -110,10 +111,10 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
 
     @testset "opt_length" begin
         # The settled length's 5th-decimal jitter is rounded away, so the request is repeatable.
-        @test opt_length((; opt_length_round = 0.5), 150.00282) == 150.0
-        @test opt_length((; opt_length_round = 0.5), 150.00290) == 150.0
-        @test opt_length((; opt_length_round = 0.5), 150.3) == 150.5
-        @test opt_length((; opt_length_round = 0.0), 150.00282) == 150.00282
+        @test opt_length(150.00282) == 150.0
+        @test opt_length(150.00290) == 150.0
+        @test opt_length(150.3; step = 0.5) == 150.5
+        @test opt_length(150.00282; step = 0.0) == 150.00282
     end
 end
 nothing

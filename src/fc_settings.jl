@@ -452,7 +452,8 @@ const MOVED_FC_KEYS = ("winch_force_tau", "winch_len_kp", "winch_damp", "winch_f
 Keys that were removed from the settings structs, each with the one value the
 code now always behaves as: the shape parameters `C` and `D` of
 [`figure_eight_path`](@ref), the `TrajOptSettings` fields that no run switched
-on, and the switches every run had on. Archived settings files still carry them.
+on, and the switches every run had on; `traj_opt_settings.jl` adds the fixed
+parameters of the optimizer client. Archived settings files still carry them.
 """
 const RETIRED_YAML_KEYS = Dict{String, Any}(
     "f8_c" => 0, "f8_d" => 0, "guess_c" => 0, "guess_d" => 0,

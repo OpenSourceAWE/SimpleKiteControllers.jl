@@ -162,7 +162,7 @@ end
         r = @test_logs (:info, r"keeping the incumbent") match_mode = :any fly_startup(;
             tos = tos_gate, path_for = p -> p <= 1000 ? TIGHT : NARROW_EIGHT)
         @test r.err isa ErrorException
-        n_retries = Int(r.setup.tos.startup_retries_max)
+        n_retries = SimpleKiteControllers.STARTUP_RETRIES_MAX
         @test count(==("/step"), r.paths) == 1 + n_retries
         @test count(startswith("startup_retry"), r.saved) == n_retries
         @test r.st.opt_paths_raw[1][1] ≈ TIGHT[1] && r.st.incumbent_score.margin < 1.3

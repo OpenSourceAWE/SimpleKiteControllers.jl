@@ -56,7 +56,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         lift = wing_lift(az, el)
         function install(; margin, c1 = c1)
             fec = new_fec(gentle)
-            setup = (; tos = (; resample_points = 361, min_feasibility_margin = margin),
+            setup = (; tos = (; min_feasibility_margin = margin),
                      fcs = FC_Settings(; max_steering = fcs.course.max_steering, el_offset_wing = 2.0), fec,
                      l_tether, wing_lift, c1_at_depower = dp -> c1, pattern_depower = r -> 0.27)
             st = RunState()
@@ -138,7 +138,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
     @testset "init_loop_state" begin
         raw = (collect(gentle[1]), collect(gentle[2]))
-        tos = (; resample_points = 361)
+        tos = (;)
         fec = new_fec(gentle)
         set_path!(fec, raw...; resample = n - 1)           # as install_optimized_path! does
         setup = (; fcs = FC_Settings(; depower_setpoint = 0.274, up_loops), fec, tos)

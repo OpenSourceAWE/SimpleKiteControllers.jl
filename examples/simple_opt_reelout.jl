@@ -80,7 +80,7 @@ every request as a minimum turn radius (`min_turn_radius_request`, scaled up by
 `turn_radius_headroom` and the lap's reel-out), so the optimizer solves under the
 limit its reply will be judged by. A 422 from the server, not a rejected reply,
 is now the expected failure. A startup reply that still falls short is re-solved
-by `retry_startup!`, up to `startup_retries_max` times: each attempt is a warm
+by `retry_startup!`, up to `STARTUP_RETRIES_MAX` times: each attempt is a warm
 `/step` under one changed lever (`next_lever`: turn radius, elevation ceiling or
 width), never a different seed.
 
@@ -143,6 +143,7 @@ using YAML   # for reelout_results.jl: the optimizer paths
 # The optimizer client's helpers (src/awetrim_client.jl), used by reelout_results.jl, not exported.
 using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite,
     save_opt_entries, first_error_line
+using SimpleKiteControllers: GUESS_POINTS   # read by reelout_results.jl
 
 run_script = basename(@__FILE__)
 
