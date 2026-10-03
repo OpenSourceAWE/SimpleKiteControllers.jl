@@ -55,12 +55,16 @@ const SITE_RUNS = Dict("cabauw" => ("system_reelout_cabauw.yaml", "reelout_cabau
 const RESULTS = dirname(realpath(joinpath(@__DIR__, "..", "output", "scenarios")))
 "Folder (relative to `RESULTS`) of the identification record: its run folders, table and fit"
 const RECORD = "depower_conversion/2026-10-03"
-"Runs replayed: site, wind speed [m/s], run folder (relative to `RESULTS`)"
+"""
+Runs replayed: site, wind speed [m/s], run folder (relative to `RESULTS`). Maasvlakte 3.5 and
+4 m/s are in the record but not fitted: below about 1.5 kN the optimizer's soft winch floor
+predicts a much slower reel-out than the plant flies, so the predicted tension is not a target
+for the depower (docs/power_ratio_findings.md).
+"""
 const SCENARIOS = [(site, wind, @sprintf("%s/runs/%s_v%04.1f", RECORD, site, wind))
                    for (site, wind) in (("cabauw", 4.0), ("cabauw", 5.0), ("cabauw", 6.0),
                                         ("cabauw", 7.0), ("cabauw", 8.0), ("cabauw", 9.0),
-                                        ("cabauw", 10.0), ("maasvlakte", 3.5),
-                                        ("maasvlakte", 4.0), ("maasvlakte", 8.0),
+                                        ("cabauw", 10.0), ("maasvlakte", 8.0),
                                         ("maasvlakte", 10.0), ("maasvlakte", 11.0))]
 "Where the replay logs are kept"
 const LOG_DIR = normpath(joinpath(@__DIR__, "..", "output", "depower_conversion"))

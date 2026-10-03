@@ -152,8 +152,9 @@ run's ratio stayed below the trigger.
   force limits, not controller loss. At the lowest wind speeds the plant
   exceeds even the planner's free-speed optimum. The 3.5 and 4 m/s rows of the
   Maasvlakte table use different references (free speed vs winch law).
-- **Depower identification:** leave Maasvlakte 3.5 and 4 m/s out of
-  `SCENARIOS` and refit with the tether-length term. Not done yet.
+- **Depower identification:** Maasvlakte 3.5 and 4 m/s are left out of
+  `SCENARIOS`; their runs stay in the record. The tether-length term is not
+  implemented yet.
 - **The fix is in the models, not in the controller.** Either the planner gets
   the dynamic model's lift and drag (an effective polar fitted from plant logs),
   or the dynamic model's drag is corrected towards the measurements. With
