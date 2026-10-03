@@ -14,7 +14,8 @@ using SimpleKiteControllers
 import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
     OptChain, opt_request_key, post, opt_init, opt_step, opt_status, opt_trajectory,
     chain_init, chain_step, chain_status, chain_trajectory, record_opt_success!,
-    stale_conn_error, server_running, ensure_server, replay_entries, clear_opt_chain_cache,
+    stale_conn_error, server_running, ensure_server, replay_entries, save_opt_entries,
+    clear_opt_chain_cache,
     free_speed_reference, TrajOptSettings, WCSettings, HTTP, JSON3, YAML
 
 @isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
@@ -210,6 +211,18 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
                         Dict("paths" => [path(az2 .+ 1, el2, 55.0)]))
         @test_throws r"installed at t = 55.0 s" replay_entries(scenario, "miss"; dir)
         @test_throws r"no other_opt_paths.yaml" replay_entries(scenario, "other"; dir)
+        # Saved next to the run, the entries replay without the cache, and a replay of that
+        # folder takes them from it.
+        @test save_opt_entries(scenario, "run"; dir) == joinpath(scenario, "run_opt_entries.json")
+        @test [e["key"] for e in replay_entries(scenario, "run"; dir = mktempdir())] == ["a", "b"]
+        replayed = mktempdir()
+        cp(joinpath(scenario, "run_opt_paths.yaml"), joinpath(replayed, "run_opt_paths.yaml"))
+        save_opt_entries(replayed, "run"; replay_paths = scenario, dir = mktempdir())
+        @test [e["key"] for e in replay_entries(replayed, "run"; dir = mktempdir())] == ["a", "b"]
+        # Without a path list a stale file goes.
+        rm(joinpath(replayed, "run_opt_paths.yaml"))
+        @test isnothing(save_opt_entries(replayed, "run"; dir))
+        @test !isfile(joinpath(replayed, "run_opt_entries.json"))
     end
 
     @testset "clear_opt_chain_cache" begin

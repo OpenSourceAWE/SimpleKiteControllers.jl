@@ -626,7 +626,9 @@ CORRECTED path, so it rises with the correction and cannot show what the
 correction did; these are the curves the kite is meant to land on. Its own file
 next to the log, archived with it, so `plot_pattern_scenario` can draw them for
 an archived run as well as a live one. Each carries the sim time and phase it
-was installed at, so the plot can leave out what only phase 5 flew.
+was installed at, so the plot can leave out what only phase 5 flew. Next to it,
+`<log>_opt_entries.json` holds the optimizer results of these paths, so that the
+run folder replays without the solution cache ([`save_opt_entries`](@ref)).
 """
 function write_summary_files(setup, st::RunState, summary)
     (; output_path, log_name) = setup
@@ -645,6 +647,11 @@ function write_summary_files(setup, st::RunState, summary)
                         for ((paz, pel), (t_at, ph_at)) in zip(st.opt_paths_raw, st.opt_paths_at)]))
     elseif isfile(opt_paths_file)
         rm(opt_paths_file)   # a stale one from an earlier run would be drawn as this run's
+    end
+    try
+        save_opt_entries(output_path, log_name; replay_paths = setup.inputs.replay_paths)
+    catch e   # the run is scored and logged; only replaying it elsewhere is lost
+        @warn "Could not save the optimizer results of the installed paths: $(first_error_line(e))"
     end
     return opt_paths_file
 end
@@ -681,6 +688,7 @@ function archive_run(setup, run_time, opt_paths_file)
         joinpath(output_path, log_name * ".arrow"),
         joinpath(output_path, log_name * ".yaml"),
         opt_paths_file,                                       # optimizer's uncorrected curves
+        replace(opt_paths_file, "_opt_paths.yaml" => "_opt_entries.json"),  # their optimizer results
     ]
     return archive_run_files(output_path, run_time, input_files, output_files)
 end

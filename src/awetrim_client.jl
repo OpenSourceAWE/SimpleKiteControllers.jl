@@ -763,23 +763,47 @@ OptChain(url::AbstractString = AWETRIM_URL; successes::Bool = true, failures::Bo
     replay_entries(scenario_dir, log_name; dir = OPT_CHAIN_CACHE) -> Vector{Dict}
 
 The solution-cache entries of the paths an archived run installed, in the order
-it installed them: each path of `<log_name>_opt_paths.yaml` in `scenario_dir`
-matched to the converged entry whose reply (startup) or trajectory table (a
-re-optimization) carries the same curve, within 0.01°. Errors if a path has no
-match: the cache was cleared since that run, and it cannot be replayed.
+it installed them. They are read from `<log_name>_opt_entries.json` in
+`scenario_dir` when the run saved them there ([`save_opt_entries`](@ref)), so
+that the folder replays on any machine. Otherwise each path of
+`<log_name>_opt_paths.yaml` is matched to the converged entry of the cache `dir`
+whose reply (startup) or trajectory table (a re-optimization) carries the same
+curve, within 0.01°. Errors if a path has no match: the cache was cleared since
+that run, or the run was flown on another machine, and it cannot be replayed.
 
 Passed as `OptChain(...; replay)`, the run flies the archived run's optimizer
 results on the current plant, without the optimizer: the way to tell a change of
 the kite model from a change of the path the optimizer returns for it.
 """
 function replay_entries(scenario_dir, log_name; dir = OPT_CHAIN_CACHE)
-    file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
-    isfile(file) || error("replay_entries: no $(basename(file)) in $scenario_dir.")
+    file = opt_entries_file(scenario_dir, log_name)
+    isfile(file) && return JSON3.read(read(file, String), Vector{Dict{String, Any}})
+    return match_opt_entries(scenario_dir, log_name, cached_entries(dir), dir)
+end
+
+"The file in `scenario_dir` holding the optimizer results its run installed"
+opt_entries_file(scenario_dir, log_name) = joinpath(scenario_dir, log_name * "_opt_entries.json")
+
+"The converged entries of the solution cache `dir`"
+function cached_entries(dir)
     entries = Dict{String, Any}[]
     for f in filter(endswith(".json"), readdir(dir; join = true))
         e = JSON3.read(read(f, String), Dict{String, Any})
         get(e, "status", "") == "converged" && push!(entries, e)
     end
+    return entries
+end
+
+"""
+    match_opt_entries(scenario_dir, log_name, entries, source) -> Vector{Dict}
+
+Each path of `<log_name>_opt_paths.yaml` in `scenario_dir` matched to the first of
+`entries` that carries the same curve, see [`replay_entries`](@ref); `source`
+names where `entries` came from in the error.
+"""
+function match_opt_entries(scenario_dir, log_name, entries, source)
+    file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
+    isfile(file) || error("replay_entries: no $(basename(file)) in $scenario_dir.")
     curves(e) = filter(!isnothing, [
         haskey(e, "reply") ? (Float64.(e["reply"]["trajectory"]["azimuth"]),
                               Float64.(e["reply"]["trajectory"]["elevation"])) : nothing,
@@ -792,9 +816,31 @@ function replay_entries(scenario_dir, log_name; dir = OPT_CHAIN_CACHE)
         i = findfirst(e -> any(c -> same(az, el, c), curves(e)), entries)
         isnothing(i) && error(@sprintf("replay_entries: the path installed at t = %.1f s \
                                         in %s is not in the solution cache %s.",
-                                       p["installed_t"], scenario_dir, dir))
+                                       p["installed_t"], scenario_dir, source))
         entries[i]
     end
+end
+
+"""
+    save_opt_entries(output_path, log_name; replay_paths = nothing, dir = OPT_CHAIN_CACHE)
+        -> file | nothing
+
+Write the optimizer results of the paths the run installed, in the order of
+`<log_name>_opt_paths.yaml` in `output_path`, to `<log_name>_opt_entries.json`
+next to it, so that the run folder replays without the solution cache. A replay
+takes them from its source folder `replay_paths`. Without a path list a stale
+file is removed and `nothing` returned. About 30 kB per path.
+"""
+function save_opt_entries(output_path, log_name; replay_paths = nothing, dir = OPT_CHAIN_CACHE)
+    file = opt_entries_file(output_path, log_name)
+    if !isfile(joinpath(output_path, log_name * "_opt_paths.yaml"))
+        rm(file; force = true)
+        return nothing
+    end
+    entries = isnothing(replay_paths) ? cached_entries(dir) : replay_entries(replay_paths, log_name; dir)
+    write(file, JSON3.write(match_opt_entries(output_path, log_name, entries,
+                                              something(replay_paths, dir))))
+    return file
 end
 
 # A step's key: its parent's, and everything of the step the server sees. `x` is

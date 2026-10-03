@@ -146,7 +146,8 @@ import Dates
 using OrderedCollections: OrderedDict
 using YAML   # for reelout_results.jl: the optimizer paths
 # The optimizer client's helpers (src/awetrim_client.jl), used by reelout_results.jl, not exported.
-using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite
+using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite,
+    save_opt_entries, first_error_line
 
 run_script = basename(@__FILE__)
 
