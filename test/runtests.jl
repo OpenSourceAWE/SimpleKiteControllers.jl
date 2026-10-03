@@ -9,7 +9,10 @@ end
 using SimpleKiteControllers
 using Test
 
-@testset verbose=true "SimpleKiteControllers.jl" begin
+# The result as the global `ts`, to read the counts after `include`; reset first, because a
+# failing run throws before the assignment and would leave the previous run's result.
+ts = nothing
+ts = @testset verbose=true "SimpleKiteControllers.jl" begin
     # Pure geometry: no simulation and no kite model, so this runs in under a second.
     include("test_fig8_controller.jl")
     include("test_course_controller.jl")
