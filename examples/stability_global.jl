@@ -3,8 +3,10 @@
 
 """
 Disk-margin stability analysis of the reel-out course loop over every archived
-scenario of the active project's site (`output/scenarios/<site>/vNN`, see
-`selected_scenarios_dir` in `src/gui_state.jl`).
+scenario of both sites (`output/scenarios/<site>/vNN`), one site after the other as
+`build_all_scenarios.jl` flies them: each site's project of `SITE_PROJECTS` is selected
+(`set_selected_project`, so `selected_scenarios_dir` in `src/gui_state.jl` names its folder)
+and the `data/gui.yaml` selection is restored at the end, also after an error.
 
 For each non-empty scenario folder this runs `stability_opt_reelout.jl` with
 the input `log_dir` set to that folder: the operating points (tether length, `v_a`, kite
@@ -14,12 +16,12 @@ table answers "is the current tuning stable at every operating point flown so
 far", not "was each scenario stable as it was flown" — a scenario flown before
 a retune may have used other gains.
 
-Prints one row per scenario with the worst disk margin over its linear
+Prints, per site, one row per scenario with the worst disk margin over its linear
 tether-length bins, for the inner loop and the loop with the guidance, and
-where the guided worst case sits (tether length, `v_a`, depower). The guided
-margin is the one rated. Then re-runs the worst scenario with plots on, which
-shows its Bode plot and the margins over tether length, and leaves its `L` in
-`Main` for `diskmargin(L)`.
+where the guided worst case sits (tether length, `v_a`, depower), and writes the site's
+`stability_overview.md`. The guided margin is the one rated. Then re-runs the worst
+scenario of both sites with plots on, which shows its Bode plot and the margins over
+tether length, and leaves its `L` in `Main` for `diskmargin(L)`.
 
 About 35 s per scenario. `run_example("stability_global.jl"; verbose = true)` shows each
 scenario's full per-bin output (`src/script_inputs.jl`).
@@ -35,17 +37,26 @@ end
 using Printf
 import YAML
 
-using SimpleKiteControllers: selected_scenarios_dir
+using SimpleKiteControllers: selected_scenarios_dir, read_gui_field, set_selected_project
 using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
-scenarios_dir = selected_scenarios_dir()
-isdir(scenarios_dir) || error("No scenarios: $scenarios_dir does not exist.")
-scenario_names = sort(filter(readdir(scenarios_dir)) do name
-    dir = joinpath(scenarios_dir, name)
-    !occursin('_', name) && isdir(dir) && any(endswith(".arrow"), readdir(dir))
-end)
-isempty(scenario_names) && error("No scenario folder with a log in $scenarios_dir.")
+"Project analyzed at each site, as in `build_all_scenarios.jl`; comment out a line to skip that site"
+const SITE_PROJECTS = [
+    "maasvlakte" => "system_reelout_maasvlakte.yaml",
+    "cabauw" => "system_reelout_cabauw.yaml",
+]
+
+"The scenario folders with a log in `scenarios_dir`, repeats (`_2`, ...) left out"
+function scenario_names_in(scenarios_dir)
+    isdir(scenarios_dir) || error("No scenarios: $scenarios_dir does not exist.")
+    names = sort(filter(readdir(scenarios_dir)) do name
+        dir = joinpath(scenarios_dir, name)
+        !occursin('_', name) && isdir(dir) && any(endswith(".arrow"), readdir(dir))
+    end)
+    isempty(names) && error("No scenario folder with a log in $scenarios_dir.")
+    return names
+end
 
 "Wind speed [m/s] of the scenario in `dir`, from its run summary; `NaN` if it has none"
 function scenario_wind(dir)
@@ -70,78 +81,104 @@ function analyse_scenario(dir; plots = false, quiet = true)
             τ = latest_global(:τ_log))
 end
 
-results = []
-for name in scenario_names
-    dir = joinpath(scenarios_dir, name)
-    print(rpad("  $name ", 12))
-    try
-        r = analyse_scenario(dir; quiet = !verbose)
-        push!(results, (; name, dir, wind = scenario_wind(dir), r...))
-        println(@sprintf("α guided = %.3f", r.α_guided))
-    catch e
-        push!(results, (; name, dir, wind = scenario_wind(dir), error = sprint(showerror, e)))
-        println("failed: ", first(split(sprint(showerror, e), '\n')))
-    end
-end
-
-ok = filter(r -> !haskey(r, :error), results)
-isempty(ok) && error("The stability analysis failed for every scenario in $scenarios_dir.")
-worst_scenario = argmin(r -> r.α_guided, ok)
-
 "Bins not rated / total bins, plus the bins the log never reached, if any"
 bins(r) = string(r.not_rated, "/", r.n_bins, r.not_flown > 0 ? " ($(r.not_flown) not flown)" : "")
 
 verdict(α) = α < 0.3 ? "fragile" : α < 0.5 ? "marginal" : "robust"
-println()
-printstyled(@sprintf("Worst disk margin per scenario, %s (live controller settings):\n",
-                     basename(scenarios_dir)); bold = true)
-println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/total")
-for r in results
-    if haskey(r, :error)
-        println(@sprintf("  %-8s  %10.2f  failed: %s", r.name, r.wind, first(split(r.error, '\n'))))
-        continue
-    end
-    line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %s",
-                    r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                    r.dm_guided, r.τ, bins(r))
-    color = r.α_guided < 0.3 ? :red : r.α_guided < 0.5 ? :yellow : :normal
-    printstyled(line, r === worst_scenario ? "   <- worst\n" : "\n"; color)
-end
-println()
 
-report_path = joinpath(scenarios_dir, "stability_overview.md")
-open(report_path, "w") do io
-    println(io, "# Stability overview, $(basename(scenarios_dir))")
-    println(io)
-    println(io, "Worst disk margin per scenario (live controller settings).")
-    println(io)
-    println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/total |")
-    println(io, "|---|---|---|---|---|---|---|---|---|---|---|")
+"""
+    analyse_site(site, project) -> NamedTuple
+
+Analyse every scenario of the selected site (`project` must be selected), print its
+table and write its `stability_overview.md`. Returns the worst scenario, with `site`
+and `project`.
+"""
+function analyse_site(site, project)
+    scenarios_dir = selected_scenarios_dir()
+    scenario_names = scenario_names_in(scenarios_dir)
+    results = []
+    for name in scenario_names
+        dir = joinpath(scenarios_dir, name)
+        print(rpad("  $name ", 12))
+        try
+            r = analyse_scenario(dir; quiet = !verbose)
+            push!(results, (; name, dir, wind = scenario_wind(dir), r...))
+            println(@sprintf("α guided = %.3f", r.α_guided))
+        catch e
+            push!(results, (; name, dir, wind = scenario_wind(dir), error = sprint(showerror, e)))
+            println("failed: ", first(split(sprint(showerror, e), '\n')))
+        end
+    end
+
+    ok = filter(r -> !haskey(r, :error), results)
+    isempty(ok) && error("The stability analysis failed for every scenario in $scenarios_dir.")
+    worst_scenario = argmin(r -> r.α_guided, ok)
+    println()
+    printstyled(@sprintf("Worst disk margin per scenario, %s (live controller settings):\n",
+                         basename(scenarios_dir)); bold = true)
+    println("  scenario  wind [m/s]  α inner  α guided  verdict   at L [m]  v_a [m/s]  depower  DM guided  τ_kite [s]  bins not rated/total")
     for r in results
         if haskey(r, :error)
-            println(io, @sprintf("| %s | %.2f | failed: %s | | | | | | | |",
-                                 r.name, r.wind, first(split(r.error, '\n'))))
+            println(@sprintf("  %-8s  %10.2f  failed: %s", r.name, r.wind, first(split(r.error, '\n'))))
             continue
         end
-        mark = r === worst_scenario ? " **← worst**" : ""
-        println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %s%s |",
-                             r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
-                             r.dm_guided, r.τ, bins(r), mark))
+        line = @sprintf("  %-8s  %10.2f  %7.3f  %8.3f  %-8s  %8.0f  %9.1f  %7.3f  %7.3f s  %10.3f  %s",
+                        r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
+                        r.dm_guided, r.τ, bins(r))
+        color = r.α_guided < 0.3 ? :red : r.α_guided < 0.5 ? :yellow : :normal
+        printstyled(line, r === worst_scenario ? "   <- worst\n" : "\n"; color)
     end
-    println(io)
-    println(io, "α inner is the disk margin of the course PID closed only around the turn-rate ",
-                 "plant (no guidance law); α guided is the disk margin of the actual flown loop, ",
-                 "PID → guidance law → pattern-law kite dynamics, and is the value that is rated; ",
-                 "DM guided is that same guided loop's delay margin, the extra pure delay it could ",
-                 "absorb before going unstable. The gravity term of the turn-rate law is ",
-                 "c2(u_d)/v_a·sin(ψ)·cos(β), with c1(u_d) and c2(u_d) of the plant identified in the low ",
-                 "crosswind pattern (the turn-rate table, data/turn_rate_coeffs.yaml, which the gain ",
-                 "schedule uses too); all margins are the worst case over the sign of its pole.")
-end
-@info "Wrote $report_path"
+    println()
 
-# The worst scenario again, with its plots and its full console output; leaves its `L` in Main.
-@info @sprintf("Worst scenario: %s (wind %.2f m/s), α guided = %.3f at L = %.0f m. Plotting it.",
-               worst_scenario.name, worst_scenario.wind, worst_scenario.α_guided, worst_scenario.L)
-analyse_scenario(worst_scenario.dir; plots = true, quiet = false)
+    report_path = joinpath(scenarios_dir, "stability_overview.md")
+    open(report_path, "w") do io
+        println(io, "# Stability overview, $(basename(scenarios_dir))")
+        println(io)
+        println(io, "Worst disk margin per scenario (live controller settings).")
+        println(io)
+        println(io, "| scenario | wind [m/s] | α inner | α guided | verdict | at L [m] | v_a [m/s] | depower | DM guided | τ_kite [s] | bins not rated/total |")
+        println(io, "|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in results
+            if haskey(r, :error)
+                println(io, @sprintf("| %s | %.2f | failed: %s | | | | | | | |",
+                                     r.name, r.wind, first(split(r.error, '\n'))))
+                continue
+            end
+            mark = r === worst_scenario ? " **← worst**" : ""
+            println(io, @sprintf("| %s | %.2f | %.3f | %.3f | %s | %.0f | %.1f | %.3f | %.3f s | %.3f | %s%s |",
+                                 r.name, r.wind, r.α_inner, r.α_guided, verdict(r.α_guided), r.L, r.va, r.dp,
+                                 r.dm_guided, r.τ, bins(r), mark))
+        end
+        println(io)
+        println(io, "α inner is the disk margin of the course PID closed only around the turn-rate ",
+                     "plant (no guidance law); α guided is the disk margin of the actual flown loop, ",
+                     "PID → guidance law → pattern-law kite dynamics, and is the value that is rated; ",
+                     "DM guided is that same guided loop's delay margin, the extra pure delay it could ",
+                     "absorb before going unstable. The gravity term of the turn-rate law is ",
+                     "c2(u_d)/v_a·sin(ψ)·cos(β), with c1(u_d) and c2(u_d) of the plant identified in the low ",
+                     "crosswind pattern (the turn-rate table, data/turn_rate_coeffs.yaml, which the gain ",
+                     "schedule uses too); all margins are the worst case over the sign of its pole.")
+    end
+    @info "Wrote $report_path"
+    return merge(worst_scenario, (; site, project))
+end
+
+project0 = read_gui_field("project")
+worst_scenario = try
+    worst_per_site = map(SITE_PROJECTS) do (site, project)
+        set_selected_project(project)
+        printstyled("\n$site\n"; bold = true)
+        analyse_site(site, project)
+    end
+    worst = argmin(r -> r.α_guided, worst_per_site)
+    # The worst scenario of both sites again, with its plots and its full console output;
+    # leaves its `L` in Main.
+    @info @sprintf("Worst scenario: %s/%s (wind %.2f m/s), α guided = %.3f at L = %.0f m. Plotting it.",
+                   worst.site, worst.name, worst.wind, worst.α_guided, worst.L)
+    set_selected_project(worst.project)
+    analyse_scenario(worst.dir; plots = true, quiet = false)
+    worst
+finally
+    set_selected_project(project0)
+end
 nothing

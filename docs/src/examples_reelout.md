@@ -49,8 +49,9 @@ of `stability_fig8.jl`; the operating points (apparent wind speed, kite speed, d
 are taken from a flown log. It needs `ControlSystemsBase`.
 
 ### [`stability_global.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/stability_global.jl)
-Runs `stability_opt_reelout.jl` on every archived scenario of the active site and prints the
-worst disk margin of each one. The operating points come from the scenario's log and the
+Runs `stability_opt_reelout.jl` on every archived scenario of both sites, one site after the
+other as `build_all_scenarios.jl` does, prints the worst disk margin of each one and writes each
+site's `stability_overview.md`. The operating points come from the scenario's log and the
 controller from the current settings, so the table answers whether the current tuning is stable
 at every operating point flown so far.
 
