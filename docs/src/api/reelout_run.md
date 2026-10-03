@@ -44,7 +44,6 @@ RunState
 step_commands!
 record_step!
 check_overspeed
-apply_optimized_kv!
 ```
 
 ## Run log and startup retries
