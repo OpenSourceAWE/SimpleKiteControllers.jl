@@ -133,7 +133,7 @@ function depower_command!(st::RunState, setup, plant, t, phase_before, phase, re
             st.depower_blend_t0 = t
         end
         w_dp, dp_flown = blended_depower(st.depower_blend_from, st.depower_blend_to,
-                                         st.depower_blend_t0, t, tos.path_blend_time,
+                                         st.depower_blend_t0, t, tos.reopt.path_blend_time,
                                          st.depower_flown_opt)
         st.depower_flown = dp_flown
         w_dp >= 1.0 && (st.depower_blend_to = nothing)
@@ -250,8 +250,8 @@ function reoptimize!(st::RunState, setup, plant, t, phase, el_target)
     ss = plant.ss
     l_now = Float64(ss.l_tether[1])
     # Queue on a lap boundary, never while a solve or a blend is running, never past max_reopt.
-    if !st.reopt_pending && isnothing(st.blend_to) && st.reopt_n < tos.max_reopt &&
-       st.fig8_idx_progress >= (st.reopt_lap + tos.reopt_every_n_laps) * st.n_path
+    if !st.reopt_pending && isnothing(st.blend_to) && st.reopt_n < tos.reopt.max_reopt &&
+       st.fig8_idx_progress >= (st.reopt_lap + tos.reopt.reopt_every_n_laps) * st.n_path
         request_reopt!(st, setup, t, phase, l_now)
     end
     # Collect: poll rather than block, and validate before installing.
@@ -275,7 +275,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
         # Clocked from here, so a request that fails while being BUILT still has a start.
         st.reopt_t_wall_request = time()
         # Seeds: `nothing` is a warm `/step`, a number a cold `/init` from the guess.
-        el_seeds = tos.reopt_blocking ? (nothing, el_center_seed) : (nothing,)
+        el_seeds = tos.reopt.reopt_blocking ? (nothing, el_center_seed) : (nothing,)
         # Asked for under the turn authority the reply will be JUDGED with (depower_final's c1 from phase 5).
         opt_r_on && (st.opt_r_min =
             min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
@@ -286,7 +286,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                 elevation_min = elevation_min_request(fcs, tos, opt_length(l_now);
                                                       extra = st.el_min_extra),
                 wind_speed = cap_wind),
-            st.opt_paths_raw[end]..., tos.size_box_growth)
+            st.opt_paths_raw[end]..., tos.reopt.size_box_growth)
         for (attempt, el_seed) in enumerate(el_seeds)
             if isnothing(el_seed)
                 # `min_turn_radius` is re-sent because it MOVES with the length; `nothing` means "keep".
@@ -297,12 +297,12 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                            wait = false)
             else
                 # Started inside the size box: a guess that violates it ends in local infeasibility.
-                guess_a, guess_b, guess_el = guess_in_box(tos.guess_a, tos.guess_b, el_seed,
+                guess_a, guess_b, guess_el = guess_in_box(tos.guess.guess_a, tos.guess.guess_b, el_seed,
                                                           st.opt_box_now)
-                (guess_a, guess_b, guess_el) == (tos.guess_a, tos.guess_b, el_seed) ||
+                (guess_a, guess_b, guess_el) == (tos.guess.guess_a, tos.guess.guess_b, el_seed) ||
                     @info @sprintf("  ... guess fitted into the box: %.1f° x %.1f° at %.1f° \
                                     (was %.1f° x %.1f° at %.1f°).",
-                                   guess_a, guess_b, guess_el, tos.guess_a, tos.guess_b, el_seed)
+                                   guess_a, guess_b, guess_el, tos.guess.guess_a, tos.guess.guess_b, el_seed)
                 guess_az_r, guess_el_r =
                     figure_eight_path(guess_a, guess_b,
                                       0.0, guess_el,
@@ -329,7 +329,7 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
             st.reopt_next_poll = t + REOPT_POLL_INTERVAL
             @info @sprintf("Re-optimizing for L = %.0f m at t = %.1f s \
                             (lap %.1f, request %d of %d, %s)%s%s.",
-                           l_now, t, st.reopt_lap, st.reopt_n + 1, tos.max_reopt,
+                           l_now, t, st.reopt_lap, st.reopt_n + 1, tos.reopt.max_reopt,
                            isnothing(el_seed) ? "warm start" :
                                @sprintf("guess el %.0f°", el_seed),
                            isnothing(st.opt_box_now) ? "" :
@@ -342,9 +342,9 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                                             @sprintf("%.1f°", st.opt_box_now.elevation_max),
                                         isnothing(st.opt_box_now.elevation_amplitude_max) ? "-" :
                                             @sprintf("%.1f°", st.opt_box_now.elevation_amplitude_max)),
-                           tos.reopt_blocking ? " — holding the simulation" : "")
+                           tos.reopt.reopt_blocking ? " — holding the simulation" : "")
             # Freeze here, so the reply is anchored to `l_now` and not to a length the run drifted to.
-            tos.reopt_blocking || break
+            tos.reopt.reopt_blocking || break
             t_block = time()
             while (try
                        chain_status(opt_chain)["state"]
@@ -412,7 +412,7 @@ function collect_reopt!(st::RunState, setup, t, phase, l_now, el_target)
     @info @sprintf("Re-optimization %d: %s%s (%s).",
                    st.reopt_n, event.status,
                    isempty(event.detail) ? "" : " — " * event.detail,
-                   tos.reopt_blocking ?
+                   tos.reopt.reopt_blocking ?
                        @sprintf("%.1f s of wall time, held", st.reopt_last_solve_s) :
                        @sprintf("%.1f s of sim after the request",
                                 t - st.reopt_t_request))
@@ -438,14 +438,14 @@ function gate_and_install!(st::RunState, setup, t, phase, l_now, el_target, even
     # Frozen for the retry chain; the first entry is the startup solve, which `min_power_frac_prev` skips.
     prev_install_pred = length(st.pred_timeline) > 1 ?
         st.pred_timeline[end].power : NaN
-    for blend_attempt in 0:tos.blend_max_retries
+    for blend_attempt in 0:tos.reopt.blend_max_retries
         if blend_attempt > 0
             retry_state = cold_retry!(st, setup, l_now, blend_attempt, reject_low, reject_reason)
             if retry_state != "converged"
                 @warn @sprintf("Blend-fold retry %d of %d for L = \
                                 %.0f m did not converge (%s); giving \
                                 up on this cycle.",
-                               blend_attempt, tos.blend_max_retries,
+                               blend_attempt, tos.reopt.blend_max_retries,
                                l_now, retry_state)
                 event = (; t, l = l_now, status = "rejected",
                          detail = @sprintf("blend-fold retry %d did \
@@ -565,12 +565,12 @@ function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reje
                                     @sprintf(" (+%.1f° for the \
                                               shortfall)",
                                              st.el_min_extra) : ""),
-                   blend_attempt, tos.blend_max_retries)
+                   blend_attempt, tos.reopt.blend_max_retries)
     retry_box = with_size_box(
         pattern_limits_from(tos;
             elevation_min = retry_el_min,
             wind_speed = cap_wind),
-        st.opt_paths_raw[end]..., tos.size_box_growth)
+        st.opt_paths_raw[end]..., tos.reopt.size_box_growth)
     return solve_cold!(st, setup, l_now, retry_el_seed, retry_box)
 end
 
@@ -584,7 +584,7 @@ optimizer's state.
 function solve_cold!(st::RunState, setup, l_now, el_seed, box)
     (; tos, opt_chain, winch_reopt, inflow) = setup
     # Started inside the size box, as in `request_reopt!`.
-    guess_a, guess_b, guess_el_center = guess_in_box(tos.guess_a, tos.guess_b, el_seed, box)
+    guess_a, guess_b, guess_el_center = guess_in_box(tos.guess.guess_a, tos.guess.guess_b, el_seed, box)
     guess_az, guess_el = figure_eight_path(guess_a, guess_b, 0.0, guess_el_center, 0.0,
                                            GUESS_POINTS)
     params = InitParams(; name = OPT_NAME, length = opt_length(l_now),
@@ -628,7 +628,7 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     (; tos, fcs, fec, feas, el_floor, opt_r_on, wing_lift, c1_at_phase, power_gate_off) = setup
     # Re-measure the anchor SCALE off the reply; the radius itself is derived where the request goes out.
     opt_r_on && (st.opt_r_scale = reelout_anchor_ratio(tab) *
-                                      tos.turn_radius_headroom)
+                                      tos.gates.turn_radius_headroom)
     # What the optimizer measured, in the request's metres; the gate reads the same curve AT THE ANCHOR.
     opt_r_reply = opt_float(tab["metrics"], "turn_radius_min_m")
     r_span = extrema(Float64.(tab["table"]["distance_radial"]))
@@ -654,7 +654,7 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     wing_frac = 1.0
     for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
         wing_frac = fw
-        lifted_margin(lifted(fw)) >= tos.min_feasibility_margin &&
+        lifted_margin(lifted(fw)) >= tos.gates.min_feasibility_margin &&
             break
     end
     new_el = lifted(wing_frac)
@@ -710,7 +710,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
                         (%.0f W predicted, %.1f m/s < \
                         power_gate_wind_min %.1f): installing anyway.",
                        l_now, new_pred, project_set.v_wind,
-                       tos.power_gate_wind_min)
+                       tos.reopt_gates.power_gate_wind_min)
     st.blend_from = cand_from
     st.blend_to = (cand_az, cand_el)
     # The scored reference follows the same ramp, unlifted curve to unlifted curve.
@@ -753,7 +753,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
                        margin = margin5.margin, st.el_applied))
     # Not a rejection reason: said once, so a phase 5 flown on the clamp is not a surprise.
     if !isnan(margin5.margin) &&
-       margin5.margin < tos.min_feasibility_margin && !margin5.warned
+       margin5.margin < tos.gates.min_feasibility_margin && !margin5.warned
         margin5.warned = true
         @warn @sprintf("The path installed at %.0f m has a \
                         curvature margin of %.2f at \
@@ -763,7 +763,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
                         will fly it with less turn authority \
                         than any gate has checked.",
                        l_now, margin5.margin, margin,
-                       tos.min_feasibility_margin)
+                       tos.gates.min_feasibility_margin)
     end
     return (; t, l = l_now, status = "installed",
             detail = @sprintf("margin %.2f%s%s, clearance %.1f m, \
@@ -790,7 +790,7 @@ w by whoever queued it, so a plain linear ramp.
 function advance_blend!(st::RunState, setup, t)
     (; tos, fcs, fec) = setup
     isnothing(st.blend_to) && return nothing
-    weight = clamp((t - st.blend_t0) / tos.path_blend_time, 0.0, 1.0)
+    weight = clamp((t - st.blend_t0) / tos.reopt.path_blend_time, 0.0, 1.0)
     b_az, b_el = blend_paths(st.blend_from[1], st.blend_from[2],
                              st.blend_to[1], st.blend_to[2], weight)
     set_path!(fec, b_az, b_el; up_loops = fcs.pattern.up_loops)
@@ -841,7 +841,7 @@ function deliver_lift_in_air!(st::RunState, setup, plant, t, phase, el_target)
         el_rung = fec.el_path .+ fm * el_delta
         rung_margin = shift_margin(el_rung)
         isnan(margin) && (margin = rung_margin)   # the WHOLE shift's margin, reported
-        if rung_margin >= tos.min_feasibility_margin &&
+        if rung_margin >= tos.gates.min_feasibility_margin &&
            !blend_folds(tos, fec.az_path, fec.el_path, fec.az_path, el_rung)
             hit = (fm, el_rung, rung_margin)
             break

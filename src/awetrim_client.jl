@@ -1164,9 +1164,9 @@ end
     guess_el_center_seed(tos, wind_speed) -> Float64
 
 The centre elevation [deg] the initial-guess lemniscate is built at:
-`tos.guess_el_center_high` at and above `tos.guess_el_center_wind_ref`,
-`tos.guess_el_center` below it. `tos.guess_el_center_high == 0.0` disables the
-step, so this returns `tos.guess_el_center` at every wind.
+`tos.guess.guess_el_center_high` at and above `tos.guess.guess_el_center_wind_ref`,
+`tos.guess.guess_el_center` below it. `tos.guess.guess_el_center_high == 0.0` disables the
+step, so this returns `tos.guess.guess_el_center` at every wind.
 
 A STEP, not a ramp like [`depower_seed`](@ref)'s: the guess picks a basin of a
 multi-modal solve (`TrajOptSettings`' docstring), and there is no reason to
@@ -1174,8 +1174,8 @@ believe a basin that converges at one wind shrinks gracefully into one that
 converges at another — only the tested seeds are known to work.
 """
 function guess_el_center_seed(tos, wind_speed)
-    tos.guess_el_center_high > 0 && wind_speed >= tos.guess_el_center_wind_ref ?
-        tos.guess_el_center_high : tos.guess_el_center
+    tos.guess.guess_el_center_high > 0 && wind_speed >= tos.guess.guess_el_center_wind_ref ?
+        tos.guess.guess_el_center_high : tos.guess.guess_el_center
 end
 
 """
@@ -1298,14 +1298,14 @@ function optimizer_session(tos, inflow, replay_paths, log_name)
     el_center_seed_base = guess_el_center_seed(tos, inflow.wind_speed)
     el_center_seed = el_center_seed_base
     startup_seed_offset = 0.0
-    guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
+    guess_az, guess_el = figure_eight_path(tos.guess.guess_a, tos.guess.guess_b,
                                            0.0, el_center_seed,
                                            0.0, GUESS_POINTS)
     @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-                   tos.guess_a, tos.guess_b, el_center_seed, GUESS_POINTS)
-    ensure_server(tos.base_url)
-    opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
-                         failures = tos.opt_failure_cache,
+                   tos.guess.guess_a, tos.guess.guess_b, el_center_seed, GUESS_POINTS)
+    ensure_server(tos.server.base_url)
+    opt_chain = OptChain(tos.server.base_url; successes = tos.server.opt_success_cache,
+                         failures = tos.server.opt_failure_cache,
                          replay = isnothing(replay_paths) ? nothing :
                                   replay_entries(replay_paths, log_name))
     isnothing(replay_paths) ||
@@ -1323,7 +1323,7 @@ The STARTUP solve, from `start_params` (the shipped guess) and, if the optimizer
 422 (no path from that seed), from the seeds of `startup_retry_el_offsets` in order, then
 whole degrees walked outward. `make_params(el_center)` builds the `/init` request seeded at
 that centre elevation and `solve(params)` sends it, returning `(result, seed_trajectory)`.
-A request the failure cache (`failure_file`, read and written only under `tos.opt_failure_cache`)
+A request the failure cache (`failure_file`, read and written only under `tos.server.opt_failure_cache`)
 records as bad is skipped and costs no retry; a 422 is recorded.
 
 Returns the result with the request and seed that produced it. Throws when every seed
@@ -1341,13 +1341,13 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
     last_422 = nothing
     cached_msg = nothing
     sent = 0
-    budget = 1 + length(tos.startup_retry_el_offsets)
+    budget = 1 + length(tos.guess.startup_retry_el_offsets)
     sent_offsets = Float64[]
-    for offset in startup_seed_offsets(tos.startup_retry_el_offsets)
+    for offset in startup_seed_offsets(tos.guess.startup_retry_el_offsets)
         sent < budget || break
         el_center = el_center_seed_base + offset
         params = offset == 0 ? start_params : make_params(el_center)
-        cached = tos.opt_failure_cache ? opt_failed_before(params; file = failure_file) : nothing
+        cached = tos.server.opt_failure_cache ? opt_failed_before(params; file = failure_file) : nothing
         if !isnothing(cached)
             cached_msg = @sprintf("This exact request failed before (%s, recorded \
                                    %s) and is cached as bad, so it was not sent: %s \
@@ -1364,7 +1364,7 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
             @warn @sprintf("Startup solve at %.0f° failed: retry %d/%d from a \
                             guess centred at %.0f° (%+.1f°, startup_retry_el_offsets%s).",
                            el_center_seed_base, sent - 1, budget - 1, el_center, offset,
-                           offset in tos.startup_retry_el_offsets ? "" :
+                           offset in tos.guess.startup_retry_el_offsets ? "" :
                                " walked outward past the listed seeds")
         try
             opt_result, opt_seed_trajectory = solve(params)
@@ -1375,7 +1375,7 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
             break
         catch exc
             exc isa HTTP.StatusError && exc.status == 422 || rethrow()
-            tos.opt_failure_cache && record_opt_failure!(params, "422 from /step"; file = failure_file)
+            tos.server.opt_failure_cache && record_opt_failure!(params, "422 from /step"; file = failure_file)
             last_422 = exc
         end
     end
@@ -1389,8 +1389,8 @@ function solve_startup(tos, make_params, solve, start_params, el_center_seed_bas
 
           Three candidates, most likely first:
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
-              it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
-              $(tos.guess_b)°, guess_el_center = $(el_center_seed_base)° of \
+              it. Here that is guess_a = $(tos.guess.guess_a)°, guess_b = \
+              $(tos.guess.guess_b)°, guess_el_center = $(el_center_seed_base)° of \
               data/traj_opt.yaml$(length(sent_offsets) == 1 ? "" :
               ", and the retry seeds at offsets $(sent_offsets[2:end])° " *
               "failed too (startup_retry_el_offsets)"), which seeds the \
@@ -1413,7 +1413,7 @@ end
         -> (; points, weighted) | nothing
 
 Mean reel-out power an OPTIMAL path could harvest with any winch inside
-`[f_min, f_max]`, solved at `tos.free_speed_reference_points` lengths spanning
+`[f_min, f_max]`, solved at `tos.server.free_speed_reference_points` lengths spanning
 `lengths` and weighted by how much of the reeling window was spent at each: every
 entry of `lengths` is one sample, scored at its own length, linearly interpolated
 between the probes and held flat outside them. `wc` is the run's `WCSettings`
@@ -1432,7 +1432,7 @@ chain of one step, and it IS the result the caller uses.
 """
 function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
                               min_turn_radius = nothing, pattern_limits = nothing)
-    n = tos.free_speed_reference_points
+    n = tos.server.free_speed_reference_points
     (n < 2 || isempty(lengths)) && return nothing
     lo, hi = extrema(lengths)
     hi - lo < 1.0 && (hi = lo + 1.0)
@@ -1440,8 +1440,8 @@ function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
     # use_awe_trim 1.0: the free_speed NLP never reads the tension curve, but the
     # node-0 forward march does, and 1.0 is the value it converges at cold.
     ref_winch = winch_from_wc(wc; use_awe_trim = 1.0, winch_mode = "free_speed")
-    ref_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
-                         failures = tos.opt_failure_cache)
+    ref_chain = OptChain(tos.server.base_url; successes = tos.server.opt_success_cache,
+                         failures = tos.server.opt_failure_cache)
     solved = NamedTuple[]
     for l in probes
         try

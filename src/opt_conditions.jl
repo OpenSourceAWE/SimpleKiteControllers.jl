@@ -221,11 +221,11 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing,
 
 The wind speed the elevation-cap step is keyed on: `v_wind_gnd` (the mean wind
 at the project's `h_ref`, as passed to `init`) scaled to
-`tos.pattern_elevation_amplitude_max_wind_height` by the project's own profile
+`tos.box.pattern_elevation_amplitude_max_wind_height` by the project's own profile
 law, or unscaled when that height is `0.0`.
 """
 function cap_wind_speed(tos, project_set, v_wind_gnd)
-    h = tos.pattern_elevation_amplitude_max_wind_height
+    h = tos.box.pattern_elevation_amplitude_max_wind_height
     h > 0 || return Float64(v_wind_gnd)
     return calc_wind_factor(AtmosphericModel(project_set; nowindfield = true), h) *
            v_wind_gnd
@@ -246,7 +246,7 @@ on), the one caller that may fly `rcs.f_high_awe_trim`.
 function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
     inflow = inflow_from_settings(project_set)
     cap_wind = cap_wind_speed(tos, project_set, inflow.wind_speed)
-    opt_awe_trim = tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim
+    opt_awe_trim = tos.server.opt_awe_trim >= 0 ? tos.server.opt_awe_trim : rcs.use_awe_trim
     winch = winch_from_wc(rcs; use_awe_trim = opt_awe_trim, f_max = f_high_nominal)
     winch_first_lap = fcs.winch.first_lap_force_frac < 1 ?
         winch_from_wc(rcs; use_awe_trim = opt_awe_trim,
@@ -258,8 +258,8 @@ function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
                    inflow.wind_speed, inflow.wind_direction, inflow.profile_law, inflow.z0,
                    winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max,
                    depower_seed(tos, inflow.wind_speed),
-                   inflow.wind_speed > tos.input_depower_wind_ref ?
-                       @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.input_depower,
-                                tos.input_depower_per_wind, tos.input_depower_wind_ref) : "")
+                   inflow.wind_speed > tos.seed.input_depower_wind_ref ?
+                       @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.seed.input_depower,
+                                tos.seed.input_depower_per_wind, tos.seed.input_depower_wind_ref) : "")
     return (; inflow, cap_wind, opt_awe_trim, winch, winch_first_lap, winch_reopt)
 end

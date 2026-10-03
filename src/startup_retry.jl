@@ -67,7 +67,7 @@ function next_lever(ladder::RetryLadder, tos, inc_az, inc_el, opt_r_sent, box_el
     (; r_asked, m_reply, bisect_hi, cap_ok, cap_bad, relax_cap, width_ok, width_bad,
        relax_width) = ladder
     target = max(STARTUP_RETRY_STEP * m_reply,
-                 STARTUP_RETRY_SLACK * tos.min_feasibility_margin)
+                 STARTUP_RETRY_SLACK * tos.gates.min_feasibility_margin)
     # The last CONVERGED ask; before any retry converged (`r_asked` NaN) the radius the startup solve
     # was SENT. It must be one that converged, or the bisection walks an interval with no solution at
     # either end — the request's own radius is re-measured off the reply by then and is NOT that number.
@@ -90,7 +90,7 @@ function next_lever(ladder::RetryLadder, tos, inc_az, inc_el, opt_r_sent, box_el
     # `m_reply * bisect_hi / prev_ask`. Once that ceiling is under the gate, bisecting only walks back
     # to the incumbent's own margin and the attempts belong to the geometry levers instead.
     bisect_room = !isnan(bisect_hi) &&
-                  m_reply * bisect_hi / prev_ask >= tos.min_feasibility_margin
+                  m_reply * bisect_hi / prev_ask >= tos.gates.min_feasibility_margin
     # One lever per attempt; every rung carries the last converged ceiling and width floor.
     az_min = width_ok
     common = (; target, prev_ask, inc_top, inc_height, inc_amp, el_min_box, bisect_room)

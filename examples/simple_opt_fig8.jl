@@ -178,20 +178,20 @@ winch = winch_from_wc(wcs)
                inflow.wind_speed, inflow.wind_direction, inflow.profile_law, inflow.z0,
                winch.k_v, winch.k_v * sqrt(winch.f_max), winch.f_max,
                depower_seed(tos, inflow.wind_speed),
-               inflow.wind_speed > tos.input_depower_wind_ref ?
-                   @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.input_depower,
-                            tos.input_depower_per_wind, tos.input_depower_wind_ref) : "")
+               inflow.wind_speed > tos.seed.input_depower_wind_ref ?
+                   @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.seed.input_depower,
+                            tos.seed.input_depower_per_wind, tos.seed.input_depower_wind_ref) : "")
 
 # The seed, from data/traj_opt.yaml and NOT from fcs.f8_*: it decides whether the
 # solve converges and which optimum it converges to, while fcs.f8_* size the
 # lemniscate the OTHER runs fly. `figure_eight_path` closes the curve itself
 # (last point == first), which is the shape the server expects.
 el_center_seed = guess_el_center_seed(tos, inflow.wind_speed)
-guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
+guess_az, guess_el = figure_eight_path(tos.guess.guess_a, tos.guess.guess_b,
                                        0.0, el_center_seed,
                                        0.0, GUESS_POINTS)
 @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
-               tos.guess_a, tos.guess_b, el_center_seed, GUESS_POINTS)
+               tos.guess.guess_a, tos.guess.guess_b, el_center_seed, GUESS_POINTS)
 
 # What the solve must respect, as opposed to what it is scored against
 # afterwards: both are off unless data/traj_opt.yaml turns them on.
@@ -204,7 +204,7 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
 # `simple_opt_reelout.jl` does it — it is assumed instead, from
 # `turn_radius_lap_reelout` (fitted to the wind) over this run's length.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
-opt_r_scale = (1 + turn_radius_reel / l0) * tos.turn_radius_headroom
+opt_r_scale = (1 + turn_radius_reel / l0) * tos.gates.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)
 opt_box = pattern_limits_from(tos;
                               elevation_min = elevation_min_request(fcs, tos, l0),
@@ -216,11 +216,11 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                        @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
                                 own, x %.3f for %.0f m of assumed reel-out per lap \
                                 and %.2f of headroom)",
-                                opt_r_min, tos.min_feasibility_margin, opt_r_scale,
-                                turn_radius_reel, tos.turn_radius_headroom),
+                                opt_r_min, tos.gates.min_feasibility_margin, opt_r_scale,
+                                turn_radius_reel, tos.gates.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
-ensure_server(tos.base_url)
+ensure_server(tos.server.base_url)
 opt_reply = opt_init(InitParams(; name = OPT_NAME, length = l0,
                                 winch_params = winch, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
@@ -228,12 +228,12 @@ opt_reply = opt_init(InitParams(; name = OPT_NAME, length = l0,
                                 reg_weight = REG_WEIGHT,
                                 min_turn_radius = opt_r_min,
                                 pattern_limits = opt_box);
-                     url = tos.base_url)
+                     url = tos.server.base_url)
 # No automatic retry with a different guess, deliberately: a guess that merely
 # converges is not the same answer, and picking one silently would hide which
 # optimum was flown. See the "initial guess" section of the docstring.
 opt_result = try
-    opt_step(StepParams(l0, winch, opt_reply.trajectory); url = tos.base_url)
+    opt_step(StepParams(l0, winch, opt_reply.trajectory); url = tos.server.base_url)
 catch exc
     exc isa HTTP.StatusError && exc.status == 422 || rethrow()
     error("""
@@ -241,8 +241,8 @@ catch exc
 
           Three candidates, most likely first:
             * the INITIAL GUESS is too far from the optimum for IPOPT to reach \
-              it. Here that is guess_a = $(tos.guess_a)°, guess_b = \
-              $(tos.guess_b)°, guess_el_center = $(el_center_seed)° of \
+              it. Here that is guess_a = $(tos.guess.guess_a)°, guess_b = \
+              $(tos.guess.guess_b)°, guess_el_center = $(el_center_seed)° of \
               data/traj_opt.yaml, which seeds the request and nothing else — \
               widening or raising it changes the guess, not the flown path. \
               Measured at 150 m and 6 m/s: 20°/11° at 18° does not converge, \
@@ -294,7 +294,7 @@ el_height_path = maximum(fec.el_path) - minimum(fec.el_path)
 # set_path! REVERSES a path that does not match up_loops, so a mismatch here is
 # not caught by anything downstream: the kite would fly the optimizer's curve,
 # but backwards, which is not the trajectory that was optimized.
-opt_table = opt_trajectory(; url = tos.base_url)
+opt_table = opt_trajectory(; url = tos.server.base_url)
 opt_downloops = opt_table["spline"]["downloops"]
 opt_downloops == !fcs.pattern.up_loops ||
     error("The optimizer returned a downloops = $opt_downloops path while this run \
@@ -314,19 +314,19 @@ opt_downloops == !fcs.pattern.up_loops ||
 # Checked with `candidate_elevation_margin` on top, because this compares the
 # REFERENCE path while the criterion scores the FLOWN one, and the kite flies below
 # its reference near the lobe tips.
-el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
+el_floor = fcs.run.min_elevation + tos.gates.candidate_elevation_margin
 minimum(fec.el_path) >= el_floor ||
     error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
                     %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
                     constrains height and not elevation, so this is not something \
                     the solve avoids on its own.",
                    minimum(fec.el_path), fcs.run.min_elevation,
-                   tos.candidate_elevation_margin, el_floor))
+                   tos.gates.candidate_elevation_margin, el_floor))
 
 # The clearance floor, checked at the tether length this run flies. Independent of
 # the turn-rate table above, so it runs whether or not `coeffs` was available.
-if tos.min_height > 0
-    clr = check_pattern_height(fec, l_tether, tos.min_height)
+if tos.gates.min_height > 0
+    clr = check_pattern_height(fec, l_tether, tos.gates.min_height)
     clr.ok ||
         error(@sprintf("The optimized path's lowest point is %.1f m above ground at \
                         L = %.0f m (elevation %.1f°), below the min_height = %.0f m \
@@ -334,7 +334,7 @@ if tos.min_height > 0
                         and it earns part of it by reeling out within the lap, which \
                         an installed (azimuth, elevation) curve does not. Raise the \
                         guess elevation, fly a longer tether, or lower min_height.",
-                       clr.height, l_tether, clr.elevation, tos.min_height))
+                       clr.height, l_tether, clr.elevation, tos.gates.min_height))
 end
 
 # Never hardcode these: both arguments move them a lot. The lookup key is
@@ -358,14 +358,14 @@ else
     # damping in use. The optimizer knows nothing of the V3's turn-rate law, so a
     # path the kite cannot turn along is a plausible thing for it to return.
     feas = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1)
-    feas.margin >= tos.min_feasibility_margin ||
+    feas.margin >= tos.gates.min_feasibility_margin ||
         error(@sprintf("The optimized path asks for a turn radius of %.1f° where the \
                         kite manages %.1f° at L = %.0f m: margin %.2f, below \
                         min_feasibility_margin = %.2f. Lower body_damping, raise \
                         max_steering, or set min_feasibility_margin: 0.0 in \
                         data/traj_opt.yaml to fly it anyway.",
                        feas.path_radius, feas.kite_radius, l_tether, feas.margin,
-                       tos.min_feasibility_margin))
+                       tos.gates.min_feasibility_margin))
 
     # Dead-time context for attractor_dist: how long the lead arc takes to fly.
     lead_time = deg2rad(fcs.pattern.attractor_dist) * l_tether / fcs.course.v_app_ref

@@ -95,9 +95,9 @@ verdicts; the caller decides what refuses the run and what only warns.
 Checks performed (all reported via `@info`/`@warn` here):
 
 * elevation floor — the path's lowest elevation against
-  `fcs.run.min_elevation + tos.candidate_elevation_margin`;
+  `fcs.run.min_elevation + tos.gates.candidate_elevation_margin`;
 * ground clearance — [`check_pattern_height`](@ref) at `l_tether`, when
-  `tos.min_height > 0`;
+  `tos.gates.min_height > 0`;
 * turn-rate coefficients for `(fcs.run.body_damping, depower)` — `depower` is the
   one the pattern is FLOWN at, `fcs.course.depower_setpoint` unless the caller flies the
   optimizer's own, where a reply judged at the setpoint's c1
@@ -117,18 +117,18 @@ function check_reelout_feasibility(fec::FigureEightController,
     # grows. Checked with `candidate_elevation_margin` on top, because this
     # compares the REFERENCE path while `fig8_metrics` scores the FLOWN one, and
     # the kite flies below its reference near the lobe tips.
-    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
+    el_floor = fcs.run.min_elevation + tos.gates.candidate_elevation_margin
     @info @sprintf("Elevation floor for re-optimized replies: %.2f° \
                     (min_elevation %.2f° + candidate_elevation_margin %.2f°).",
-                   el_floor, fcs.run.min_elevation, tos.candidate_elevation_margin)
+                   el_floor, fcs.run.min_elevation, tos.gates.candidate_elevation_margin)
 
     # The clearance floor, checked at the tether length this run flies.
-    if tos.min_height > 0
-        clr = check_pattern_height(fec, l_tether, tos.min_height)
+    if tos.gates.min_height > 0
+        clr = check_pattern_height(fec, l_tether, tos.gates.min_height)
         clr.ok || @warn @sprintf("The optimized path's lowest point is %.1f m above \
                                   ground at L = %.0f m (elevation %.1f°), below \
                                   min_height = %.0f m.",
-                                 clr.height, l_tether, clr.elevation, tos.min_height)
+                                 clr.height, l_tether, clr.elevation, tos.gates.min_height)
     end
 
     # The lookup key is `body_damping`, the value `init` was given: the damping
@@ -163,9 +163,9 @@ function check_reelout_feasibility(fec::FigureEightController,
                     min_feasibility_margin = %.2f.",
                    feas_start.margin, feas_start.path_radius, feas_start.kite_radius,
                    l_tether, fcs.course.max_steering,
-                   feas_start.margin >= tos.min_feasibility_margin ? "Clears" :
+                   feas_start.margin >= tos.gates.min_feasibility_margin ? "Clears" :
                        "BELOW the demanded",
-                   tos.min_feasibility_margin)
+                   tos.gates.min_feasibility_margin)
     feas_end = check_pattern_feasible(fec, fcs.reelout.reelout_l_max, fcs.course.max_steering;
                                       c1, prn = false)
     @info @sprintf("The same path at reelout_l_max = %.0f m: margin %.2f — a fixed \
@@ -203,12 +203,12 @@ function check_reelout_feasibility(fec::FigureEightController,
                        fcs.reelout.reelout_l_max, fcs.reelout.el_offset_final, feas_end.margin)
         # A warning, not a refusal: phase 5 is a handful of laps at the end of a
         # run that has already produced its power.
-        feas_final.margin >= tos.min_feasibility_margin || @warn @sprintf(
+        feas_final.margin >= tos.gates.min_feasibility_margin || @warn @sprintf(
             "Phase 5 asks for a turn radius of %.1f° where the kite manages %.1f° \
              at depower_final = %.3f: margin %.2f, below \
              min_feasibility_margin = %.2f.",
             feas_final.path_radius, feas_final.kite_radius, fcs.reelout.depower_final,
-            feas_final.margin, tos.min_feasibility_margin)
+            feas_final.margin, tos.gates.min_feasibility_margin)
     end
 
     # Dead-time context for the attractor lead: how long the lead arc takes to
@@ -246,14 +246,14 @@ The abort policy on the startup path installed in `fec`: the gates of
 [`check_reelout_feasibility`](@ref) that REFUSE a reel-out run rather than only warn,
 each an `error` that says why. Returns the verdicts when the path passes.
 
-* The ELEVATION floor, `fcs.run.min_elevation + tos.candidate_elevation_margin`: this
+* The ELEVATION floor, `fcs.run.min_elevation + tos.gates.candidate_elevation_margin`: this
   repo's own criterion is an angle and `fig8_metrics` fails a run that breaks it.
   AWETrim constrains height and not elevation, so this is not something the solve
   avoids on its own.
-* The clearance floor `tos.min_height` at `l_tether`, when set: the optimizer earns
+* The clearance floor `tos.gates.min_height` at `l_tether`, when set: the optimizer earns
   part of its `min_height` by reeling out within the lap, which an installed
   (azimuth, elevation) curve does not, so it must be told here rather than flown past.
-* The curvature margin at the STARTING length against `tos.min_feasibility_margin`,
+* The curvature margin at the STARTING length against `tos.gates.min_feasibility_margin`,
   at the depower the pattern is FLOWN at (`depower`): the optimizer knows nothing of
   the V3's turn-rate law, so a path the kite cannot turn along is a plausible thing
   for it to return, and flying it measures the steering clamp instead of the path.
@@ -262,32 +262,32 @@ each an `error` that says why. Returns the verdicts when the path passes.
 function check_startup_path(fec::FigureEightController, fcs::FC_Settings,
                             tos::TrajOptSettings; l_tether::Real,
                             depower::Real = fcs.course.depower_setpoint)
-    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
+    el_floor = fcs.run.min_elevation + tos.gates.candidate_elevation_margin
     minimum(fec.el_path) >= el_floor ||
         error(@sprintf("The optimized path descends to %.1f°, below min_elevation \
                         %.1f° + candidate_elevation_margin %.1f° = %.1f°. AWETrim \
                         constrains height and not elevation, so this is not something \
                         the solve avoids on its own.",
                        minimum(fec.el_path), fcs.run.min_elevation,
-                       tos.candidate_elevation_margin, el_floor))
-    if tos.min_height > 0
-        clr = check_pattern_height(fec, l_tether, tos.min_height)
+                       tos.gates.candidate_elevation_margin, el_floor))
+    if tos.gates.min_height > 0
+        clr = check_pattern_height(fec, l_tether, tos.gates.min_height)
         clr.ok ||
             error(@sprintf("The optimized path's lowest point is %.1f m above ground at \
                             L = %.0f m (elevation %.1f°), below the min_height = %.0f m \
                             of data/traj_opt.yaml. Raise the guess elevation, fly a \
                             longer tether, or lower min_height.",
-                           clr.height, l_tether, clr.elevation, tos.min_height))
+                           clr.height, l_tether, clr.elevation, tos.gates.min_height))
     end
     feas = check_reelout_feasibility(fec, fcs, tos; l_tether, depower)
     isnothing(feas.feas_start) ||
-        feas.feas_start.margin >= tos.min_feasibility_margin ||
+        feas.feas_start.margin >= tos.gates.min_feasibility_margin ||
         error(@sprintf("The optimized path asks for a turn radius of %.1f° where the \
                         kite manages %.1f° at the STARTING length %.0f m: margin %.2f, \
                         below min_feasibility_margin = %.2f. Lower body_damping, raise \
                         max_steering, or lower the margin in data/traj_opt.yaml to fly \
                         it anyway.",
                        feas.feas_start.path_radius, feas.feas_start.kite_radius,
-                       l_tether, feas.feas_start.margin, tos.min_feasibility_margin))
+                       l_tether, feas.feas_start.margin, tos.gates.min_feasibility_margin))
     return feas
 end

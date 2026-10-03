@@ -45,8 +45,8 @@ end
 
 The elevation floor [deg] to send with a request made for tether length
 `l_tether`: the highest of what the gates will demand there —
-`asind(tos.min_height/l_tether)` for the clearance one and `fcs.run.min_elevation +
-tos.candidate_elevation_margin` for the elevation one — plus `extra`. `nothing`
+`asind(tos.gates.min_height/l_tether)` for the clearance one and `fcs.run.min_elevation +
+tos.gates.candidate_elevation_margin` for the elevation one — plus `extra`. `nothing`
 asks for nothing and leaves the optimizer's own 0.6°.
 
 Inverting [`path_min_height`](@ref) at the length being asked for is what makes
@@ -61,9 +61,9 @@ off that reply and carried forward: the shortfall is structural and the next
 length has it too.
 """
 function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
-    el_min = max(0.0, fcs.run.min_elevation + tos.candidate_elevation_margin)
-    tos.min_height > 0 && l_tether > tos.min_height &&
-        (el_min = max(el_min, asind(tos.min_height / l_tether)))
+    el_min = max(0.0, fcs.run.min_elevation + tos.gates.candidate_elevation_margin)
+    tos.gates.min_height > 0 && l_tether > tos.gates.min_height &&
+        (el_min = max(el_min, asind(tos.gates.min_height / l_tether)))
     el_min += extra
     return el_min > 0 ? el_min : nothing
 end
@@ -72,34 +72,34 @@ end
     elevation_amplitude_max_at(tos, wind_speed) -> Float64
 
 The elevation half-span cap [deg] sent at `wind_speed`, the wind AT
-`tos.pattern_elevation_amplitude_max_wind_height` (see `cap_wind_speed` in `awetrim_client.jl`):
-`tos.pattern_elevation_amplitude_max_high` at and above
-`tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_elevation_amplitude_max`
-below it. `tos.pattern_elevation_amplitude_max_high == 0.0` disables the step;
+`tos.box.pattern_elevation_amplitude_max_wind_height` (see `cap_wind_speed` in `awetrim_client.jl`):
+`tos.box.pattern_elevation_amplitude_max_high` at and above
+`tos.box.pattern_elevation_amplitude_max_wind_ref`, `tos.box.pattern_elevation_amplitude_max`
+below it. `tos.box.pattern_elevation_amplitude_max_high == 0.0` disables the step;
 `wind_speed = nothing` means the wind is not known and returns the base cap.
 
 A STEP like `guess_el_center_seed`'s (`awetrim_client.jl`), and for the same reason: the cap
 decides which basin the startup solve can reach.
 """
 function elevation_amplitude_max_at(tos, wind_speed)
-    tos.pattern_elevation_amplitude_max_high > 0 && !isnothing(wind_speed) &&
-        wind_speed >= tos.pattern_elevation_amplitude_max_wind_ref ?
-        tos.pattern_elevation_amplitude_max_high : tos.pattern_elevation_amplitude_max
+    tos.box.pattern_elevation_amplitude_max_high > 0 && !isnothing(wind_speed) &&
+        wind_speed >= tos.box.pattern_elevation_amplitude_max_wind_ref ?
+        tos.box.pattern_elevation_amplitude_max_high : tos.box.pattern_elevation_amplitude_max
 end
 
 """
     azimuth_max_at(tos, wind_speed) -> Float64
 
 The azimuth half-width cap [deg] sent at `wind_speed`, the same wind as
-[`elevation_amplitude_max_at`](@ref) reads: `tos.pattern_azimuth_max_high` at and above
-`tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_azimuth_max` below it.
-`tos.pattern_azimuth_max_high == 0.0` disables the step; `wind_speed = nothing` returns
+[`elevation_amplitude_max_at`](@ref) reads: `tos.box.pattern_azimuth_max_high` at and above
+`tos.box.pattern_elevation_amplitude_max_wind_ref`, `tos.box.pattern_azimuth_max` below it.
+`tos.box.pattern_azimuth_max_high == 0.0` disables the step; `wind_speed = nothing` returns
 the base cap.
 """
 function azimuth_max_at(tos, wind_speed)
-    tos.pattern_azimuth_max_high > 0 && !isnothing(wind_speed) &&
-        wind_speed >= tos.pattern_elevation_amplitude_max_wind_ref ?
-        tos.pattern_azimuth_max_high : tos.pattern_azimuth_max
+    tos.box.pattern_azimuth_max_high > 0 && !isnothing(wind_speed) &&
+        wind_speed >= tos.box.pattern_elevation_amplitude_max_wind_ref ?
+        tos.box.pattern_azimuth_max_high : tos.box.pattern_azimuth_max
 end
 
 """
@@ -108,7 +108,7 @@ end
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
 `data/traj_opt.yaml`; each is in degrees and each is off at `0.0`, and
-`tos.pattern_symmetric` adds the mirror-symmetry rows and `tos.pattern_climb_angle_max`
+`tos.box.pattern_symmetric` adds the mirror-symmetry rows and `tos.box.pattern_climb_angle_max`
 the climb-angle ceiling. `nothing` when all are
 off, which leaves the optimizer's own defaults alone.
 
@@ -123,8 +123,8 @@ function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
                            elevation_min = on(elevation_min),
                            elevation_amplitude_max =
                                on(elevation_amplitude_max_at(tos, wind_speed)),
-                           symmetric = tos.pattern_symmetric ? true : nothing,
-                           climb_angle_max = on(tos.pattern_climb_angle_max))
+                           symmetric = tos.box.pattern_symmetric ? true : nothing,
+                           climb_angle_max = on(tos.box.pattern_climb_angle_max))
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_amplitude_max,
                     limits.symmetric, limits.climb_angle_max)) &&
         return nothing

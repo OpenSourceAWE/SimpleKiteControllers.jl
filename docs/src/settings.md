@@ -68,7 +68,8 @@ when the package loads.
   controller. Entry state machine, pattern geometry, heading/course PID, feed-forward,
   reel-out phases and the run's pass criteria.
 - `traj_opt_settings` → `traj_opt.yaml`, read into [`TrajOptSettings`](@ref): the AWETrim
-  client. Server, initial guess, solver settings and re-optimization; only used by
+  client, one section per part: server, guess, depower seed, pattern box, gates and
+  re-optimization; only used by
   `simple_opt_fig8.jl` and `simple_opt_reelout.jl`.
 - `winch_table` → `winch_table.yaml`, read by [`winch_f_low`](@ref) and
   [`winch_force_limit`](@ref): wind-dependent winch-law parameters. Reel-out projects only.

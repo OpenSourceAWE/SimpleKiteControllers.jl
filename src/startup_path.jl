@@ -16,7 +16,7 @@ first-lap winch.
 """
 function startup_params(setup, el_center)
     (; tos, l_set, winch_first_lap, inflow, opt_r_min, opt_box) = setup
-    guess_a, guess_b, guess_el = guess_in_box(tos.guess_a, tos.guess_b, el_center, opt_box)
+    guess_a, guess_b, guess_el = guess_in_box(tos.guess.guess_a, tos.guess.guess_b, el_center, opt_box)
     az, el = figure_eight_path(guess_a, guess_b, 0.0, guess_el, 0.0, GUESS_POINTS)
     InitParams(; name = OPT_NAME, length = opt_length(l_set),
                winch_params = winch_first_lap, inflow_conditions = inflow,
@@ -38,11 +38,11 @@ function startup_solve(setup, params)
     reply = chain_init(opt_chain, params)
     # Seeding solve: the cold first request fails at low winch force, so it is warmed at `opt_warm_start_awe_trim`.
     seed_trajectory = reply.trajectory
-    if tos.opt_warm_start_awe_trim > winch.use_awe_trim
+    if tos.server.opt_warm_start_awe_trim > winch.use_awe_trim
         @info @sprintf("Seeding solve at use_awe_trim %.3f before the startup \
                         request at %.3f; see opt_warm_start_awe_trim.",
-                       tos.opt_warm_start_awe_trim, winch.use_awe_trim)
-        warm_winch = winch_from_wc(rcs; use_awe_trim = tos.opt_warm_start_awe_trim)
+                       tos.server.opt_warm_start_awe_trim, winch.use_awe_trim)
+        warm_winch = winch_from_wc(rcs; use_awe_trim = tos.server.opt_warm_start_awe_trim)
         seed_trajectory = chain_step(opt_chain, StepParams(opt_length(l_set), warm_winch,
                                                            reply.trajectory)).trajectory
     end
@@ -133,13 +133,13 @@ function install_optimized_path!(setup, st::RunState, reply)
     resample = min(RESAMPLE_POINTS, length(az) - 1)
     st.c1_startup = c1_at_depower(pattern_depower(reply))
     st.startup_wing_frac = 1.0
-    if !isnan(st.c1_startup) && tos.min_feasibility_margin > 0 && any(!=(0), lift)
+    if !isnan(st.c1_startup) && tos.gates.min_feasibility_margin > 0 && any(!=(0), lift)
         for fw in (1.0, 0.75, 0.5, 0.25, 0.0)
             st.startup_wing_frac = fw
             set_path!(fec, az, el .+ fw .* lift; resample)
             check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                    c1 = st.c1_startup, prn = false).margin >=
-                tos.min_feasibility_margin && break
+                tos.gates.min_feasibility_margin && break
         end
         st.startup_wing_frac < 1 &&
             @info @sprintf("Lobe lift held back on the startup path to fit the \
@@ -171,7 +171,7 @@ function adopt_startup_path!(setup, st::RunState)
     st.opt_power_pred = Float64(st.opt_table["metrics"]["avg_power_W"])
     # The anchor ratio, now measured off the reply; guarded so a request that is off stays off.
     if opt_r_on
-        st.opt_r_scale = reelout_anchor_ratio(st.opt_table) * tos.turn_radius_headroom
+        st.opt_r_scale = reelout_anchor_ratio(st.opt_table) * tos.gates.turn_radius_headroom
         st.opt_r_min = min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
                                             c1 = st.c1_startup)
     end
@@ -179,11 +179,11 @@ function adopt_startup_path!(setup, st::RunState)
         @info @sprintf("Turn-radius request for the re-optimizations: %.2f m — the \
                         gate's %.2f m at margin %.2f, x %.3f for the lap's reel-out \
                         (%.1f -> %.1f m) and x %.2f of headroom.",
-                       st.opt_r_min, st.opt_r_min / st.opt_r_scale, tos.min_feasibility_margin,
+                       st.opt_r_min, st.opt_r_min / st.opt_r_scale, tos.gates.min_feasibility_margin,
                        reelout_anchor_ratio(st.opt_table),
                        minimum(Float64.(st.opt_table["table"]["distance_radial"])),
                        maximum(Float64.(st.opt_table["table"]["distance_radial"])),
-                       tos.turn_radius_headroom)
+                       tos.gates.turn_radius_headroom)
 end
 
 # ---- Corrected retries of the STARTUP solve: one lever per attempt (ceiling, width, radius) ---- #
@@ -197,13 +197,13 @@ function score_installed(setup, st::RunState)
     el_ok = minimum(fec.el_path) >= el_floor
     height = NaN
     clr_ok = true
-    if tos.min_height > 0
-        clr = check_pattern_height(fec, l_tether, tos.min_height; prn = false)
+    if tos.gates.min_height > 0
+        clr = check_pattern_height(fec, l_tether, tos.gates.min_height; prn = false)
         height = clr.height
         clr_ok = clr.ok
     end
     (; margin, el_ok, clr_ok, height,
-       ok = margin >= tos.min_feasibility_margin && el_ok && clr_ok)
+       ok = margin >= tos.gates.min_feasibility_margin && el_ok && clr_ok)
 end
 """
 Where [`save_failed_trajectory`](@ref) writes: the package's `trajectories/`. Set it only around a
@@ -221,7 +221,7 @@ function save_failed_trajectory(setup, name, az, el; margin = NaN, power = NaN)
         "name" => name,
         "date" => string(now()),
         "l_tether" => setup.l_tether,
-        "min_feasibility_margin" => setup.tos.min_feasibility_margin,
+        "min_feasibility_margin" => setup.tos.gates.min_feasibility_margin,
         "margin" => margin,
         "predicted_power_W" => power,
         "azimuth_deg" => collect(Float64.(az)),
@@ -256,7 +256,7 @@ function retry_startup!(setup, st::RunState)
                             are spent.",
                            attempt, STARTUP_RETRIES_MAX, ladder.bisect_hi,
                            ladder.m_reply * ladder.bisect_hi / ask.prev_ask,
-                           tos.min_feasibility_margin)
+                           tos.gates.min_feasibility_margin)
             break
         end
         (; lever, r_ask, el_cap, az_min, target, prev_ask, inc_top, inc_height, inc_amp,
@@ -271,7 +271,7 @@ function retry_startup!(setup, st::RunState)
                         min_feasibility_margin = %.2f: retry %d/%d (%s) at \
                         L = %.1f m, turn radius %.2f m (was %.2f m)%s, targeting \
                         margin %.3f%s.",
-                       st.incumbent_score.margin, tos.min_feasibility_margin,
+                       st.incumbent_score.margin, tos.gates.min_feasibility_margin,
                        attempt, STARTUP_RETRIES_MAX, lever, st.l_set,
                        r_ask, prev_ask,
                        (isnothing(el_cap) ? ", no elevation ceiling" :
@@ -334,7 +334,7 @@ function retry_startup!(setup, st::RunState)
                         %.0f W, %.1f s.",
                        attempt, att_score.margin,
                        att_score.ok ? " clearing all gates" : "",
-                       att_score.height, tos.min_height,
+                       att_score.height, tos.gates.min_height,
                        att_score.el_ok ? "ok" : "BELOW FLOOR",
                        Float64(att_table["metrics"]["avg_power_W"]),
                        time() - t_attempt)
@@ -363,7 +363,7 @@ function retry_startup!(setup, st::RunState)
             st.opt_paths_raw = [st.inc_raw]
             st.opt_paths_at = [(0.0, 0)]
             st.opt_r_scale = reelout_anchor_ratio(st.inc_table) *
-                          tos.turn_radius_headroom
+                          tos.gates.turn_radius_headroom
             st.opt_r_min = min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
                                                 c1 = st.c1_startup)
             if att_score.ok
@@ -397,11 +397,11 @@ function finish_startup!(setup, st::RunState)
     (; fec, l_tether, fcs, tos, opt_r_on, opt_depower_log) = setup
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                             c1 = st.c1_startup, prn = false).margin
-    if opt_r_on && !isnan(st.c1_startup) && margin_startup < tos.min_feasibility_margin
+    if opt_r_on && !isnan(st.c1_startup) && margin_startup < tos.gates.min_feasibility_margin
         retry_startup!(setup, st)
     end
 
-    if margin_startup < tos.min_feasibility_margin
+    if margin_startup < tos.gates.min_feasibility_margin
         # The incumbent is what the gates will refuse; `incumbent_score` exists exactly when this fires.
         save_failed_trajectory(setup, "startup_incumbent", st.inc_raw[1], st.inc_raw[2];
                                margin = st.incumbent_score.margin,

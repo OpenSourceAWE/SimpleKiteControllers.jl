@@ -43,7 +43,7 @@ low_wind_reference(fcs::FC_Settings, project_set) =
 """
     apply_low_wind_schedule!(fcs, tos, project_set; keep = ()) -> NamedTuple
 
-Overwrite the starting tether length `project_set.l_tether`, `tos.guess_el_center`,
+Overwrite the starting tether length `project_set.l_tether`, `tos.guess.guess_el_center`,
 `fcs.course.v_app_min` and `fcs.reelout.el_offset_final` with
 [`low_wind_schedule`](@ref) at [`low_wind_reference`](@ref). A name in `keep` (e.g. the
 keys of a run's overrides) is left alone; `tos = nothing` skips the guess, for a caller
@@ -58,7 +58,7 @@ function apply_low_wind_schedule!(fcs::FC_Settings, tos, project_set; keep = ())
     lw = fcs.low_wind
     if !isempty(lw.low_wind_speeds)
         base = (; l_tether = project_set.l_tether,
-                guess_el_center = isnothing(tos) ? lw.low_wind_guess_el_center[end] : tos.guess_el_center,
+                guess_el_center = isnothing(tos) ? lw.low_wind_guess_el_center[end] : tos.guess.guess_el_center,
                 v_app_min = fcs.course.v_app_min, el_offset_final = fcs.reelout.el_offset_final)
         last_row = map(last, (; l_tether = lw.low_wind_l_tether, guess_el_center = lw.low_wind_guess_el_center,
                               v_app_min = lw.low_wind_v_app_min, el_offset_final = lw.low_wind_el_offset_final))
@@ -70,7 +70,7 @@ function apply_low_wind_schedule!(fcs::FC_Settings, tos, project_set; keep = ())
     isnothing(values) && return (; v_ref, values)
     keep = Symbol.(collect(keep))
     :l_tether in keep || :l_tethers in keep || (project_set.l_tether = values.l_tether)
-    isnothing(tos) || :guess_el_center in keep || (tos.guess_el_center = values.guess_el_center)
+    isnothing(tos) || :guess_el_center in keep || (tos.guess.guess_el_center = values.guess_el_center)
     :v_app_min in keep || (fcs.course.v_app_min = values.v_app_min)
     :el_offset_final in keep || (fcs.reelout.el_offset_final = values.el_offset_final)
     @info @sprintf("Low-wind schedule at %.2f m/s (%.0f m): l_tether = %.1f m, guess_el_center = %.2f°, \

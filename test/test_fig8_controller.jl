@@ -1047,31 +1047,31 @@ end
         tos = TrajOptSettings("traj_opt.yaml")
         # The shipped file loads, and its guess is NOT the reel-out pattern: those
         # 20°/11°-at-18° values do not converge at 150 m and 6 m/s (2026-08-18).
-        @test tos.base_url == "http://127.0.0.1:8000"
-        @test tos.guess_a == 30.0
-        @test tos.guess_b == 12.0
+        @test tos.server.base_url == "http://127.0.0.1:8000"
+        @test tos.guess.guess_a == 30.0
+        @test tos.guess.guess_b == 12.0
         # 30 since 2026-08-20 (ad08158), not the 26 that was the narrower basin in
         # tether LENGTH before it: raising wc_settings' f_high 7600 -> 8000 moves the
         # request's f_max with it, and at 150.0 m / 9 m/s the 22 seed throws IPOPT's
         # iteration limit where it used to converge. See the YAML header, which
         # carries both measurements and what to try if the failure pockets bite.
-        @test tos.guess_el_center == 29.0
+        @test tos.guess.guess_el_center == 29.0
         # 8° -> 10° at 11 m/s: the 8° cap that closes the tall basin below 11 m/s
         # cannot hold the 17.3°-tall figure that IS the good basin there (2026-09-21).
         # 8° -> 8.5°: Maasvlakte 3.5 m/s needs 8.12° (2026-09-24).
-        @test tos.pattern_elevation_amplitude_max == 8.5
+        @test tos.box.pattern_elevation_amplitude_max == 8.5
         # 10° -> 11°: Cabauw 10 at f_high 7200 N needs 10.5-10.7° at 150 m (2026-09-23).
-        @test tos.pattern_elevation_amplitude_max_high == 11.0
+        @test tos.box.pattern_elevation_amplitude_max_high == 11.0
         # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
-        @test tos.pattern_elevation_amplitude_max_wind_ref == 13.2
-        @test tos.pattern_elevation_amplitude_max_wind_height == 100.0
+        @test tos.box.pattern_elevation_amplitude_max_wind_ref == 13.2
+        @test tos.box.pattern_elevation_amplitude_max_wind_height == 100.0
         # 32° at and above the same wind: under the 45° climb limit Cabauw 10 needs ±28.4-28.8°,
         # and the startup solve 2-3° of room beyond (2026-10-03).
-        @test tos.pattern_azimuth_max == 28.0
-        @test tos.pattern_azimuth_max_high == 32.0
+        @test tos.box.pattern_azimuth_max == 28.0
+        @test tos.box.pattern_azimuth_max_high == 32.0
         # The optimizer's lopsided basins are closed by the mirror-symmetry rows (2026-09-25).
-        @test tos.pattern_symmetric === true
-        @test TrajOptSettings().pattern_symmetric === false
+        @test tos.box.pattern_symmetric === true
+        @test TrajOptSettings().box.pattern_symmetric === false
     end
 
     @testset "attractor_distance" begin
@@ -1135,72 +1135,72 @@ end
         @test fro.low_wind.low_wind_l_tether[end] == 150.0
         @test fro.low_wind.low_wind_v_app_min[end] == fro.course.v_app_min
         @test fro.low_wind.low_wind_el_offset_final[end] == fro.reelout.el_offset_final
-        @test fro.low_wind.low_wind_guess_el_center[end] == TrajOptSettings("traj_opt.yaml").guess_el_center
+        @test fro.low_wind.low_wind_guess_el_center[end] == TrajOptSettings("traj_opt.yaml").guess.guess_el_center
         @test low_wind_schedule(fro, 4.51).v_app_min == 8.0
         tos = TrajOptSettings("traj_opt.yaml")
         # Below the struct's 1.0, but no longer for the old reason: the request is
         # scaled from this number and the optimizer honours it, so what the gate
         # reads back is ~1.2x of it (0.78 -> ~0.95 flown, 2026-08-20). It moves with
         # every sweep, so only the inequality is pinned.
-        @test 0 < tos.min_feasibility_margin < TrajOptSettings().min_feasibility_margin
+        @test 0 < tos.gates.min_feasibility_margin < TrajOptSettings().gates.min_feasibility_margin
         # 40, not AWETrim's 50: an installed (azimuth, elevation) curve clears only
         # ~50*r0/r_low at its anchor radius, whatever the anchor. See the YAML.
-        @test tos.min_height == 40.0
+        @test tos.gates.min_height == 40.0
         # Above the struct's 1.0: asking for exactly what the gate demands is what
         # got a converged, constraint-satisfying reply rejected at margin 0.63
         # against 0.74 (2026-08-19). The exact value follows the measurement, so
         # only the inequality is pinned.
-        @test tos.turn_radius_headroom > TrajOptSettings().turn_radius_headroom == 1.0
+        @test tos.gates.turn_radius_headroom > TrajOptSettings().gates.turn_radius_headroom == 1.0
         # The startup request's assumed reel-out per lap, a linear fit to the wind;
         # later requests measure it off the replies.
         @test turn_radius_lap_reelout(tos, 8.0) ≈ 1.987 * 8.0 + 14.18
         # 1, not the struct's 2: the shipped file re-anchors every lap, which is
         # what the reel-out window is long enough for.
-        @test tos.reopt_every_n_laps == 1
+        @test tos.reopt.reopt_every_n_laps == 1
         # At least the struct's bound: re-anchoring every lap needs one solve per
         # lap of the reel-out window, which is more than the default (7 on
         # 2026-08-18) — the exact count follows the window, so it is not pinned.
-        @test tos.max_reopt >= TrajOptSettings().max_reopt
+        @test tos.reopt.max_reopt >= TrajOptSettings().reopt.max_reopt
         # 6, not the struct's 4 (2026-09-26): at Cabauw 8 m/s a path installed during a
         # lobe turn reshaped the reference under the kite; 6 s cut that run's RMS d
         # from 1.69 to 1.12° for 0.4 % of mean power.
-        @test TrajOptSettings().path_blend_time == 4.0
-        @test tos.path_blend_time == 6.0
+        @test TrajOptSettings().reopt.path_blend_time == 4.0
+        @test tos.reopt.path_blend_time == 6.0
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
-        @test tos.candidate_elevation_margin == 3.0
+        @test tos.gates.candidate_elevation_margin == 3.0
         # The identity the per-request floor inverts: ask for asind(min_height/L)
         # and `path_min_height` reads back exactly min_height at that length. This
         # is the whole reason the request and the gate can be made the same
         # question — the optimizer's own floor is a height at a DIFFERENT radius.
-        let L = 187.0, el_ask = asind(tos.min_height / L)
-            @test path_min_height([0.0, 1.0], [el_ask, el_ask + 5], L) ≈ tos.min_height
+        let L = 187.0, el_ask = asind(tos.gates.min_height / L)
+            @test path_min_height([0.0, 1.0], [el_ask, el_ask + 5], L) ≈ tos.gates.min_height
         end
         # The depower seed follows the wind, and only UPWARDS from the reference:
         # all six runs of the 5.0-7.0 m/s scan converged from 1.6 m, so the
         # reference may not drop below the top of that scan, while 8.0 m/s did not
         # converge from it (2026-08-20, a 422 out of /step's stage 1, which carries
         # no turn-radius constraint at all).
-        @test tos.input_depower_wind_ref >= 7.0
-        @test tos.input_depower_per_wind > 0
+        @test tos.seed.input_depower_wind_ref >= 7.0
+        @test tos.seed.input_depower_per_wind > 0
         # The DEFAULT is the behaviour before the ramp existed: input_depower
         # whatever the wind.
-        @test TrajOptSettings().input_depower_per_wind == 0.0
+        @test TrajOptSettings().seed.input_depower_per_wind == 0.0
         # Below this mean wind a NEGATIVE prediction bypasses both power gates:
         # the optimizer's winch model is out of its domain there (a ~883 N
         # representable force floor against a 585 N mean at 3 m/s), so the number
         # reports the model, not the path. Measured 2026-08-25 at 3 m/s:
         # -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held.
-        @test tos.power_gate_wind_min == 4.0
-        @test TrajOptSettings().power_gate_wind_min == 4.0
+        @test tos.reopt_gates.power_gate_wind_min == 4.0
+        @test TrajOptSettings().reopt_gates.power_gate_wind_min == 4.0
         # The continuity gate: a reply may not be more than this much BIGGER
         # than the install it replaces. 1.3 refuses the 1.57x jump of 2026-09-21
         # (7 m/s, 247 m) and clears every other archived install (<= 1.13).
-        @test tos.max_size_growth == 1.3
-        @test TrajOptSettings().max_size_growth == 1.3
+        @test tos.reopt_gates.max_size_growth == 1.3
+        @test TrajOptSettings().reopt_gates.max_size_growth == 1.3
         # The gate the example applies: BOTH conditions, so a positive prediction
         # is still gated at low wind and a negative one is still gated above it.
-        let off(pred, v) = pred < 0 && v < tos.power_gate_wind_min
+        let off(pred, v) = pred < 0 && v < tos.reopt_gates.power_gate_wind_min
             @test off(-397.0, 3.0)
             @test !off(-397.0, 9.0)
             @test !off(45.0, 3.0)
@@ -1211,8 +1211,8 @@ end
             good = joinpath(dir, "t.yaml")
             write(good, "traj_opt:\n    guess_a: 25.0\n")
             t2 = TrajOptSettings(good)
-            @test t2.guess_a == 25.0          # given
-            @test t2.guess_b == 12.0          # and the default for the rest
+            @test t2.guess.guess_a == 25.0          # given
+            @test t2.guess.guess_b == 12.0          # and the default for the rest
             bad = joinpath(dir, "b.yaml")
             write(bad, "traj_opt:\n    guess_with_a_typo: 1.0\n")
             @test_throws ErrorException TrajOptSettings(bad)
@@ -1258,13 +1258,13 @@ end
                 off = joinpath(dir, "sz0.yaml")
                 write(off, "traj_opt:\n    max_size_growth: 0.0\n")
                 off
-            end).max_size_growth == 0.0
+            end).reopt_gates.max_size_growth == 0.0
             # 0.0 is the documented "off": no wind is below it, so nothing bypasses.
             @test TrajOptSettings(begin
                 off = joinpath(dir, "o.yaml")
                 write(off, "traj_opt:\n    power_gate_wind_min: 0.0\n")
                 off
-            end).power_gate_wind_min == 0.0
+            end).reopt_gates.power_gate_wind_min == 0.0
         end
     end
 
@@ -1412,7 +1412,7 @@ end
             tos_clear = TrajOptSettings(; candidate_elevation_margin = 2.0,
                                         min_height = low_h - 1,
                                         min_feasibility_margin = 1.0)
-            @test check_pattern_height(fec, l_tether, tos_clear.min_height;
+            @test check_pattern_height(fec, l_tether, tos_clear.gates.min_height;
                                        prn = false).ok
             feas_clear = check_reelout_feasibility(fec, fcs, tos_clear; l_tether)
             @test feas_clear.c1 == feas.c1

@@ -238,9 +238,9 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
         fs = fake_server(; fail = [175.0])
         try
             tos = TrajOptSettings()
-            tos.base_url = fs.url
-            tos.opt_success_cache = tos.opt_failure_cache = false
-            tos.free_speed_reference_points = 3
+            tos.server.base_url = fs.url
+            tos.server.opt_success_cache = tos.server.opt_failure_cache = false
+            tos.server.free_speed_reference_points = 3
             wc = WCSettings(; dt = 0.01)
             lengths = collect(150.0:10.0:200.0)
             guess = (collect(Float64, AZ), collect(Float64, EL))
@@ -255,18 +255,18 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
             # Below 1 m of span the probes are spread over 1 m; off or without samples: nothing.
             r = free_speed_reference(tos, wc, INFLOW, guess..., [160.0])
             @test [p.l for p in r.points] == [160.0, 160.5, 161.0] && r.weighted == r.points[1].power
-            tos.free_speed_reference_points = 1
+            tos.server.free_speed_reference_points = 1
             @test isnothing(free_speed_reference(tos, wc, INFLOW, guess..., lengths))
-            tos.free_speed_reference_points = 3
+            tos.server.free_speed_reference_points = 3
             @test isnothing(free_speed_reference(tos, wc, INFLOW, guess..., Float64[]))
         finally
             close(fs.server)
         end
         # Every probe failing: nothing.
         tos = TrajOptSettings()
-        tos.base_url = fs.url
-        tos.opt_success_cache = tos.opt_failure_cache = false
-        tos.free_speed_reference_points = 2
+        tos.server.base_url = fs.url
+        tos.server.opt_success_cache = tos.server.opt_failure_cache = false
+        tos.server.free_speed_reference_points = 2
         @test isnothing(free_speed_reference(tos, WCSettings(; dt = 0.01), INFLOW, AZ, EL, [150.0, 200.0]))
     end
 end

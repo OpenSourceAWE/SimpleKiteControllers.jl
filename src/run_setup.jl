@@ -253,10 +253,10 @@ function setup_run(inputs; init_model)
     l_tether = project_set.l_tether
 
     # Whether `min_power_frac`/`min_power_frac_prev` are bypassed for a candidate predicting `pred`
-    # watts: only below `tos.power_gate_wind_min` mean wind AND only for a NEGATIVE prediction, where
+    # watts: only below `tos.reopt_gates.power_gate_wind_min` mean wind AND only for a NEGATIVE prediction, where
     # the number reports the optimizer's winch model leaving its own domain rather than a bad path.
     # Defined after the wind override, so it gates on the speed actually flown.
-    power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.power_gate_wind_min
+    power_gate_off(pred) = pred < 0 && project_set.v_wind < tos.reopt_gates.power_gate_wind_min
 
     # Simulated time to ask `init` for: the reel-out budget under a wind-speed override, see `sim_budget`.
     # Without a sim_time and a wind override that is `nothing`: the project's own, as `init` would take it.
@@ -303,8 +303,8 @@ function setup_run(inputs; init_model)
     (; opt_r_scale, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
         request_constraints(tos, fcs, inflow, cap_wind, opt_length(l_set))
     # `startup_params` fits the guess into that box; a guess outside it ends in local infeasibility.
-    let (guess_a, guess_b, guess_el) = guess_in_box(tos.guess_a, tos.guess_b, el_center_seed, opt_box)
-        (guess_a, guess_b, guess_el) == (tos.guess_a, tos.guess_b, el_center_seed) ||
+    let (guess_a, guess_b, guess_el) = guess_in_box(tos.guess.guess_a, tos.guess.guess_b, el_center_seed, opt_box)
+        (guess_a, guess_b, guess_el) == (tos.guess.guess_a, tos.guess.guess_b, el_center_seed) ||
             @info @sprintf("  ... startup guess fitted into the box: %.1f° x %.1f° at %.1f°.",
                            guess_a, guess_b, guess_el)
     end
@@ -361,7 +361,7 @@ function setup_run(inputs; init_model)
         !isnothing(reply.depower) ?
             awetrim_depower_to_v3kite(reply.depower.value) : fcs.course.depower_setpoint
     # The elevation floor of every candidate path, the startup gates' and `check_startup_path`'s.
-    el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin
+    el_floor = fcs.run.min_elevation + tos.gates.candidate_elevation_margin
 
     return RunSetup(; inputs, show_plots, steer_disturbance, xtrack_offset, xtrack_phase, hold_compliance,
             steer_gain_factor, steer_gain_feedback_only, extra_steer_delay, hook_settle, replay_paths,

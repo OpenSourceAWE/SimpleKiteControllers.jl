@@ -51,8 +51,8 @@ using KiteUtils: KiteUtils
         try
             KiteUtils.set_data_path(skc_data_path())
             set = KiteUtils.Settings(project_file("system_reelout_maasvlakte.yaml"))
-            @test cap_wind_speed((; pattern_elevation_amplitude_max_wind_height = 0.0), set, 8.0) === 8.0
-            @test cap_wind_speed((; pattern_elevation_amplitude_max_wind_height = 100.0), set, 8.0) ≈
+            @test cap_wind_speed(TrajOptSettings(; pattern_elevation_amplitude_max_wind_height = 0.0), set, 8.0) === 8.0
+            @test cap_wind_speed(TrajOptSettings(; pattern_elevation_amplitude_max_wind_height = 100.0), set, 8.0) ≈
                   calc_wind_factor(AtmosphericModel(set; nowindfield = true), 100.0) * 8.0
         finally
             KiteUtils.set_data_path(data_path)
@@ -61,7 +61,7 @@ using KiteUtils: KiteUtils
 
     @testset "optimizer_conditions" begin
         tos = TrajOptSettings()
-        tos.pattern_elevation_amplitude_max_wind_height = 0.0
+        tos.box.pattern_elevation_amplitude_max_wind_height = 0.0
         set = (; h_ref = 6.0, v_wind = 8.0, upwind_dir = -90.0, profile_law = 3, alpha = 0.08,
                z0 = 0.0002)
         rcs = WCSettings(; dt = 0.01)
@@ -72,7 +72,7 @@ using KiteUtils: KiteUtils
         # The startup solve at the plain ceiling, lap 1 below it, the re-optimizations at the de-rating.
         @test c.winch.f_max == 7200.0 && c.winch_first_lap.f_max == 0.8 * 7200.0
         @test c.winch_reopt.f_max == 6000.0
-        @test c.opt_awe_trim == (tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim)
+        @test c.opt_awe_trim == (tos.server.opt_awe_trim >= 0 ? tos.server.opt_awe_trim : rcs.use_awe_trim)
         @test c.winch.use_awe_trim == c.opt_awe_trim
         @test isnothing(c.winch.winch_mode) && !c.winch.optimize_k_v
         c = optimizer_conditions(tos, FC_Settings(; first_lap_force_frac = 1.0), set, rcs, 7200.0)

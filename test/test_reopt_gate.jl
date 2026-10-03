@@ -12,7 +12,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
     ELEVATION_MIN_RETRY_MARGIN
 
 @testset verbose = true "reopt_gate" begin
-    tos = (; min_feasibility_margin = 1.0, min_height = 40.0,
+    tos = TrajOptSettings(; min_feasibility_margin = 1.0, min_height = 40.0,
            blend_max_retries = 2, min_power_frac = 0.5,
            min_power_frac_prev = 0.85, max_size_growth = 1.3)
     # A candidate that passes everything; each test spoils one thing.
@@ -70,11 +70,11 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
         @test g.verdict == :retry && !g.low
         @test occursin("1.60x the previous install's size", g.reason)
         @test gate(size = big, blend_attempt = 2).verdict == :reject
-        @test gate_candidate(merge(tos, (; max_size_growth = 0.0)), merge(good, (; size = big))).verdict == :accept
+        @test gate_candidate(TrajOptSettings(tos; max_size_growth = 0.0), merge(good, (; size = big))).verdict == :accept
     end
 
     @testset "wants_challenge" begin
-        ctos = (; challenge_growth = 1.1)
+        ctos = TrajOptSettings(; challenge_growth = 1.1)
         grown = (; growth = 1.23, az_ratio = 1.2, el_ratio = 1.23)
         # Cabauw 7 m/s at 236 m: grew x1.23 at 0.98 of the previous prediction.
         c = (; size = grown, new_pred = 23949.0, prev_install_pred = 24427.0)
@@ -87,7 +87,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
         # Shrinking with less power is the power gates' business, not this one's.
         @test !wants_challenge(ctos, merge(c, (; size = (; growth = 0.6, az_ratio = 0.6,
                                                         el_ratio = 0.5))))
-        @test !wants_challenge((; challenge_growth = 0.0), c)
+        @test !wants_challenge(TrajOptSettings(; challenge_growth = 0.0), c)
     end
 
     @testset "checks_run_in_order" begin
@@ -100,7 +100,7 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
     end
 
     @testset "blend_folds" begin
-        fold_tos = (; blend_fold_margin = 0.3)
+        fold_tos = TrajOptSettings(; blend_fold_margin = 0.3)
         az0, el0 = figure_eight_path(20.0, 8.0, 0.0, 30.0, 0.0, 100)
         az1, el1 = figure_eight_path(24.0, 9.0, 0.0, 32.0, 0.0, 100)
         @test !blend_folds(fold_tos, az0, el0, az0, el0)

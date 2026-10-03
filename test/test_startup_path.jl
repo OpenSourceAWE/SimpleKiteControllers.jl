@@ -34,7 +34,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         st = RunState(; c1_startup = c1)
         setup(; margin = 0.82, min_height = 50.0, el_floor = 13.0) =
             (; fec, l_tether, fcs = FC_Settings(; max_steering = fcs.course.max_steering),
-             tos = (; min_feasibility_margin = margin, min_height), el_floor)
+             tos = TrajOptSettings(; min_feasibility_margin = margin, min_height), el_floor)
         m = check_pattern_feasible(fec, l_tether, fcs.course.max_steering; c1, prn = false).margin
         r = score_installed(setup(), st)
         @test r.margin == m && r.el_ok && r.clr_ok && r.ok
@@ -56,7 +56,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         lift = wing_lift(az, el)
         function install(; margin, c1 = c1)
             fec = new_fec(gentle)
-            setup = (; tos = (; min_feasibility_margin = margin),
+            setup = (; tos = TrajOptSettings(; min_feasibility_margin = margin),
                      fcs = FC_Settings(; max_steering = fcs.course.max_steering, el_offset_wing = 2.0), fec,
                      l_tether, wing_lift, c1_at_depower = dp -> c1, pattern_depower = r -> 0.27)
             st = RunState()
@@ -111,7 +111,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
                        pattern_depower = r -> fcs.course.depower_setpoint)
         st = RunState(; depower_flown_opt = 0.27)
         r = startup_feasibility(setup(gentle), st)
-        @test r.feas.feas_start.margin >= tos.min_feasibility_margin
+        @test r.feas.feas_start.margin >= tos.gates.min_feasibility_margin
         # The laws the loop reads: the table's c1 at a depower in phases 3-4, the phase-5 law in 5.
         @test r.c1_at_phase(4, 0.27) == c1_at(r.feas, 4, c1_at_depower(0.27))
         @test r.c1_at_phase(5, 0.27) == c1_at(r.feas, 5, NaN)
@@ -138,7 +138,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
 
     @testset "init_loop_state" begin
         raw = (collect(gentle[1]), collect(gentle[2]))
-        tos = (;)
+        tos = TrajOptSettings()
         fec = new_fec(gentle)
         set_path!(fec, raw...; resample = n - 1)           # as install_optimized_path! does
         setup = (; fcs = FC_Settings(; depower_setpoint = 0.274, up_loops), fec, tos)

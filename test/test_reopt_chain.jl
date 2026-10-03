@@ -49,8 +49,8 @@ import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, Inflow
     function cycle(replies; max_reopt = 3, server = nothing, blocking = false, retries = 0,
                    power = 18000.0)
         tos = TrajOptSettings()
-        tos.reopt_blocking = blocking
-        tos.reopt_every_n_laps = 1; tos.max_reopt = max_reopt; tos.blend_max_retries = retries
+        tos.reopt.reopt_blocking = blocking
+        tos.reopt.reopt_every_n_laps = 1; tos.reopt.max_reopt = max_reopt; tos.reopt.blend_max_retries = retries
         fec = FigureEightController(fcs; dt = 0.02)
         set_path!(fec, flown...; up_loops)
         oc = isnothing(server) ? OptChain("http://127.0.0.1:1"; dir = mktempdir(), replay = replies) :
@@ -160,7 +160,7 @@ import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, Inflow
         try
             st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
             # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
-            setup.tos.size_box_growth = 0.0
+            setup.tos.reopt.size_box_growth = 0.0
             @test_logs (:info, r"failed from the warm start; retrying from guess el 30°") match_mode = :any reoptimize!(
                 st, setup, plant, 30.0, 4, 0.0)
             # The warm step failed; the next seed is a cold /init from the guess at el_center_seed.
@@ -179,7 +179,7 @@ import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, Inflow
             # 1000 W, below 30 % of 5000 W, is re-asked; the cold retry's 2000 W passes.
             st, setup = cycle(nothing; server = fs, retries = 1, power = 5000.0)
             # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
-            setup.tos.size_box_growth = 0.0
+            setup.tos.reopt.size_box_growth = 0.0
             reoptimize!(st, setup, plant, 30.0, 4, 0.0)
             @test st.reopt_pending
             @test_logs (:info, r"rejected \(1000 W predicted.*cold-restarting from guess el 32°") match_mode = :any reoptimize!(

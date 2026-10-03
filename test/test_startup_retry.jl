@@ -12,7 +12,7 @@ import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_conve
     azimuth_amplitude, RETRY_GAIN_MAX, startup_seed_offsets, STARTUP_RETRY_STEP, STARTUP_RETRY_SLACK
 
 @testset verbose = true "startup_retry" begin
-    tos = (; min_feasibility_margin = 1.0)
+    tos = TrajOptSettings(; min_feasibility_margin = 1.0)
     # An incumbent 10° wide and 4° tall, top at 22°, with a box floor at 10°: room to lower the ceiling.
     az = 10 .* sin.(range(0, 2pi; length = 100))
     el = 20 .+ 2 .* sin.(range(0, 4pi; length = 100))

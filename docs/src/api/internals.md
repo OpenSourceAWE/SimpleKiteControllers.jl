@@ -12,6 +12,8 @@ SimpleKiteControllers.DEPOWER_SEED_BOUNDS
 SimpleKiteControllers.RETIRED_YAML_KEYS
 SimpleKiteControllers.FC_PARTS
 SimpleKiteControllers.FC_FIELD_PART
+SimpleKiteControllers.TO_PARTS
+SimpleKiteControllers.TO_FIELD_PART
 SimpleKiteControllers.MOVED_FC_KEYS
 SimpleKiteControllers.attractor_floor
 SimpleKiteControllers.gate_candidate

@@ -8,6 +8,13 @@ CurrentModule = SimpleKiteControllers
 
 ```@docs
 TrajOptSettings
+TrajOptServer
+TrajOptGuess
+TrajOptSeed
+TrajOptBox
+TrajOptGates
+TrajOptReopt
+TrajOptReoptGates
 turn_radius_lap_reelout
 ```
 
@@ -18,6 +25,8 @@ load_yaml_fields!
 apply_overrides!
 set_fc_field!
 get_fc_field
+set_tos_field!
+get_tos_field
 ```
 
 ## Project and data files

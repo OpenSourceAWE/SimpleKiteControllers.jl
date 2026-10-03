@@ -56,7 +56,8 @@ export low_wind_schedule, low_wind_reference, apply_low_wind_schedule!
 export turn_rate_coeffs_file, course_loop_model_file, kite_correction_file, winch_table_file, traj_opt_settings_file
 
 # Externally optimized flight path (examples/simple_opt_fig8.jl)
-export TrajOptSettings, turn_radius_lap_reelout
+export TrajOptSettings, TrajOptServer, TrajOptGuess, TrajOptSeed, TrajOptBox, TrajOptGates,
+    TrajOptReopt, TrajOptReoptGates, set_tos_field!, get_tos_field, turn_radius_lap_reelout
 
 # Reel-out feasibility gates (examples/simple_opt_reelout.jl)
 export ReeloutFeasibility, Phase5MarginState, c1_at, phase5_margin
@@ -126,7 +127,7 @@ include("summary_yaml.jl")
 include("fc_settings.jl")
 # After fc_settings.jl: the FC_Settings constructor is defined with the type it constructs.
 include("course_controller.jl")
-# After fc_settings.jl too: TrajOptSettings is loaded through load_yaml_fields!.
+# After fc_settings.jl too: TrajOptSettings is loaded through set_yaml_fields! and RETIRED_YAML_KEYS.
 include("traj_opt_settings.jl")
 # After traj_opt_settings.jl: check_reelout_feasibility takes both settings types.
 include("reelout_feasibility.jl")

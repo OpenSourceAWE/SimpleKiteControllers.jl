@@ -177,7 +177,7 @@ function power_comparison(setup, st::RunState, sl, rp, p4)
     power_ratio_notable = !isnothing(opt_power_meas) &&
                           (opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX ||
                            opt_power_meas / opt_power_pred_eff >= FREE_SPEED_RATIO_MIN_HIGH)
-    if !isnothing(rp) && tos.free_speed_reference_points >= 2 && !isnothing(p4) &&
+    if !isnothing(rp) && tos.server.free_speed_reference_points >= 2 && !isnothing(p4) &&
        p4.force.min < 1000 && power_ratio_notable
         lengths_ro = Float64.(sl.var_10[rp.idx])
         fs_ref = free_speed_reference(tos, setup.rcs, setup.inflow, setup.guess_az, setup.guess_el,
@@ -188,7 +188,7 @@ function power_comparison(setup, st::RunState, sl, rp, p4)
         else
             @printf("  free_speed reference: %.0f W over %.0f-%.0f m (%d of %d solved)%s\n",
                     fs_ref.weighted, minimum(lengths_ro), maximum(lengths_ro),
-                    length(fs_ref.points), tos.free_speed_reference_points,
+                    length(fs_ref.points), tos.server.free_speed_reference_points,
                     isnothing(opt_power_meas) ? "" :
                         @sprintf("; measured %.0f W is %.2f x it",
                                  opt_power_meas, opt_power_meas / fs_ref.weighted))
@@ -213,9 +213,9 @@ end
 function feasibility_block(setup, st::RunState)
     (; tos, feas, margin5, c1_setpoint, inflow) = setup
     block = OrderedDict{String, Any}(
-        "min_required" => (tos.min_feasibility_margin,
+        "min_required" => (tos.gates.min_feasibility_margin,
             "min_feasibility_margin of data/traj_opt.yaml [-]"),
-        "turn_radius_headroom" => (tos.turn_radius_headroom,
+        "turn_radius_headroom" => (tos.gates.turn_radius_headroom,
             "factor on the gate's number for what the GATE adds: its \
              finite-difference curvature estimate and the elevation lift [-]"),
         "turn_radius_request_m" => (isnothing(st.opt_r_min) ? "unset" :
@@ -281,7 +281,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
     (; sl, fig8m, az_amp_mean, el_h_mean, span_margins, span_worst, el_min_final, lift_mean) = scored
     droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
                   for b in 1:st.n_droop_bins]
-    guess_a, guess_b, _ = SimpleKiteControllers.guess_in_box(tos.guess_a, tos.guess_b,
+    guess_a, guess_b, _ = SimpleKiteControllers.guess_in_box(tos.guess.guess_a, tos.guess.guess_b,
                                                              el_center_seed, opt_box)
     OrderedDict{String, Any}(
         "power" => power_block,
@@ -335,7 +335,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
         "feasibility" => feasibility,
         "reopt" => OrderedDict(
             "requests" => (st.reopt_n, "solves that completed, accepted or rejected"),
-            "blocking" => (tos.reopt_blocking,
+            "blocking" => (tos.reopt.reopt_blocking,
                 "simulation held while a solve ran"),
             "blocked" => (round(st.reopt_blocked_s; digits = 1),
                 "wall time the simulation was frozen waiting for replies [s]"),
@@ -390,7 +390,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                 @sprintf("t_%05.1f_s", e.t) =>
                     (e.status,
                      @sprintf("%+.2f° of shift, curvature margin %.2f vs %.2f required",
-                              e.delta, e.margin, tos.min_feasibility_margin))
+                              e.delta, e.margin, tos.gates.min_feasibility_margin))
                 for e in st.el_shift_events)),
         "droop_profile" => OrderedDict(
             vcat(
@@ -446,7 +446,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                                             for (lt, el) in zip(sl.l_tether, sl.elevation));
                                     digits = 1),
                 "lowest point the kite actually reached over the run [m]"),
-            "min_required_m" => (tos.min_height, "min_height of data/traj_opt.yaml [m]"),
+            "min_required_m" => (tos.gates.min_height, "min_height of data/traj_opt.yaml [m]"),
             "elevation_min_asked_deg" => (
                 let b = !isnothing(st.opt_box_now) ? st.opt_box_now : opt_box
                     isnothing(b) || isnothing(b.elevation_min) ? "unset" :

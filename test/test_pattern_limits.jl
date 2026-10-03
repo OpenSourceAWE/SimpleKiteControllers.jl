@@ -15,7 +15,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
 
 @testset verbose = true "pattern_limits" begin
     # Every side off; each test switches on what it needs.
-    off = (; pattern_azimuth_max = 0.0, pattern_azimuth_max_high = 0.0, pattern_elevation_amplitude_max = 0.0,
+    off = TrajOptSettings(; pattern_azimuth_max = 0.0, pattern_azimuth_max_high = 0.0, pattern_elevation_amplitude_max = 0.0,
            pattern_elevation_amplitude_max_high = 0.0,
            pattern_elevation_amplitude_max_wind_ref = 10.0, pattern_symmetric = false,
            pattern_climb_angle_max = 0.0,
@@ -25,37 +25,37 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
     @testset "pattern_limits_from" begin
         # All off leaves the optimizer's own defaults alone.
         @test isnothing(pattern_limits_from(off))
-        b = pattern_limits_from(merge(off, (; pattern_azimuth_max = 40, pattern_symmetric = true)))
+        b = pattern_limits_from(TrajOptSettings(off; pattern_azimuth_max = 40, pattern_symmetric = true))
         @test b.azimuth_max === 40.0
         @test b.symmetric === true
         @test isnothing(b.elevation_min) && isnothing(b.elevation_max)
         @test isnothing(b.climb_angle_max)
         # The climb ceiling alone is a box too.
-        @test pattern_limits_from(merge(off, (; pattern_climb_angle_max = 45))).climb_angle_max === 45.0
+        @test pattern_limits_from(TrajOptSettings(off; pattern_climb_angle_max = 45)).climb_angle_max === 45.0
         # The per-request floor alone is a box too.
         @test pattern_limits_from(off; elevation_min = 25.0).elevation_min == 25.0
     end
 
     @testset "elevation_amplitude_max_at" begin
-        tos = merge(off, (; pattern_elevation_amplitude_max = 8.0,
-                          pattern_elevation_amplitude_max_high = 6.0))
+        tos = TrajOptSettings(off; pattern_elevation_amplitude_max = 8.0,
+                          pattern_elevation_amplitude_max_high = 6.0)
         @test elevation_amplitude_max_at(tos, 9.9) == 8.0
         @test elevation_amplitude_max_at(tos, 10.0) == 6.0
         # An unknown wind, or the step disabled, keeps the base cap.
         @test elevation_amplitude_max_at(tos, nothing) == 8.0
-        @test elevation_amplitude_max_at(merge(tos, (; pattern_elevation_amplitude_max_high = 0.0)),
+        @test elevation_amplitude_max_at(TrajOptSettings(tos; pattern_elevation_amplitude_max_high = 0.0),
                                          20.0) == 8.0
         @test pattern_limits_from(tos; wind_speed = 12.0).elevation_amplitude_max == 6.0
     end
 
     @testset "azimuth_max_at" begin
         # The same wind step as the elevation cap: pattern_elevation_amplitude_max_wind_ref.
-        tos = merge(off, (; pattern_azimuth_max = 28.0, pattern_azimuth_max_high = 30.0))
+        tos = TrajOptSettings(off; pattern_azimuth_max = 28.0, pattern_azimuth_max_high = 30.0)
         @test azimuth_max_at(tos, 9.9) == 28.0
         @test azimuth_max_at(tos, 10.0) == 30.0
         # An unknown wind, or the step disabled, keeps the base cap.
         @test azimuth_max_at(tos, nothing) == 28.0
-        @test azimuth_max_at(merge(tos, (; pattern_azimuth_max_high = 0.0)), 20.0) == 28.0
+        @test azimuth_max_at(TrajOptSettings(tos; pattern_azimuth_max_high = 0.0), 20.0) == 28.0
         @test pattern_limits_from(tos; wind_speed = 12.0).azimuth_max == 30.0
         @test pattern_limits_from(tos; wind_speed = 9.0).azimuth_max == 28.0
     end
@@ -65,7 +65,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         # Without a clearance floor the elevation gate's min_elevation + margin is asked for.
         @test elevation_min_request(fcs, off, 150.0) ≈ 22.0
         @test isnothing(elevation_min_request(FC_Settings(; min_elevation = -2.0), off, 150.0))
-        gates = merge(off, (; min_height = 100.0))
+        gates = TrajOptSettings(off; min_height = 100.0)
         # The clearance floor asind(100/150) = 41.8° beats the elevation gate's 22°...
         @test elevation_min_request(fcs, gates, 150.0) ≈ asind(100 / 150)
         # ...and falls as the tether grows, until the elevation gate's is the higher one.

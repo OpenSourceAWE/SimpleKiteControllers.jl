@@ -217,7 +217,7 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
     end
 
     @testset "solve_startup_seed_retries" begin
-        tos = (; name = "v4", startup_retry_el_offsets = [-1.0, 2.0], opt_failure_cache = true,
+        tos = TrajOptSettings(; startup_retry_el_offsets = [-1.0, 2.0], opt_failure_cache = true,
                guess_a = 30.0, guess_b = 12.0)
         center(p) = sum(p.trajectory.elevation) / length(p.trajectory.elevation)
         # `solve` answers 422 for the seeds in `bad` and converges elsewhere; `sent` records each call.
@@ -257,7 +257,7 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
         @test sent == [26.0] && r.startup_seed_offset == 1.0
 
         # No retry seeds and the only one cached as bad: nothing is sent, and the error says why.
-        tos0 = merge(tos, (; startup_retry_el_offsets = Float64[]))
+        tos0 = TrajOptSettings(tos; startup_retry_el_offsets = Float64[])
         file = joinpath(mktempdir(), "failures.yaml")
         record_opt_failure!(params(), "422 from /step"; file)
         err = try
@@ -268,7 +268,7 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
         end
         @test err isa ErrorException && occursin("cached as bad", err.msg)
         # With the failure cache off it is neither read nor written.
-        tosoff = merge(tos, (; opt_failure_cache = false))
+        tosoff = TrajOptSettings(tos; opt_failure_cache = false)
         r, sent = run([25.0]; file, tos = tosoff)
         @test sent == [25.0, 24.0] && length(opt_failures(; file)) == 1
     end
@@ -295,10 +295,10 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
     end
 
     @testset "seed_and_anchor_ratio" begin
-        tos = (; guess_el_center = 30.0, guess_el_center_high = 32.0, guess_el_center_wind_ref = 8.0)
+        tos = TrajOptSettings(; guess_el_center = 30.0, guess_el_center_high = 32.0, guess_el_center_wind_ref = 8.0)
         @test guess_el_center_seed(tos, 7.99) == 30.0
         @test guess_el_center_seed(tos, 8.0) == 32.0             # a step at the reference wind
-        @test guess_el_center_seed(merge(tos, (; guess_el_center_high = 0.0)), 12.0) == 30.0
+        @test guess_el_center_seed(TrajOptSettings(tos; guess_el_center_high = 0.0), 12.0) == 30.0
         table(r) = Dict("table" => Dict("distance_radial" => r))
         @test reelout_anchor_ratio(table([150.0, 165.0, 180.0])) ≈ 1.2
         # Anything unusable is the neutral factor, never an error.

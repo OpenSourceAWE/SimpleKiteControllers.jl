@@ -113,7 +113,7 @@ end
         @test st.opt_result.metrics.avg_power_W == 18000.0 && st.opt_power_pred == 18000.0
         @test st.opt_paths_raw[1][1] ≈ TIGHT[1] && st.opt_downloops == !UP_LOOPS
         @test isnothing(st.incumbent_score) && isempty(r.saved)
-        @test setup.feas.feas_start.margin >= setup.tos.min_feasibility_margin
+        @test setup.feas.feas_start.margin >= setup.tos.gates.min_feasibility_margin
         @test st.depower_flown_opt ≈ SimpleKiteControllers.awetrim_depower_to_v3kite(1.42)
         # The state the loop starts from.
         @test st.n_path == length(setup.fec.az_path) == length(st.raw_az)
@@ -188,7 +188,7 @@ end
         fs = fake_server()
         try
             tos = deepcopy(setup.tos)
-            tos.opt_warm_start_awe_trim = 1.0
+            tos.server.opt_warm_start_awe_trim = 1.0
             su = (; opt_chain = OptChain(fs.url; successes = false, failures = false), tos,
                   winch = (; use_awe_trim = 0.5), rcs = setup.rcs, l_set = setup.l_set,
                   winch_first_lap = setup.winch_first_lap)

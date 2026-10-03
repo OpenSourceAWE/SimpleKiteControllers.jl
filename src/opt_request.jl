@@ -77,10 +77,10 @@ const DEPOWER_SEED_BOUNDS = (1.1, 2.3)
 """
     depower_seed(tos, wind_speed) -> Float64
 
-The power-tape length `l_dp` [m] a request STARTS from, `tos.input_depower` plus
-`tos.input_depower_per_wind` per m/s of wind above `tos.input_depower_wind_ref`,
+The power-tape length `l_dp` [m] a request STARTS from, `tos.seed.input_depower` plus
+`tos.seed.input_depower_per_wind` per m/s of wind above `tos.seed.input_depower_wind_ref`,
 clamped to [`DEPOWER_SEED_BOUNDS`](@ref) and, below that, to
-`tos.input_depower_seed_max` when it is set.
+`tos.seed.input_depower_seed_max` when it is set.
 
 A seed landing exactly on `DEPOWER_SEED_BOUNDS`' hard ceiling is itself a
 failure mode, not just a value: measured 2026-08-20 at 150 m / 10 m/s, the ramp
@@ -107,10 +107,10 @@ largest seed known to converge (7.0 m/s, that scan) and 1.85 m is what 8 m/s was
 first solved with. A third measured wind should replace it rather than extend it.
 """
 function depower_seed(tos, wind_speed)
-    seed = tos.input_depower +
-           tos.input_depower_per_wind * max(0.0, wind_speed - tos.input_depower_wind_ref)
+    seed = tos.seed.input_depower +
+           tos.seed.input_depower_per_wind * max(0.0, wind_speed - tos.seed.input_depower_wind_ref)
     lo, hi = DEPOWER_SEED_BOUNDS
-    soft_hi = tos.input_depower_seed_max > 0 ? min(hi, tos.input_depower_seed_max) : hi
+    soft_hi = tos.seed.input_depower_seed_max > 0 ? min(hi, tos.seed.input_depower_seed_max) : hi
     clamped = clamp(seed, lo, soft_hi)
     # Only warn when the EFFECTIVE seed still lands on AWETrim's own hard bound:
     # a clamp by input_depower_seed_max short of it is the deliberate, calibrated
@@ -120,26 +120,26 @@ function depower_seed(tos, wind_speed)
                         bounds [%.3f, %.3f] m and was clamped to %.3f m. The ramp \
                         (input_depower %.2f + %.3f per m/s above %.1f m/s of \
                         data/traj_opt.yaml) has run out of tape.",
-                       seed, wind_speed, lo, hi, clamped, tos.input_depower,
-                       tos.input_depower_per_wind, tos.input_depower_wind_ref)
+                       seed, wind_speed, lo, hi, clamped, tos.seed.input_depower,
+                       tos.seed.input_depower_per_wind, tos.seed.input_depower_wind_ref)
     end
     return clamped
 end
 
 """
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
-                            margin = tos.min_feasibility_margin) -> Union{Float64, Nothing}
+                            margin = tos.gates.min_feasibility_margin) -> Union{Float64, Nothing}
 
 `margin` in METRES — `margin/(c1*max_steering)`, the kite's own physical turning
 limit scaled by the margin — sent WITH the request so the optimizer cannot answer
-with a pattern that is about to be rejected. Defaults to `tos.min_feasibility_margin`;
+with a pattern that is about to be rejected. Defaults to `tos.gates.min_feasibility_margin`;
 pass a smaller value to ask for less than the full gate, e.g. a graduated startup
 retry. `nothing` — send no constraint — when `margin` is 0, which is also where the
 gate is off.
 
 `scale` asks for MORE than that, and a reel-out run has to: the two numbers do not
 measure the same curve at the same radius, and the difference is NOT in the run's
-favour. Pass `reelout_anchor_ratio(table) * tos.turn_radius_headroom`.
+favour. Pass `reelout_anchor_ratio(table) * tos.gates.turn_radius_headroom`.
 
 The optimizer enforces `R = r/|kappa|` at each node's OWN radius, and `r` grows
 through the lap — it starts at the anchor and reels out. The run installs the reply
@@ -156,7 +156,7 @@ On top of that the gate re-estimates the curvature from the reply's ~99 points
 ~5 % tighter than the exact anchor value — 10.81 m against 11.38 m on the same
 reply — and the run then adds `el_offset_wing` before checking, which
 compresses the azimuth axis by `cos(elevation)` a little more.
-`tos.turn_radius_headroom` covers that half.
+`tos.gates.turn_radius_headroom` covers that half.
 
 Both together are why an unscaled request came back at margin 0.63 against a
 `min_feasibility_margin` of 0.74, converged and with its constraint satisfied
@@ -184,7 +184,7 @@ it cannot serve therefore sends no constraint and warns, exactly as the feasibil
 GATE degrades — an off-grid run loses the advice, not the run.
 """
 function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
-                                 margin = tos.min_feasibility_margin)
+                                 margin = tos.gates.min_feasibility_margin)
     margin > 0 || return nothing
     scale >= 0 || error("min_turn_radius_request: scale must be >= 0, got $scale.")
     if !isnothing(c1) && isfinite(c1) && c1 > 0
@@ -192,7 +192,7 @@ function min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
     end
     coeffs = try_turn_rate_coeffs(fcs; info = false,
         consequence = "asking the optimizer for NO minimum turn radius, though \
-                       min_feasibility_margin = $(tos.min_feasibility_margin) will \
+                       min_feasibility_margin = $(tos.gates.min_feasibility_margin) will \
                        still gate the reply")
     isnothing(coeffs) && return nothing
     return scale * margin / (coeffs.c1 * fcs.course.max_steering)
@@ -219,7 +219,7 @@ curvature the kite never had.
 """
 function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
     turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
-    opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.turn_radius_headroom
+    opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.gates.turn_radius_headroom
     depower_request = awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed))
     c1_request = try
         turn_rate_coeffs(fcs.run.body_damping, depower_request).c1
@@ -240,12 +240,12 @@ function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
                            @sprintf("%.2f m (min_feasibility_margin %.2f x the kite's \
                                     own at depower %.3f%s, x %.3f for %.0f m of assumed \
                                     reel-out per lap and %.2f of headroom)",
-                                    opt_r_min, tos.min_feasibility_margin,
+                                    opt_r_min, tos.gates.min_feasibility_margin,
                                     depower_request,
                                     " — the seed's, not the setpoint's, because the \
                                      reply is flown at its own",
                                     opt_r_scale, turn_radius_reel,
-                                    tos.turn_radius_headroom),
+                                    tos.gates.turn_radius_headroom),
                        isnothing(opt_box) ? "unset" : string(opt_box))
     return (; turn_radius_reel, opt_r_scale, depower_request, c1_request, opt_r_min, opt_r_on,
             opt_r_sent, opt_box)

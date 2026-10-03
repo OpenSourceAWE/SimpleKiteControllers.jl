@@ -30,7 +30,7 @@ using LinearAlgebra: norm
     c1_setpoint = 0.28
 
     function steer_setup(; c1_now = c1_setpoint)
-        (; fcs, tos = (; path_blend_time = 6.0), c1_setpoint, c1_depower_max = Inf,
+        (; fcs, tos = TrajOptSettings(; path_blend_time = 6.0), c1_setpoint, c1_depower_max = Inf,
          c1_ctrl_at = dp -> c1_now, dt0 = 0.02, fec = new_fec())
     end
 
