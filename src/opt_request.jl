@@ -5,74 +5,71 @@
 # `pattern_limits.jl`: the depower it starts from and how its reply converts to V3Kite's, and the
 # minimum turn radius. Pure: settings in, numbers out; only the client talks to the server.
 
-"""
-Total offset [`rel_depower` units] between the two models at equal power.
+"File in `data/` holding the identified depower conversion, see [`depower_conversion`](@ref)"
+const DEPOWER_CONVERSION_FILE = "depower_conversion.yaml"
 
-Recalibrated 2026-08-29 after `kite.mass` in `data/settings_reelout_150m.yaml`
-rose from 6.2 kg to 10.9926 kg (commit `6443fbe`) to match AWETrim's own LEI-V3
-wing — AWETrim never receives a mass, so it was already assuming 11 kg, and the
-prior 0.099 had silently absorbed the 4.8 kg mismatch. At 6 m/s (8 mm tether,
-no turbulence), 0.099 measured 7506 W against 7301 W predicted (ratio 1.028).
-Confirmed at **0.1010**, twice: 7286 W measured against 7262 W predicted,
-ratio 1.00, both runs inside the 0.995..1.004 acceptance band.
-
-Earlier 2026-08-26 sweep, at the 6.2 kg mass (predictor AWETrim `a745914`):
-
-| offset | measured − predicted [W] | `power_ratio` |
-|--------|--------------------------|---------------|
-| 0.105  | −578                     | 0.92          |
-| 0.100  | −68                      | 0.99          |
-| 0.0985 | +67                      | 1.01          |
-| 0.095  | +451                     | 1.06          |
-
-~100 W measured per 0.001, ~0.14 of ratio per 0.010 — steep enough that the
-0.995..1.004 band (±0.00036 in this variable) needs the constant written to
-four decimals. Earlier history: 0.12 measured 2026-08-18
-(`docs/steering_depower.md`, VSM needing 0.12 more `rel_depower` than the ROM for
-equal power, of which 0.08 was the two tape-length zeros and 0.04 genuine aero
-disagreement), lowered to 0.107 by commit `ee1ecbd` without re-measurement, then
-(post-8 mm tether) to 0.099, then (post-mass) to this value. RE-MEASURE after
-any change to either model's depower axis, aero, or mass.
-"""
-const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.1010
+"The conversion in force; `nothing` until [`depower_conversion`](@ref) first reads the file"
+const DEPOWER_CONVERSION = Ref{Union{Nothing, NamedTuple}}(nothing)
 
 """
-AWETrim tape length [m] at which [`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref) was
-calibrated: the `l_dp` the optimizer flies at 6 m/s (1.430 at 220 m, Cabauw
-2026-10-03). The conversion turns about this point, so changing
-[`AWETRIM_V3KITE_DEPOWER_SLOPE`](@ref) leaves the calibration alone.
+    load_depower_conversion(file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE))
+        -> NamedTuple
+
+The identified conversion `(; offset, pivot, slope, curvature, l_dp_min, l_dp_max)` of
+`data/depower_conversion.yaml`, see [`awetrim_depower_to_v3kite`](@ref) and the file for
+what each value is and how it was measured.
 """
-const AWETRIM_V3KITE_DEPOWER_PIVOT = 1.43
+function load_depower_conversion(file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE))
+    d = YAML.load_file(file)["depower_conversion"]
+    return (; offset = Float64(d["offset"]), pivot = Float64(d["pivot"]),
+            slope = Float64(d["slope"]), curvature = Float64(d["curvature"]),
+            l_dp_min = Float64(d["l_dp_min"]), l_dp_max = Float64(d["l_dp_max"]))
+end
 
 """
-`rel_depower` per metre of AWETrim tape length [1/m]. The plain tape geometry
-gives 1/5 = 0.2; 0.1833 since 2026-10-03.
+    depower_conversion() -> NamedTuple
 
-With depower at the force limit the simulator pulls about 13x per unit of
-`rel_depower` more steeply in ln(force) (Cabauw 7 m/s: 9440 N at 0.274 against
-6546 N at 0.302), so a few thousandths decide the force. Matching the predicted
-tension of the early re-optimized paths needed about -0.0055 of `rel_depower`
-at 7 m/s (`l_dp` ~1.61) and about +0.002 at 5-6 m/s; 0.1833 corrects half the
-7 m/s error (0.300 instead of 0.303 at 1.61 m) while keeping the 6 m/s
-calibration point. It moves 8-10 m/s by -0.005 to -0.008, where the same
-identification asked for -0.003 to +0.006: check them before trusting it there.
+The conversion in force, read from `data/depower_conversion.yaml` on first use. An
+identification replaces it for its trial runs with [`with_depower_conversion`](@ref).
 """
-const AWETRIM_V3KITE_DEPOWER_SLOPE = 0.1833
+function depower_conversion()
+    isnothing(DEPOWER_CONVERSION[]) && (DEPOWER_CONVERSION[] = load_depower_conversion())
+    return DEPOWER_CONVERSION[]
+end
 
 """
-    awetrim_depower_to_v3kite(l_dp) -> Float64
+    with_depower_conversion(f, conv)
+
+Run `f()` with the conversion `conv` (a `(; offset, pivot, slope, curvature, l_dp_min, l_dp_max)`) in force,
+restoring the previous one afterwards, also after an error.
+"""
+function with_depower_conversion(f, conv)
+    old = depower_conversion()
+    DEPOWER_CONVERSION[] = conv
+    try
+        return f()
+    finally
+        DEPOWER_CONVERSION[] = old
+    end
+end
+
+"""
+    awetrim_depower_to_v3kite(l_dp; conv = depower_conversion()) -> Float64
 
 Convert an AWETrim `l_dp` [m] (`input_depower`, `l_dp = 0.6 + 5*u_p`) into the
-V3Kite `rel_depower` expected to fly at the SAME power: the line through the
-calibration point, `(PIVOT - 0.6)/5 + `[`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref),
-with slope [`AWETRIM_V3KITE_DEPOWER_SLOPE`](@ref). At slope 1/5 this is the old
-`(l_dp - 0.6)/5 + OFFSET`. The offset is the FULL correction — do not also
-subtract the 0.4 m calibration offset separately, it is already inside the
-original 0.12 split (0.08 tape zero + 0.04 aero).
+V3Kite `rel_depower` expected to fly at the SAME tension: the plain tape geometry
+`(pivot - 0.6)/5` plus the calibrated `offset` at the calibration point `pivot`, and
+`slope*x + curvature*x^2` away from it, `x = l_dp - pivot`. Outside `[l_dp_min, l_dp_max]`,
+the tape lengths it was identified on, it continues along the tangent at the nearer end
+instead of the parabola. At slope 1/5 and no curvature this is the old
+`(l_dp - 0.6)/5 + offset`. The values are identified, see `data/depower_conversion.yaml`.
 """
-awetrim_depower_to_v3kite(l_dp) =
-    (AWETRIM_V3KITE_DEPOWER_PIVOT - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET +
-    AWETRIM_V3KITE_DEPOWER_SLOPE * (l_dp - AWETRIM_V3KITE_DEPOWER_PIVOT)
+function awetrim_depower_to_v3kite(l_dp; conv = depower_conversion())
+    x_end = clamp(l_dp, conv.l_dp_min, conv.l_dp_max) - conv.pivot
+    tangent = conv.slope + 2 * conv.curvature * x_end
+    return (conv.pivot - 0.6) / 5 + conv.offset + conv.slope * x_end + conv.curvature * x_end^2 +
+           tangent * (l_dp - conv.pivot - x_end)
+end
 
 "AWETrim's own bounds on `input_depower`, from `src/awetrim/utils/defaults.py` [m]."
 const DEPOWER_SEED_BOUNDS = (1.1, 2.3)

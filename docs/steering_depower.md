@@ -292,7 +292,7 @@ applies. See [fig8_tuning_log.md](fig8_tuning_log.md).
 tether) and again on 2026-08-29 (`kite.mass` raised from 6.2 kg to 10.9926 kg to
 match AWETrim's own wing), each time by re-measuring `power_ratio` at 6 m/s
 rather than by re-deriving the worked numbers above. Current value: **0.1010**.
-Treat the `AWETRIM_V3KITE_DEPOWER_OFFSET` docstring in `src/awetrim_client.jl`
-as the source of truth, not the number in this file.
+Treat `data/depower_conversion.yaml` (`offset`, and since 2026-10-03 `slope` and
+`curvature`) as the source of truth, not the number in this file.
 
 
