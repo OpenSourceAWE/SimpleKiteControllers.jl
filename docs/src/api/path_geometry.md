@@ -6,6 +6,20 @@ CurrentModule = SimpleKiteControllers
 
 Reference paths are closed curves in azimuth and elevation [deg].
 
+## Externally optimized flight path
+
+```@docs
+TrajOptSettings
+TrajOptServer
+TrajOptGuess
+TrajOptSeed
+TrajOptBox
+TrajOptGates
+TrajOptReopt
+TrajOptReoptGates
+turn_radius_lap_reelout
+```
+
 ## Building a path
 
 ```@docs

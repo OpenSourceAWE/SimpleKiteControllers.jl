@@ -1,7 +1,14 @@
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-"AWETrim server, request caches and the winch law sent; a part of [`TrajOptSettings`](@ref)"
+"""
+The AWETrim server, the request caches and the winch law sent, part `server` of
+[`TrajOptSettings`](@ref), section `server:` of the YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct TrajOptServer
     "Address of the AWETrim server"
     base_url::String = "http://127.0.0.1:8000"
@@ -17,7 +24,14 @@
     free_speed_reference_points::Int64 = 0
 end
 
-"The initial guess the startup solve starts from; a part of [`TrajOptSettings`](@ref)"
+"""
+The initial guess the startup solve starts from, part `guess` of
+[`TrajOptSettings`](@ref), section `guess:` of the YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct TrajOptGuess @deftype Float64
     "Width of the guess lemniscate; azimuth spans ±`guess_a` [deg]"
     guess_a = 30.0
@@ -33,7 +47,14 @@ end
     startup_retry_el_offsets::Vector{Float64} = Float64[]
 end
 
-"The depower seed of the solve, ramped with the wind; a part of [`TrajOptSettings`](@ref)"
+"""
+The depower seed of the solve, ramped with the wind, part `seed` of
+[`TrajOptSettings`](@ref), section `seed:` of the YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct TrajOptSeed @deftype Float64
     "Power-tape length seed `l_dp` on AWETrim's scale [m]"
     input_depower = 1.6
@@ -47,7 +68,12 @@ end
 
 """
 The pattern box the optimizer solves UNDER, sent with every request so a reply cannot
-break it; a part of [`TrajOptSettings`](@ref). Each bound is off at `0.0`.
+break it, part `box` of [`TrajOptSettings`](@ref), section `box:` of the YAML file.
+Each bound is off at `0.0`.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct TrajOptBox @deftype Float64
     "Azimuth half-width limit of the optimized pattern [deg]; `0.0` = optimizer's 45.8°"
@@ -70,8 +96,12 @@ end
 
 """
 The gates every returned path must pass before it is flown, at startup and after a
-re-optimization; a part of [`TrajOptSettings`](@ref). `min_feasibility_margin` is also
-sent with the request, as a minimum turn radius.
+re-optimization, part `gates` of [`TrajOptSettings`](@ref), section `gates:` of the YAML
+file. `min_feasibility_margin` is also sent with the request, as a minimum turn radius.
+
+# Fields
+
+$(TYPEDFIELDS)
 """
 @with_kw mutable struct TrajOptGates @deftype Float64
     "Minimum curvature margin of the returned path, also sent as turn radius; `0.0` = off"
@@ -84,7 +114,14 @@ sent with the request, as a minimum turn radius.
     candidate_elevation_margin = 3.0
 end
 
-"Re-optimization while the tether grows (`simple_opt_reelout.jl`); a part of [`TrajOptSettings`](@ref)"
+"""
+Re-optimization while the tether grows (`simple_opt_reelout.jl`), part `reopt` of
+[`TrajOptSettings`](@ref), section `reopt:` of the YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct TrajOptReopt @deftype Float64
     "Laps between re-optimizations"
     reopt_every_n_laps::Int64 = 2
@@ -102,7 +139,14 @@ end
     challenge_growth = 1.1
 end
 
-"The extra gates of a re-optimization reply; a part of [`TrajOptSettings`](@ref)"
+"""
+The extra gates of a re-optimization reply, part `reopt_gates` of
+[`TrajOptSettings`](@ref), section `reopt_gates:` of the YAML file.
+
+# Fields
+
+$(TYPEDFIELDS)
+"""
 @with_kw mutable struct TrajOptReoptGates @deftype Float64
     "Min fraction of the startup install's predicted power a reply must reach [-]"
     min_power_frac = 0.3

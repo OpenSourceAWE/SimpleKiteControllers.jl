@@ -4,20 +4,6 @@ CurrentModule = SimpleKiteControllers
 
 # Settings and data files
 
-## Externally optimized flight path
-
-```@docs
-TrajOptSettings
-TrajOptServer
-TrajOptGuess
-TrajOptSeed
-TrajOptBox
-TrajOptGates
-TrajOptReopt
-TrajOptReoptGates
-turn_radius_lap_reelout
-```
-
 ## Loading settings
 
 ```@docs
