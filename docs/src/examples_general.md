@@ -53,6 +53,7 @@ Choose example to run or `q` to quit:
    build_all_scenarios.jl       - re-fly and replace every scenario of both sites (30 min!)
    simple_opt_reelout.jl        - reel out along an externally optimized path (minutes!)
    simple_reelout_plots.jl      - plot the last logged reel-out run
+   stability_opt_reelout.jl     - disk margins of the reel-out course loop over tether length
    stability_global.jl          - worst reel-out disk margin of every archived scenario (minutes!)
    simple_fig8.jl               - fly the figure-of-eight pattern (minutes!)
    simple_fig8_live.jl          - the same run, shown live in the 3D viewer (minutes!)
