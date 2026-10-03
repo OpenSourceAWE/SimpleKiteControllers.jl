@@ -211,7 +211,7 @@ turn-rate cell) and the pattern box `opt_box`. `opt_r_sent` starts as `opt_r_min
 the startup solve actually CONVERGED at, which the retry ladder bisects toward.
 
 `depower_request` is the depower the reply will be FLOWN at, which is the c1 the request must
-be sized at, see [`min_turn_radius_request`](@ref). Under `fly_opt_depower` that is the optimizer's
+be sized at, see [`min_turn_radius_request`](@ref). That is the optimizer's
 own and so unknown before the solve; the seed it starts from is the only estimate there is,
 and the setpoint is NOT one: it is the depower the loop is tuned at, typically far more
 powered, and a request sized there comes back a third too tight and is then gated out for a
@@ -220,9 +220,7 @@ curvature the kite never had.
 function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
     turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
     opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.turn_radius_headroom
-    depower_request = tos.fly_opt_depower ?
-                      awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed)) :
-                      fcs.course.depower_setpoint
+    depower_request = awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed))
     c1_request = try
         turn_rate_coeffs(fcs.run.body_damping, depower_request).c1
     catch exc
@@ -244,8 +242,8 @@ function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
                                     reel-out per lap and %.2f of headroom)",
                                     opt_r_min, tos.min_feasibility_margin,
                                     depower_request,
-                                    tos.fly_opt_depower ? " — the seed's, not the \
-                                        setpoint's, because the reply is flown at its own" : "",
+                                    " — the seed's, not the setpoint's, because the \
+                                     reply is flown at its own",
                                     opt_r_scale, turn_radius_reel,
                                     tos.turn_radius_headroom),
                        isnothing(opt_box) ? "unset" : string(opt_box))

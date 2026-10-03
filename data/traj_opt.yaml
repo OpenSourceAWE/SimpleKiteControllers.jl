@@ -1,7 +1,6 @@
 # Externally optimized path settings; each key is a `TrajOptSettings` field (src/traj_opt_settings.jl, rationale there), tuning record in docs/fig8_tuning_log.md
 traj_opt:
     base_url: "http://127.0.0.1:8000"  # address of the AWETrim server
-    autostart_server: true   # start one with bin/run_server when none answers
     name: "simple_opt_fig8"  # name the optimization is registered under
 
     # --- Initial guess (seeds a multi-modal solve: changes the answer, not the run time) --- #
@@ -17,9 +16,7 @@ traj_opt:
     input_depower_wind_ref:  7.0   # wind at which input_depower IS the seed  [m/s]
     input_depower_per_wind:  0.25  # tape added per m/s above that; one-sided [m/(m/s)]
     input_depower_seed_max:  1.85  # ramp ceiling, below the server's 2.3 m  [m]
-    fly_opt_depower:   true  # phases >= 3 fly the optimizer's converted u_d  [-]
     reg_weight:        1.0   # regularization weight                           [-]
-    detect_simple_bounds: true   # IPOPT flag
     resample_points:   361   # points the path is resampled to                 [-]
     opt_failure_cache: true  # skip requests recorded as failing; see the docstring
     opt_success_cache: true  # replay applied results of an identical request chain; clear after an AWETrim change
@@ -32,7 +29,6 @@ traj_opt:
     min_height: 40.0              # clearance gate at the anchor radius; 40 not 50 because AWETrim's floor is at the END of the reel-out [m]
 
     # --- Pattern box the optimizer solves UNDER; 0.0 keeps the server default (|az| <= 45.8, 0.6 <= el <= 51.6) [deg] --- #
-    elevation_min_from_gates: true    # raise the floor to what the gates will demand at the requested length
     elevation_min_retry_margin: 0.5   # extra elevation on a re-ask after a clearance/elevation rejection [deg]
     pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
     pattern_azimuth_max_high: 32.0    # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
@@ -54,8 +50,6 @@ traj_opt:
     pattern_climb_angle_max: 45.0     # steepest climb of the path in the az/el plane; descending is free; 0 is off [deg]
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
-    reopt_enabled: true      # off by default: a run is reproducible without a server
-    use_step: true           # warm /step from the previous optimum; false re-runs /init from the guess
     reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
     max_reopt: 7             # bound on re-optimizations per run                 [-]
     path_blend_time: 6.0     # seconds over which the new path replaces the old  [s]

@@ -623,8 +623,7 @@ Every step is WARM-STARTED from the session's previous optimum; what the
 `trajectory` field does is REPLACE that seed with a curve of the caller's, refitted
 into the pattern B-spline. Leaving it `nothing` therefore re-anchors the last
 optimum to the new `length` and solves from there — the cheap solve — while
-sending one is a cold start in everything but the session (see
-`TrajOptSettings.use_step`).
+sending one is a cold start in everything but the session.
 
 With `wait = false` the server accepts the job and replies immediately; the
 return value is the step index instead. Poll [`opt_status`](@ref) until its
@@ -1304,7 +1303,7 @@ function optimizer_session(tos, inflow, replay_paths, log_name)
                                            0.0, tos.guess_points)
     @info @sprintf("Initial guess: %.0f° x %.0f° at %.0f°, %d points.",
                    tos.guess_a, tos.guess_b, el_center_seed, tos.guess_points)
-    ensure_server(tos.base_url; autostart = tos.autostart_server)
+    ensure_server(tos.base_url)
     opt_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
                          failures = tos.opt_failure_cache,
                          replay = isnothing(replay_paths) ? nothing :
@@ -1451,7 +1450,6 @@ function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                                 input_depower = depower_seed(tos, inflow.wind_speed),
                                 reg_weight = tos.reg_weight,
-                                detect_simple_bounds = tos.detect_simple_bounds,
                                 min_turn_radius, pattern_limits)
             reply = chain_init(ref_chain, params)
             result = chain_step(ref_chain, StepParams(l, ref_winch, reply.trajectory))

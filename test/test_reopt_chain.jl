@@ -49,9 +49,8 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
     function cycle(replies; max_reopt = 3, server = nothing, blocking = false, retries = 0,
                    poll = 0.5, power = 18000.0)
         tos = TrajOptSettings()
-        tos.use_step = true; tos.reopt_blocking = blocking; tos.reopt_poll_interval = poll
+        tos.reopt_blocking = blocking; tos.reopt_poll_interval = poll
         tos.reopt_every_n_laps = 1; tos.max_reopt = max_reopt; tos.blend_max_retries = retries
-        tos.fly_opt_depower = false
         fec = FigureEightController(fcs; dt = 0.02)
         set_path!(fec, flown...; up_loops)
         oc = isnothing(server) ? OptChain("http://127.0.0.1:1"; dir = mktempdir(), replay = replies) :
@@ -205,35 +204,17 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         @test st.reopt_cycles[end].status == "request failed"
     end
 
-    @testset "blocking_cold_seed" begin
-        # Without use_step every request is a cold /init from the guess.
-        fs = fake_server(; instant = true, table = reply_table)
-        try
-            st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
-            setup.tos.use_step = false
-            # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
-            setup.tos.size_box_growth = 0.0
-            reoptimize!(st, setup, plant, 30.0, 4, 0.0)
-            @test paths(fs) == ["/init", "/step", "/status", "/trajectory"]
-            @test mean_el(fs.log[1][2]) ≈ 30.0 atol = 0.5
-            @test st.reopt_events[end].status == "installed"
-        finally
-            close(fs.server)
-        end
-    end
-
     @testset "cold_seed_fitted_into_box" begin
-        # With the size box around `flown` (el 20-30°, let out to 18.5-31.5° at 1.3), the guess
-        # at el_center_seed = 30° is moved down into it before it is sent.
-        fs = fake_server(; instant = true, table = reply_table)
+        # With the size box around `flown` (el 20-30°, let out to 18.5-31.5° at 1.3), the cold
+        # guess after a failed warm step, at el_center_seed = 30°, is moved down into it.
+        fs = fake_server(; instant = true, fail_warm = true, table = reply_table)
         try
             st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
-            setup.tos.use_step = false
             @test_logs (:info, r"guess fitted into the box") match_mode = :any reoptimize!(
                 st, setup, plant, 30.0, 4, 0.0)
-            el = fs.log[1][2]["trajectory"]["elevation"]
+            el = fs.log[3][2]["trajectory"]["elevation"]
             box = st.opt_box_now
-            @test mean_el(fs.log[1][2]) < 30.0
+            @test mean_el(fs.log[3][2]) < 30.0
             @test box.elevation_min <= minimum(el) && maximum(el) <= box.elevation_max
             @test st.reopt_events[end].status == "installed"
         finally

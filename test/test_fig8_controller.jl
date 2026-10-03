@@ -1156,13 +1156,6 @@ end
         # The startup request's assumed reel-out per lap, a linear fit to the wind;
         # later requests measure it off the replies.
         @test turn_radius_lap_reelout(tos, 8.0) ≈ 1.987 * 8.0 + 14.18
-        # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
-        # carries whatever the last experiment needed.
-        @test !TrajOptSettings().reopt_enabled
-        # Warm re-optimization: off by default, since a cold solve per length is the
-        # reproducible one, and on in the shipped file, where it buys the cheap solve.
-        @test !TrajOptSettings().use_step
-        @test tos.use_step
         # 1, not the struct's 2: the shipped file re-anchors every lap, which is
         # what the reel-out window is long enough for.
         @test tos.reopt_every_n_laps == 1
@@ -1178,10 +1171,6 @@ end
         # The gate reads the reference path, the criterion scores the flown one, and
         # ~3° of undershoot was measured twice on 2026-08-18.
         @test tos.candidate_elevation_margin == 3.0
-        # On by default since 2026-08-22: the clearance gate is a HEIGHT the request
-        # never carried, and three replies in a row were thrown away 1.4 m short.
-        @test TrajOptSettings().elevation_min_from_gates
-        @test tos.elevation_min_from_gates
         @test tos.elevation_min_retry_margin >= 0
         # The identity the per-request floor inverts: ask for asind(min_height/L)
         # and `path_min_height` reads back exactly min_height at that length. This
@@ -1190,7 +1179,6 @@ end
         let L = 187.0, el_ask = asind(tos.min_height / L)
             @test path_min_height([0.0, 1.0], [el_ask, el_ask + 5], L) ≈ tos.min_height
         end
-        @test tos.detect_simple_bounds
         # The depower seed follows the wind, and only UPWARDS from the reference:
         # all six runs of the 5.0-7.0 m/s scan converged from 1.6 m, so the
         # reference may not drop below the top of that scan, while 8.0 m/s did not
@@ -1248,15 +1236,18 @@ end
             slack = joinpath(dir, "h.yaml")
             write(slack, "traj_opt:\n    turn_radius_headroom: 0.9\n")
             @test_throws ErrorException TrajOptSettings(slack)
-            # A retired key loads at its off value, as archived files carry it, and
-            # errors at any other, so a removed feature cannot be switched on silently.
+            # A retired key loads at the value the code now always has, as archived
+            # files carry it, and errors at any other, so a removed branch cannot be
+            # asked for silently.
             back = joinpath(dir, "r.yaml")
             write(back, "traj_opt:\n    optimize_k_v: false\n    opt_winch_mode: \"\"\n" *
-                        "    pattern_elevation_max: 0.0\n")
+                        "    pattern_elevation_max: 0.0\n    use_step: true\n")
             @test TrajOptSettings(back) isa TrajOptSettings
             write(back, "traj_opt:\n    optimize_k_v: true\n")
             @test_throws ErrorException TrajOptSettings(back)
             write(back, "traj_opt:\n    opt_winch_mode: \"free_speed\"\n")
+            @test_throws ErrorException TrajOptSettings(back)
+            write(back, "traj_opt:\n    reopt_enabled: false\n")
             @test_throws ErrorException TrajOptSettings(back)
             gate = joinpath(dir, "g.yaml")
             write(gate, "traj_opt:\n    power_gate_wind_min: -1.0\n")

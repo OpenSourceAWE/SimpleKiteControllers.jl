@@ -210,7 +210,7 @@ function setup_run(inputs; init_model)
     tos = TrajOptSettings(traj_opt_settings_file(project))
 
     # Sweep overrides (the input `fcs_overrides`), and the same for the optimizer's settings
-    # (`tos_overrides`), e.g. `reopt_enabled = false` for a test run.
+    # (`tos_overrides`), e.g. `max_reopt = 0` for a test run.
     apply_overrides!(fcs, inputs.fcs_overrides, "fcs_overrides", "FC_Settings", "fcs")
     apply_overrides!(tos, inputs.tos_overrides, "tos_overrides", "TrajOptSettings", "tos")
     # Test input: a steering disturbance `t -> Δu` added after the controller (`steer_disturbance`);
@@ -358,7 +358,7 @@ function setup_run(inputs; init_model)
     end
     # The depower a reply is FLOWN at, which is what every gate and request must read c1 at.
     pattern_depower(reply) =
-        tos.fly_opt_depower && !isnothing(reply.depower) ?
+        !isnothing(reply.depower) ?
             awetrim_depower_to_v3kite(reply.depower.value) : fcs.course.depower_setpoint
     # The elevation floor of every candidate path, the startup gates' and `check_startup_path`'s.
     el_floor = fcs.run.min_elevation + tos.candidate_elevation_margin

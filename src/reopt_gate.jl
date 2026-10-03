@@ -48,7 +48,7 @@ function gate_candidate(tos, c)
         reason = @sprintf("clearance %.1f m", c.clearance)
         # In DEGREES, the request's currency: how far the lowest point sits below the elevation demanded.
         deficit = asind(min(1.0, tos.min_height / c.l_now)) - c.chk_el_min
-        if tos.elevation_min_from_gates && retry_room
+        if retry_room
             return (; verdict = :retry, reason, detail = "",
                     raise = deficit + tos.elevation_min_retry_margin, low = true)
         end
@@ -58,7 +58,7 @@ function gate_candidate(tos, c)
         # The clearance floor does NOT imply this one: at 318 m, 50 m of height is 9° of elevation.
         reason = @sprintf("descends to %.1f°, below min_elevation + margin = %.1f°",
                           c.chk_el_min, c.el_floor)
-        if tos.elevation_min_from_gates && retry_room
+        if retry_room
             return (; verdict = :retry, reason, detail = "",
                     raise = c.el_floor - c.chk_el_min + tos.elevation_min_retry_margin, low = true)
         end

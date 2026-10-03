@@ -47,8 +47,7 @@ The elevation floor [deg] to send with a request made for tether length
 `l_tether`: the highest of what the gates will demand there —
 `asind(tos.min_height/l_tether)` for the clearance one and `fcs.run.min_elevation +
 tos.candidate_elevation_margin` for the elevation one — plus `extra`. `nothing`
-asks for nothing and leaves the optimizer's own 0.6°; so does
-`tos.elevation_min_from_gates = false` without an `extra`.
+asks for nothing and leaves the optimizer's own 0.6°.
 
 Inverting [`path_min_height`](@ref) at the length being asked for is what makes
 the request and the gate the same question: AWETrim constrains HEIGHT and reaches
@@ -62,12 +61,9 @@ off that reply and carried forward: the shortfall is structural and the next
 length has it too.
 """
 function elevation_min_request(fcs, tos, l_tether; extra = 0.0)
-    el_min = 0.0
-    if tos.elevation_min_from_gates
-        el_min = max(el_min, fcs.run.min_elevation + tos.candidate_elevation_margin)
-        tos.min_height > 0 && l_tether > tos.min_height &&
-            (el_min = max(el_min, asind(tos.min_height / l_tether)))
-    end
+    el_min = max(0.0, fcs.run.min_elevation + tos.candidate_elevation_margin)
+    tos.min_height > 0 && l_tether > tos.min_height &&
+        (el_min = max(el_min, asind(tos.min_height / l_tether)))
     el_min += extra
     return el_min > 0 ? el_min : nothing
 end

@@ -23,7 +23,6 @@ function startup_params(setup, el_center)
                trajectory = Trajectory(collect(az), collect(el)),
                input_depower = depower_seed(tos, inflow.wind_speed),
                reg_weight = tos.reg_weight,
-               detect_simple_bounds = tos.detect_simple_bounds,
                min_turn_radius = opt_r_min, pattern_limits = opt_box)
 end
 
@@ -419,7 +418,7 @@ end
 """
     capture_startup_geometry!(setup, st)
 
-The startup pattern's own geometry, captured now (with `reopt_enabled`, `fec` holds another path at the
+The startup pattern's own geometry, captured now (after re-optimization, `fec` holds another path at the
 end), and the prediction timeline that says which path was flown when, so the run is scored against the
 path in the air. Refuses a path that flies against `up_loops`.
 """
@@ -449,8 +448,8 @@ end
     startup_feasibility(setup, st) -> (; feas, margin5, c1_at_phase, phase5_margin_at)
 
 The gates that refuse the run (`check_startup_path`) on the installed startup path, at
-the depower the pattern is FLOWN at (`pattern_depower`): with `fly_opt_depower` the kite
-flies the optimizer's `u_d` from phase 3 on. Returns the verdicts `feas`, `margin5`, the
+the depower the pattern is FLOWN at (`pattern_depower`): the kite flies the optimizer's
+`u_d` from phase 3 on. Returns the verdicts `feas`, `margin5`, the
 `Phase5MarginState` of the in-air phase-5 check, and the two laws the loop reads off
 `feas`: `c1_at_phase(phase, depower | st)`, the c1 to check a path against at time t,
 and `phase5_margin_at(az, el)`, what phase 5 will fly a candidate path with.
@@ -463,7 +462,7 @@ function startup_feasibility(setup, st::RunState)
     c1_at_phase(phase::Integer, depower::Real) =
         c1_at(feas, phase, phase >= 5 ? NaN : c1_at_depower(depower))
     c1_at_phase(phase::Integer, st::RunState) =
-        c1_at_phase(phase, tos.fly_opt_depower ? st.depower_flown_opt : fcs.course.depower_setpoint)
+        c1_at_phase(phase, st.depower_flown_opt)
     # NaN when the table could not serve depower_final. See phase5_margin's docstring for
     # why this is NOT comparable to the install's own margin early in the reel-out.
     phase5_margin_at(az, el) = phase5_margin(feas, az, el, fcs.reelout.reelout_l_max, fcs.course.max_steering)

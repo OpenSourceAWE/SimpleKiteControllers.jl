@@ -11,7 +11,7 @@ using SimpleKiteControllers
 import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge
 
 @testset verbose = true "reopt_gate" begin
-    tos = (; min_feasibility_margin = 1.0, min_height = 40.0, elevation_min_from_gates = true,
+    tos = (; min_feasibility_margin = 1.0, min_height = 40.0,
            blend_max_retries = 2, elevation_min_retry_margin = 1.0, min_power_frac = 0.5,
            min_power_frac_prev = 0.85, max_size_growth = 1.3)
     # A candidate that passes everything; each test spoils one thing.
@@ -42,9 +42,6 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, 
         g2 = gate(clearance = 30.0, blend_attempt = 2)
         @test g2.verdict == :reject && g2.detail == "clearance 30.0 m" * retried(2)
         @test gate(clearance = 30.0, blend_attempt = 0).low
-        # Without `elevation_min_from_gates` a height shortfall is final.
-        g3 = gate_candidate(merge(tos, (; elevation_min_from_gates = false)), merge(good, (; clearance = 30.0)))
-        @test g3.verdict == :reject
     end
 
     @testset "elevation_floor" begin

@@ -68,7 +68,7 @@ function fly_startup(; tos = Dict{Symbol, Any}(), wind = "default", path_for = p
         GUI_STATE_FILE_OVERRIDE[] = gui
         FAILED_TRAJECTORY_DIR[] = traj_dir
         KiteUtils.set_data_path(skc_data_path())
-        overrides = merge(Dict{Symbol, Any}(:base_url => fs.url, :autostart_server => false,
+        overrides = merge(Dict{Symbol, Any}(:base_url => fs.url,
                                             :opt_success_cache => false, :opt_failure_cache => false),
                           tos)
         inputs = merge(run_input_defaults(), (; output_path = mktempdir(), tos_overrides = overrides))

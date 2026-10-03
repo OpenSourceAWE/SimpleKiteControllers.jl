@@ -30,13 +30,14 @@ using LinearAlgebra: norm
     c1_setpoint = 0.28
 
     function steer_setup(; c1_now = c1_setpoint)
-        (; fcs, tos = (; fly_opt_depower = false), c1_setpoint, c1_depower_max = Inf,
+        (; fcs, tos = (; path_blend_time = 6.0), c1_setpoint, c1_depower_max = Inf,
          c1_ctrl_at = dp -> c1_now, dt0 = 0.02, fec = new_fec())
     end
 
     @testset "hand_over_to_phase_3" begin
         setup = steer_setup()
-        st = RunState(; cc = new_cc(), rel_depower_prev = fcs.course.depower_setpoint)
+        st = RunState(; cc = new_cc(), rel_depower_prev = fcs.course.depower_setpoint,
+                      depower_flown_opt = 0.28)
         set_phase!(st.cc, 2)
         st.cc.hold_start = 10.0
         hold = st.cc.ccs.hold_time
@@ -54,7 +55,7 @@ using LinearAlgebra: norm
     @testset "gain_scale_and_inputs" begin
         # c1 at the flown depower half the setpoint's: the loop gain is scaled up twice.
         setup = steer_setup(; c1_now = c1_setpoint / 2)
-        st = RunState(; cc = new_cc(), rel_depower_prev = 0.3)
+        st = RunState(; cc = new_cc(), rel_depower_prev = 0.3, depower_flown_opt = 0.28)
         set_phase!(st.cc, 3)
         ref = deepcopy(st.cc)
         # Heading and course 0.4 rad once `course_offset` is applied: the error is the 0.01 rad commanded.
@@ -63,12 +64,13 @@ using LinearAlgebra: norm
         @test gain == 2.0
         chi_set = 0.41                              # a small course error: the PID does not saturate
         cmd = steering_command!(st, setup, plant(ss), 40.0, chi_set, 1.5)
-        u_ref, dp_ref, phase_ref = calc_steering(ref, chi_set, ss.heading, ss.course; t = 40.0,
+        u_ref, _, phase_ref = calc_steering(ref, chi_set, ss.heading, ss.course; t = 40.0,
             elevation = ss.elevation, v_kite = norm(ss.vel_kite), v_app = ss.v_app, dmin = 1.5,
             tangent = path_tangent(setup.fec), gain_scale = gain, u_ff = 0.0, chi_ff = 0.0)
-        @test cmd.rel_steering == u_ref && cmd.rel_depower == dp_ref && cmd.phase == phase_ref
+        # Phases 3 and 4 fly the optimizer's depower, not the controller's.
+        @test cmd.rel_steering == u_ref && cmd.rel_depower == 0.28 && cmd.phase == phase_ref
         # And the scale matters: at the setpoint's own c1 the same step steers differently.
-        st1 = RunState(; cc = new_cc(), rel_depower_prev = 0.3)
+        st1 = RunState(; cc = new_cc(), rel_depower_prev = 0.3, depower_flown_opt = 0.28)
         set_phase!(st1.cc, 3)
         cmd1 = steering_command!(st1, steer_setup(), plant(ss), 40.0, chi_set, 1.5)
         @test abs(cmd.rel_steering) < fcs.course.max_steering && abs(cmd1.rel_steering) < fcs.course.max_steering

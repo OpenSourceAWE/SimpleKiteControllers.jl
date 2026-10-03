@@ -16,21 +16,17 @@ rehearsal, flying the same path at constant length.
 
 The optimizer predicts a mean reel-out power for its path; reeling out along it
 measures one. Both land in the `traj_opt:` section of the run summary with their
-ratio. A large gap is the finding, not a bug to hide. With `fly_opt_depower`
-(on in the shipped yaml) phases 3 and 4 also fly the optimizer's depower, ramped
-in over `path_blend_time`; phase 5 always flies `fcs.reelout.depower_final`.
+ratio. A large gap is the finding, not a bug to hide. Phases 3 and 4 also fly
+the optimizer's depower, ramped in over `path_blend_time`; phase 5 always flies `fcs.reelout.depower_final`.
 
 # Re-optimizing while the tether grows
 
-`reopt_enabled` (on in the shipped `data/traj_opt.yaml`; the field defaults to
-off, so a run is reproducible without a server) re-anchors the path to the length actually flown:
+Re-optimization re-anchors the path to the length actually flown:
 a request every `reopt_every_n_laps` laps, at most `max_reopt` times, polled via
 `/status` and collected from `opt_trajectory` (its table is in RADIANS). While a
 solve runs or after one fails, the server keeps serving the previous path.
 
-`use_step: false` repeats the cold STARTUP solve (`/init` from the parametric
-guess, then `/step`) at each length. `use_step: true` (shipped) sends `/init`
-once and re-optimizes with `/step` alone, WARM-STARTING from the previous optimum
+The run sends `/init` once and re-optimizes with `/step` alone, WARM-STARTING from the previous optimum
 re-anchored to the new length — cheaper, but it follows one branch of a
 multi-modal problem and the failure cache cannot key it; with `reopt_blocking`,
 a failed warm step falls back to one cold `/init`. The FLOWN path is never fed back as a seed: optimized
@@ -74,8 +70,8 @@ size criterion has left.
 For ONE path flown all the way out, the start is the worst case: the angular
 turn radius `1/(L*c1*u_s)` only shrinks with length, so the startup check runs
 at the starting length, and phase 5 is checked separately at `reelout_l_max`
-under `depower_final` (`margin5`, `c1_at_phase`). With `reopt_enabled` every
-re-optimization is the worst case instead: the PHYSICAL radius `1/(c1*u_s)` =
+under `depower_final` (`margin5`, `c1_at_phase`). With re-optimization every
+request is the worst case instead: the PHYSICAL radius `1/(c1*u_s)` =
 11.35 m is length-independent, so each candidate is checked against the c1 of
 the phase it will be flown in.
 
@@ -96,9 +92,8 @@ the system project's settings file (wind) and its `wc_settings` (winch law) via
 `inflow_from_settings` and `winch_from_wc`. The guess decides whether and where
 the solve converges, so it is only moved when the server refuses: a startup 422
 is re-sent from guess centres shifted by `startup_retry_el_offsets` (see
-[`solve_startup`](@ref)), and a failed blocking COLD re-optimization
-(`use_step: false`) once from `guess_el_center + reopt_retry_el_offset`. A
-startup path that converges but is too tight keeps its seed (`retry_startup!`).
+[`solve_startup`](@ref)), and a failed blocking warm step once as a cold `/init`
+from the guess. A startup path that converges but is too tight keeps its seed (`retry_startup!`).
 See `simple_opt_fig8.jl` for the measurements. `fcs.pattern.f8_a`/`f8_b`/`el_center` are NOT
 flown here; the pattern's centre and extent are measured off the installed path.
 
@@ -169,7 +164,7 @@ LOG_NAME = nothing
 # `run_example(file; kwargs)` includes this script; `script_inputs` reads its kwargs, else the defaults.
 setup = setup_run(script_inputs(@__FILE__, run_input_defaults()); init_model)
 
-# What phases 3+ fly under `fly_opt_depower`; the fixed setpoint until the first optimizer answer.
+# What phases 3+ fly: the optimizer's depower; the fixed setpoint until the first optimizer answer.
 st = RunState(; l_set = setup.l_set, opt_r_scale = setup.opt_r_scale, opt_r_min = setup.opt_r_min,
               depower_flown_opt = setup.fcs.course.depower_setpoint)
 

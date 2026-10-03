@@ -25,8 +25,8 @@ is built on that. `simple_reelout.jl`'s successor closes the loop
 # The server
 
 `ensure_server()` starts one (`bin/run_server start`) if none answers, so a run
-does not fail because a terminal was closed; `base_url` and `autostart_server`
-are in `data/traj_opt.yaml` with the rest of the optimizer's settings. The
+does not fail because a terminal was closed; `base_url` is in
+`data/traj_opt.yaml` with the rest of the optimizer's settings. The
 request is built by
 `inflow_from_settings(project_set)` and `winch_from_wc(wcs)`, from the same files
 the plant is built from: a path optimized for another wind, or for a winch three
@@ -219,13 +219,12 @@ isnothing(opt_r_min) && isnothing(opt_box) ||
                                 turn_radius_reel, tos.turn_radius_headroom),
                    isnothing(opt_box) ? "unset" : string(opt_box))
 
-ensure_server(tos.base_url; autostart = tos.autostart_server)
+ensure_server(tos.base_url)
 opt_reply = opt_init(InitParams(; name = tos.name, length = l0,
                                 winch_params = winch, inflow_conditions = inflow,
                                 trajectory = Trajectory(collect(guess_az), collect(guess_el)),
                                 input_depower = depower_seed(tos, inflow.wind_speed),
                                 reg_weight = tos.reg_weight,
-                                detect_simple_bounds = tos.detect_simple_bounds,
                                 min_turn_radius = opt_r_min,
                                 pattern_limits = opt_box);
                      url = tos.base_url)

@@ -78,11 +78,11 @@ import SimpleKiteControllers: depower_conversion, with_depower_conversion, awetr
         rc = request_constraints(tos, fcs, inflow, 10.0, l_opt)
         @test rc.turn_radius_reel == turn_radius_lap_reelout(tos, 8.0)
         @test rc.opt_r_scale ≈ (1 + rc.turn_radius_reel / l_opt) * tos.turn_radius_headroom
-        # Sized at the setpoint when the reply is not flown at its own depower.
-        @test rc.depower_request == fcs.course.depower_setpoint
-        @test rc.c1_request == c1_setpoint
+        # Sized at the seed's depower, converted to V3Kite's: the reply is flown at its own.
+        @test rc.depower_request ≈ awetrim_depower_to_v3kite(depower_seed(tos, 8.0))
+        @test rc.c1_request == turn_rate_coeffs(fcs.run.body_damping, rc.depower_request).c1
         @test rc.opt_r_min ≈ rc.opt_r_scale * tos.min_feasibility_margin /
-                             (c1_setpoint * fcs.course.max_steering)
+                             (rc.c1_request * fcs.course.max_steering)
         @test rc.opt_r_on
         @test rc.opt_r_sent == rc.opt_r_min
         box = pattern_limits_from(tos; elevation_min = elevation_min_request(fcs, tos, l_opt),
@@ -91,16 +91,9 @@ import SimpleKiteControllers: depower_conversion, with_depower_conversion, awetr
               Tuple(getfield(rc.opt_box, f) for f in fieldnames(typeof(box))) ==
               Tuple(getfield(box, f) for f in fieldnames(typeof(box)))
 
-        # Under fly_opt_depower, sized at the seed's depower, converted to V3Kite's.
-        own = deepcopy(tos)
-        own.fly_opt_depower = true
-        rc = request_constraints(own, fcs, inflow, 10.0, l_opt)
-        @test rc.depower_request ≈ awetrim_depower_to_v3kite(depower_seed(own, 8.0))
-        @test rc.c1_request == turn_rate_coeffs(fcs.run.body_damping, rc.depower_request).c1
-
         # Off the grid: no c1, no radius constraint, and the gate's warning.
         off_grid = deepcopy(fcs)
-        off_grid.course.depower_setpoint = 0.9
+        off_grid.run.body_damping = 100 .* fcs.run.body_damping
         rc = @test_logs (:warn,) match_mode = :any request_constraints(tos, off_grid, inflow, 10.0,
                                                                        l_opt)
         @test isnothing(rc.c1_request)

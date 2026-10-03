@@ -36,7 +36,7 @@ function step_commands!(st::RunState, setup, plant, t)
     (; rel_depower, phase) = cmd
     el_target = update_lift_target!(st, setup, plant, t, phase)
     phase >= 4 && count_laps!(st, setup, plant, t)
-    tos.reopt_enabled && phase == 4 && reoptimize!(st, setup, plant, t, phase, el_target)
+    phase == 4 && reoptimize!(st, setup, plant, t, phase, el_target)
     # OUTSIDE the re-optimization block: the in-air lift queues blends too, with re-optimization off and
     # into phase 5; inside it they were reported as delivered but never ran (2026-09-26).
     phase >= 4 && advance_blend!(st, setup, t)
@@ -125,7 +125,7 @@ function depower_command!(st::RunState, setup, plant, t, phase_before, phase, re
     (; tos, fcs) = setup
     ss = plant.ss
     # The optimizer's depower from phase 3 on, ramped over path_blend_time; phase 5 below still wins.
-    if tos.fly_opt_depower && phase in (3, 4)
+    if phase in (3, 4)
         # The entry ladder's depower is the FROM endpoint the first time, so the 2->3 hand-over ramps too.
         if phase_before < 3 && isnothing(st.depower_blend_to)
             st.depower_blend_from = rel_depower
@@ -264,10 +264,9 @@ end
 """
     request_reopt!(st, setup, t, phase, l_now)
 
-Send a re-optimization request for `l_now`: a warm `/step` or a cold `/init` from the guess (see
-`use_step`), with the turn-radius request and the pattern box rebuilt at this length. Blocking
-(`reopt_blocking`) holds the simulation until the solve is over and retries a failed one from the
-next seed. A refused request is recorded and the run flies on with the path it has.
+Send a re-optimization request for `l_now`: a warm `/step` from the previous optimum, with the
+turn-radius request and the pattern box rebuilt at this length. Blocking (`reopt_blocking`) holds
+the simulation until the solve is over and retries a failed one as a cold `/init` from the guess. A refused request is recorded and the run flies on with the path it has.
 """
 function request_reopt!(st::RunState, setup, t, phase, l_now)
     (; tos, fcs, opt_chain, opt_r_on, c1_at_phase, cap_wind, el_center_seed, winch_reopt,
@@ -275,16 +274,8 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
     try
         # Clocked from here, so a request that fails while being BUILT still has a start.
         st.reopt_t_wall_request = time()
-        # Seeds: `nothing` is a warm `/step`, a number a cold `/init` from the guess (see `use_step`).
-        el_seeds = if tos.use_step
-            tos.reopt_blocking ? (nothing, el_center_seed) :
-                                 (nothing,)
-        elseif tos.reopt_blocking && tos.reopt_retry_el_offset != 0
-            (el_center_seed,
-             el_center_seed + tos.reopt_retry_el_offset)
-        else
-            (el_center_seed,)
-        end
+        # Seeds: `nothing` is a warm `/step`, a number a cold `/init` from the guess.
+        el_seeds = tos.reopt_blocking ? (nothing, el_center_seed) : (nothing,)
         # Asked for under the turn authority the reply will be JUDGED with (depower_final's c1 from phase 5).
         opt_r_on && (st.opt_r_min =
             min_turn_radius_request(fcs, tos; scale = st.opt_r_scale,
@@ -323,7 +314,6 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                                                                   collect(guess_el_r)),
                                           input_depower = depower_seed(tos, inflow.wind_speed),
                                           reg_weight = tos.reg_weight,
-                                          detect_simple_bounds = tos.detect_simple_bounds,
                                           min_turn_radius = st.opt_r_min,
                                           pattern_limits = st.opt_box_now)
                 # A known failure is served by `opt_chain`, not skipped here: skipping would leave
@@ -602,7 +592,6 @@ function solve_cold!(st::RunState, setup, l_now, el_seed, box)
         trajectory = Trajectory(collect(guess_az), collect(guess_el)),
         input_depower = depower_seed(tos, inflow.wind_speed),
         reg_weight = tos.reg_weight,
-        detect_simple_bounds = tos.detect_simple_bounds,
         min_turn_radius = st.opt_r_min,
         pattern_limits = box)
     reply = chain_init(opt_chain, params)
@@ -652,10 +641,8 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
     wing_delta = wing_lift(new_az, new_el)
     n_native = min(tos.resample_points, length(new_az) - 1)
     # The turn authority THIS reply will be flown with, read off `tab`.
-    cand_c1 = c1_at_phase(phase, tos.fly_opt_depower ?
-        awetrim_depower_to_v3kite(
-            Float64(tab["optimized_parameters"]["input_depower"])) :
-        fcs.course.depower_setpoint)
+    cand_c1 = c1_at_phase(phase, awetrim_depower_to_v3kite(
+        Float64(tab["optimized_parameters"]["input_depower"])))
     lifted(fw) = new_el .+ el_target .+ fw .* wing_delta
     function lifted_margin(el_try)
         isnan(feas.c1) && return Inf

@@ -233,8 +233,8 @@ function feasibility_block(setup, st::RunState)
     if !isnan(feas.c1)
         block["c1_pattern"] = (round(feas.c1; digits = 4),
             "turn-rate gain the startup gate and requests read the path at: at the \
-             depower the pattern is FLOWN at (the optimizer's own under \
-             fly_opt_depower), not depower_setpoint's [1/m]")
+             depower the pattern is FLOWN at (the optimizer's own), not \
+             depower_setpoint's [1/m]")
         block["gain_scale_flown"] = (round(c1_setpoint / feas.c1; digits = 3),
             "heading_p factor phases 3-4 flew with, c1(depower_setpoint)/c1(flown) \
              for the startup reply; 1.0 when the optimizer's depower is the setpoint [-]")
@@ -334,10 +334,6 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
             "downloops" => (st.opt_downloops, "traversal direction the optimizer solved for")),
         "feasibility" => feasibility,
         "reopt" => OrderedDict(
-            "enabled" => (tos.reopt_enabled, "re-optimization during the run"),
-            "warm_start" => (tos.use_step,
-                "/step alone, seeded from the previous optimum; false re-inits from \
-                 the parametric guess at every length"),
             "requests" => (st.reopt_n, "solves that completed, accepted or rejected"),
             "blocking" => (tos.reopt_blocking,
                 "simulation held while a solve ran"),

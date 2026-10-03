@@ -65,7 +65,7 @@ end
 """
     blended_depower(blend_from, blend_to, t0, t, T, flown_opt) -> (w, depower)
 
-The depower flown under `fly_opt_depower`: a linear ramp over `T` seconds from `blend_from` to
+The optimizer's depower as flown in phases 3 and 4: a linear ramp over `T` seconds from `blend_from` to
 `blend_to`, started at `t0`, with weight `w` in [0, 1]; `flown_opt` at once when no ramp is
 running (`blend_to === nothing`).
 """

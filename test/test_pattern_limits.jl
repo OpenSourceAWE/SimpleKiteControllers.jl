@@ -19,7 +19,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
            pattern_elevation_amplitude_max_high = 0.0,
            pattern_elevation_amplitude_max_wind_ref = 10.0, pattern_symmetric = false,
            pattern_climb_angle_max = 0.0,
-           elevation_min_from_gates = false, candidate_elevation_margin = 2.0, min_height = 0.0)
+           candidate_elevation_margin = 2.0, min_height = 0.0)
     sides(b) = Tuple(getfield(b, f) for f in fieldnames(PatternLimits))
 
     @testset "pattern_limits_from" begin
@@ -62,9 +62,10 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
 
     @testset "elevation_min_request" begin
         fcs = FC_Settings(; min_elevation = 20.0)
-        @test isnothing(elevation_min_request(fcs, off, 150.0))
-        @test elevation_min_request(fcs, off, 150.0; extra = 1.5) == 1.5
-        gates = merge(off, (; elevation_min_from_gates = true, min_height = 100.0))
+        # Without a clearance floor the elevation gate's min_elevation + margin is asked for.
+        @test elevation_min_request(fcs, off, 150.0) ≈ 22.0
+        @test isnothing(elevation_min_request(FC_Settings(; min_elevation = -2.0), off, 150.0))
+        gates = merge(off, (; min_height = 100.0))
         # The clearance floor asind(100/150) = 41.8° beats the elevation gate's 22°...
         @test elevation_min_request(fcs, gates, 150.0) ≈ asind(100 / 150)
         # ...and falls as the tether grows, until the elevation gate's is the higher one.

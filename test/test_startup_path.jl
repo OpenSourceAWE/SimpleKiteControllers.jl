@@ -115,8 +115,7 @@ import SimpleKiteControllers: score_installed, install_optimized_path!, capture_
         # The laws the loop reads: the table's c1 at a depower in phases 3-4, the phase-5 law in 5.
         @test r.c1_at_phase(4, 0.27) == c1_at(r.feas, 4, c1_at_depower(0.27))
         @test r.c1_at_phase(5, 0.27) == c1_at(r.feas, 5, NaN)
-        dp_st = tos.fly_opt_depower ? st.depower_flown_opt : fcs.course.depower_setpoint
-        @test r.c1_at_phase(4, st) == r.c1_at_phase(4, dp_st)
+        @test r.c1_at_phase(4, st) == r.c1_at_phase(4, st.depower_flown_opt)
         @test r.phase5_margin_at(gentle...) ==
               phase5_margin(r.feas, gentle[1], gentle[2], fcs.reelout.reelout_l_max, fcs.course.max_steering)
         @test r.margin5 isa Phase5MarginState

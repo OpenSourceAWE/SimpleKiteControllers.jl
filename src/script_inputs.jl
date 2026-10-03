@@ -4,7 +4,7 @@
 # Caller inputs of the example scripts, passed as keywords instead of globals.
 #
 #     run_example("simple_opt_reelout.jl"; show_plots = false,
-#                 tos_overrides = Dict{Symbol, Any}(:reopt_enabled => false))
+#                 tos_overrides = Dict{Symbol, Any}(:max_reopt => 0))
 #
 # `include`s the script with those inputs; the script reads them at its top with
 # `script_inputs(@__FILE__, defaults)`. A plain `include("examples/simple_opt_reelout.jl")`
@@ -24,7 +24,7 @@ defaults. Returns what the `include` returns. A script started this way may itse
 `run_example` another one before it reads its own inputs: they are restored afterwards.
 
     run_example("simple_opt_reelout.jl"; show_plots = false,
-                tos_overrides = Dict{Symbol, Any}(:reopt_enabled => false))
+                tos_overrides = Dict{Symbol, Any}(:max_reopt => 0))
 """
 function run_example(file::AbstractString; inputs...)
     path = abspath(isabspath(file) ? file : joinpath(dirname(@__DIR__), "examples", file))

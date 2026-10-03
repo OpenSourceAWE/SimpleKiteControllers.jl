@@ -34,8 +34,6 @@ $(TYPEDFIELDS)
 @with_kw mutable struct TrajOptSettings @deftype Float64
     "Address of the AWETrim server"
     base_url::String = "http://127.0.0.1:8000"
-    "Start a detached server when nothing answers `base_url`; `false` makes it an error"
-    autostart_server::Bool = true
     "Name the optimization is registered under on the server"
     name::String = "simple_opt_fig8"
 
@@ -62,12 +60,8 @@ $(TYPEDFIELDS)
     input_depower_per_wind = 0.0
     "Soft ceiling on the ramped depower seed [m]; `0.0` = AWETrim's hard bound only"
     input_depower_seed_max = 0.0
-    "Fly the optimizer's depower in phases 3-4 instead of the fixed setpoint"
-    fly_opt_depower::Bool = false
     "Regularization weight of the solve [-]"
     reg_weight = 1.0
-    "Solver flag passed through to IPOPT"
-    detect_simple_bounds::Bool = true
 
     # ---- What is done with the path that comes back ---------------------- #
     "Upper bound on the points the optimized path is resampled to"
@@ -114,8 +108,6 @@ $(TYPEDFIELDS)
     # solve lands on the best branch less often than a free one (11/18 lengths
     # against 16/18, measured by AWETrim on the LEI-V3 reference), so a 422 where
     # there used to be a rejected reply is the expected new failure mode.
-    "Raise the elevation floor per request to what the gates will demand"
-    elevation_min_from_gates::Bool = true
     "Extra elevation on top of the shortfall when re-asking a rejected reply [deg]"
     elevation_min_retry_margin = 0.5
     "Azimuth half-width limit of the optimized pattern [deg]; `0.0` = optimizer's 45.8°"
@@ -136,10 +128,6 @@ $(TYPEDFIELDS)
     pattern_climb_angle_max = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
-    "Re-optimize during the run as the tether grows"
-    reopt_enabled::Bool = false
-    "Re-optimize with warm-started `/step` instead of a cold `/init` each time"
-    use_step::Bool = false
     "Laps between re-optimizations"
     reopt_every_n_laps::Int64 = 2
     "Max re-optimizations per run; bounds wall time"

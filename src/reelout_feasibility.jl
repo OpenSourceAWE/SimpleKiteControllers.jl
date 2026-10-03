@@ -100,7 +100,7 @@ Checks performed (all reported via `@info`/`@warn` here):
   `tos.min_height > 0`;
 * turn-rate coefficients for `(fcs.run.body_damping, depower)` — `depower` is the
   one the pattern is FLOWN at, `fcs.course.depower_setpoint` unless the caller flies the
-  optimizer's own (`fly_opt_depower`), where a reply judged at the setpoint's c1
+  optimizer's own, where a reply judged at the setpoint's c1
   is off by `c1(flown)/c1(setpoint)`, ~22 % at 0.33 against 0.274 (Cabauw 8 m/s,
   2026-09-18); a cell the table cannot serve costs the diagnosis, not the run
   (warned, coefficients become `NaN`);
@@ -229,7 +229,7 @@ end
     c1_at(f, phase, c1) -> Float64
 
 The turn-rate gain to check a path against at flight phase `phase`, given `c1`, the
-table's gain at the depower asked about: with `fly_opt_depower` the depower a reply
+table's gain at the depower asked about: the depower a reply
 carries (a candidate's own, when scoring it) or the one currently flown (when sizing
 a request). From phase 5 that is `depower_final`'s, [`c1_at(f, phase)`](@ref c1_at);
 before that `c1`, falling back to the startup law `f.c1` when `c1` is `NaN`, a
