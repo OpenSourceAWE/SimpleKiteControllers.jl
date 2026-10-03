@@ -37,15 +37,42 @@ any change to either model's depower axis, aero, or mass.
 const AWETRIM_V3KITE_DEPOWER_OFFSET = 0.1010
 
 """
+AWETrim tape length [m] at which [`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref) was
+calibrated: the `l_dp` the optimizer flies at 6 m/s (1.430 at 220 m, Cabauw
+2026-10-03). The conversion turns about this point, so changing
+[`AWETRIM_V3KITE_DEPOWER_SLOPE`](@ref) leaves the calibration alone.
+"""
+const AWETRIM_V3KITE_DEPOWER_PIVOT = 1.43
+
+"""
+`rel_depower` per metre of AWETrim tape length [1/m]. The plain tape geometry
+gives 1/5 = 0.2; 0.1833 since 2026-10-03.
+
+With depower at the force limit the simulator pulls about 13x per unit of
+`rel_depower` more steeply in ln(force) (Cabauw 7 m/s: 9440 N at 0.274 against
+6546 N at 0.302), so a few thousandths decide the force. Matching the predicted
+tension of the early re-optimized paths needed about -0.0055 of `rel_depower`
+at 7 m/s (`l_dp` ~1.61) and about +0.002 at 5-6 m/s; 0.1833 corrects half the
+7 m/s error (0.300 instead of 0.303 at 1.61 m) while keeping the 6 m/s
+calibration point. It moves 8-10 m/s by -0.005 to -0.008, where the same
+identification asked for -0.003 to +0.006: check them before trusting it there.
+"""
+const AWETRIM_V3KITE_DEPOWER_SLOPE = 0.1833
+
+"""
     awetrim_depower_to_v3kite(l_dp) -> Float64
 
 Convert an AWETrim `l_dp` [m] (`input_depower`, `l_dp = 0.6 + 5*u_p`) into the
-V3Kite `rel_depower` expected to fly at the SAME power, i.e. `(l_dp - 0.6)/5 +
-`[`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref). This is the FULL correction — do not
-also subtract the 0.4 m calibration offset separately, it is already inside
-the original 0.12 split (0.08 tape zero + 0.04 aero).
+V3Kite `rel_depower` expected to fly at the SAME power: the line through the
+calibration point, `(PIVOT - 0.6)/5 + `[`AWETRIM_V3KITE_DEPOWER_OFFSET`](@ref),
+with slope [`AWETRIM_V3KITE_DEPOWER_SLOPE`](@ref). At slope 1/5 this is the old
+`(l_dp - 0.6)/5 + OFFSET`. The offset is the FULL correction — do not also
+subtract the 0.4 m calibration offset separately, it is already inside the
+original 0.12 split (0.08 tape zero + 0.04 aero).
 """
-awetrim_depower_to_v3kite(l_dp) = (l_dp - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
+awetrim_depower_to_v3kite(l_dp) =
+    (AWETRIM_V3KITE_DEPOWER_PIVOT - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET +
+    AWETRIM_V3KITE_DEPOWER_SLOPE * (l_dp - AWETRIM_V3KITE_DEPOWER_PIVOT)
 
 "AWETrim's own bounds on `input_depower`, from `src/awetrim/utils/defaults.py` [m]."
 const DEPOWER_SEED_BOUNDS = (1.1, 2.3)

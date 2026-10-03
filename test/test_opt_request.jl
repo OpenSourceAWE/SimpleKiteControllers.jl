@@ -9,15 +9,21 @@ Settings and the package's turn-rate table in, numbers out; no optimizer.
 
 using Test
 using SimpleKiteControllers
-import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, awetrim_depower_to_v3kite,
+import SimpleKiteControllers: AWETRIM_V3KITE_DEPOWER_OFFSET, AWETRIM_V3KITE_DEPOWER_PIVOT,
+    AWETRIM_V3KITE_DEPOWER_SLOPE, awetrim_depower_to_v3kite,
     DEPOWER_SEED_BOUNDS, depower_seed, min_turn_radius_request, request_constraints,
     pattern_limits_from, elevation_min_request
 
 @testset verbose = true "opt_request" begin
     @testset "awetrim_depower_to_v3kite" begin
-        # l_dp = 0.6 + 5*u_p, plus the calibrated offset between the two models.
-        @test awetrim_depower_to_v3kite(0.6) == AWETRIM_V3KITE_DEPOWER_OFFSET
-        @test awetrim_depower_to_v3kite(1.6) ≈ 0.2 + AWETRIM_V3KITE_DEPOWER_OFFSET
+        # At the calibration point: l_dp = 0.6 + 5*u_p plus the calibrated offset, as ever.
+        pivot = AWETRIM_V3KITE_DEPOWER_PIVOT
+        @test awetrim_depower_to_v3kite(pivot) ≈ (pivot - 0.6) / 5 + AWETRIM_V3KITE_DEPOWER_OFFSET
+        # Away from it, the line turns about that point with the identified slope.
+        @test awetrim_depower_to_v3kite(pivot + 0.2) - awetrim_depower_to_v3kite(pivot) ≈
+              0.2 * AWETRIM_V3KITE_DEPOWER_SLOPE
+        # Half the 7 m/s error: 0.300 instead of 0.303 at l_dp = 1.61 m.
+        @test awetrim_depower_to_v3kite(1.61) ≈ 0.300 atol = 5e-4
     end
 
     @testset "depower_seed" begin
