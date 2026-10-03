@@ -16,7 +16,7 @@ import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitPar
     opt_failures, opt_failed_before, record_opt_failure!, clear_opt_failures, OptChain,
     _write_chain_entry, _chain_entry, _cached_422, chain_step, chain_status, chain_trajectory,
     record_opt_success!, solve_startup, as_step_reply, as_pattern_limits, guess_el_center_seed,
-    reelout_anchor_ratio, with_file_lock, HTTP
+    reelout_anchor_ratio, with_file_lock, HTTP, JSON3
 
 const INFLOW = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0, profile_law = 3)
 const WINCH = WinchParams("reelout", 0.04, 700.0, 7200.0)
@@ -72,6 +72,11 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
         # `symmetric` is left out of the key while unset, so the keys from before it stay valid.
         @test length(_key_fields(PatternLimits(; azimuth_max = 28.0))) == 5
         @test length(_key_fields(PatternLimits(; azimuth_max = 28.0, symmetric = true))) == 6
+        # So is `climb_angle_max`, and an unset one is left out of the JSON: a server older
+        # than the field rejects the key even as null.
+        @test length(_key_fields(PatternLimits(; azimuth_max = 28.0, climb_angle_max = 45.0))) == 6
+        @test !occursin("climb_angle_max", JSON3.write(PatternLimits(; azimuth_max = 28.0)))
+        @test occursin("\"climb_angle_max\":45.0", JSON3.write(PatternLimits(; climb_angle_max = 45.0)))
         @test stable_hash((1, "a")) == stable_hash((1, "a")) != stable_hash((1, "b"))
         # A step's key carries its parent's: equal keys mean equal lineage.
         sp = StepParams(150.0, WINCH)
@@ -274,13 +279,15 @@ step_key(oc, sp) = chain_key(oc.state, (_key_fields(sp), _key_fields(nothing), n
         @test isnothing(r.depower) && isnothing(r.pattern_limits) && isnothing(r.winch_params)
         @test isnothing(r.metrics.turn_radius_min_m) && r.step_index == 1
         d["depower"] = Dict{String, Any}("mode" => "optimize", "value" => 1.42)
-        d["pattern_limits"] = Dict{String, Any}("azimuth_max" => 28, "symmetric" => true)
+        d["pattern_limits"] = Dict{String, Any}("azimuth_max" => 28, "symmetric" => true,
+                                                "climb_angle_max" => 45)
         d["winch_params"] = Dict{String, Any}("mode" => "reelout", "k_v" => 0.04, "f_min" => 700,
                                               "f_max" => 7200, "v_max" => nothing)
         d["metrics"]["turn_radius_min_m"] = 12.48
         r = as_step_reply(d)
         @test r.depower.value == 1.42 && isnothing(r.depower.profile)
         @test r.pattern_limits.azimuth_max === 28.0 && r.pattern_limits.symmetric
+        @test r.pattern_limits.climb_angle_max === 45.0
         @test isnothing(r.pattern_limits.elevation_min)
         @test r.winch_params.f_max === 7200.0 && isnothing(r.winch_params.v_max)
         @test !r.winch_params.optimize_k_v && r.metrics.turn_radius_min_m == 12.48

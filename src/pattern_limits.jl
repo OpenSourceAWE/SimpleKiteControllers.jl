@@ -7,7 +7,8 @@
 
 """
     PatternLimits(; azimuth_max, elevation_min, elevation_max,
-                  azimuth_amplitude_min, elevation_amplitude_max, symmetric)
+                  azimuth_amplitude_min, elevation_amplitude_max, symmetric,
+                  climb_angle_max)
 
 A box, in DEGREES, on where the optimized pattern may go. The server bounds the
 B-spline's control coefficients, so by the convex-hull property the limits hold
@@ -22,7 +23,10 @@ caps the figure's elevation HALF-SPAN with one smooth row (mean squared
 deviation from the mean elevation <= value²/2) — where `elevation_max` only
 caps where the path may sit, this caps how TALL it is. `symmetric = true`
 forces a figure mirror-symmetric about azimuth 0 (half a period later the kite
-is at the mirrored point). On `/step` the struct
+is at the mirrored point). `climb_angle_max` caps how steeply the path may
+CLIMB in the azimuth/elevation plane (elevation rising along the flight
+direction: d(elevation) <= tan(value) * |d(azimuth)|, plain angles); descending
+is free, so the vertical dives at the sides stay allowed. On `/step` the struct
 replaces the session's limits as a whole, so an all-`nothing` `PatternLimits()`
 CLEARS them.
 """
@@ -33,6 +37,7 @@ Base.@kwdef struct PatternLimits
     azimuth_amplitude_min::Union{Float64, Nothing} = nothing # half-width >= this [deg]
     elevation_amplitude_max::Union{Float64, Nothing} = nothing # half-span <= this [deg]
     symmetric::Union{Bool, Nothing} = nothing                # mirror-symmetric figure
+    climb_angle_max::Union{Float64, Nothing} = nothing       # climb slope <= this [deg]
 end
 
 """
@@ -93,7 +98,8 @@ end
 
 The box the optimized pattern must stay in, from the `pattern_*` fields of
 `data/traj_opt.yaml`; each is in degrees and each is off at `0.0`, and
-`tos.pattern_symmetric` adds the mirror-symmetry rows. `nothing` when all six are
+`tos.pattern_symmetric` adds the mirror-symmetry rows and `tos.pattern_climb_angle_max`
+the climb-angle ceiling. `nothing` when all seven are
 off, which leaves the optimizer's own defaults alone.
 
 `elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
@@ -110,10 +116,11 @@ function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
                            azimuth_amplitude_min = on(tos.pattern_azimuth_amplitude_min),
                            elevation_amplitude_max =
                                on(elevation_amplitude_max_at(tos, wind_speed)),
-                           symmetric = tos.pattern_symmetric ? true : nothing)
+                           symmetric = tos.pattern_symmetric ? true : nothing,
+                           climb_angle_max = on(tos.pattern_climb_angle_max))
     all(isnothing, (limits.azimuth_max, limits.elevation_min, limits.elevation_max,
                     limits.azimuth_amplitude_min, limits.elevation_amplitude_max,
-                    limits.symmetric)) &&
+                    limits.symmetric, limits.climb_angle_max)) &&
         return nothing
     return limits
 end
@@ -130,7 +137,7 @@ with_elevation_max(box, el_max) = isnothing(box) ?
                   elevation_max = el_max,
                   azimuth_amplitude_min = box.azimuth_amplitude_min,
                   elevation_amplitude_max = box.elevation_amplitude_max,
-                  symmetric = box.symmetric)
+                  symmetric = box.symmetric, climb_angle_max = box.climb_angle_max)
 
 """
     with_azimuth_amplitude_min(box, a_min) -> PatternLimits
@@ -144,7 +151,7 @@ with_azimuth_amplitude_min(box, a_min) = isnothing(box) ?
                   elevation_max = box.elevation_max,
                   azimuth_amplitude_min = a_min,
                   elevation_amplitude_max = box.elevation_amplitude_max,
-                  symmetric = box.symmetric)
+                  symmetric = box.symmetric, climb_angle_max = box.climb_angle_max)
 
 """
     with_size_box(box, az_prev, el_prev, growth) -> Union{PatternLimits, Nothing}
@@ -175,7 +182,7 @@ function with_size_box(box, az_prev, el_prev, growth)
                          elevation_max = tighter(box.elevation_max, el_hi + slack),
                          azimuth_amplitude_min = box.azimuth_amplitude_min,
                          elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim),
-                         symmetric = box.symmetric)
+                         symmetric = box.symmetric, climb_angle_max = box.climb_angle_max)
 end
 
 """

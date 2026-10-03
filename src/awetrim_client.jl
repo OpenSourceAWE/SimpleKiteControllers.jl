@@ -199,6 +199,8 @@ StructTypes.StructType(::Type{InitParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{StepParams}) = StructTypes.Struct()
 StructTypes.StructType(::Type{DepowerSpec}) = StructTypes.Struct()
 StructTypes.StructType(::Type{PatternLimits}) = StructTypes.Struct()
+# Left out of the JSON while unset: a server older than the field rejects the key even as null.
+StructTypes.omitempties(::Type{PatternLimits}) = (:climb_angle_max,)
 
 # ---------------------------------------------------------------------------
 # Failed-request cache
@@ -276,10 +278,11 @@ stable_hash(x) = bytes2hex(sha256(repr(x)))[1:16]
 _key_fields(x::Union{WinchParams, InflowConditions, Trajectory, DepowerSpec, PatternLimits,
                      StepParams}) =
     Tuple(_key_fields(getfield(x, f)) for f in fieldnames(typeof(x)))
-# `symmetric` came last; left out while off, so the keys cached before it stay valid.
+# `symmetric` and `climb_angle_max` came last; each is left out while off, so the keys cached
+# before it stay valid.
 _key_fields(x::PatternLimits) =
     Tuple(_key_fields(getfield(x, f)) for f in fieldnames(PatternLimits)
-          if !(f === :symmetric && isnothing(x.symmetric)))
+          if !(f in (:symmetric, :climb_angle_max) && isnothing(getfield(x, f))))
 _key_fields(x) = x
 
 """
@@ -537,7 +540,8 @@ function as_pattern_limits(d)
                          elevation_max = opt_float(d, "elevation_max"),
                          azimuth_amplitude_min = opt_float(d, "azimuth_amplitude_min"),
                          elevation_amplitude_max = opt_float(d, "elevation_amplitude_max"),
-                         symmetric = opt_get(d, "symmetric"))
+                         symmetric = opt_get(d, "symmetric"),
+                         climb_angle_max = opt_float(d, "climb_angle_max"))
 end
 
 as_metrics(d) = SolveMetrics(; energy_J = d["energy_J"],

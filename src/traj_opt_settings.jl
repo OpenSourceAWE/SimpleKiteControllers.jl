@@ -572,6 +572,22 @@ $(TYPEDFIELDS)
     -2.3° azimuth with 214 of 361 points in the left lobe. `false` is off.
     """
     pattern_symmetric::Bool = false
+    """
+    Steepest CLIMB [deg] the optimized path may have in the azimuth/elevation
+    plane (the server's `climb_angle_max` pattern limit): wherever the elevation
+    rises along the flight direction, d(elevation) <= tan(value) * |d(azimuth)|.
+    Descending is free, so the vertical dives at the sides stay allowed. `0.0` is
+    off.
+
+    A kite cannot follow a path that climbs much steeper than 45°. Measured
+    2026-10-03 over 48 installed paths of the Cabauw set: the 7 m/s paths climb at
+    up to 88° (17 % of the path steeper than 45°) and fly at 0.86 of their
+    predicted power, the lowest of 5.75-10 m/s, while 5.75 and 6 m/s never climb
+    steeper than 44° and fly at or above their prediction on the shorter tethers;
+    with the tether length removed, the share of the path climbing steeper than
+    45° costs 0.23 of the measured/predicted power ratio per unit.
+    """
+    pattern_climb_angle_max = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
     """
@@ -961,6 +977,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("max_size_growth must be 0 (off) or >= 1, got $(tos.max_size_growth).")
     tos.size_box_growth == 0 || tos.size_box_growth >= 1 ||
         error("size_box_growth must be 0 (off) or >= 1, got $(tos.size_box_growth).")
+    0 <= tos.pattern_climb_angle_max < 90 ||
+        error("pattern_climb_angle_max must be in [0, 90), got $(tos.pattern_climb_angle_max).")
     tos.challenge_growth == 0 || tos.challenge_growth >= 1 ||
         error("challenge_growth must be 0 (off) or >= 1, got $(tos.challenge_growth).")
     tos.guess_a > 0 && tos.guess_b > 0 ||

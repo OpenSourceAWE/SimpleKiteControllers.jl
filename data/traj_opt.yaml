@@ -51,6 +51,7 @@ traj_opt:
     pattern_elevation_amplitude_max_wind_height: 100.0  # height that wind is taken at; 0 = the 6 m wind [m]
     pattern_symmetric: true           # mirror-symmetric figure about azimuth 0; the solve is multi-modal and
                                       # otherwise lands lopsided (Cabauw 2026-09-25: centre -2.3°, lobes 214/147 points)
+    pattern_climb_angle_max: 45.0     # steepest climb of the path in the az/el plane; descending is free; 0 is off [deg]
 
     # --- Re-optimization while the tether grows (simple_opt_reelout.jl) ----- #
     reopt_enabled: true      # off by default: a run is reproducible without a server

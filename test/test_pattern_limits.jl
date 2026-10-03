@@ -19,6 +19,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
            pattern_azimuth_amplitude_min = 0.0, pattern_elevation_amplitude_max = 0.0,
            pattern_elevation_amplitude_max_high = 0.0,
            pattern_elevation_amplitude_max_wind_ref = 10.0, pattern_symmetric = false,
+           pattern_climb_angle_max = 0.0,
            elevation_min_from_gates = false, candidate_elevation_margin = 2.0, min_height = 0.0)
     sides(b) = Tuple(getfield(b, f) for f in fieldnames(PatternLimits))
 
@@ -29,6 +30,9 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         @test b.azimuth_max === 40.0
         @test b.symmetric === true
         @test isnothing(b.elevation_min) && isnothing(b.elevation_max)
+        @test isnothing(b.climb_angle_max)
+        # The climb ceiling alone is a box too.
+        @test pattern_limits_from(merge(off, (; pattern_climb_angle_max = 45))).climb_angle_max === 45.0
         # The per-request floor overrides the file's.
         b = pattern_limits_from(merge(off, (; pattern_elevation_min = 10.0)); elevation_min = 25.0)
         @test b.elevation_min == 25.0
@@ -61,16 +65,17 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
     @testset "with_one_side" begin
         box = PatternLimits(; azimuth_max = 40.0, elevation_min = 20.0, elevation_max = 50.0,
                             azimuth_amplitude_min = 10.0, elevation_amplitude_max = 8.0,
-                            symmetric = true)
+                            symmetric = true, climb_angle_max = 45.0)
         b = with_elevation_max(box, 45.0)
         @test b.elevation_max == 45.0
-        @test sides(b) == (40.0, 20.0, 45.0, 10.0, 8.0, true)
+        @test sides(b) == (40.0, 20.0, 45.0, 10.0, 8.0, true, 45.0)
         b = with_azimuth_amplitude_min(box, 15.0)
-        @test sides(b) == (40.0, 20.0, 50.0, 15.0, 8.0, true)
+        @test sides(b) == (40.0, 20.0, 50.0, 15.0, 8.0, true, 45.0)
         # From no box at all, only the one side is set.
-        @test sides(with_elevation_max(nothing, 45.0)) == (nothing, nothing, 45.0, nothing, nothing, nothing)
+        @test sides(with_elevation_max(nothing, 45.0)) ==
+              (nothing, nothing, 45.0, nothing, nothing, nothing, nothing)
         @test sides(with_azimuth_amplitude_min(nothing, 15.0)) ==
-              (nothing, nothing, nothing, 15.0, nothing, nothing)
+              (nothing, nothing, nothing, 15.0, nothing, nothing, nothing)
     end
 
     @testset "with_size_box" begin
@@ -89,7 +94,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         # A box that is already tighter keeps its sides; a looser one is tightened.
         tight = PatternLimits(; azimuth_max = 5.0, elevation_min = 29.0, elevation_max = 31.0,
                               elevation_amplitude_max = 1.0, azimuth_amplitude_min = 3.0,
-                              symmetric = true)
+                              symmetric = true, climb_angle_max = 45.0)
         @test sides(with_size_box(tight, az, el, 1.2)) == sides(tight)
         loose = PatternLimits(; azimuth_max = 80.0, elevation_min = 0.0, elevation_max = 80.0,
                               elevation_amplitude_max = 30.0)
