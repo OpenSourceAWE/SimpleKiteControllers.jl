@@ -38,9 +38,11 @@ using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set
 using SimpleKiteControllers: run_example, script_inputs, with_run_log, first_error_line
 using SimpleKiteControllers: startup_ladder_report, ladder_line
 
-"Project flown at each site, see `scenario_site`"
-const SITE_PROJECTS = ("maasvlakte" => "system_reelout_maasvlakte.yaml",
-                       "cabauw" => "system_reelout_cabauw.yaml")
+"Project flown at each site, see `scenario_site`; comment out a line to skip that site"
+const SITE_PROJECTS = [
+    "maasvlakte" => "system_reelout_maasvlakte.yaml",
+    "cabauw" => "system_reelout_cabauw.yaml",
+]
 output_dir = normpath(joinpath(@__DIR__, "..", "output"))
 run_done_file = joinpath(output_dir, "last_run_done.txt")
 progress_file = joinpath(output_dir, "build_all_scenarios.txt")
