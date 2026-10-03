@@ -306,6 +306,12 @@ function setup_run(inputs; init_model)
     # Constraints the solve must respect; the turn radius carries the anchor ratio `L/r` and the gate's headroom.
     (; opt_r_scale, opt_r_min, opt_r_on, opt_r_sent, opt_box) =
         request_constraints(tos, fcs, inflow, cap_wind, opt_length(tos, l_set))
+    # `startup_params` fits the guess into that box; a guess outside it ends in local infeasibility.
+    let (guess_a, guess_b, guess_el) = guess_in_box(tos.guess_a, tos.guess_b, el_center_seed, opt_box)
+        (guess_a, guess_b, guess_el) == (tos.guess_a, tos.guess_b, el_center_seed) ||
+            @info @sprintf("  ... startup guess fitted into the box: %.1f° x %.1f° at %.1f°.",
+                           guess_a, guess_b, guess_el)
+    end
 
     # One row per depower value the optimizer reports back (startup, each ACCEPTED reopt), for summary and plot.
     opt_depower_log = NamedTuple[]

@@ -10,13 +10,14 @@
     startup_params(setup, el_center) -> InitParams
 
 The startup `/init` request seeded with the guess lemniscate centred at
-`el_center` [deg]; everything else comes from `tos`, the inflow and the
+`el_center` [deg] and fitted into the startup box `opt_box` ([`guess_in_box`](@ref)), as the
+cold re-optimizations are; everything else comes from `tos`, the inflow and the
 first-lap winch.
 """
 function startup_params(setup, el_center)
     (; tos, l_set, winch_first_lap, inflow, opt_r_min, opt_box) = setup
-    az, el = figure_eight_path(tos.guess_a, tos.guess_b,
-                               0.0, el_center, 0.0, tos.guess_points)
+    guess_a, guess_b, guess_el = guess_in_box(tos.guess_a, tos.guess_b, el_center, opt_box)
+    az, el = figure_eight_path(guess_a, guess_b, 0.0, guess_el, 0.0, tos.guess_points)
     InitParams(; name = tos.name, length = opt_length(tos, l_set),
                winch_params = winch_first_lap, inflow_conditions = inflow,
                trajectory = Trajectory(collect(az), collect(el)),

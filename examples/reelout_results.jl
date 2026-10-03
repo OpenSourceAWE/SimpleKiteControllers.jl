@@ -280,11 +280,15 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
     (; sl, fig8m, az_amp_mean, el_h_mean, span_margins, span_worst, el_min_final, lift_mean) = scored
     droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
                   for b in 1:st.n_droop_bins]
+    guess_a, guess_b, _ = SimpleKiteControllers.guess_in_box(tos.guess_a, tos.guess_b,
+                                                             el_center_seed, opt_box)
     OrderedDict{String, Any}(
         "power" => power_block,
         "guess" => OrderedDict(
-            "a_deg" => (tos.guess_a, "width of the guess lemniscate; azimuth spans ±a [deg]"),
-            "b_deg" => (tos.guess_b, "height of the guess, peak to peak [deg]"),
+            "a_deg" => (round(guess_a; digits = 2),
+                "width of the guess lemniscate, fitted into the startup box; azimuth spans ±a [deg]"),
+            "b_deg" => (round(guess_b; digits = 2),
+                "height of the guess, peak to peak, fitted into the startup box [deg]"),
             "el_center_deg" => (el_center_seed,
                 "centre elevation of the guess the startup path was solved from; \
                  guess_el_center_high at and above guess_el_center_wind_ref, plus \
@@ -309,7 +313,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
             "depower_optimized_rel" => OrderedDict(time_keyed(opt_depower_log) do e
                 (e.t, (round(e.u_p_equiv; digits = 4),
                        "the same reply as V3Kite rel_depower, converted with the \
-                        AWETRIM_V3KITE_DEPOWER_OFFSET in force at run time; what a \
+                        depower conversion in force at run time; what a \
                         replot's u_d panel draws [-]"))
             end),
             "k_v_optimized" => OrderedDict(time_keyed(opt_kv_log) do e

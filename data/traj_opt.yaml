@@ -38,6 +38,10 @@ traj_opt:
     elevation_min_retry_margin: 0.5   # extra elevation on a re-ask after a clearance/elevation rejection [deg]
     pattern_elevation_max: 0.0
     pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
+    pattern_azimuth_max_high: 32.0    # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
+                                      # limit Cabauw 10 needs ±28.4-28.8° at 150 m and IPOPT 2-3° of room: 422 under
+                                      # 28 and 29 at r_min 22.8 m, under 30 at 23.5 m (quadratic depower
+                                      # conversion); converges under 31 and 32 (2026-10-03) [deg]
     pattern_azimuth_amplitude_min: 0.0
     pattern_elevation_amplitude_max: 8.5   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg];
                                            # 8.0 left Maasvlakte 3.5 m/s infeasible at 8.12° (2026-09-24)

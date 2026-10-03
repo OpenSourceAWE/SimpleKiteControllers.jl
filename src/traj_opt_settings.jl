@@ -518,6 +518,17 @@ $(TYPEDFIELDS)
     """
     pattern_azimuth_max = 0.0
     """
+    Azimuth half-width limit [deg] `pattern_azimuth_max` STEPS UP to at
+    `pattern_elevation_amplitude_max_wind_ref` and above, the same wind step as the
+    elevation cap; `0.0` disables the step.
+
+    The climb ceiling `pattern_climb_angle_max` widens the high-wind figure: Cabauw
+    10 m/s needs ±28.4-28.8° at the 150 m startup, and the startup solve converges
+    only with 2-3° to spare: 422 under 28° and 29° at a 22.8 m turn-radius request,
+    under 30° at 23.5 m, a path under 31° and 32° (2026-10-03).
+    """
+    pattern_azimuth_max_high = 0.0
+    """
     Smallest azimuth half-width [deg] the optimized figure may have; `0.0` is off.
     Guards the OTHER bad basin: the pattern collapsing to zero amplitude.
     """
@@ -920,6 +931,7 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     for (name, value) in (("pattern_elevation_min", tos.pattern_elevation_min),
                           ("pattern_elevation_max", tos.pattern_elevation_max),
                           ("pattern_azimuth_max", tos.pattern_azimuth_max),
+                          ("pattern_azimuth_max_high", tos.pattern_azimuth_max_high),
                           ("pattern_azimuth_amplitude_min",
                            tos.pattern_azimuth_amplitude_min),
                           ("pattern_elevation_amplitude_max",

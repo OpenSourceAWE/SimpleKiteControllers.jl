@@ -1065,6 +1065,10 @@ end
         # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
         @test tos.pattern_elevation_amplitude_max_wind_ref == 13.2
         @test tos.pattern_elevation_amplitude_max_wind_height == 100.0
+        # 32° at and above the same wind: under the 45° climb limit Cabauw 10 needs ±28.4-28.8°,
+        # and the startup solve 2-3° of room beyond (2026-10-03).
+        @test tos.pattern_azimuth_max == 28.0
+        @test tos.pattern_azimuth_max_high == 32.0
         # The optimizer's lopsided basins are closed by the mirror-symmetry rows (2026-09-25).
         @test tos.pattern_symmetric === true
         @test TrajOptSettings().pattern_symmetric === false

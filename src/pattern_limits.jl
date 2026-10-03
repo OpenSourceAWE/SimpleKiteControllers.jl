@@ -93,6 +93,21 @@ function elevation_amplitude_max_at(tos, wind_speed)
 end
 
 """
+    azimuth_max_at(tos, wind_speed) -> Float64
+
+The azimuth half-width cap [deg] sent at `wind_speed`, the same wind as
+[`elevation_amplitude_max_at`](@ref) reads: `tos.pattern_azimuth_max_high` at and above
+`tos.pattern_elevation_amplitude_max_wind_ref`, `tos.pattern_azimuth_max` below it.
+`tos.pattern_azimuth_max_high == 0.0` disables the step; `wind_speed = nothing` returns
+the base cap.
+"""
+function azimuth_max_at(tos, wind_speed)
+    tos.pattern_azimuth_max_high > 0 && !isnothing(wind_speed) &&
+        wind_speed >= tos.pattern_elevation_amplitude_max_wind_ref ?
+        tos.pattern_azimuth_max_high : tos.pattern_azimuth_max
+end
+
+"""
     pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
         -> Union{PatternLimits, Nothing}
 
@@ -105,11 +120,12 @@ off, which leaves the optimizer's own defaults alone.
 `elevation_min` overrides `tos.pattern_elevation_min`: it is the per-request floor
 of [`elevation_min_request`](@ref), which depends on the length being asked for and
 so cannot come from the file alone. `wind_speed` picks the elevation half-span cap
-through [`elevation_amplitude_max_at`](@ref).
+through [`elevation_amplitude_max_at`](@ref) and the azimuth cap through
+[`azimuth_max_at`](@ref).
 """
 function pattern_limits_from(tos; elevation_min = nothing, wind_speed = nothing)
     on(x) = !isnothing(x) && x > 0 ? Float64(x) : nothing
-    limits = PatternLimits(; azimuth_max = on(tos.pattern_azimuth_max),
+    limits = PatternLimits(; azimuth_max = on(azimuth_max_at(tos, wind_speed)),
                            elevation_min = on(something(elevation_min,
                                                         tos.pattern_elevation_min)),
                            elevation_max = on(tos.pattern_elevation_max),

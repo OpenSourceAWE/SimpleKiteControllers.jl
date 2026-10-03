@@ -10,12 +10,12 @@ numbers, no optimizer.
 using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_request,
-    elevation_amplitude_max_at, with_elevation_max, with_azimuth_amplitude_min, with_size_box,
+    elevation_amplitude_max_at, azimuth_max_at, with_elevation_max, with_azimuth_amplitude_min, with_size_box,
     elevation_amplitude, guess_in_box
 
 @testset verbose = true "pattern_limits" begin
     # Every side off; each test switches on what it needs.
-    off = (; pattern_azimuth_max = 0.0, pattern_elevation_min = 0.0, pattern_elevation_max = 0.0,
+    off = (; pattern_azimuth_max = 0.0, pattern_azimuth_max_high = 0.0, pattern_elevation_min = 0.0, pattern_elevation_max = 0.0,
            pattern_azimuth_amplitude_min = 0.0, pattern_elevation_amplitude_max = 0.0,
            pattern_elevation_amplitude_max_high = 0.0,
            pattern_elevation_amplitude_max_wind_ref = 10.0, pattern_symmetric = false,
@@ -48,6 +48,18 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         @test elevation_amplitude_max_at(merge(tos, (; pattern_elevation_amplitude_max_high = 0.0)),
                                          20.0) == 8.0
         @test pattern_limits_from(tos; wind_speed = 12.0).elevation_amplitude_max == 6.0
+    end
+
+    @testset "azimuth_max_at" begin
+        # The same wind step as the elevation cap: pattern_elevation_amplitude_max_wind_ref.
+        tos = merge(off, (; pattern_azimuth_max = 28.0, pattern_azimuth_max_high = 30.0))
+        @test azimuth_max_at(tos, 9.9) == 28.0
+        @test azimuth_max_at(tos, 10.0) == 30.0
+        # An unknown wind, or the step disabled, keeps the base cap.
+        @test azimuth_max_at(tos, nothing) == 28.0
+        @test azimuth_max_at(merge(tos, (; pattern_azimuth_max_high = 0.0)), 20.0) == 28.0
+        @test pattern_limits_from(tos; wind_speed = 12.0).azimuth_max == 30.0
+        @test pattern_limits_from(tos; wind_speed = 9.0).azimuth_max == 28.0
     end
 
     @testset "elevation_min_request" begin
