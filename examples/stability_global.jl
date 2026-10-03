@@ -23,8 +23,9 @@ where the guided worst case sits (tether length, `v_a`, depower), and writes the
 scenario of both sites with plots on, which shows its Bode plot and the margins over
 tether length, and leaves its `L` in `Main` for `diskmargin(L)`.
 
-About 35 s per scenario. `run_example("stability_global.jl"; verbose = true)` shows each
-scenario's full per-bin output (`src/script_inputs.jl`).
+About 4 s per scenario (94 s for the 22 of 2026-10-03).
+`run_example("stability_global.jl"; verbose = true)` shows each scenario's full per-bin output
+(`src/script_inputs.jl`).
 
     include("stability_global.jl")
 """
