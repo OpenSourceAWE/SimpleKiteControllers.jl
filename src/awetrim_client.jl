@@ -1440,8 +1440,7 @@ function free_speed_reference(tos, wc, inflow, guess_az, guess_el, lengths;
     probes = collect(range(lo, hi; length = n))
     # use_awe_trim 1.0: the free_speed NLP never reads the tension curve, but the
     # node-0 forward march does, and 1.0 is the value it converges at cold.
-    ref_winch = winch_from_wc(wc; optimize_k_v = false, use_awe_trim = 1.0,
-                              winch_mode = "free_speed")
+    ref_winch = winch_from_wc(wc; use_awe_trim = 1.0, winch_mode = "free_speed")
     ref_chain = OptChain(tos.base_url; successes = tos.opt_success_cache,
                          failures = tos.opt_failure_cache)
     solved = NamedTuple[]

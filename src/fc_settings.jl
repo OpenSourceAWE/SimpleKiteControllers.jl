@@ -429,8 +429,8 @@ function FC_Settings(filename::String; path = skc_data_path())
         elseif haskey(FC_FIELD_PART, sym)
             set_fc_field!(fcs, sym, value)
         elseif key in RETIRED_YAML_KEYS
-            iszero(value) ||
-                error("Retired key \"$key\" in $filename must be 0, got $value.")
+            retired_off(value) ||
+                error("Retired key \"$key\" in $filename must be off, got $value.")
         elseif key in MOVED_FC_KEYS
             continue
         else
@@ -448,11 +448,18 @@ skips them when it loads such a file.
 const MOVED_FC_KEYS = ("winch_force_tau", "winch_len_kp", "winch_damp", "winch_force_min")
 
 """
-Keys that were removed from the settings structs together with the shape
-parameters `C` and `D` of [`figure_eight_path`](@ref). Archived settings files
-still carry them, always as `0`, which is the shape the path now always has.
+Keys that were removed from the settings structs: the shape parameters `C` and
+`D` of [`figure_eight_path`](@ref), and the `TrajOptSettings` fields that no run
+switched on. Archived settings files still carry them at their off value (`0`,
+`false` or `""`), which is the behaviour the code now always has.
 """
-const RETIRED_YAML_KEYS = ("f8_c", "f8_d", "guess_c", "guess_d")
+const RETIRED_YAML_KEYS = ("f8_c", "f8_d", "guess_c", "guess_d",
+                           "pattern_elevation_min", "pattern_elevation_max",
+                           "pattern_azimuth_amplitude_min", "optimize_k_v",
+                           "opt_winch_mode", "turn_radius_lap_reelout_m")
+
+"True if a value of a retired key is its off value: `0`, `false` or `\"\"`."
+retired_off(value) = value == "" || (value isa Number && iszero(value))
 
 """
     load_yaml_fields!(obj, filename, section; path = skc_data_path()) -> obj
@@ -462,8 +469,8 @@ on the mutable struct `obj`, converting each value to the field's declared
 type; `filename` is resolved under `path` unless already absolute. An unknown
 key errors, a key the file omits leaves `obj`'s existing value (its struct
 default, for a freshly constructed `obj`) untouched. A key in
-[`RETIRED_YAML_KEYS`](@ref) is skipped if it is `0` and errors otherwise, so
-archived settings files still load.
+[`RETIRED_YAML_KEYS`](@ref) is skipped if it is off (`0`, `false` or `""`) and
+errors otherwise, so archived settings files still load.
 
 Purely reflective (`hasfield`/`setfield!`/`fieldtype` on `typeof(obj)`), so it
 works on any mutable struct without `src/` depending on the struct's package.
@@ -491,8 +498,8 @@ function set_yaml_fields!(obj, dict, filename)
     for (key, value) in dict
         sym = Symbol(key)
         if !hasfield(T, sym) && key in RETIRED_YAML_KEYS
-            iszero(value) ||
-                error("Retired key \"$key\" in $filename must be 0, got $value.")
+            retired_off(value) ||
+                error("Retired key \"$key\" in $filename must be off, got $value.")
             continue
         end
         hasfield(T, sym) ||

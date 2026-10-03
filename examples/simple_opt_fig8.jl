@@ -201,7 +201,7 @@ guess_az, guess_el = figure_eight_path(tos.guess_a, tos.guess_b,
 # elevation) curve and flies it at ONE length. There is only this one solve here,
 # so the geometric part cannot be measured off a previous reply the way
 # `simple_opt_reelout.jl` does it — it is assumed instead, from
-# `turn_radius_lap_reelout_m` over this run's length.
+# `turn_radius_lap_reelout` (fitted to the wind) over this run's length.
 turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
 opt_r_scale = (1 + turn_radius_reel / l0) * tos.turn_radius_headroom
 opt_r_min = min_turn_radius_request(fcs, tos; scale = opt_r_scale)

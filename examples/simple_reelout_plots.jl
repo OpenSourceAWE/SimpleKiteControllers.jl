@@ -59,13 +59,13 @@ A fifth panel, flown `rel_depower` (`var_14`) against the optimizer's own
 depower converted to the same units (`awetrim_depower_to_v3kite`, step-held
 between reopt solves), is added when the run has one — silently skipped for a
 plain `simple_reelout.jl` run. A sixth carries `k_v`, the winch gain the run
-flew, against the seed it was bracketed around when `optimize_k_v` made it a
+flew, against the seed it was bracketed around when an archived run made it a
 design variable; that one is ALWAYS drawn, flat when the gain was fixed.
 
 Neither rides a `var_` slot — all sixteen are taken. Both are read from the RUN
 SUMMARY on a scenario replot (`traj_opt.guess.depower_optimized_rel`,
 `traj_opt.guess.k_v_optimized`, `traj_opt.winch.k_v_flown`) and from the live
-run's `opt_depower_log`/`opt_kv_log` (`live_global`) only for the run that just flew —
+run's `opt_depower_log`/`rc` (`live_global`) only for the run that just flew —
 see `depower_series`/`kv_series` for why a replot must never touch them.
 An archive from before `depower_optimized_rel` was written gets no `u_d` panel.
 
@@ -225,13 +225,12 @@ end
 The winch gain over `times`, step-held between optimizer replies, for the power
 plot's `k_v` panel.
 
-Sourced from `opt_kv_log` when a live run left it in scope, and otherwise parsed
-out of the summary's `traj_opt.guess.k_v_optimized` — which is what an ARCHIVED
-replot has, since `k_v` is not a log column. `moved` is false when the optimizer
-never retuned the gain (`optimize_k_v` off), and the series is then the flat gain
-the run actually flew, read back from the winch the law used.
+Parsed out of the summary's `traj_opt.guess.k_v_optimized`, which only runs from
+before `optimize_k_v` was removed (2026-10-03) carry, since `k_v` is not a log
+column. `moved` is false when the optimizer never retuned the gain, and the series
+is then the flat gain the run actually flew, read back from the winch the law used.
 
-`live = false` (a scenario replot) ignores `rc`/`winch`/`opt_kv_log` (see `live_global`) entirely and
+`live = false` (a scenario replot) ignores `rc`/`winch` (see `live_global`) entirely and
 reads only the summary. Without that, replotting an archive from the REPL that
 just flew something else would draw THAT run's gain onto this run's plot — the
 globals outlive the run that set them.
@@ -244,7 +243,6 @@ function kv_series(summary, times; live::Bool)
     wsum = isnothing(traj) ? nothing : get(traj, "winch", nothing)
     winch = live ? live_global(:winch) : nothing
     rc = live ? live_global(:rc) : nothing
-    opt_kv_log = live ? live_global(:opt_kv_log) : nothing
     seed = if !isnothing(winch) && hasproperty(winch, :k_v)
         Float64(winch.k_v)
     elseif !isnothing(wsum)
@@ -259,19 +257,15 @@ function kv_series(summary, times; live::Bool)
     else
         seed
     end
-    t_kv, k_kv = if !isnothing(opt_kv_log) && !isempty(opt_kv_log)
-        (Float64[e.t for e in opt_kv_log], Float64[e.k_v for e in opt_kv_log])
-    else
-        guess = isnothing(traj) ? nothing : get(traj, "guess", nothing)
-        block = isnothing(guess) ? nothing : get(guess, "k_v_optimized", nothing)
-        rows = block isa AbstractDict ?
-            [(parse(Float64, m[1]), String(k), Float64(v))
-             for (k, v) in block
-             for m in (match(r"^t_([\d.]+)_s", String(k)),) if m !== nothing] :
-            Tuple{Float64, String, Float64}[]
-        sort!(rows; by = r -> (r[1], r[2]))
-        (Float64[r[1] for r in rows], Float64[r[3] for r in rows])
-    end
+    guess = isnothing(traj) ? nothing : get(traj, "guess", nothing)
+    block = isnothing(guess) ? nothing : get(guess, "k_v_optimized", nothing)
+    rows = block isa AbstractDict ?
+        [(parse(Float64, m[1]), String(k), Float64(v))
+         for (k, v) in block
+         for m in (match(r"^t_([\d.]+)_s", String(k)),) if m !== nothing] :
+        Tuple{Float64, String, Float64}[]
+    sort!(rows; by = r -> (r[1], r[2]))
+    t_kv, k_kv = Float64[r[1] for r in rows], Float64[r[3] for r in rows]
     isempty(t_kv) && return fill(flown, length(times)), seed, false
     idx = searchsortedlast.(Ref(t_kv), times)
     ([i == 0 ? k_kv[1] : k_kv[i] for i in idx], seed, true)

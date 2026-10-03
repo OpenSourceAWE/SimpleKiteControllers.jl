@@ -1153,15 +1153,9 @@ end
         # against 0.74 (2026-08-19). The exact value follows the measurement, so
         # only the inequality is pinned.
         @test tos.turn_radius_headroom > TrajOptSettings().turn_radius_headroom == 1.0
-        # The startup request's assumed reel-out per lap: off by default (0.0 in YAML
-        # and struct), but computed from wind speed using a linear fit (1.987*v + 14.18)
-        # when 0.0. A non-zero YAML value uses that as a fixed fallback instead of the
-        # wind-adapted formula, for backward compatibility. The measured reel-out per lap
-        # is v_reelout times a lap, so it varies with wind and winch; the turn_radius_request
-        # per length uses this assumption for the startup request only (no prior reply to
-        # measure it off), and later requests measure it from the replies.
-        @test tos.turn_radius_lap_reelout_m == 0.0  # YAML does not define it, uses default
-        @test TrajOptSettings().turn_radius_lap_reelout_m == 0.0
+        # The startup request's assumed reel-out per lap, a linear fit to the wind;
+        # later requests measure it off the replies.
+        @test turn_radius_lap_reelout(tos, 8.0) ≈ 1.987 * 8.0 + 14.18
         # The DEFAULT, not the YAML: reopt_enabled is a per-run switch and the file
         # carries whatever the last experiment needed.
         @test !TrajOptSettings().reopt_enabled
@@ -1219,14 +1213,6 @@ end
         # (7 m/s, 247 m) and clears every other archived install (<= 1.13).
         @test tos.max_size_growth == 1.3
         @test TrajOptSettings().max_size_growth == 1.3
-        # k_v as a DESIGN VARIABLE. OFF in both since 2026-08-25: the optimizer's
-        # model soft-caps force at f_max, and the plant then capped it nowhere, so
-        # the low gain it chooses built force to 12684 N against a winch rated 8400
-        # while costing power. `force_limit: "soft"` (2026-08-25) supplies a
-        # limiter, but the measured run rings at +-1.1 m/s and peak force barely
-        # moved, so the gate is unchanged — see the tuning log.
-        @test !tos.optimize_k_v
-        @test !TrajOptSettings().optimize_k_v
         # The gate the example applies: BOTH conditions, so a positive prediction
         # is still gated at low wind and a negative one is still gated above it.
         let off(pred, v) = pred < 0 && v < tos.power_gate_wind_min
@@ -1262,8 +1248,15 @@ end
             slack = joinpath(dir, "h.yaml")
             write(slack, "traj_opt:\n    turn_radius_headroom: 0.9\n")
             @test_throws ErrorException TrajOptSettings(slack)
+            # A retired key loads at its off value, as archived files carry it, and
+            # errors at any other, so a removed feature cannot be switched on silently.
             back = joinpath(dir, "r.yaml")
-            write(back, "traj_opt:\n    turn_radius_lap_reelout_m: -1.0\n")
+            write(back, "traj_opt:\n    optimize_k_v: false\n    opt_winch_mode: \"\"\n" *
+                        "    pattern_elevation_max: 0.0\n")
+            @test TrajOptSettings(back) isa TrajOptSettings
+            write(back, "traj_opt:\n    optimize_k_v: true\n")
+            @test_throws ErrorException TrajOptSettings(back)
+            write(back, "traj_opt:\n    opt_winch_mode: \"free_speed\"\n")
             @test_throws ErrorException TrajOptSettings(back)
             gate = joinpath(dir, "g.yaml")
             write(gate, "traj_opt:\n    power_gate_wind_min: -1.0\n")

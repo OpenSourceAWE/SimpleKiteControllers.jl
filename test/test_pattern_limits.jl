@@ -15,8 +15,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
 
 @testset verbose = true "pattern_limits" begin
     # Every side off; each test switches on what it needs.
-    off = (; pattern_azimuth_max = 0.0, pattern_azimuth_max_high = 0.0, pattern_elevation_min = 0.0, pattern_elevation_max = 0.0,
-           pattern_azimuth_amplitude_min = 0.0, pattern_elevation_amplitude_max = 0.0,
+    off = (; pattern_azimuth_max = 0.0, pattern_azimuth_max_high = 0.0, pattern_elevation_amplitude_max = 0.0,
            pattern_elevation_amplitude_max_high = 0.0,
            pattern_elevation_amplitude_max_wind_ref = 10.0, pattern_symmetric = false,
            pattern_climb_angle_max = 0.0,
@@ -33,9 +32,8 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         @test isnothing(b.climb_angle_max)
         # The climb ceiling alone is a box too.
         @test pattern_limits_from(merge(off, (; pattern_climb_angle_max = 45))).climb_angle_max === 45.0
-        # The per-request floor overrides the file's.
-        b = pattern_limits_from(merge(off, (; pattern_elevation_min = 10.0)); elevation_min = 25.0)
-        @test b.elevation_min == 25.0
+        # The per-request floor alone is a box too.
+        @test pattern_limits_from(off; elevation_min = 25.0).elevation_min == 25.0
     end
 
     @testset "elevation_amplitude_max_at" begin
@@ -65,7 +63,7 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
     @testset "elevation_min_request" begin
         fcs = FC_Settings(; min_elevation = 20.0)
         @test isnothing(elevation_min_request(fcs, off, 150.0))
-        @test elevation_min_request(fcs, merge(off, (; pattern_elevation_min = 12.0)), 150.0) == 12.0
+        @test elevation_min_request(fcs, off, 150.0; extra = 1.5) == 1.5
         gates = merge(off, (; elevation_min_from_gates = true, min_height = 100.0))
         # The clearance floor asind(100/150) = 41.8° beats the elevation gate's 22°...
         @test elevation_min_request(fcs, gates, 150.0) ≈ asind(100 / 150)

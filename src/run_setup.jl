@@ -119,8 +119,6 @@ Base.@kwdef mutable struct RunSetup{S, CD, CC}
     opt_r_sent::Union{Nothing, Float64}
     "The pattern box sent; nothing when off"
     opt_box::Union{Nothing, PatternLimits}
-    "Every reply's winch gain"
-    opt_kv_log::Vector{@NamedTuple{t::Float64, l::Float64, k_v::Float64, at_bound::Bool}}
     "Every reply's depower"
     opt_depower_log::Vector{NamedTuple}
     # ---- the laws the gates and the loop read ----
@@ -296,8 +294,6 @@ function setup_run(inputs; init_model)
     # The conditions of THIS run and the winches the optimizer is sent, see `optimizer_conditions`.
     (; inflow, cap_wind, winch, winch_first_lap, winch_reopt) =
         optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
-    # Every reply's optimized gain, so the summary reports what was flown, not only what was sent.
-    opt_kv_log = NamedTuple{(:t, :l, :k_v, :at_bound), Tuple{Float64, Float64, Float64, Bool}}[]
 
     # The seed of the startup solve and the connection to the optimizer, see `optimizer_session`; anchored to the
     # STARTING length, re-optimizing during the run is `reoptimize!`. `solve_startup_path!` replaces the seed.
@@ -373,7 +369,7 @@ function setup_run(inputs; init_model)
             output_path, run_done_file, log_name, wc, wpc, dt0, rcs, s, rc, f_high_nominal, guard_lfc,
             l_set, fec, inflow, cap_wind, winch, winch_first_lap, winch_reopt, el_center_seed_base,
             el_center_seed, opt_chain, opt_r_scale, opt_r_min, opt_r_on, opt_r_sent, opt_box,
-            opt_kv_log, opt_depower_log, power_gate_off, wing_lift, c1_at_depower, c1_ctrl_at,
+            opt_depower_log, power_gate_off, wing_lift, c1_at_depower, c1_ctrl_at,
             c1_setpoint, c1_depower_max, pattern_depower, el_floor)
 end
 

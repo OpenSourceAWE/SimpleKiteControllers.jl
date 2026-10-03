@@ -34,11 +34,7 @@ $(TYPEDFIELDS)
 @with_kw mutable struct TrajOptSettings @deftype Float64
     "Address of the AWETrim server"
     base_url::String = "http://127.0.0.1:8000"
-    """
-    Start a detached server with `bin/run_server start` when nothing answers
-    `base_url`. `false` turns a missing server into an error, which is what a run
-    against a server on another machine wants.
-    """
+    "Start a detached server when nothing answers `base_url`; `false` makes it an error"
     autostart_server::Bool = true
     "Name the optimization is registered under on the server"
     name::String = "simple_opt_fig8"
@@ -50,91 +46,23 @@ $(TYPEDFIELDS)
     guess_b = 12.0
     "Centre elevation of the guess [deg]"
     guess_el_center = 26.0
-    """
-    Centre elevation [deg] `guess_el_center` STEPS UP to at
-    `guess_el_center_wind_ref` and above; `0.0` disables the step, so the guess
-    stays at `guess_el_center` whatever the wind.
-
-    A step, not a ramp like `input_depower`'s: the guess is a choice of BASIN in a
-    multi-modal solve (see the struct docstring), and a basin that converges at one
-    wind does not shrink gracefully into a worse one at another — it is either the
-    tested seed or it is not.
-    """
+    "Guess centre elevation at and above `guess_el_center_wind_ref` [deg]; `0.0` = off"
     guess_el_center_high = 0.0
-    """
-    Wind speed [m/s] at and above which `guess_el_center_high` replaces
-    `guess_el_center` as the guess's centre elevation. Unused while
-    `guess_el_center_high` is `0.0`.
-    """
+    "Wind speed at and above which `guess_el_center_high` is used [m/s]"
     guess_el_center_wind_ref = 0.0
-    """
-    Points the guess is sent with. The reply comes back with as many points as
-    were sent (measured; the server's own `n_points` does not enter), so this
-    also sets the resolution of the optimized path before resampling.
-    """
+    "Points the guess is sent with; also the resolution of the reply"
     guess_points::Int64 = 361
 
     # ---- Solver knobs the API exposes ------------------------------------ #
-    """
-    Power-tape length `l_dp` [m] the optimizer starts from, on ITS scale
-    (`l_dp = 0.6 + 5*u_p`, 0.4 m longer than V3Kite's for the same `rel_depower`).
-    Only a seed: the optimizer varies it, since it is in the server's default
-    `optimization_params`. Pinning it to the flown depower makes the solve
-    infeasible — see `docs/steering_depower.md`.
-    """
+    "Power-tape length seed `l_dp` on AWETrim's scale [m]"
     input_depower = 1.6
-    """
-    Wind speed [m/s] at which `input_depower` IS the seed. Below it nothing is
-    added — see `input_depower_per_wind`.
-    """
+    "Wind speed at which `input_depower` is the seed [m/s]"
     input_depower_wind_ref = 7.0
-    """
-    Tape length [m] added to the seed per m/s of wind ABOVE
-    `input_depower_wind_ref`, i.e. `depower_seed` in
-    `awetrim_client.jl`. `0.0` sends `input_depower` whatever the wind.
-
-    The solve is against an `angle_of_attack <= 14°` cap that is already BINDING
-    at 6 m/s (measured 2026-08-20 at 150 m: stage 1 of `/step` solved in 0.85 s
-    with AoA 8.3-14.0°, steering saturated at ±0.35). More wind needs more tape
-    to stay under it, and a seed that does not follow the wind leaves the solver
-    to find that out from a starting point on the wrong side of the cap: at
-    8 m/s from 1.6 m, stage 1 — which carries NO turn-radius constraint — ran to
-    its iteration cap with AoA at -25…88° and the trim, winch-law and
-    radial-continuity residuals all infeasible, and the constrained stage 2 then
-    converged to a point of local infeasibility. That is the whole reason this
-    ramp exists; it is not a power knob.
-
-    `0.0` here, off, so the struct alone reproduces the behaviour that predates
-    the ramp; `data/traj_opt.yaml` ships the measured slope.
-    """
+    "Tape length added to the seed per m/s above `input_depower_wind_ref` [m/(m/s)]"
     input_depower_per_wind = 0.0
-    """
-    Soft ceiling [m] on the ramped seed, below AWETrim's hard 2.3 m bound
-    ([`DEPOWER_SEED_BOUNDS`](@ref)). `0.0` disables it —
-    the ramp then clamps to the hard bound alone.
-
-    A seed AT the hard bound leaves the solver no room to move: measured
-    2026-08-20 at 150 m / 10 m/s, the ramp's own 2.35 m clamps to 2.3 m and
-    `/step` then runs to IPOPT's iteration cap every time, constrained or not.
-    1.85 m — the same seed already calibrated at 8 m/s — converges immediately
-    instead, with margin to spare (unconstrained turn radius 13.59 m against the
-    13.34 m the run demands). This caps the ramp there rather than at the
-    server's own bound.
-    """
+    "Soft ceiling on the ramped depower seed [m]; `0.0` = AWETrim's hard bound only"
     input_depower_seed_max = 0.0
-    """
-    Fly the optimizer's own depower from phase 3 (transition, where reel-out
-    begins) through phase 4 (fig8) instead of the fixed `fcs.course.depower_setpoint`,
-    converted with `awetrim_depower_to_v3kite`. Updated at startup and after
-    every re-optimization that installs a path
-    (`examples/simple_opt_reelout.jl`'s `depower_flown_opt`); phase 5 always flies
-    `fcs.reelout.depower_final` regardless of this flag.
-
-    `false` reproduces the pre-2026-08-20 behaviour. This is untested against the
-    curvature ceiling (`docs/fig8_tuning_log.md`, `PlanStrongWind.md`): the
-    optimizer's value is not clamped to it, so a value above the ceiling can start
-    a run that would otherwise have refused to fly.
-    """
+    "Fly the optimizer's depower in phases 3-4 instead of the fixed setpoint"
     fly_opt_depower::Bool = false
     "Regularization weight of the solve [-]"
     reg_weight = 1.0
@@ -142,315 +70,35 @@ $(TYPEDFIELDS)
     detect_simple_bounds::Bool = true
 
     # ---- What is done with the path that comes back ---------------------- #
-    """
-    Points the optimized path is resampled to before it is flown, equidistant in
-    arc length ([`resample_path`](@ref)). Used as an UPPER bound: a reply with
-    fewer points is left at its own resolution, because interpolating extra
-    points onto a polyline concentrates each vertex's turn into one short segment
-    and makes [`path_radius_profile`](@ref) report a far tighter pattern than the
-    curve is.
-    """
+    "Upper bound on the points the optimized path is resampled to"
     resample_points::Int64 = 361
-    """
-    Skip optimizer requests that are recorded as having failed before.
-
-    A failing solve is the expensive one — it runs to IPOPT's iteration cap,
-    measured at 81 s against 1.5 s for a converged solve — and in blocking mode
-    the simulation is held for all of it. The failures are reproducible and
-    isolated in tether length, so `awetrim_client.jl` records each one
-    and refuses to send it again; see `OPT_FAILURE_CACHE` there for the file, and
-    `clear_opt_failures()` to forget them.
-
-    Set `false` to send every request regardless — after a server or AWETrim
-    upgrade, say, when what used to fail may not any more.
-    """
+    "Skip optimizer requests recorded as failed before (`OPT_FAILURE_CACHE`)"
     opt_failure_cache::Bool = true
-    """
-    Replay optimizer results that were APPLIED before, instead of solving them
-    again.
-
-    A rerun of a scenario sends the same requests and gets the same answers, so
-    `awetrim_client.jl` stores every installed result. It also stores
-    the replies that result was warm-started from, rejected ones included. The
-    key is the whole chain of requests since the `/init`, because a warm `/step`
-    depends on the state the server holds. After a hit the server no longer
-    holds that state, and it is rebuilt before the next request that misses. See
-    `OptChain` there, `OPT_CHAIN_CACHE` for the directory, and
-    `clear_opt_chain_cache()` to forget them.
-
-    The key cannot see the server itself: clear the cache, or set this `false`,
-    after any change to AWETrim, or a run replays the old optimizer's answers.
-    Failed WARM steps are stored in the same place, but under
-    `opt_failure_cache`.
-    """
+    "Replay previously applied optimizer results (`OPT_CHAIN_CACHE`)"
     opt_success_cache::Bool = true
-    """
-    `use_awe_trim` of a throwaway solve sent BEFORE the startup request, to seed
-    the session for it. `0.0` is off.
-
-    The optimizer's first solve after `/init` is cold: it marches a quasi-steady
-    state along the seed path before IPOPT sees it, and at 3 m/s that march fails
-    outright once the winch's force at zero reel speed drops below ~830 N
-    (measured 2026-08-29). A converged solve leaves its `speed_radial`, `s_dot`
-    and `input_steering` profiles in the session, and the next request starts from
-    those instead — which clears that failure entirely.
-
-    Set this to a `use_awe_trim` known to converge (`1.0` is the softminus-floored
-    law the server used before the reel-in law replaced it) when
-    `wc_settings.yaml`'s own value does not converge cold. It costs one extra
-    solve at startup and nothing during the run: re-optimizations are already warm
-    from the solve before them, only the first request is cold.
-
-    This is a deterministic pre-solve, NOT a retry — it runs unconditionally when
-    set, so the ladder is the same every run and the optimum flown stays
-    reproducible. That is what keeps it clear of the rule under
-    `reopt_retry_el_offset` that the startup solve retries only through
-    `startup_retry_el_offsets`.
-
-    Only sent when it is ABOVE `wc_settings.yaml`'s `use_awe_trim`; a value at or
-    below it would seed with a law at least as hard to solve as the real one.
-    """
+    "`use_awe_trim` of a warm-up solve sent before the startup request; `0.0` = off"
     opt_warm_start_awe_trim::Float64 = 0.0
-    """
-    Round the tether length SENT to the optimizer to a multiple of this [m].
-    `0.0` sends it unrounded.
-
-    Whether a request converges depends on the tether length to an absurd
-    precision — measured 2026-08-29 at 3 m/s, a run at 149.9999542236328 m threw
-    422 where 150.0 m converges in 12 s, 46 MICROMETRES away. The run's own length
-    is a settling artefact that never lands on a round number, so it draws from
-    that lottery every time; rounding the request makes it ask a question that has
-    a known answer.
-
-    Only the REQUEST is rounded. `l_set` — what the winch is actually commanded to
-    — is untouched, so this does not move the kite. It does mean the path is
-    anchored to a length up to half this value away from the one it is flown at,
-    on top of the drift the run already has from re-optimizing at intervals; at
-    `1.0` that is 0.5 m against a 150-380 m sweep.
-
-    This is a workaround for the optimizer's sensitivity, not a fix for it.
-    """
+    "Round the tether length sent to the optimizer to a multiple of this [m]; `0.0` = off"
     opt_length_round::Float64 = 0.0
-    """
-    `use_awe_trim` SENT to AWETrim, independent of the local winch's own
-    `wc_settings.yaml` value. Negative follows `wc.use_awe_trim`, as before.
-
-    The two sides want opposite things and cannot share one number. LOCALLY it
-    must be near `0.0`: it sets the force at which the winch starts reeling out,
-    350 N at `0.0` against 883 N at `1.0`, and at 3 m/s the kite cannot pull 883 N,
-    so a high value simply never reels out — measured 2026-08-29, `0.875` stalled
-    the run at 188.7 m of a 380 m target where `0.0` reached 380 m. SERVER-SIDE it
-    must be HIGH: the 3 m/s solve does not converge below ~0.875, on either
-    continuation axis.
-
-    So this is the same split `AWETRIM_SOFTMINUS_BETA` makes for the other beta
-    (`awetrim_client.jl`) — the run flies the law it can fly, and asks the
-    optimizer the question it can answer.
-
-    It does NOT make the two laws agree; it makes each side usable. The predicted
-    power is still computed against a winch floored far above the forces the run
-    flies, so the power ratio stays wrong until AWETrim converges at low winch
-    force. See PlanFix3m_per_s.md.
-    """
+    "`use_awe_trim` sent to AWETrim; negative follows `wc.use_awe_trim`"
     opt_awe_trim::Float64 = -1.0
-    """
-    Winch model AWETrim optimizes against: `""` (default) leaves the server on
-    its own `force_law`, `"free_speed"` drops the winch law entirely.
-
-    `force_law` ties tension to reel speed through the `k_v` curve as a per-node
-    equality. `free_speed` replaces that with a force band `[f_min, f_max]` and
-    makes the reel speed a direct, acceleration-limited control — the winch law's
-    flat regions (`dT/dv_r` ~ 0) then cannot cost the solve its Jacobian rank.
-
-    At 3 m/s that is the difference between converging and not. Measured
-    2026-08-29, cold at every length of the reel-out sweep (150, 151, 175, 200,
-    250, 300, 324, 380 m): `free_speed` converged at all eight in 8-12 s, where
-    `force_law` needs the winch floored near 883 N to solve at all and then
-    predicts a standstill.
-
-    The trade is what the reply MEANS. Its path is optimal for any winch inside
-    the force band, not for the `k_v` law the run flies, and its predicted power
-    is therefore an UPPER BOUND. That makes it a better reference than
-    `force_law`'s number at low wind — a measured/predicted ratio above 1 is then
-    unambiguously a disagreement about the physics rather than an artefact of a
-    winch floor the kite can never reach — but it is not a prediction of this
-    controller. See PlanFix3m_per_s.md.
-    """
-    opt_winch_mode::String = ""
-    """
-    Lengths at which a `free_speed` reference power is solved AFTER the run, to
-    score the measured power against. `0` is off; below 2 nothing is solved.
-
-    `force_law`'s own prediction is made against the `k_v` law including its soft
-    floor, which at low wind stands the winch still — at 3 m/s it has come back
-    negative, and the ratio is then unreadable. A `free_speed` solve drops the
-    winch law for a plain `[f_min, f_max]` force band, so its power is what ANY
-    winch in that band could harvest on an optimal path: an UPPER BOUND. Scored
-    against it, a ratio above 1 is a disagreement about the physics rather than an
-    artefact of a floor the kite can never reach.
-
-    Solved after the run, at lengths spanning the reeling window and weighted by
-    the time the run spent at each, so it costs the run nothing and cannot
-    destabilise it. That matters: a free-speed path is NOT flyable here. Installing
-    one crashed a run on 2026-08-29 — it does not sustain the force the winch needs,
-    so the winch reeled in from 150 m to 83 m and the kite stalled. This reference
-    is never flown, only compared against.
-
-    A failed solve is skipped rather than fatal, and the keys are omitted entirely
-    if none succeed.
-    """
+    "Lengths of the post-run `free_speed` reference power solve; `0` = off"
     free_speed_reference_points::Int64 = 0
-    """
-    Smallest curvature margin ([`check_pattern_feasible`](@ref), path radius over
-    the kite's minimum turn radius) the returned path must have at the tether
-    length it is flown at. Below 1.0 the path is tighter than the kite can turn,
-    and the run measures the steering clamp instead of the path. `0.0` disables
-    the check and flies whatever came back.
-
-    Since 2026-08-19 this is not only a gate. `min_turn_radius_request` converts
-    it to metres — `margin/(c1*max_steering)`, 9.3 m at the shipped 0.82 — and
-    sends it with the request, so the optimizer solves under the same limit the
-    reply is about to be judged by and "PATTERN TOO TIGHT" is answered before the
-    solve rather than after it. `0.0` therefore turns off the request and the
-    gate together.
-
-    What is sent is that number scaled UP, by `turn_radius_headroom` and by
-    the lap's reel-out: the optimizer measures the path's radius up its own reel-out
-    while the gate reads the same curve at the anchor, so an unscaled request is one
-    the reply satisfies and the gate still refuses.
-
-    That makes this a DIAL rather than the rejection-rate knob it used to be. The
-    optimizer honours the request — 11.86 m asked at 150 m, 11.91 m delivered,
-    2026-08-20 — so what the gate reads back is this number times the scaling
-    cushion: ~1.2x at the startup length, ~1.15x on the re-optimized replies. Set it
-    to the turn authority the kite should fly with, not to whatever makes replies
-    pass.
-    """
+    "Minimum curvature margin of the returned path, also sent as turn radius; `0.0` = off"
     min_feasibility_margin = 1.0
-    """
-    Extra turn radius asked of the optimizer, as a factor on what
-    `min_feasibility_margin` demands; `1.0` asks for exactly the gate's
-    number, which is NOT enough.
-
-    The request and the gate do not measure the same curve at the same radius, and
-    two corrections are needed. The geometric one the run MEASURES per length
-    (`reelout_anchor_ratio`: the optimizer constrains `R = r/|kappa|` at each node's
-    own radius, which grows through the lap, while the run flies the curve at the
-    anchor, tighter by `L/r` — 0.87 at 220 m, 0.92 at 380 m). This field is the
-    rest, which is about the GATE and not the geometry:
-
-    - `path_radius_profile` estimates the curvature by finite differences on the
-      resampled ~99-point reply and reads ~5 % tighter than the exact value
-      (10.81 m against 11.38 m on one reply, measured 2026-08-19);
-    - the run adds `el_offset_wing` before checking, and lifting the
-      path compresses its azimuth axis by `cos(elevation)`.
-
-    1.10 covers both with a little to spare; `data/traj_opt.yaml` ships 1.20,
-    because this is also the only knob that MAKES slack — it raises the request
-    without moving the gate, so a lift has something to spend at the install
-    (`docs/fig8_tuning_log.md`). Raising it buys
-    installs and delivered shape at the cost of a wider, less powerful pattern;
-    lowering it towards 1.0 brings back replies that converge, satisfy their own
-    constraint and are then rejected — margin ~0.63 against the 0.74 demanded at
-    the time, which is what the first `use_step` run did.
-
-    The startup `/init` gets this factor alone: there is no reply to measure the
-    geometric one off yet. If the STARTUP path is refused for curvature, this is the
-    number to raise.
-    """
+    "Factor on the turn radius requested from the optimizer, on top of the gate's [-]"
     turn_radius_headroom = 1.0
-    """
-    Reel-out per lap [m] ASSUMED for the startup request; `0.0` assumes none.
-
-    The turn-radius request has to be scaled by `1 + dL/L`, because the optimizer
-    measures the path's radius up its own reel-out while the run flies the curve at
-    the anchor. Every re-optimization measures that ratio off the previous reply
-    (`reelout_anchor_ratio`); the startup `/init` is the one request with no reply to
-    measure, and it is also where the ratio is LARGEST — the same `dL` is a bigger
-    fraction of a short tether. Measured 2026-08-20, the lap's reel-out is nearly
-    length-independent (33.2 m at 150 m, 35.0 m at 380 m), which is what makes one
-    number usable here: 35 m is 1.23 at 150 m and 1.09 at 380 m, each within a
-    percent of what the reply then measured.
-
-    It is an assumption, so it moves with the wind and the winch — it is `v_reelout`
-    times a lap. Left at `0.0` the startup asks for `turn_radius_headroom` alone,
-    which at 150 m produced a path flown at margin 0.90 against the 0.74 demanded at
-    the time: accepted, but on the steering clamp in its tightest corner until the
-    first re-optimization replaced it. A startup solve that lands short is retried
-    once under the MEASURED ratio, so this number decides how often that retry is
-    needed, not whether the run survives without it.
-    """
-    turn_radius_lap_reelout_m = 0.0
-    """
-    Corrected startup re-solves allowed when the first reply falls short of
-    `min_feasibility_margin`. Each is a warm `/step` under a raised turn
-    radius — the same solve under a better-measured constraint, never a different
-    seed. `0` flies the first short path straight to the gates, as before
-    2026-08-26; `2` costs at most two extra converged solves (~3 s each).
-    """
+    "Corrected startup re-solves allowed when the first reply's margin is too small"
     startup_retries_max = 2
-    """
-    First-attempt target margin of a startup retry, as this multiple of the
-    INSTALLED path's measured margin. Combined with `startup_retry_slack`
-    into `max(startup_retry_step * margin, startup_retry_slack *
-    min_feasibility_margin)`; `1.05` keeps the historical fixed +5 % step.
-    """
+    "First startup retry target, as a multiple of the installed path's margin [-]"
     startup_retry_step = 1.05
-    """
-    Floor on every retry's target margin, as a factor on
-    `min_feasibility_margin`: the request never aims at or below the very
-    number the gate accepts. Aiming exactly AT the gate lost the rounding on
-    2026-08-26 — 0.82 targeted, 0.8199 delivered, refused — while aiming far above
-    it overshoots, because replies land wider than asked (2026-08-21: 0.72 ->
-    0.90 against a 0.82 target) and a wider pattern risks ground clearance.
-    `1.03` leaves ~3 % of daylight. Raise it if retries converge from below more
-    than once or twice.
-    """
+    "Floor on a retry's target margin, as a factor on `min_feasibility_margin` [-]"
     startup_retry_slack = 1.03
-    """
-    Elevation [deg] each corrected startup retry caps the path BELOW the
-    incumbent's own highest point, sent as the box's `elevation_max` next to the
-    raised turn radius; `0.0` sends the box unchanged.
-
-    A raised radius alone can be spent by climbing: the lemniscate's tightest
-    curve is its upper shoulder, where `cos(elevation)` compresses the azimuth
-    axis, so the measured margin can FALL as the ask rises. The cap makes the
-    solve widen instead. Skipped when it would leave less than `guess_b` of
-    height above the box's elevation floor.
-    """
+    "Elevation cap below the incumbent's top for each startup retry [deg]; `0.0` = off"
     startup_retry_el_cap_step = 2.0
-    """
-    Azimuth half-width [deg] a startup WIDTH retry asks for on top of the
-    incumbent's own, sent as the box's `azimuth_amplitude_min` (the RMS-based
-    amplitude the server measures, `sqrt(2 * mean((az - mean(az))^2))`); `0.0`
-    never widens.
-
-    The rung between the ceiling and the radius: at Cabauw 7 m/s (2026-09-18)
-    the figure's height was rigid — every ceiling step 422'd, even 0.7° below
-    the top — and a wider radius ask came back TALLER (16.5°), tighter at the
-    anchor (3.6° against 3.9°), so neither moved the margin off 0.73-0.79.
-    Width is what the passing figures have that this one lacks: Maasvlakte
-    10 m/s at the same depower and height was ±24° at margin 1.03, this one
-    ±18°. Compounds on every adopted reply; a floor that 422'd is never re-asked.
-    """
+    "Extra azimuth half-width a startup width retry asks for [deg]; `0.0` = off"
     startup_retry_az_widen_step = 2.0
-    """
-    Ground clearance [m] the returned path must have at the tether length it is
-    flown at ([`check_pattern_height`](@ref)); `0.0` disables the check.
-
-    AWETrim constrains HEIGHT (50 m, `DEFAULT_LIMITS["height"]`) and does not
-    constrain elevation at all — but it reaches that floor at the END of a lap's
-    reel-out, so a curve installed as (azimuth, elevation) and flown at its anchor
-    radius clears only `50 * r0/r_low` ≈ 42 m, whatever the anchor — and less than
-    that where a lap reels out more than the ~35 m that estimate assumes, which is
-    what `elevation_min_from_gates` exists for. This floor is
-    therefore about the anchor radius, not about how low the kite gets: the run
-    reels out and climbs through 50 m within the first lap. `data/traj_opt.yaml`
-    ships 40.0 for that reason, and the flown minimum is reported separately.
-
-    The shortest tether is the worst case, since a fixed elevation rises as the
-    tether grows.
-    """
+    "Ground clearance the returned path must have [m]; `0.0` = off"
     min_height = 50.0
 
     # ---- Constraints the optimizer solves UNDER -------------------------- #
@@ -466,450 +114,65 @@ $(TYPEDFIELDS)
     # solve lands on the best branch less often than a free one (11/18 lengths
     # against 16/18, measured by AWETrim on the LEI-V3 reference), so a 422 where
     # there used to be a rejected reply is the expected new failure mode.
-    """
-    Elevation floor [deg] the optimized pattern must stay above, sent with the
-    request; `0.0` keeps the optimizer's own 0.6°.
-
-    Not the same thing as `min_height`, and that is the point: AWETrim
-    constrains HEIGHT, which a growing tether satisfies at ever lower angles (50 m
-    at 350 m of tether is 8.2°), while this repo's criterion — and the elevation floor
-    of [`check_startup_path`](@ref) — is an ANGLE. Set it to `min_elevation +
-    candidate_elevation_margin` to ask for what the gate will demand.
-    """
-    pattern_elevation_min = 0.0
-    """
-    Raise the floor above to whatever the GATES will demand at the length being
-    asked for, per request: `asind(min_height/L)` for the clearance gate and
-    `min_elevation + candidate_elevation_margin` for the elevation one
-    ([`elevation_min_request`](@ref)). `false` sends
-    `pattern_elevation_min` alone.
-
-    A height floor is not something the optimizer can meet on this run's behalf.
-    AWETrim reaches its own 50 m at the END of a lap's reel-out, where the reply
-    is installed as angles and judged at the anchor, so what arrives is
-    `50 * r0/r_max` — and that ratio is measured, not assumed: three consecutive
-    replies were gated out at 38.6, 40.0 and 39.5 m against a 40 m floor on
-    2026-08-22, leaving the run on its startup path for 99 % of the reeling
-    window. Inverting the gate closes the gap by construction, at the price every
-    sent constraint carries: a constrained cold solve lands on the best branch
-    less often than a free one.
-    """
+    "Raise the elevation floor per request to what the gates will demand"
     elevation_min_from_gates::Bool = true
-    """
-    Extra elevation [deg] asked for on top of the measured shortfall when a reply
-    rejected for clearance or elevation is re-asked with a raised floor; `0.0`
-    re-asks for the shortfall alone. The retry spends the `blend_max_retries`
-    budget and is off with `elevation_min_from_gates`.
-
-    There is no retry for the curvature gate for the reason there was none for
-    these two until now: a cold re-ask with identical inputs solves to the
-    identical reply. Raising the floor is what makes the second question a
-    different one.
-    """
+    "Extra elevation on top of the shortfall when re-asking a rejected reply [deg]"
     elevation_min_retry_margin = 0.5
-    """
-    Elevation ceiling [deg] of the optimized pattern; `0.0` keeps the optimizer's
-    51.6°. Guards the run-away-to-zenith basin a failed re-optimization falls into.
-    """
-    pattern_elevation_max = 0.0
-    """
-    Half-width limit [deg] of the optimized pattern in azimuth; `0.0` keeps the
-    optimizer's 45.8°.
-    """
+    "Azimuth half-width limit of the optimized pattern [deg]; `0.0` = optimizer's 45.8°"
     pattern_azimuth_max = 0.0
-    """
-    Azimuth half-width limit [deg] `pattern_azimuth_max` STEPS UP to at
-    `pattern_elevation_amplitude_max_wind_ref` and above, the same wind step as the
-    elevation cap; `0.0` disables the step.
-
-    The climb ceiling `pattern_climb_angle_max` widens the high-wind figure: Cabauw
-    10 m/s needs ±28.4-28.8° at the 150 m startup, and the startup solve converges
-    only with 2-3° to spare: 422 under 28° and 29° at a 22.8 m turn-radius request,
-    under 30° at 23.5 m, a path under 31° and 32° (2026-10-03).
-    """
+    "Azimuth half-width limit at and above the high-wind step [deg]; `0.0` = off"
     pattern_azimuth_max_high = 0.0
-    """
-    Smallest azimuth half-width [deg] the optimized figure may have; `0.0` is off.
-    Guards the OTHER bad basin: the pattern collapsing to zero amplitude.
-    """
-    pattern_azimuth_amplitude_min = 0.0
-    """
-    Largest elevation half-span [deg] the optimized figure may have; `0.0` is off.
-    One smooth NLP row (mean squared deviation of the elevation from its own mean
-    <= value²/2), the mirror of the server's `min_azimuth_amplitude`. Where
-    `pattern_elevation_max` only caps where the path may SIT, this caps how TALL
-    the figure is — the span is what the curvature margin reads.
-    """
+    "Largest (RMS) elevation half-span of the optimized figure [deg]; `0.0` = off"
     pattern_elevation_amplitude_max = 0.0
-    """
-    Elevation half-span cap [deg] `pattern_elevation_amplitude_max` STEPS UP to at
-    `pattern_elevation_amplitude_max_wind_ref` and above; `0.0` disables the step.
-
-    A step for the same reason as `guess_el_center_high`: the cap selects a BASIN.
-    The reel-out figure at 11 m/s is 17.3° tall (8.65° half-span); under an 8° cap the
-    startup solve cannot reach it and converges 19° higher instead, at 45° centre
-    elevation, where the optimizer trades depower for power and the entry dive
-    overshoots the 8400 N limit (2026-09-21).
-    """
+    "Elevation half-span cap at and above the high-wind step [deg]; `0.0` = off"
     pattern_elevation_amplitude_max_high = 0.0
-    """
-    Wind speed [m/s] AT `pattern_elevation_amplitude_max_wind_height` at and above
-    which `pattern_elevation_amplitude_max_high` replaces
-    `pattern_elevation_amplitude_max`. Unused while
-    `pattern_elevation_amplitude_max_high` is `0.0`.
-
-    Keyed on the wind aloft, not the 6 m wind the projects are parametrized by,
-    because how tall the optimizer's figure wants to be follows the wind the
-    kite flies in, and the sites' shear differs: Cabauw's 10 m/s at 6 m is
-    19.3 m/s at 100 m, Maasvlakte's 11 m/s is 14.2. A ground-wind step at 11 m/s
-    (2026-09-21, morning) left every Cabauw run from 7 m/s up — archived under
-    the 10° cap with 17-22°-tall figures — without a basin under 8°: three 422s
-    at 10 m/s. At 100 m the sites separate cleanly, Maasvlakte 10 m/s at 12.9
-    (passes under 8°) against Cabauw 7 m/s at 13.5 (needs 10°).
-    """
+    "Wind speed aloft at and above which the high-wind caps apply [m/s]"
     pattern_elevation_amplitude_max_wind_ref = 0.0
-    """
-    Height [m] `pattern_elevation_amplitude_max_wind_ref` is measured at; the
-    ground wind is scaled to it with the project's own profile law
-    (`calc_wind_factor`). `0.0` = the ground wind as passed to `init`.
-    """
+    "Height the high-wind step's wind speed is measured at [m]; `0.0` = ground wind"
     pattern_elevation_amplitude_max_wind_height = 0.0
-    """
-    Force a mirror-symmetric figure-eight: half a period later the kite is at the
-    point mirrored about azimuth 0 (the server's `symmetric` pattern limit, M linear
-    rows on the spline coefficients). Nothing physical prefers one side, but the
-    power objective barely reads the lobe balance, so the multi-modal solve lands
-    on lopsided figures: the Cabauw run of 2026-09-25 started on a figure centred at
-    -2.3° azimuth with 214 of 361 points in the left lobe. `false` is off.
-    """
+    "Force a mirror-symmetric figure-eight"
     pattern_symmetric::Bool = false
-    """
-    Steepest CLIMB [deg] the optimized path may have in the azimuth/elevation
-    plane (the server's `climb_angle_max` pattern limit): wherever the elevation
-    rises along the flight direction, d(elevation) <= tan(value) * |d(azimuth)|.
-    Descending is free, so the vertical dives at the sides stay allowed. `0.0` is
-    off.
-
-    A kite cannot follow a path that climbs much steeper than 45°. Measured
-    2026-10-03 over 48 installed paths of the Cabauw set: the 7 m/s paths climb at
-    up to 88° (17 % of the path steeper than 45°) and fly at 0.86 of their
-    predicted power, the lowest of 5.75-10 m/s, while 5.75 and 6 m/s never climb
-    steeper than 44° and fly at or above their prediction on the shorter tethers;
-    with the tether length removed, the share of the path climbing steeper than
-    45° costs 0.23 of the measured/predicted power ratio per unit.
-    """
+    "Steepest climb angle of the optimized path [deg]; `0.0` = off"
     pattern_climb_angle_max = 0.0
 
     # ---- Re-optimization while the tether grows (simple_opt_reelout.jl) --- #
-    """
-    Re-optimize during the run. The path is anchored to ONE radius, and a reel-out
-    run walks 180 -> 350 m away from it; each re-optimization re-anchors it to the
-    length actually being flown. `false` flies the path from `/init` all the way.
-    """
+    "Re-optimize during the run as the tether grows"
     reopt_enabled::Bool = false
-    """
-    Re-optimize with `/step` ALONE, keeping the session `/init` built at the start
-    of the run, so each solve WARM-STARTS from the previous optimum. `/step`
-    re-anchors the pattern to the length it is given — the server moves `r0` and
-    shifts its stored node-wise warm start by the same delta — so the seed is the
-    last optimum at the radius now being flown. `false` repeats the STARTUP solve
-    every time: a fresh `/init` from the parametric guess, i.e. a cold solve at
-    every length.
-
-    Not to be confused with feeding the FLOWN path back as the seed, which is what
-    the docstring of `examples/simple_opt_reelout.jl` warns about and which failed
-    repeatedly from ~210 m out. That refits an (azimuth, elevation) curve solved
-    for a much shorter radius; this hands the optimizer its own previous iterate in
-    its own variables and never leaves the server.
-
-    What it costs. A warm request is not reproducible on its own — it depends on
-    every solve before it — so the failure cache cannot key it and is skipped for
-    warm steps (the cold fallback below is still cached). And the run then follows
-    ONE branch of a multi-modal problem instead of re-drawing from the guess at
-    every length: a good branch is kept, a mediocre one is kept too. What it buys
-    is the cheap solve, which under `reopt_blocking` is wall time the simulation is
-    frozen for.
-
-    A warm step that comes back `"failed"` falls back to ONE cold `/init` from the
-    parametric guess, under the same rule as `reopt_retry_el_offset`:
-    blocking mode only, since without the hold there is nothing to retry within.
-    That `/init` also RESETS the session, so the warm starts that follow it
-    continue from the new solve.
-    """
+    "Re-optimize with warm-started `/step` instead of a cold `/init` each time"
     use_step::Bool = false
-    """
-    Laps between re-optimizations. Requests go out on a lap boundary because that
-    is where a path swap is cheapest, and never while a solve is still running.
-    """
+    "Laps between re-optimizations"
     reopt_every_n_laps::Int64 = 2
     "Max re-optimizations per run; bounds wall time"
     max_reopt::Int64 = 4
-    """
-    Seconds over which a new path replaces the old one ([`blend_paths`](@ref)).
-    Installing one in a single step is a step in the cross-track error, and the
-    guidance answers a step with steering.
-    """
+    "Time over which a new path is blended into the old one [s]"
     path_blend_time = 4.0
-    """
-    Fraction of the smaller of two blend ENDPOINTS' own `path_min_radius` (both
-    at the run's flying resolution) that every sampled point of the prospective
-    blend between them must clear (`blend_folds`,
-    `examples/simple_opt_reelout.jl`). Checked once, BEFORE a candidate is ever
-    installed — `blend_paths` interpolates two closed curves point BY INDEX,
-    which can fold the curve IN BETWEEN even when neither endpoint does, and a
-    folded blend reads a near-zero radius against endpoints that are not, so
-    this does not need to be tight.
-    """
+    "Fraction of the endpoints' min radius every blended path must clear [-]"
     blend_fold_margin = 0.5
-    """
-    Points `blend_folds` samples `w` at across `[0, 1]` when checking a
-    prospective blend before installing it. A fold zone measured 2026-08-20
-    spanned `w` = 0.2-0.78 (more than half the blend), so a coarse sweep is
-    enough to catch one; it does not need to find the fold's exact extent, only
-    that it exists somewhere in the range.
-    """
+    "Points at which a prospective blend is sampled for folds"
     blend_probe_points::Int64 = 21
-    """
-    Fresh solves `examples/simple_opt_reelout.jl` requests, holding the
-    simulation, if a re-optimization reply's own prospective blend folds
-    (`blend_folds`) even though the reply itself clears the curvature/clearance/
-    elevation gates. Exhausting this without a fold-free reply keeps flying the
-    CURRENT path and falls back to the ordinary `reopt_every_n_laps` schedule,
-    same as any other rejected reply.
-    """
+    "Fresh solves allowed when a reply is rejected by the blend or power gates"
     blend_max_retries::Int64 = 3
-    """
-    Fraction of the STARTUP install's predicted power a re-optimization reply
-    must clear, checked alongside `blend_folds` and retried the same way
-    (`examples/simple_opt_reelout.jl`). A pattern collapsed to near-zero
-    amplitude trivially clears curvature/clearance margin and `blend_folds` —
-    there is almost no pattern left to be tight, low, or foldable — but is a
-    candidate no run should fly: measured 2026-08-20, 2094 W predicted against
-    ~22000 W everywhere else in the same run, installed anyway because nothing
-    else caught it. Checked against the STARTUP prediction specifically, not
-    the previous install's, so a chain of retries cannot ratchet the floor down
-    alongside itself.
-    """
+    "Min fraction of the startup install's predicted power a reply must reach [-]"
     min_power_frac = 0.3
-    """
-    Fraction of the PREVIOUS INSTALL's predicted power a re-optimization reply
-    must clear, retried exactly like `min_power_frac`; `0.0` is off. Guards the
-    other way the solver goes wrong: not a collapsed pattern but a different,
-    much worse local optimum at a length a few metres further out — measured
-    2026-08-22, 2100 W at 264 m followed by 1065 W at 312 m, installed and flown
-    for 27 % of the reel-out. `min_power_frac` cannot see that, since predicted
-    power RISES with tether length and its startup reference is the run's
-    minimum.
-
-    Skipped until one re-optimization has installed a path, because the startup
-    path is solved at the starting length from the parametric guess and the
-    first re-anchoring may legitimately predict far less (v03: 200 -> 116 W).
-    That step keeps `min_power_frac` as its only power gate. Beyond it, every
-    good step measured across 3.5-10 m/s stays above 0.93 of the previous
-    install (the worst is 0.93 at 11 m/s; the 3.5-10 m/s runs never go below
-    0.98), so 0.85 rejects a wrong basin with room to spare. Raised from 0.7 on
-    2026-09-18, where Cabauw 6 m/s re-optimized to 5338 W against the 7391 W it
-    replaced — a ratio of 0.72 the old floor let through, then flown for 48 % of
-    the reel-out.
-
-    Needs no anti-ratchet of its own: a rejected reply is never installed, so
-    the reference cannot move while a retry chain runs.
-    """
+    "Min fraction of the previous install's predicted power a reply must reach [-]"
     min_power_frac_prev = 0.85
-    """
-    Mean wind [m/s] below which BOTH power gates are bypassed for a candidate
-    whose predicted power is NEGATIVE. Below it the optimizer's winch model is
-    out of its own domain — its softminus floor puts the representable tether
-    force at ~883 N against a measured 585 N mean at 3 m/s — so a negative
-    prediction says the model cannot represent the regime, not that the path is
-    bad, and the retry chain only burns wall time (measured 2026-08-25 at 3 m/s:
-    -342/-397/-328 W against a 198 W startup, 3 retries, 8 s held, old path
-    kept). A POSITIVE prediction is still gated at any wind, and nothing changes
-    at or above this speed. `0.0` is off. See `PlanWinchSpeed.md`.
-    """
+    "Wind below which negative power predictions bypass the power gates [m/s]"
     power_gate_wind_min = 4.0
-    """
-    Largest factor by which a re-optimization reply may be BIGGER than the path
-    it replaces — the larger of its azimuth half-width ratio and its elevation
-    span ratio, [`pattern_size_growth`](@ref) — retried exactly like
-    `min_power_frac`; `0.0` is off. The continuity gate: the reply is compared
-    with the previous INSTALL's raw curve (the startup path included), not with
-    any prediction.
-
-    Guards the failure the power gates cannot see. A pattern shrinks as the
-    tether grows (7 m/s, 2026-09-21: ±22° -> ±16° -> ±12.5° -> ±8.8°), so a
-    reply that jumps UP in size is a different local optimum, and one that sits
-    in the corner of the pattern box passes every other gate BY BEING BIG: wide
-    turns clear the curvature margin (1.17 against 0.82), a tall pattern clears
-    the clearance floor, and its predicted power is only mildly worse (10989 W
-    against 12260 W, 0.896 of the previous install against a 0.85 gate).
-    Measured on that run: the warm step at 247 m answered the ±16° / 10° tall
-    optimum with a ±24.2° / 15.5° tall one (azimuth at 24.2 of the 25° box,
-    elevation half-span binding at its 8° ceiling), growth 1.57, installed, and
-    the lap it was flown in took 24.8 s against 15.6-15.8 s for its neighbours
-    at 13 % less power. `1.3` refuses it with room to spare and leaves the
-    ordinary course of a run alone: over the 26 archived runs with a path record
-    (maasvlakte 3.5-7 m/s, cabauw 4-5.75 m/s) every other install is at 1.13 or
-    below, most of them shrinking. The one exception is the kept cabauw 5.5 m/s
-    run, whose 263 m install grew 1.76x with MORE power predicted (19360 W
-    against 18459) and a 26.5 s lap after it; the run passed all criteria, so
-    that is the known cost of this gate — a re-ask from the cold guess there,
-    not a lost run. Only growth is gated, shrinking is never refused. Lowering
-    `pattern_azimuth_max` instead would bind at startup on every scenario that
-    flies ±21-25° (low wind, high wind, and the whole Cabauw set).
-    """
+    "Max size growth of a reply relative to the previous install [-]; `0.0` = off"
     max_size_growth = 1.3
-    """
-    Tighten the pattern box SENT with every re-optimization request to this
-    factor times the previous install's size, so the solver is steered back into
-    the basin being flown instead of answering from the tall or wide one and
-    being refused by `max_size_growth` afterwards — three cold retries (~4 s of
-    frozen simulation each) and then the old path flown out to the end of the
-    reel-out. `0` = off, the box stays the fixed `pattern_*` one.
-
-    Measured 2026-09-21, Cabauw 6 m/s (`_165423`, `_155052`): the warm step at
-    241 and 303 m answered the 13°-tall figure flown with 1.5-1.8x taller ones,
-    rejected after 3 retries each, and the 191 m path was flown to 380 m
-    (RMS d 1.51 -> 1.66°, peak force 7589 -> 8267 N). The fixed 8° elevation
-    cap had not stopped them because it is an RMS half-span (see
-    `PatternLimits`), well under a lemniscate's peak half-span; this bound is
-    taken in the server's own measure of the previous install, so it binds
-    where the gate would refuse.
-
-    `azimuth_max` becomes `min(pattern_azimuth_max, factor * max|az|)`,
-    `elevation_amplitude_max` `min(the wind cap, factor * elevation_amplitude)`,
-    and the elevation RANGE is boxed to the previous install's top and bottom
-    each let out by `(factor - 1)/2` of its span — all of the previous install
-    (raw reply, no lift), and no side is ever loosened. The range bound is the
-    one that actually holds the gate's measure: the RMS cap alone let a reply
-    sitting exactly on its 1.3x ceiling come back 1.50x taller peak to peak
-    (`_171552`, the tall basin's figure is peakier). The gate stays as the
-    backstop. Each install is bounded by the one actually flown before it, and
-    the fixed caps stay the ceiling.
-
-    The bound compounds: each warm step may grow the pattern by up to 1.3x, so
-    a chain can walk into the wide, tall basin one step at a time (Cabauw
-    7 m/s: ±19.9° x 15.7° at 190 m, ±23.8° x 19.3° at 236 m, ±26.2° x 21.5° at
-    303 m). 1.1 was flown on 2026-10-03 (Cabauw 5.75-9 m/s) and kept the paths
-    compact, but measured power fell at 6, 8 and 9 m/s (21438 -> 21216 W,
-    21802 -> 21206 W, 23045 -> 22734 W) and 7 m/s only moved from 20653 to
-    20758 W: the box also confines the elevation RANGE to the previous
-    install's ±5 % of span, which stops the path from shifting its centre
-    (8 m/s first re-optimization: 23850 W predicted against 24407 W at 1.3).
-    Kept at 1.3; `challenge_growth` catches the drift instead.
-    """
+    "Box sent with re-optimizations, as factor on the previous install's size; `0` = off"
     size_box_growth = 1.3
-    """
-    Size growth above which an ACCEPTED re-optimization reply that also
-    predicts LESS power than the previous install is cross-checked by one cold
-    solve ([`wants_challenge`](@ref)); `0` = off. The challenger is seeded at the
-    previous install's centre elevation, in the same box and under the same turn
-    radius, and whichever of the two passes the gate with more predicted power
-    is installed.
-
-    Guards the drift the two size bounds above cannot see: each warm step grows
-    the pattern by less than 1.3x, so the chain walks into the wide basin one
-    step at a time. One cold seed lands in the narrow basin only by luck
-    (2026-10-03, 7 m/s at 236 m: seeds 24.9-25.2° found ±17-19°, 24.6° and
-    25.5° the wide paths); flown at 7 m/s it won both of its challenges and
-    raised the measured power by 1 % (20653 -> 20849 W). Measured 2026-10-03 over the 45 re-optimizations of the
-    Cabauw set: exactly three grew AND lost power — 7 m/s at 236 m (x1.23,
-    0.980 of the previous prediction), 8 m/s at 284 m (x1.26, 0.968) and
-    10 m/s at 294 m (x1.27, 0.964) — and every other growth above 1.1 gained
-    at least 1.2 %. A cold solve from the previous centre found a narrower path
-    for all three: 24663 against 23949 W, 25056 against 23906 W, 24353 against
-    23471 W, and the narrow paths fly closer to their prediction (0.92-0.95
-    measured/predicted against 0.80-0.89 for the wide ones). Costs one solve,
-    ~15-25 s of frozen wall time, per trigger.
-    """
+    "Growth above which a power-losing reply is challenged by a cold solve; `0` = off"
     challenge_growth = 1.1
-    """
-    Send `k_v` as a DESIGN VARIABLE rather than a constant, so the optimizer
-    solves for the winch gain and the path together under its own saturating
-    tension curve. The server brackets it a factor `K_V_BRACKET_FACTOR` (2.0)
-    either side of the value sent and returns the optimized one, which the run
-    then flies — a path solved for one gain is not flyable with another.
-
-    The lever for getting mean force under `f_max`: reeling out faster sheds
-    force, so at high wind the optimizer raises `k_v` until the path fits inside
-    the bound it was given. Measured before this existed, the flat
-    per-wind-speed `kv` tuning ran 8394 N mean at 9 m/s and 8150 N at 10
-    against an `f_max` of 8000 N, i.e. the request was for a path the winch law
-    could not hold. `false` keeps the gain fixed at whatever
-    the `kv` of `data/wc_settings.yaml` supplies.
-    """
-    optimize_k_v::Bool = false
-    """
-    Seconds between `/status` polls while a solve is running. SIMULATED seconds
-    when `reopt_blocking` is false, WALL-CLOCK seconds when it is true (nothing is
-    simulated then). The solve takes 7-13 s of wall time (measured), so polling
-    faster only adds HTTP round trips.
-    """
+    "Interval between `/status` polls while a solve runs [s]"
     reopt_poll_interval = 0.5
-    """
-    Halt the simulation while a re-optimization runs, instead of flying on and
-    collecting the reply when it lands.
-
-    `false` keeps the run realtime-ish: the kite keeps flying through the 7-13 s
-    solve, so the path arrives anchored to a radius the run has already left, by
-    the reel-out speed times the solve time. `true` freezes the loop at the
-    request, so the reply is anchored to the length it was asked for, at the cost
-    of that wall time. Only the accounting differs, not the physics: the frozen
-    time is reported as `traj_opt.reopt.blocked` and taken out of
-    `performance.realtime_factor`.
-    """
+    "Halt the simulation while a re-optimization runs"
     reopt_blocking::Bool = true
-    """
-    Elevation offset [deg] added to `guess_el_center` for ONE retry when a
-    re-optimization comes back `"failed"`; `0.0` never retries.
-
-    The optimizer has isolated failure pockets in tether length — measured
-    2026-08-18 at 6 m/s, 240 and 243 m fail from the shipped guess while 246 m
-    solves to 8931 W — and it falls into two bad basins there: the pattern
-    collapses to zero amplitude, or it runs away to the `C_beta` bound. A retry
-    from a different seed usually lands elsewhere.
-
-    This is NOT the startup solve, which retries only through
-    `startup_retry_el_offsets` and reports it. A re-optimization is a
-    candidate that still has to pass the curvature, clearance and elevation gates
-    before it is installed, and a failure just means flying on with the current
-    path — so a second attempt costs one solve and risks nothing.
-
-    Only applies when `reopt_blocking` is true; without the hold there is nothing
-    to retry within.
-    """
+    "Guess elevation offset for one retry of a failed re-optimization [deg]; `0.0` = off"
     reopt_retry_el_offset = 2.0
-    """
-    Elevation offsets [deg] added to the startup guess's centre, tried in order
-    when the STARTUP solve throws 422; empty never retries and the first 422 ends
-    the run.
-
-    A retry seed that converges is a different optimum, so it is not silent: the
-    run warns which seed was flown and the summary carries it as
-    `traj_opt.guess.el_center_retry_offset_deg`. The path still has to pass the
-    startup curvature and clearance gates. Why it exists: the 10 m/s startup at
-    150 m sits on a fold — an identical request threw 422 on 2026-08-30 and
-    2026-09-13 and converged in between, decided by floating-point noise from
-    IPOPT iteration 14 on.
-
-    The length of the list is a budget of requests actually SENT, not of seeds
-    looked at: a seed the failure cache already knows is skipped for free, and
-    once the listed seeds are used up the run walks outward by whole degrees
-    (-1, +1, -2, +2, … to ±10) so a cached seed is replaced by an untried one.
-    A converging walked-out seed is reported like any other retry.
-    """
+    "Guess elevation offsets tried in order when the startup solve fails [deg]"
     startup_retry_el_offsets::Vector{Float64} = Float64[]
-    """
-    Extra elevation [deg] a path must clear above `FC_Settings.run.min_elevation`
-    before it is flown.
-
-    The gate compares the REFERENCE path's lowest point; the criterion scores the
-    FLOWN one, and the kite flies below its reference near the lobe tips where the
-    steering is already clamped. Measured on 2026-08-18, twice: reference 10.0° ->
-    flown 7.0°, and reference 10.0° -> flown 7.3°. Without an allowance the gate
-    admits paths that break the criterion it is supposed to protect, which is what
-    happened on the first stage-4 run. `0.0` gates on `min_elevation` alone.
-    """
+    "Margin above `min_elevation` a path's lowest point must have [deg]"
     candidate_elevation_margin = 3.0
 end
 
@@ -928,12 +191,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.min_height >= 0 || error("min_height must be >= 0, got $(tos.min_height).")
     tos.reopt_every_n_laps >= 1 ||
         error("reopt_every_n_laps must be >= 1, got $(tos.reopt_every_n_laps).")
-    for (name, value) in (("pattern_elevation_min", tos.pattern_elevation_min),
-                          ("pattern_elevation_max", tos.pattern_elevation_max),
-                          ("pattern_azimuth_max", tos.pattern_azimuth_max),
+    for (name, value) in (("pattern_azimuth_max", tos.pattern_azimuth_max),
                           ("pattern_azimuth_max_high", tos.pattern_azimuth_max_high),
-                          ("pattern_azimuth_amplitude_min",
-                           tos.pattern_azimuth_amplitude_min),
                           ("pattern_elevation_amplitude_max",
                            tos.pattern_elevation_amplitude_max),
                           ("pattern_elevation_amplitude_max_high",
@@ -946,10 +205,6 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.pattern_elevation_amplitude_max_wind_height >= 0 ||
         error("pattern_elevation_amplitude_max_wind_height must be >= 0, got "*
               "$(tos.pattern_elevation_amplitude_max_wind_height).")
-    tos.pattern_elevation_max == 0 ||
-        tos.pattern_elevation_max > tos.pattern_elevation_min ||
-        error("pattern_elevation_max ($(tos.pattern_elevation_max)) must be greater "*
-              "than pattern_elevation_min ($(tos.pattern_elevation_min)).")
     tos.input_depower_wind_ref >= 0 ||
         error("input_depower_wind_ref must be >= 0, got "*
               "$(tos.input_depower_wind_ref).")
@@ -961,9 +216,6 @@ function TrajOptSettings(filename::String; path = skc_data_path())
               "$(tos.input_depower_seed_max).")
     tos.turn_radius_headroom >= 1 ||
         error("turn_radius_headroom must be >= 1, got $(tos.turn_radius_headroom).")
-    tos.turn_radius_lap_reelout_m >= 0 ||
-        error("turn_radius_lap_reelout_m must be >= 0, got "*
-              "$(tos.turn_radius_lap_reelout_m).")
     tos.candidate_elevation_margin >= 0 ||
         error("candidate_elevation_margin must be >= 0, got "*
               "$(tos.candidate_elevation_margin).")
@@ -1006,18 +258,11 @@ end
 """
     turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
 
-Compute the reel-out per lap [m] adapted to wind speed using a linear approximation.
-
-Fitted from measured data across wind speeds 4-9 m/s:
-`turn_radius_lap_reelout_m = 1.987 * v_wind + 14.18` (R² = 0.949)
-
-If `tos.turn_radius_lap_reelout_m > 0`, uses it as a fallback (for fixed assumption).
-Otherwise, computes from the linear model fitted to empirical reel-out data.
+Reel-out per lap [m] assumed for the startup turn-radius request, from a linear
+fit to measured data across wind speeds 4-9 m/s:
+`1.987 * v_wind + 14.18` (R² = 0.949).
 """
 function turn_radius_lap_reelout(tos::TrajOptSettings, v_wind::Float64)
-    if tos.turn_radius_lap_reelout_m > 0
-        return tos.turn_radius_lap_reelout_m
-    end
     return 1.987 * v_wind + 14.18
 end
 
@@ -1025,8 +270,7 @@ end
     opt_length(tos, l) -> Float64
 
 Tether length to SEND to the optimizer, rounded to `tos.opt_length_round` [m]
-(`0.0` sends `l` unchanged). The flown `l_set` is never rounded — see the setting's
-docstring for why the request is.
+(`0.0` sends `l` unchanged). The flown `l_set` is never rounded.
 
 Every constraint that depends on the length is sized at this one too, not at the
 flown length: the settled `l_set` moves in the 5th decimal with the plant

@@ -35,7 +35,7 @@ Base.@kwdef struct WinchParams
     # factor `K_V_BRACKET_FACTOR` (2.0) either side of the value sent and solves for
     # it under its own saturating tension curve, so the path and the gain that flies
     # it are optimized together. The reply's `k_v` is then the OPTIMIZED one and the
-    # path is not flyable with the value sent in — see `apply_optimized_kv!`.
+    # path is not flyable with the value sent in. The run always sends `false`.
     optimize_k_v::Bool = false
     # Corner sharpness of the two soft saturations the server applies to the
     # tension curve [1/N]; larger is sharper, the transition spanning a band of
@@ -66,7 +66,7 @@ Base.@kwdef struct WinchParams
     # acceleration-limited control. `nothing` leaves the server on its own default.
     # The reply is then the best path for ANY winch in that force band, so its
     # predicted power is an UPPER BOUND, not a prediction of this k_v law -- see
-    # TrajOptSettings.opt_winch_mode.
+    # TrajOptSettings.free_speed_reference_points.
     winch_mode::Union{String, Nothing} = nothing
     # Sharpness [s/m] of the soft reel-speed clamp at `v_max`, the server-side
     # mirror of `calc_vro_soft`'s `_clamp_v_sat` (`WCSettings.v_sat_beta`): the
@@ -196,7 +196,7 @@ clamp), a finite `wc.v_sat_beta` (`Inf` is a hard clamp, the server's plain law)
 and `v_max == wc.v_sat`. The server's tension curve then rises to `f_max` at
 `v_max` like the controller's, instead of ending at about 6.9 kN there.
 """
-winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
+winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing,
               f_max = wc.f_high_awe_trim > 0 ? wc.f_high_awe_trim : wc.f_high,
               use_awe_trim = wc.use_awe_trim, winch_mode = nothing) =
     WinchParams(; mode = "reelout", k_v = wc.kv, f_min = wc.f_low,
@@ -206,7 +206,6 @@ winch_from_wc(wc; v_max = wc.v_sat, p_max = nothing, optimize_k_v = false,
                 f_max = Float64(f_max),
                 v_max = v_max === nothing ? nothing : Float64(v_max),
                 p_max = p_max === nothing ? nothing : Float64(p_max),
-                optimize_k_v = Bool(optimize_k_v),
                 use_awe_trim = Float64(use_awe_trim),
                 v_reel_in = Float64(wc.v_reel_in),
                 reel_in_beta = Float64(wc.reel_in_beta),
@@ -234,11 +233,11 @@ end
 
 """
     optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
-        -> (; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt)
+        -> (; inflow, cap_wind, opt_awe_trim, winch, winch_first_lap, winch_reopt)
 
 What the optimizer is SENT about THIS run, decoupled from the local winch law (the solve
 must converge at a force the kite can pull): the `inflow`, the wind the elevation-cap step
-reads (`cap_wind`), the AWETrim setting and mode, and the winch of the three kinds of solve:
+reads (`cap_wind`), the AWETrim setting, and the winch of the three kinds of solve:
 `winch` for the STARTUP solve, the plain runtime ceiling `f_high_nominal`, never
 `rcs.f_high_awe_trim`; `winch_first_lap` under `first_lap_force_frac`, so the startup path is
 solved against the ceiling lap 1 flies under; and `winch_reopt` for the re-optimizations (lap 2
@@ -248,15 +247,11 @@ function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
     inflow = inflow_from_settings(project_set)
     cap_wind = cap_wind_speed(tos, project_set, inflow.wind_speed)
     opt_awe_trim = tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim
-    opt_winch_mode = isempty(tos.opt_winch_mode) ? nothing : tos.opt_winch_mode
-    winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                          winch_mode = opt_winch_mode, f_max = f_high_nominal)
+    winch = winch_from_wc(rcs; use_awe_trim = opt_awe_trim, f_max = f_high_nominal)
     winch_first_lap = fcs.winch.first_lap_force_frac < 1 ?
-        winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                      winch_mode = opt_winch_mode,
+        winch_from_wc(rcs; use_awe_trim = opt_awe_trim,
                       f_max = f_high_nominal * fcs.winch.first_lap_force_frac) : winch
-    winch_reopt = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v, use_awe_trim = opt_awe_trim,
-                                winch_mode = opt_winch_mode)
+    winch_reopt = winch_from_wc(rcs; use_awe_trim = opt_awe_trim)
     @info @sprintf("Optimizer conditions: %.1f m/s at 6 m from %.0f°, profile_law %d, \
                     z0 = %g m | winch kv = %.4f, i.e. %.1f m/s at f_high = %.0f N | \
                     depower seed %.3f m%s.",
@@ -266,5 +261,5 @@ function optimizer_conditions(tos, fcs, project_set, rcs, f_high_nominal)
                    inflow.wind_speed > tos.input_depower_wind_ref ?
                        @sprintf(" (%.2f + %.3f per m/s above %.1f m/s)", tos.input_depower,
                                 tos.input_depower_per_wind, tos.input_depower_wind_ref) : "")
-    return (; inflow, cap_wind, opt_awe_trim, opt_winch_mode, winch, winch_first_lap, winch_reopt)
+    return (; inflow, cap_wind, opt_awe_trim, winch, winch_first_lap, winch_reopt)
 end

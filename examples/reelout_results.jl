@@ -211,7 +211,7 @@ end
 
 "The summary's `traj_opt.feasibility` section: the curvature gates and what phase 5 inherited"
 function feasibility_block(setup, st::RunState)
-    (; tos, feas, margin5, c1_setpoint) = setup
+    (; tos, feas, margin5, c1_setpoint, inflow) = setup
     block = OrderedDict{String, Any}(
         "min_required" => (tos.min_feasibility_margin,
             "min_feasibility_margin of data/traj_opt.yaml [-]"),
@@ -226,9 +226,10 @@ function feasibility_block(setup, st::RunState)
              while the run flies the curve at the anchor [m]"),
         "turn_radius_scale" => (round(st.opt_r_scale; digits = 3),
             "the two corrections together, as sent [-]"),
-        "turn_radius_lap_reelout_m" => (tos.turn_radius_lap_reelout_m,
-            "reel-out per lap ASSUMED for the startup request, the only one with no \
-             reply to measure it off [m]"))
+        "turn_radius_lap_reelout_m" => (round(turn_radius_lap_reelout(tos, inflow.wind_speed);
+                                              digits = 2),
+            "reel-out per lap ASSUMED for the startup request, fitted to the wind; the \
+             only request with no reply to measure it off [m]"))
     if !isnan(feas.c1)
         block["c1_pattern"] = (round(feas.c1; digits = 4),
             "turn-rate gain the startup gate and requests read the path at: at the \
@@ -275,7 +276,7 @@ re-optimization, the elevation lift and what it cost (`scored`, from
 `score_log`), the droop profile, clearance, inflow and winch.
 """
 function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
-    (; fcs, tos, inflow, winch, rc, fec, opt_chain, opt_box, opt_kv_log, opt_depower_log,
+    (; fcs, tos, inflow, winch, rc, fec, opt_chain, opt_box, opt_depower_log,
        replay_paths, el_center_seed, startup_seed_offset) = setup
     (; sl, fig8m, az_amp_mean, el_h_mean, span_margins, span_worst, el_min_final, lift_mean) = scored
     droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
@@ -315,13 +316,6 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                        "the same reply as V3Kite rel_depower, converted with the \
                         depower conversion in force at run time; what a \
                         replot's u_d panel draws [-]"))
-            end),
-            "k_v_optimized" => OrderedDict(time_keyed(opt_kv_log) do e
-                (e.t, (round(e.k_v; digits = 5),
-                       @sprintf("optimizer's k_v at L = %.0f m, %+.1f %% of the %.5f \
-                                 seed kv of wc_settings%s",
-                                e.l, 100 * (e.k_v / winch.k_v - 1), winch.k_v,
-                                e.at_bound ? "; AT ITS BRACKET EDGE" : "")))
             end)),
         "path" => OrderedDict(
             "points" => (st.n_path_initial, "points of the path installed before the run"),
@@ -475,17 +469,9 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
             "profile_law" => (inflow.profile_law, "0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4-6=CUSTOM_*")),
         "winch" => OrderedDict(
             "k_v" => (winch.k_v, "v_set = k_v * sqrt(force) sent to the optimizer [-]"),
-            "optimize_k_v" => (winch.optimize_k_v,
-                "k_v sent as a design variable; the reply's value is then the one flown"),
             # `rc.wcs`: the gain the RUN flew is the one in the object the reel-out
             # law actually read, not the one the summary would like it to be.
-            "k_v_flown" => (round(rc.wcs.kv; digits = 5),
-                isempty(opt_kv_log) ?
-                    "k_v the run actually flew; == k_v, the optimizer did not move it" :
-                    @sprintf("k_v the run actually flew, last of %d optimizer change(s)%s",
-                             length(opt_kv_log),
-                             any(e -> e.at_bound, opt_kv_log) ?
-                                 "; one hit the bracket edge, widen it to chase further" : "")),
+            "k_v_flown" => (round(rc.wcs.kv; digits = 5), "k_v the run actually flew"),
             "f_min_N" => (winch.f_min, "minimum winch force sent [N]"),
             "f_max_N" => (winch.f_max, "maximum winch force sent [N]"),
             "force_limit" => (rc.wcs.force_limit,

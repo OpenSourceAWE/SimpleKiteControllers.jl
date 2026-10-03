@@ -94,7 +94,7 @@ export scenario_site, selected_scenarios_dir, apply_windspeed_override!
 export run_example, script_inputs, muted, latest_global, first_error_line
 
 # One reel-out run of examples/simple_opt_reelout.jl: its state, and its loop around the model's step!.
-export RunState, step_commands!, record_step!, check_overspeed, apply_optimized_kv!
+export RunState, step_commands!, record_step!, check_overspeed
 export RunSetup
 
 # A run's log messages written to a file, and what they say about its startup retries.

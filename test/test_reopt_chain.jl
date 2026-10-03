@@ -51,7 +51,7 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         tos = TrajOptSettings()
         tos.use_step = true; tos.reopt_blocking = blocking; tos.reopt_poll_interval = poll
         tos.reopt_every_n_laps = 1; tos.max_reopt = max_reopt; tos.blend_max_retries = retries
-        tos.optimize_k_v = false; tos.fly_opt_depower = false
+        tos.fly_opt_depower = false
         fec = FigureEightController(fcs; dt = 0.02)
         set_path!(fec, flown...; up_loops)
         oc = isnothing(server) ? OptChain("http://127.0.0.1:1"; dir = mktempdir(), replay = replies) :
@@ -68,8 +68,7 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
                  feas = (; c1 = NaN), el_floor = 13.0, wing_lift = (az, el) -> zero(az),
                  power_gate_off = pred -> false, margin5 = Phase5MarginState(),
                  phase5_margin_at = (az, el) -> 1.7, opt_depower_log = NamedTuple[],
-                 project_set = (; v_wind = 8.0), wc = nothing, rc = nothing,
-                 opt_kv_log = NamedTuple[])
+                 project_set = (; v_wind = 8.0), wc = nothing, rc = nothing)
         st = RunState(; n_path = length(fec.az_path), fig8_idx_progress = length(fec.az_path),
                       opt_paths_raw = [flown], opt_paths_at = [(0.0, 0)], opt_power_pred = power,
                       raw_az = flown[1], raw_el = flown[2], depower_flown = 0.27,

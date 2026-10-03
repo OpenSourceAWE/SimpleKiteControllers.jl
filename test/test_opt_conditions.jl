@@ -74,11 +74,9 @@ using KiteUtils: KiteUtils
         @test c.winch_reopt.f_max == 6000.0
         @test c.opt_awe_trim == (tos.opt_awe_trim >= 0 ? tos.opt_awe_trim : rcs.use_awe_trim)
         @test c.winch.use_awe_trim == c.opt_awe_trim
-        @test isnothing(c.opt_winch_mode) && isnothing(c.winch.winch_mode)
+        @test isnothing(c.winch.winch_mode) && !c.winch.optimize_k_v
         c = optimizer_conditions(tos, FC_Settings(; first_lap_force_frac = 1.0), set, rcs, 7200.0)
         @test c.winch_first_lap === c.winch                  # no first-lap reduction
-        tos.opt_winch_mode = "free_speed"
-        @test optimizer_conditions(tos, fcs, set, rcs, 7200.0).winch_reopt.winch_mode == "free_speed"
     end
 end
 nothing

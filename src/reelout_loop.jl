@@ -707,44 +707,10 @@ function evaluate_candidate!(st::RunState, setup, tab, phase, l_now, el_target, 
 end
 
 """
-    apply_optimized_kv!(setup, tab, t, l_now)
-
-Move the winch gain the optimizer chose out of a `/trajectory` reply and into the
-`WCSettings` the run reads, so it flies the `k_v` the path was solved for. `wc`,
-`rcs` and `rc.wcs` are one object, and every sub-controller of `rc` holds a
-reference to it, so a single assignment reaches all of them. A reply that did not
-optimize the gain carries no `k_v` under `optimized_parameters` and this is then a
-no-op. A gain that ran into its own bracket is reported: the value is the edge of
-the box, not an optimum.
-"""
-function apply_optimized_kv!(setup, tab, t, l_now)
-    (; tos, wc, rc, opt_kv_log) = setup
-    tos.optimize_k_v || return
-    params = get(tab, "optimized_parameters", nothing)
-    raw = params === nothing ? nothing : get(params, "k_v", nothing)
-    raw === nothing && return
-    k_v = Float64(raw)
-    k_v > 0 || return
-    at_bound = something(get(params, "k_v_at_bound", false), false)
-    if isempty(opt_kv_log) || abs(k_v - last(opt_kv_log).k_v) > 1e-9
-        @info @sprintf("  ... optimizer chose k_v = %.5f at L = %.0f m (was %.5f)%s",
-                       k_v, l_now, wc.kv, at_bound ? " — AT ITS BRACKET EDGE" : "")
-        at_bound && @warn "k_v hit the K_V_BRACKET_FACTOR bound: the optimizer wanted \
-                           to retune further than it was allowed, so this is the edge \
-                           of the box rather than an optimum."
-    end
-    wc.kv = k_v
-    @assert rc.wcs === wc "the reel-out controller must read the WCSettings the gain is written to"
-    # EVERY accepted install with a gain, repeats included; a rejected candidate never reaches this function.
-    push!(opt_kv_log, (; t, l = l_now, k_v, at_bound))
-    return
-end
-
-"""
     install_candidate!(st, setup, t, phase, l_now, el_target, tab, cand) -> event
 
 Install a candidate that passed the gate: queue the blend from the aligned old path, move the scored
-reference, the optimizer's depower and `k_v` with it, re-base the lap counter, and record the install
+reference and the optimizer's depower with it, re-base the lap counter, and record the install
 and its phase-5 margin. Returns the cycle's event.
 """
 function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab, cand)
@@ -770,7 +736,7 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
     push!(st.opt_paths_raw, cand_raw)
     push!(st.opt_paths_at, (t, phase))
     st.blend_t0 = t
-    # k_v and input_depower move only for the `tab` that made it here.
+    # input_depower moves only for the `tab` that made it here.
     let l_dp = Float64(tab["optimized_parameters"]["input_depower"])
         st.depower_flown_opt = awetrim_depower_to_v3kite(l_dp)
         st.depower_blend_from = st.depower_flown
@@ -778,7 +744,6 @@ function install_candidate!(st::RunState, setup, t, phase, l_now, el_target, tab
         st.depower_blend_t0 = t
         push!(opt_depower_log, (; t, l_dp, u_p_equiv = st.depower_flown_opt))
     end
-    apply_optimized_kv!(setup, tab, t, l_now)
     record_opt_success!(opt_chain)
     abs(el_target - st.el_applied) > 1e-6 &&
         push!(st.el_shift_events,

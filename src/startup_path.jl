@@ -43,8 +43,7 @@ function startup_solve(setup, params)
         @info @sprintf("Seeding solve at use_awe_trim %.3f before the startup \
                         request at %.3f; see opt_warm_start_awe_trim.",
                        tos.opt_warm_start_awe_trim, winch.use_awe_trim)
-        warm_winch = winch_from_wc(rcs; optimize_k_v = tos.optimize_k_v,
-                                   use_awe_trim = tos.opt_warm_start_awe_trim)
+        warm_winch = winch_from_wc(rcs; use_awe_trim = tos.opt_warm_start_awe_trim)
         seed_trajectory = chain_step(opt_chain, StepParams(opt_length(tos, l_set), warm_winch,
                                                            reply.trajectory)).trajectory
     end
@@ -169,7 +168,6 @@ function adopt_startup_path!(setup, st::RunState)
     st.opt_table = chain_trajectory(opt_chain)
     # Installed above, so applied: stored for a rerun that sends the same requests.
     record_opt_success!(opt_chain)
-    apply_optimized_kv!(setup, st.opt_table, 0.0, l_tether)
     st.opt_downloops = st.opt_table["spline"]["downloops"]
     st.opt_power_pred = Float64(st.opt_table["metrics"]["avg_power_W"])
     # The anchor ratio, now measured off the reply; guarded so a request that is off stays off.
@@ -358,7 +356,6 @@ function retry_startup!(setup, st::RunState)
             record_opt_success!(opt_chain)
             st.incumbent_score = att_score
             st.inc_result, st.inc_table, st.inc_raw = att_result, att_table, att_raw
-            apply_optimized_kv!(setup, st.inc_table, 0.0, st.l_set)
             # Only adoption moves these: a discarded retry leaves the `opt_*` state untouched.
             st.opt_result = st.inc_result
             st.opt_table = st.inc_table
