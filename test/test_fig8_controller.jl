@@ -1090,6 +1090,13 @@ end
         @test attractor_distance(fcs, 0.0, 100.0) == attractor_distance(fcs, 10.0, 100.0)
         # Ceiling: 2 x attractor_dist.
         @test attractor_distance(fcs, 60.0, 100.0) == 12.0
+        # Floor and ceiling ∝ 1/L with a reference length: a fixed arc length in metres.
+        fcs.pattern.attractor_dist_ref_length = 150.0
+        @test attractor_distance(fcs, 11.8, 150.0) == 6.0
+        @test attractor_distance(fcs, 11.8, 300.0) == 3.0
+        @test attractor_distance(fcs, 60.0, 100.0) == 18.0
+        fcs.pattern.attractor_lead_time = 0.0
+        @test attractor_distance(fcs, 30.0, 225.0) ≈ 4.0
         # wind_schedule: off by default, otherwise a ramp, rounded to 0.01 / 0.5°.
         fws = FC_Settings(; depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)
         @test wind_schedule(fws, 12.0) == (depower_setpoint = 0.27, f8_a = 30.0, f8_b = 12.0)

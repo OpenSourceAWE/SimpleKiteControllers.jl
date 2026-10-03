@@ -114,6 +114,8 @@ $(TYPEDFIELDS)
     el_center = 26.0
     "Arc Q -> attractor [deg]; the floor of a timed lead"
     attractor_dist = 10.0
+    "Tether length [m] where `attractor_dist` holds; floor ∝ 1/L; 0 = fixed"
+    attractor_dist_ref_length = 0.0
     "Attractor lead [s], 1-2 × `attractor_dist`; 0 = fixed"
     attractor_lead_time = 0.0
     "How much closer [deg] a global point must be for Q to jump"
@@ -709,20 +711,34 @@ function apply_wind_schedule!(fcs::FC_Settings, v_wind)
 end
 
 """
+    attractor_floor(fcs::FC_Settings, l_tether) -> Float64
+
+The floor [deg] of the attractor lead at tether length `l_tether` [m]: `fcs.pattern.attractor_dist`,
+scaled by `attractor_dist_ref_length / l_tether` when `fcs.pattern.attractor_dist_ref_length > 0`.
+Scaled, the floor is a fixed arc LENGTH, `attractor_dist` in rad times the reference length, so
+the guidance rate it sets no longer falls as the tether grows.
+"""
+function attractor_floor(fcs::FC_Settings, l_tether)
+    l_ref = fcs.pattern.attractor_dist_ref_length
+    return l_ref > 0 ? fcs.pattern.attractor_dist * l_ref / l_tether : fcs.pattern.attractor_dist
+end
+
+"""
     attractor_distance(fcs::FC_Settings, v_app, l_tether) -> Float64
 
 The attractor lead [deg] to fly at apparent wind `v_app` [m/s] and tether length
-`l_tether` [m]: a constant `fcs.pattern.attractor_dist` while `fcs.pattern.attractor_lead_time`
+`l_tether` [m]: the [`attractor_floor`](@ref) while `fcs.pattern.attractor_lead_time`
 is off, otherwise the arc that takes `attractor_lead_time` seconds to fly,
 `v_app` floored at `fcs.course.v_app_min` and the result clamped to
-`[attractor_dist, 2 * attractor_dist]`. Pure kinematics, no plant: the caller
+`[floor, 2 * floor]`. Pure kinematics, no plant: the caller
 writes it into `FigureEightSettings.attractor_distance` before each
 `navigate_fig8`.
 """
 function attractor_distance(fcs::FC_Settings, v_app, l_tether)
-    fcs.pattern.attractor_lead_time > 0 || return fcs.pattern.attractor_dist
+    floor_deg = attractor_floor(fcs, l_tether)
+    fcs.pattern.attractor_lead_time > 0 || return floor_deg
     lead = rad2deg(fcs.pattern.attractor_lead_time * max(v_app, fcs.course.v_app_min) / l_tether)
-    return clamp(lead, fcs.pattern.attractor_dist, 2 * fcs.pattern.attractor_dist)
+    return clamp(lead, floor_deg, 2 * floor_deg)
 end
 
 """

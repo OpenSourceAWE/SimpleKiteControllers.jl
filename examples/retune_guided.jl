@@ -154,18 +154,20 @@ function retune(data; target = 0.3, settings_keys = keys(RETUNE_STEPS), max_step
 end
 
 """
-    tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30) -> Vector
+    tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30,
+            settings = live_settings()) -> Vector
 
-Trade guided margin for tracking: lower `key` from the live settings by `step`
+Trade guided margin for tracking: lower `key` from `settings` (the live ones by default) by `step`
 per step while the worst guided disk margin stays at or above `floor`. The model
 does not rate tracking, so the result is the smallest `key` the margin allows,
 not a tracking optimum. Returns the trail, one `(; settings, α, move)` per step,
 the live settings first; `trail[end]` is the last setting that kept `floor`.
 """
-function tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30)
-    f = live_settings()
-    trail = [(; settings = f, α = worst_margin(data, f), move = "live")]
-    @info @sprintf("live: %s = %.5g, worst α guided = %.4f", key, get_fc_field(f, key), trail[end].α)
+function tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30,
+                 settings = live_settings())
+    f = settings
+    trail = [(; settings = f, α = worst_margin(data, f), move = "start")]
+    @info @sprintf("start: %s = %.5g, worst α guided = %.4f", key, get_fc_field(f, key), trail[end].α)
     trail[end].α >= floor || (@warn @sprintf("Live margin already below %.3f.", floor); return trail)
     for i in 1:max_steps
         g = deepcopy(trail[end].settings)

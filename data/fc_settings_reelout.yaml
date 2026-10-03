@@ -58,7 +58,13 @@ fc_settings:
     # maasvlakte 3.5/8.0 and cabauw 3.0 m/s pass all criteria, RMS d +20 - 29 %, power unchanged.
     # 9.75 -> 8.25 (2026-10-03, retune_guided.jl tighten, floor 0.51): worst guided disk margin
     # 0.523 -> 0.515, now maasvlakte 5 m/s; 8 m/s and up unchanged. Aim: lower RMS tracking error.
-    attractor_dist:      8.25    # Arc distance Q -> attractor; the FLOOR under a lead time [deg]
+    # Floor ∝ 1/L since 2026-10-03: a fixed arc of 25.3 m, 8.35° at 175 m (9.7° at 150 m, 3.8° at
+    # 380 m). Only attractor_dist * attractor_dist_ref_length matters; the smallest product keeping
+    # the worst guided margin of the 22 scenarios >= 0.51 is 8.31° x 175 m (the same at L_ref 150-300).
+    # Replays on the archived paths: RMS d -31 % maasvlakte 3.5, -28 % 5, -20 % 8, -25 % cabauw 4,
+    # -5 % 6, -3 % 9 m/s; power within 2 %, max force unchanged, all criteria passed.
+    attractor_dist:      8.35    # Arc distance Q -> attractor at attractor_dist_ref_length; the FLOOR under a lead time [deg]
+    attractor_dist_ref_length: 175.0 # Tether length where attractor_dist holds, floor ∝ 1/L; 0 = fixed [m]
     # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28);
     # 0.96 -> 1.05 (2026-10-03): Cabauw 10 m/s guided disk margin 0.477 -> 0.534, RMS cross-track error 1.27 -> 1.21°.
     attractor_lead_time: 1.05    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
