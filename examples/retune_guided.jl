@@ -35,6 +35,7 @@ About 1 min to collect, then about 20 s per trial setting (3 – 8 per step).
     table(data, live_settings())               # worst margins per scenario
     trail = retune(data; target = 0.3)         # greedy small steps
     table(data, trail[end].settings)           # the proposal, per scenario
+    trail = tighten(data; floor = 0.51)        # smallest attractor_dist the margin allows
 """
 
 using Pkg
@@ -149,6 +150,35 @@ function retune(data; target = 0.3, settings_keys = keys(RETUNE_STEPS), max_step
     for k in RETUNE_STEPS |> propertynames
         println(@sprintf("  %-20s %8.5g → %8.5g", k, get_fc_field(f0, k), get_fc_field(f1, k)))
     end
+    return trail
+end
+
+"""
+    tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30) -> Vector
+
+Trade guided margin for tracking: lower `key` from the live settings by `step`
+per step while the worst guided disk margin stays at or above `floor`. The model
+does not rate tracking, so the result is the smallest `key` the margin allows,
+not a tracking optimum. Returns the trail, one `(; settings, α, move)` per step,
+the live settings first; `trail[end]` is the last setting that kept `floor`.
+"""
+function tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30)
+    f = live_settings()
+    trail = [(; settings = f, α = worst_margin(data, f), move = "live")]
+    @info @sprintf("live: %s = %.5g, worst α guided = %.4f", key, get_fc_field(f, key), trail[end].α)
+    trail[end].α >= floor || (@warn @sprintf("Live margin already below %.3f.", floor); return trail)
+    for i in 1:max_steps
+        g = deepcopy(trail[end].settings)
+        set_fc_field!(g, key, get_fc_field(g, key) - step)
+        get_fc_field(g, key) > 0 || break
+        α = worst_margin(data, g)
+        @info @sprintf("step %d: %s = %.5g, worst α guided = %.4f", i, key, get_fc_field(g, key), α)
+        α >= floor || break
+        push!(trail, (; settings = g, α, move = @sprintf("%s → %.5g", key, get_fc_field(g, key))))
+    end
+    println(@sprintf("Proposal: %s %.5g → %.5g, worst α guided %.4f → %.4f", key,
+                     get_fc_field(trail[1].settings, key), get_fc_field(trail[end].settings, key),
+                     trail[1].α, trail[end].α))
     return trail
 end
 
