@@ -305,9 +305,16 @@ function request_reopt!(st::RunState, setup, t, phase, l_now)
                                       pattern_limits = st.opt_box_now);
                            wait = false)
             else
+                # Started inside the size box: a guess that violates it ends in local infeasibility.
+                guess_a, guess_b, guess_el = guess_in_box(tos.guess_a, tos.guess_b, el_seed,
+                                                          st.opt_box_now)
+                (guess_a, guess_b, guess_el) == (tos.guess_a, tos.guess_b, el_seed) ||
+                    @info @sprintf("  ... guess fitted into the box: %.1f° x %.1f° at %.1f° \
+                                    (was %.1f° x %.1f° at %.1f°).",
+                                   guess_a, guess_b, guess_el, tos.guess_a, tos.guess_b, el_seed)
                 guess_az_r, guess_el_r =
-                    figure_eight_path(tos.guess_a, tos.guess_b,
-                                      0.0, el_seed,
+                    figure_eight_path(guess_a, guess_b,
+                                      0.0, guess_el,
                                       0.0, tos.guess_points)
                 reopt_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
                                           winch_params = winch_reopt,
@@ -507,9 +514,17 @@ function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reje
                                               shortfall)",
                                              st.el_min_extra) : ""),
                    blend_attempt, tos.blend_max_retries)
-    retry_az, retry_el = figure_eight_path(tos.guess_a,
-        tos.guess_b, 0.0,
-        retry_el_seed, 0.0, tos.guess_points)
+    retry_box = with_size_box(
+        pattern_limits_from(tos;
+            elevation_min = retry_el_min,
+            wind_speed = cap_wind),
+        st.opt_paths_raw[end]..., tos.size_box_growth)
+    # Started inside the size box, as in `request_reopt!`.
+    retry_a, retry_b, retry_el_center = guess_in_box(tos.guess_a, tos.guess_b, retry_el_seed,
+                                                     retry_box)
+    retry_az, retry_el = figure_eight_path(retry_a,
+        retry_b, 0.0,
+        retry_el_center, 0.0, tos.guess_points)
     retry_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
         winch_params = winch_reopt, inflow_conditions = inflow,
         trajectory = Trajectory(collect(retry_az),
@@ -518,11 +533,7 @@ function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reje
         reg_weight = tos.reg_weight,
         detect_simple_bounds = tos.detect_simple_bounds,
         min_turn_radius = st.opt_r_min,
-        pattern_limits = with_size_box(
-            pattern_limits_from(tos;
-                elevation_min = retry_el_min,
-                wind_speed = cap_wind),
-            st.opt_paths_raw[end]..., tos.size_box_growth))
+        pattern_limits = retry_box)
     retry_reply = chain_init(opt_chain, retry_params)
     chain_step(opt_chain,
                StepParams(opt_length(tos, l_now), winch_reopt, retry_reply.trajectory);

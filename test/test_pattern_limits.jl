@@ -11,7 +11,7 @@ using Test
 using SimpleKiteControllers
 import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_request,
     elevation_amplitude_max_at, with_elevation_max, with_azimuth_amplitude_min, with_size_box,
-    elevation_amplitude
+    elevation_amplitude, guess_in_box
 
 @testset verbose = true "pattern_limits" begin
     # Every side off; each test switches on what it needs.
@@ -98,6 +98,31 @@ import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_
         @test b.elevation_min ≈ el_lo - slack
         @test b.elevation_max ≈ el_hi + slack
         @test b.elevation_amplitude_max ≈ 1.2 * elevation_amplitude(el)
+    end
+
+    @testset "guess_in_box" begin
+        # No box, or a box the guess already fits: unchanged.
+        @test guess_in_box(30.0, 12.0, 30.0, nothing) == (30.0, 12.0, 30.0)
+        roomy = PatternLimits(; azimuth_max = 45.0, elevation_min = 10.0, elevation_max = 50.0,
+                              elevation_amplitude_max = 11.0)
+        @test guess_in_box(30.0, 12.0, 30.0, roomy) == (30.0, 12.0, 30.0)
+        # The Cabauw 8 m/s re-optimization box: the ±30° guess at 24°..36° violated it.
+        box = PatternLimits(; azimuth_max = 22.6, elevation_min = 13.9, elevation_max = 32.9,
+                            elevation_amplitude_max = 9.5)
+        a, b, el_c = guess_in_box(30.0, 12.0, 30.0, box)
+        az, el = figure_eight_path(a, b, 0.0, el_c, 0.0, 361)
+        @test maximum(abs, az) < box.azimuth_max
+        @test box.elevation_min < minimum(el) && maximum(el) < box.elevation_max
+        @test elevation_amplitude(el) < box.elevation_amplitude_max
+        @test b == 12.0   # the height fits; only the width and the centre move
+        # A tall guess in a shallow band is flattened to fit; one-sided floors only lift it.
+        a, b, el_c = guess_in_box(30.0, 12.0, 30.0,
+                                  PatternLimits(; elevation_min = 20.0, elevation_max = 30.0))
+        @test b ≈ 9.0 && el_c ≈ 25.0
+        @test guess_in_box(30.0, 12.0, 20.0, PatternLimits(; elevation_min = 18.0))[3] > 24.0
+        # The width never drops below the amplitude floor.
+        @test guess_in_box(30.0, 12.0, 30.0,
+                           PatternLimits(; azimuth_max = 10.0, azimuth_amplitude_min = 12.0))[1] == 12.0
     end
 end
 nothing

@@ -177,3 +177,33 @@ function with_size_box(box, az_prev, el_prev, growth)
                          elevation_amplitude_max = tighter(box.elevation_amplitude_max, el_lim),
                          symmetric = box.symmetric)
 end
+
+"""
+    guess_in_box(a, b, el_center, box; fill = 0.9) -> (a, b, el_center)
+
+The figure-eight guess of [`figure_eight_path`](@ref) — width `a` (azimuth spans ±`a`), height `b`
+(peak to peak), centred at elevation `el_center`, all [deg] — shrunk and moved so it starts INSIDE
+`box`: `a` to at most `fill * azimuth_max` (never below `azimuth_amplitude_min`), the half-span `b/2`
+to at most `fill * elevation_amplitude_max` and to `fill` of the elevation range, and `el_center`
+clamped into that `fill` band. Sides that are `nothing` (and `box = nothing`) leave the guess alone.
+
+A cold re-optimization under the size box ([`with_size_box`](@ref)) from a guess that violates it
+converges to local infeasibility (Cabauw 8 m/s, 2026-10-03: a ±30° guess against a 22.6° box).
+"""
+function guess_in_box(a, b, el_center, box; fill = 0.9)
+    isnothing(box) && return (a, b, el_center)
+    isnothing(box.azimuth_max) || (a = min(a, fill * box.azimuth_max))
+    isnothing(box.azimuth_amplitude_min) || (a = max(a, box.azimuth_amplitude_min))
+    isnothing(box.elevation_amplitude_max) || (b = min(b, 2 * fill * box.elevation_amplitude_max))
+    lo, hi = box.elevation_min, box.elevation_max
+    if !isnothing(lo) && !isnothing(hi)
+        mid, half = 0.5 * (lo + hi), 0.5 * fill * (hi - lo)
+        b = min(b, 2 * half)
+        el_center = clamp(el_center, mid - half + b / 2, mid + half - b / 2)
+    elseif !isnothing(lo)
+        el_center = max(el_center, lo + b / (2 * fill))
+    elseif !isnothing(hi)
+        el_center = min(el_center, hi - b / (2 * fill))
+    end
+    return (a, b, el_center)
+end
