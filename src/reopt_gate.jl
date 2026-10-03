@@ -95,6 +95,19 @@ function gate_candidate(tos, c)
 end
 
 """
+    wants_challenge(tos, c) -> Bool
+
+Whether an ACCEPTED reply looks like a step into a worse basin and is cross-checked by a cold
+solve (`challenge_growth`): it GREW the pattern by more than `tos.challenge_growth` against the
+previous install and predicts LESS power than that install. `c` holds `size`, `new_pred` and
+`prev_install_pred` as in [`gate_candidate`](@ref); a `NaN` `prev_install_pred` (before the
+first re-optimization has installed a path) never asks.
+"""
+wants_challenge(tos, c) =
+    tos.challenge_growth > 0 && !isnan(c.prev_install_pred) &&
+    c.size.growth > tos.challenge_growth && c.new_pred < c.prev_install_pred
+
+"""
     blend_folds(tos, az0, el0, az1, el1) -> Bool
 
 Does `blend_paths` between these two closed curves collapse `path_min_radius`

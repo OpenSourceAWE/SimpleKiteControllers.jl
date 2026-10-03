@@ -365,6 +365,11 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
                 "cold-restart attempts spent on a rejected reply — a folded blend, a \
                  collapsed prediction, or a clearance/elevation shortfall re-asked at \
                  a raised floor — across every install this run"),
+            "challenges" => (st.challenges_total,
+                "cold challenger solves run against an accepted reply that grew by more \
+                 than challenge_growth while predicting less than the previous install"),
+            "challenges_won" => (st.challenges_won,
+                "challengers installed instead of the reply they challenged"),
             "events" => OrderedDict(time_keyed(st.reopt_events) do e
                 (e.t, (string(e.status, isempty(e.detail) ? "" : " — " * e.detail),
                        @sprintf("at L = %.0f m", e.l)))

@@ -1033,6 +1033,32 @@ function record_opt_success!(oc::OptChain)
 end
 
 """
+    chain_snapshot(oc::OptChain) -> NamedTuple
+
+Where the chain stands, for [`chain_restore!`](@ref) after a side solve whose result is not
+kept (a challenger that lost, see `challenge_growth`).
+"""
+chain_snapshot(oc::OptChain) = (; oc.state, oc.config, oc.table, oc.current, oc.served,
+                                  pending = copy(oc.pending))
+
+"""
+    chain_restore!(oc::OptChain, snap)
+
+Put the chain back where [`chain_snapshot`](@ref) found it. `oc.server` is left alone: the
+server really holds the side solve, so it no longer matches the restored state, and the next
+miss rebuilds that state first ([`rebuild_session!`](@ref)).
+"""
+function chain_restore!(oc::OptChain, snap)
+    oc.state = snap.state
+    oc.config = snap.config
+    oc.table = snap.table
+    oc.current = snap.current
+    oc.served = snap.served
+    oc.pending = snap.pending
+    return nothing
+end
+
+"""
     rebuild_session!(oc::OptChain)
 
 Put the server back into the state the chain has reached after it was served

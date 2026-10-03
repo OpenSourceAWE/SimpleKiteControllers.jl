@@ -219,6 +219,10 @@ Base.@kwdef mutable struct RunState
     reopt_cycles::Vector{NamedTuple} = NamedTuple[]
     "Cold-restart attempts spent on a rejected reply"
     blend_retries_total::Int = 0
+    "Cold challenger solves run against an accepted reply (`challenge_growth`)"
+    challenges_total::Int = 0
+    "Challenger solves that were installed instead of the reply they challenged"
+    challenges_won::Int = 0
     "[deg] shortfall of the last reply gated out; carried across cycles"
     el_min_extra::Float64 = 0.0
     "The path the blend in progress starts from; fold-free across w in [0, 1]"

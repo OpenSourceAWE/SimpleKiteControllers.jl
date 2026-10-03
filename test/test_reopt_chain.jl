@@ -161,6 +161,8 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         fs = fake_server(; instant = true, fail_warm = true, table = reply_table)
         try
             st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
+            # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
+            setup.tos.size_box_growth = 0.0
             @test_logs (:info, r"failed from the warm start; retrying from guess el 30°") match_mode = :any reoptimize!(
                 st, setup, plant, 30.0, 4, 0.0)
             # The warm step failed; the next seed is a cold /init from the guess at el_center_seed.
@@ -178,6 +180,8 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         try
             # 1000 W, below 30 % of 5000 W, is re-asked; the cold retry's 2000 W passes.
             st, setup = cycle(nothing; server = fs, retries = 1, poll = 0.05, power = 5000.0)
+            # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
+            setup.tos.size_box_growth = 0.0
             reoptimize!(st, setup, plant, 30.0, 4, 0.0)
             @test st.reopt_pending
             @test_logs (:info, r"rejected \(1000 W predicted.*cold-restarting from guess el 32°") match_mode = :any reoptimize!(
@@ -208,9 +212,30 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         try
             st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
             setup.tos.use_step = false
+            # The fixed box only: a size box around `flown` would fit the guess to ~25° (`guess_in_box`).
+            setup.tos.size_box_growth = 0.0
             reoptimize!(st, setup, plant, 30.0, 4, 0.0)
             @test paths(fs) == ["/init", "/step", "/status", "/trajectory"]
             @test mean_el(fs.log[1][2]) ≈ 30.0 atol = 0.5
+            @test st.reopt_events[end].status == "installed"
+        finally
+            close(fs.server)
+        end
+    end
+
+    @testset "cold_seed_fitted_into_box" begin
+        # With the size box around `flown` (el 20-30°, let out to 18.5-31.5° at 1.3), the guess
+        # at el_center_seed = 30° is moved down into it before it is sent.
+        fs = fake_server(; instant = true, table = reply_table)
+        try
+            st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
+            setup.tos.use_step = false
+            @test_logs (:info, r"guess fitted into the box") match_mode = :any reoptimize!(
+                st, setup, plant, 30.0, 4, 0.0)
+            el = fs.log[1][2]["trajectory"]["elevation"]
+            box = st.opt_box_now
+            @test mean_el(fs.log[1][2]) < 30.0
+            @test box.elevation_min <= minimum(el) && maximum(el) <= box.elevation_max
             @test st.reopt_events[end].status == "installed"
         finally
             close(fs.server)
@@ -227,6 +252,72 @@ import SimpleKiteControllers: reoptimize!, OptChain, InflowConditions, WinchPara
         @test_logs (:warn, r"Could not reach the optimizer; will retry") match_mode = :any reoptimize!(
             st, setup, plant, 30.5, 4, 0.0)
         @test st.reopt_pending && st.reopt_n == 0 && st.reopt_next_poll == 31.0
+    end
+
+    # The challenger: a warm reply that GREW (x1.15) and predicts less than the previous install
+    # (1100 W) is cross-checked by a cold solve from the previous install's centre elevation.
+    function challenged(challenger_power)
+        table(p) = p == 1000.0 ? entry(; power = 1000.0, a = 23.0)["table"] :
+                                 entry(; power = challenger_power, a = 20.5)["table"]
+        fs = fake_server(; instant = true, table)
+        st, setup = cycle(nothing; server = fs, blocking = true, power = 1000.0)
+        push!(st.pred_timeline, (t = 10.0, power = 1100.0))
+        return fs, st, setup
+    end
+
+    @testset "challenger_wins" begin
+        fs, st, setup = challenged(2000.0)
+        try
+            @test_logs (:info, r"grew x1.15 and predicts 1000 W against the previous install's 1100 W") match_mode = :any reoptimize!(
+                st, setup, plant, 30.0, 4, 0.0)
+            @test paths(fs) == ["/step", "/status", "/trajectory", "/init", "/step", "/status",
+                                "/trajectory"]
+            @test mean_el(fs.log[4][2]) ≈ 25.0 atol = 0.5   # the previous install's centre
+            ev = st.reopt_events[end]
+            @test ev.status == "installed" && occursin("challenger from el 25.0° won", ev.detail)
+            @test st.pred_timeline[end].power == 2000.0
+            @test st.challenges_total == 1 && st.challenges_won == 1
+            # The chain goes on from the challenger, which the server holds.
+            oc = setup.opt_chain
+            @test oc.state == oc.server && oc.current["status"] == "converged"
+        finally
+            close(fs.server)
+        end
+    end
+
+    @testset "challenger_loses" begin
+        fs, st, setup = challenged(950.0)
+        try
+            reoptimize!(st, setup, plant, 30.0, 4, 0.0)
+            ev = st.reopt_events[end]
+            @test ev.status == "installed" && occursin("challenger from el 25.0° lost (950 W)", ev.detail)
+            @test st.pred_timeline[end].power == 1000.0
+            @test st.challenges_total == 1 && st.challenges_won == 0
+            # Back on the warm reply's lineage; the server holds the challenger, so the next
+            # miss rebuilds the session first.
+            oc = setup.opt_chain
+            @test oc.state != oc.server
+            @test oc.table["metrics"]["avg_power_W"] == 1000.0
+            # Only the warm reply, the one installed, is stored, under the restored state.
+            stored = readdir(oc.dir)
+            @test stored == [oc.state * ".json"]
+            e = JSON3.read(read(joinpath(oc.dir, only(stored)), String), Dict{String, Any})
+            @test e["table"]["metrics"]["avg_power_W"] == 1000.0 && e["applied"]
+        finally
+            close(fs.server)
+        end
+    end
+
+    @testset "no_challenge_with_more_power" begin
+        fs, st, setup = challenged(2000.0)
+        try
+            st.pred_timeline[end] = (t = 10.0, power = 900.0)   # the grown reply gains power
+            reoptimize!(st, setup, plant, 30.0, 4, 0.0)
+            @test paths(fs) == ["/step", "/status", "/trajectory"]
+            @test st.challenges_total == 0 && st.pred_timeline[end].power == 1000.0
+        finally
+            close(fs.server)
+        end
     end
 
     @testset "cold_retry_failed" begin

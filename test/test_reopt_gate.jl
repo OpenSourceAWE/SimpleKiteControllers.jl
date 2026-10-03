@@ -8,7 +8,7 @@ order, and whether it asks for a fresh reply or gives up. Pure numbers, no optim
 
 using Test
 using SimpleKiteControllers
-import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length
+import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge
 
 @testset verbose = true "reopt_gate" begin
     tos = (; min_feasibility_margin = 1.0, min_height = 40.0, elevation_min_from_gates = true,
@@ -73,6 +73,23 @@ import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length
         @test occursin("1.60x the previous install's size", g.reason)
         @test gate(size = big, blend_attempt = 2).verdict == :reject
         @test gate_candidate(merge(tos, (; max_size_growth = 0.0)), merge(good, (; size = big))).verdict == :accept
+    end
+
+    @testset "wants_challenge" begin
+        ctos = (; challenge_growth = 1.1)
+        grown = (; growth = 1.23, az_ratio = 1.2, el_ratio = 1.23)
+        # Cabauw 7 m/s at 236 m: grew x1.23 at 0.98 of the previous prediction.
+        c = (; size = grown, new_pred = 23949.0, prev_install_pred = 24427.0)
+        @test wants_challenge(ctos, c)
+        # Grew with MORE power, grew too little, or no previous install: no challenge.
+        @test !wants_challenge(ctos, merge(c, (; new_pred = 24700.0)))
+        @test !wants_challenge(ctos, merge(c, (; size = (; growth = 1.05, az_ratio = 1.05,
+                                                        el_ratio = 1.0))))
+        @test !wants_challenge(ctos, merge(c, (; prev_install_pred = NaN)))
+        # Shrinking with less power is the power gates' business, not this one's.
+        @test !wants_challenge(ctos, merge(c, (; size = (; growth = 0.6, az_ratio = 0.6,
+                                                        el_ratio = 0.5))))
+        @test !wants_challenge((; challenge_growth = 0.0), c)
     end
 
     @testset "checks_run_in_order" begin

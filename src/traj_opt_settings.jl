@@ -757,10 +757,45 @@ $(TYPEDFIELDS)
     one that actually holds the gate's measure: the RMS cap alone let a reply
     sitting exactly on its 1.3x ceiling come back 1.50x taller peak to peak
     (`_171552`, the tall basin's figure is peakier). The gate stays as the
-    backstop. There is nothing compounding: each install is bounded by the one
-    actually flown before it, and the fixed caps stay the ceiling.
+    backstop. Each install is bounded by the one actually flown before it, and
+    the fixed caps stay the ceiling.
+
+    The bound compounds: each warm step may grow the pattern by up to 1.3x, so
+    a chain can walk into the wide, tall basin one step at a time (Cabauw
+    7 m/s: ±19.9° x 15.7° at 190 m, ±23.8° x 19.3° at 236 m, ±26.2° x 21.5° at
+    303 m). 1.1 was flown on 2026-10-03 (Cabauw 5.75-9 m/s) and kept the paths
+    compact, but measured power fell at 6, 8 and 9 m/s (21438 -> 21216 W,
+    21802 -> 21206 W, 23045 -> 22734 W) and 7 m/s only moved from 20653 to
+    20758 W: the box also confines the elevation RANGE to the previous
+    install's ±5 % of span, which stops the path from shifting its centre
+    (8 m/s first re-optimization: 23850 W predicted against 24407 W at 1.3).
+    Kept at 1.3; `challenge_growth` catches the drift instead.
     """
     size_box_growth = 1.3
+    """
+    Size growth above which an ACCEPTED re-optimization reply that also
+    predicts LESS power than the previous install is cross-checked by one cold
+    solve ([`wants_challenge`](@ref)); `0` = off. The challenger is seeded at the
+    previous install's centre elevation, in the same box and under the same turn
+    radius, and whichever of the two passes the gate with more predicted power
+    is installed.
+
+    Guards the drift the two size bounds above cannot see: each warm step grows
+    the pattern by less than 1.3x, so the chain walks into the wide basin one
+    step at a time. One cold seed lands in the narrow basin only by luck
+    (2026-10-03, 7 m/s at 236 m: seeds 24.9-25.2° found ±17-19°, 24.6° and
+    25.5° the wide paths); flown at 7 m/s it won both of its challenges and
+    raised the measured power by 1 % (20653 -> 20849 W). Measured 2026-10-03 over the 45 re-optimizations of the
+    Cabauw set: exactly three grew AND lost power — 7 m/s at 236 m (x1.23,
+    0.980 of the previous prediction), 8 m/s at 284 m (x1.26, 0.968) and
+    10 m/s at 294 m (x1.27, 0.964) — and every other growth above 1.1 gained
+    at least 1.2 %. A cold solve from the previous centre found a narrower path
+    for all three: 24663 against 23949 W, 25056 against 23906 W, 24353 against
+    23471 W, and the narrow paths fly closer to their prediction (0.92-0.95
+    measured/predicted against 0.80-0.89 for the wide ones). Costs one solve,
+    ~15-25 s of frozen wall time, per trigger.
+    """
+    challenge_growth = 1.1
     """
     Send `k_v` as a DESIGN VARIABLE rather than a constant, so the optimizer
     solves for the winch gain and the path together under its own saturating
@@ -926,6 +961,8 @@ function TrajOptSettings(filename::String; path = skc_data_path())
         error("max_size_growth must be 0 (off) or >= 1, got $(tos.max_size_growth).")
     tos.size_box_growth == 0 || tos.size_box_growth >= 1 ||
         error("size_box_growth must be 0 (off) or >= 1, got $(tos.size_box_growth).")
+    tos.challenge_growth == 0 || tos.challenge_growth >= 1 ||
+        error("challenge_growth must be 0 (off) or >= 1, got $(tos.challenge_growth).")
     tos.guess_a > 0 && tos.guess_b > 0 ||
         error("guess_a and guess_b must be > 0, got $(tos.guess_a) and $(tos.guess_b).")
     tos.guess_el_center_high >= 0 ||

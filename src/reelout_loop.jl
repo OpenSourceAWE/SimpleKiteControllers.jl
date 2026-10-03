@@ -479,11 +479,73 @@ function gate_and_install!(st::RunState, setup, t, phase, l_now, el_target, even
             event = (; t, l = l_now, status = "rejected", detail = gate.detail)
             break
         else
+            # A warm reply that grew AND lost power is cross-checked by one cold solve first.
+            note = ""
+            if blend_attempt == 0 && isnothing(opt_chain.replay) &&
+               wants_challenge(tos, (; size = cand.cand_size, cand.new_pred, prev_install_pred))
+                tab, cand, note = challenge_candidate!(st, setup, phase, l_now, el_target, tab,
+                                                       cand, prev_install_pred)
+            end
             event = install_candidate!(st, setup, t, phase, l_now, el_target, tab, cand)
+            isempty(note) || (event = merge(event, (; detail = event.detail * note)))
             break
         end
     end
     return event
+end
+
+"""
+    challenge_candidate!(st, setup, phase, l_now, el_target, tab, cand, prev_install_pred)
+        -> (tab, cand, note)
+
+Cross-check an accepted reply that [`wants_challenge`](@ref) flags with one COLD solve
+([`solve_cold!`](@ref)) from the guess centred at the previous install's centre elevation, in the
+same box (`st.opt_box_now`) and under the same turn radius. Returns the challenger when it passes
+the gate with more predicted power, else the reply as given, with the chain put back on the reply's
+lineage ([`chain_restore!`](@ref)); `note` is appended to the install event.
+"""
+function challenge_candidate!(st::RunState, setup, phase, l_now, el_target, tab, cand,
+                              prev_install_pred)
+    (; opt_chain) = setup
+    st.challenges_total += 1
+    prev_el = st.opt_paths_raw[end][2]
+    el_seed = (maximum(prev_el) + minimum(prev_el)) / 2
+    @info @sprintf("  ... reply at L = %.0f m grew x%.2f and predicts %.0f W against the \
+                    previous install's %.0f W; cross-checking with a cold solve from guess \
+                    el %.1f°, holding the simulation.",
+                   l_now, cand.cand_size.growth, cand.new_pred, prev_install_pred, el_seed)
+    snap = chain_snapshot(opt_chain)
+    state = try
+        solve_cold!(st, setup, l_now, el_seed, st.opt_box_now)
+    catch exc
+        @warn "The challenger solve could not be sent; keeping the reply." exception = exc
+        "request failed"
+    end
+    if state == "converged"
+        tab_c = chain_trajectory(opt_chain)
+        cand_c = evaluate_candidate!(st, setup, tab_c, phase, l_now, el_target, 0,
+                                     prev_install_pred)
+        if cand_c.gate.verdict == :accept && cand_c.new_pred > cand.new_pred
+            st.challenges_won += 1
+            @info @sprintf("  ... the challenger wins: %.0f W against %.0f W (size x%.2f \
+                            against x%.2f).", cand_c.new_pred, cand.new_pred,
+                           cand_c.cand_size.growth, cand.cand_size.growth)
+            return tab_c, cand_c,
+                   @sprintf("; cold challenger from el %.1f° won against the reply's %.0f W",
+                            el_seed, cand.new_pred)
+        end
+        note = cand_c.gate.verdict == :accept ?
+            @sprintf("; cold challenger from el %.1f° lost (%.0f W)", el_seed, cand_c.new_pred) :
+            @sprintf("; cold challenger from el %.1f° refused (%s)", el_seed,
+                     isempty(cand_c.gate.reason) ? cand_c.gate.detail : cand_c.gate.reason)
+    else
+        note = @sprintf("; cold challenger from el %.1f° %s", el_seed, state)
+    end
+    @info "  ... the reply stays" * note * "."
+    chain_restore!(opt_chain, snap)
+    # `evaluate_candidate!` re-measured `st.opt_r_scale` and `st.chk_points` off the challenger.
+    cand = evaluate_candidate!(st, setup, tab, phase, l_now, el_target, 0, prev_install_pred)
+    return tab, cand, note
 end
 
 """
@@ -494,7 +556,7 @@ A fresh COLD solve for `l_now` after a rejected candidate, from the guess moved 
 by `el_min_extra`. Holds the simulation until the solve is over; returns the optimizer's state.
 """
 function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reject_reason)
-    (; tos, fcs, opt_chain, el_center_seed, winch_reopt, inflow, cap_wind) = setup
+    (; tos, fcs, el_center_seed, cap_wind) = setup
     st.blend_retries_total += 1
     # Alternating +/- `reopt_retry_el_offset`, never scaled UP by `blend_attempt`.
     retry_el_seed = el_center_seed +
@@ -519,39 +581,47 @@ function cold_retry!(st::RunState, setup, l_now, blend_attempt, reject_low, reje
             elevation_min = retry_el_min,
             wind_speed = cap_wind),
         st.opt_paths_raw[end]..., tos.size_box_growth)
+    return solve_cold!(st, setup, l_now, retry_el_seed, retry_box)
+end
+
+"""
+    solve_cold!(st, setup, l_now, el_seed, box) -> state
+
+A COLD `/init` + `/step` for `l_now` from the guess lemniscate centred at `el_seed` [deg] and fitted
+into `box`, under `st.opt_r_min`. Holds the simulation until the solve is over; returns the
+optimizer's state.
+"""
+function solve_cold!(st::RunState, setup, l_now, el_seed, box)
+    (; tos, opt_chain, winch_reopt, inflow) = setup
     # Started inside the size box, as in `request_reopt!`.
-    retry_a, retry_b, retry_el_center = guess_in_box(tos.guess_a, tos.guess_b, retry_el_seed,
-                                                     retry_box)
-    retry_az, retry_el = figure_eight_path(retry_a,
-        retry_b, 0.0,
-        retry_el_center, 0.0, tos.guess_points)
-    retry_params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
+    guess_a, guess_b, guess_el_center = guess_in_box(tos.guess_a, tos.guess_b, el_seed, box)
+    guess_az, guess_el = figure_eight_path(guess_a, guess_b, 0.0, guess_el_center, 0.0,
+                                           tos.guess_points)
+    params = InitParams(; name = tos.name, length = opt_length(tos, l_now),
         winch_params = winch_reopt, inflow_conditions = inflow,
-        trajectory = Trajectory(collect(retry_az),
-                                collect(retry_el)),
+        trajectory = Trajectory(collect(guess_az), collect(guess_el)),
         input_depower = depower_seed(tos, inflow.wind_speed),
         reg_weight = tos.reg_weight,
         detect_simple_bounds = tos.detect_simple_bounds,
         min_turn_radius = st.opt_r_min,
-        pattern_limits = retry_box)
-    retry_reply = chain_init(opt_chain, retry_params)
-    chain_step(opt_chain,
-               StepParams(opt_length(tos, l_now), winch_reopt, retry_reply.trajectory);
+        pattern_limits = box)
+    reply = chain_init(opt_chain, params)
+    chain_step(opt_chain, StepParams(opt_length(tos, l_now), winch_reopt, reply.trajectory);
                wait = false)
-    t_retry = time()
-    retry_state = "solving"
-    while retry_state == "solving"
+    t_cold = time()
+    state = "solving"
+    while state == "solving"
         sleep(tos.reopt_poll_interval)
-        retry_state = try
+        state = try
             chain_status(opt_chain)["state"]
         catch exc
             @warn "Could not reach the optimizer while \
-                   retrying a folded blend; will retry." exception = exc
+                   holding for a cold solve; will retry." exception = exc
             "solving"
         end
     end
-    st.reopt_blocked_s += time() - t_retry
-    return retry_state
+    st.reopt_blocked_s += time() - t_cold
+    return state
 end
 
 """
