@@ -4,11 +4,14 @@
 """
 Identify the conversion of the optimizer's power-tape length `l_dp` into V3Kite's
 `rel_depower` ([`awetrim_depower_to_v3kite`](@ref)) as a quadratic in `l_dp`, from the
-tension the archived scenarios' paths predict and the tension the plant flies on them,
+tension the paths of the scenario runs predict and the tension the plant flies on them,
 and write it into `data/depower_conversion.yaml`.
 
-Each scenario of `SCENARIOS` is replayed (`replay_paths`: its own optimizer results, no
-optimizer) with the conversion in force shifted by each of `shifts` [`rel_depower`]. For every
+Each run folder of `SCENARIOS`, in SimulationResults, is replayed (`replay_paths`: its own
+optimizer results from `<log>_opt_entries.json`, no optimizer) with the conversion in force
+shifted by each of `shifts` [`rel_depower`]. A folder replays on any machine only with that
+file; runs before 2026-10-03 do not have it and replay only where the solution cache still
+holds their replies. For every
 path the run installed in phase 4, the predicted tension is the time mean of the reply's
 `tension_tether_ground` over the pattern, and the measured one the mean winch force over the
 time that path was flown (from `T_SETTLE` after it was installed to the next install or the
@@ -22,7 +25,8 @@ range of the paths' tape lengths, outside which the conversion continues along i
 
 The startup path is left out: lap 1 flies it at a reduced force limit. The logs are kept in
 `output/depower_conversion/`, so `fly = false` refits them without flying. About 30 s per run,
-`length(SCENARIOS) * length(shifts)` runs. The inputs are passed with `run_example`
+`length(SCENARIOS) * length(shifts)` runs. `save = true` also writes the per-path table
+(`points.csv`) and the fit (`fit.yaml`) to `RECORD`, next to the run folders. The inputs are passed with `run_example`
 (`src/script_inputs.jl`):
 
     include("examples/identify_depower_conversion.jl")                       # fly, fit, print
@@ -47,14 +51,17 @@ import Dates
 "Project and log name of each site's runs"
 const SITE_RUNS = Dict("cabauw" => ("system_reelout_cabauw.yaml", "reelout_cabauw_opt"),
                        "maasvlakte" => ("system_reelout_maasvlakte.yaml", "reelout_150m_opt"))
-"Scenarios replayed: site, wind speed [m/s], folder (relative to `output/`)"
-const SCENARIOS = [("cabauw", 4.0, "scenarios/cabauw/v04"), ("cabauw", 5.0, "scenarios/cabauw/v05"),
-                   ("cabauw", 6.0, "scenarios/cabauw/v06"), ("cabauw", 7.0, "scenarios/cabauw/v07"),
-                   ("cabauw", 8.0, "scenarios/cabauw/v08"), ("cabauw", 9.0, "scenarios/cabauw/v09"),
-                   ("cabauw", 10.0, "archives/2026-10-03_135041"),
-                   ("maasvlakte", 8.0, "scenarios/maasvlakte/v08"),
-                   ("maasvlakte", 10.0, "scenarios/maasvlakte/v10"),
-                   ("maasvlakte", 11.0, "scenarios/maasvlakte/v11")]
+"The SimulationResults repository: `output/scenarios` links into it"
+const RESULTS = dirname(realpath(joinpath(@__DIR__, "..", "output", "scenarios")))
+"Folder (relative to `RESULTS`) of the identification record: its run folders, table and fit"
+const RECORD = "depower_conversion/2026-10-03"
+"Runs replayed: site, wind speed [m/s], run folder (relative to `RESULTS`)"
+const SCENARIOS = [(site, wind, @sprintf("%s/runs/%s_v%04.1f", RECORD, site, wind))
+                   for (site, wind) in (("cabauw", 4.0), ("cabauw", 5.0), ("cabauw", 6.0),
+                                        ("cabauw", 7.0), ("cabauw", 8.0), ("cabauw", 9.0),
+                                        ("cabauw", 10.0), ("maasvlakte", 3.5),
+                                        ("maasvlakte", 4.0), ("maasvlakte", 8.0),
+                                        ("maasvlakte", 10.0), ("maasvlakte", 11.0))]
 "Where the replay logs are kept"
 const LOG_DIR = normpath(joinpath(@__DIR__, "..", "output", "depower_conversion"))
 "Time after an install, and before the end of phase 4, left out of the measured mean [s]"
@@ -67,19 +74,17 @@ run_dir(site, wind, shift) = joinpath(LOG_DIR, @sprintf("%s_v%04.1f_d%+.3f", sit
 shifted(conv, shift) = merge(conv, (; offset = conv.offset + shift))
 first_value(x) = Float64(x isa AbstractVector ? x[1] : x)
 
-"Replay `folder` of `site` at `wind` with the conversion in force shifted by `shift`, into `dir`"
-function replay(site, wind, folder, shift, dir)
+"Fly `simple_opt_reelout.jl` for `site` at `wind` into `dir`, with `inputs` passed on"
+function fly_run(site, wind, dir; inputs...)
     project, _ = SITE_RUNS[site]
     mkpath(dir)
     project0, wind0 = read_gui_field("project"), read_gui_field("wind_speed")
     try
         set_selected_project(project)
         write_gui_field("wind_speed", wind)
-        with_depower_conversion(shifted(depower_conversion(), shift)) do
-            with_run_log(joinpath(dir, "run.log")) do
-                run_example("simple_opt_reelout.jl"; show_plots = false, run_archive = false,
-                            replay_paths = joinpath(LOG_DIR, "..", folder), output_path = dir)
-            end
+        with_run_log(joinpath(dir, "run.log")) do
+            run_example("simple_opt_reelout.jl"; show_plots = false, run_archive = false,
+                        output_path = dir, inputs...)
         end
     finally
         set_selected_project(project0)
@@ -114,9 +119,15 @@ function measured(dir, log_name)
     end
 end
 
+"Replay `folder` of `site` at `wind` with the conversion in force shifted by `shift`"
+replay(site, wind, folder, shift) =
+    with_depower_conversion(shifted(depower_conversion(), shift)) do
+        fly_run(site, wind, run_dir(site, wind, shift); replay_paths = joinpath(RESULTS, folder))
+    end
+
 fly && for (site, wind, folder) in SCENARIOS, shift in shifts
     @info @sprintf("Replaying %s %.1f m/s at a depower shift of %+.3f", site, wind, shift)
-    replay(site, wind, folder, shift, run_dir(site, wind, shift))
+    replay(site, wind, folder, shift)
 end
 
 # One point per phase-4 path: its tape length, the shift that makes it fly the predicted
@@ -125,7 +136,7 @@ conv = depower_conversion()
 points = NamedTuple[]
 for (site, wind, folder) in SCENARIOS
     _, run_log_name = SITE_RUNS[site]
-    entries = replay_entries(joinpath(LOG_DIR, "..", folder), run_log_name)
+    entries = replay_entries(joinpath(RESULTS, folder), run_log_name)
     runs = [measured(run_dir(site, wind, shift), run_log_name) for shift in shifts]
     for k in eachindex(runs[1])
         f_pred, l_dp = predicted(entries[k + 1])
@@ -136,7 +147,8 @@ for (site, wind, folder) in SCENARIOS
         s = (n * sum(shifts .* y) - sx * sy) / (n * sum(shifts .^ 2) - sx^2)
         c = (sy - s * sx) / n
         δ = -c / s
-        push!(points, (; site, wind, k, l_dp, f_pred, ratio = exp(c), sens = s, δ,
+        push!(points, (; site, wind, k, l_dp, f_pred, f_meas = [run[k].f for run in runs],
+                       ratio = exp(c), sens = s, δ,
                        target = awetrim_depower_to_v3kite(l_dp; conv) + δ,
                        weight = runs[1][k].t1 - runs[1][k].t0))
     end
@@ -181,5 +193,31 @@ function write_fit(fit, file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE
     @info "Wrote the fit to $file ($(Dates.today())); add the identification record by hand."
 end
 
-save && write_fit(fit)
+"""
+Write the per-path table and the fit to `RECORD` in SimulationResults: what the fit was made
+of, without the replay logs (about 70 MB each)
+"""
+function write_record(points, fit, rms, dir = joinpath(RESULTS, RECORD))
+    mkpath(dir)
+    open(joinpath(dir, "points.csv"), "w") do io
+        println(io, "site,wind,path,l_dp,f_pred,", join([@sprintf("f_meas_d%+.3f", d) for d in shifts], ","),
+                ",weight,delta,target,residual")
+        for p in points
+            println(io, join([p.site; string(p.wind); string(p.k + 1);
+                              [@sprintf("%.4f", p.l_dp), @sprintf("%.1f", p.f_pred)];
+                              [@sprintf("%.1f", f) for f in p.f_meas];
+                              [@sprintf("%.2f", p.weight), @sprintf("%.5f", p.δ), @sprintf("%.5f", p.target),
+                               @sprintf("%.5f", awetrim_depower_to_v3kite(p.l_dp; conv = fit) - p.target)]], ","))
+        end
+    end
+    YAML.write_file(joinpath(dir, "fit.yaml"), Dict(
+        "date" => string(Dates.today()), "shifts" => shifts, "fit_offset" => fit_offset,
+        "paths" => length(points), "runs" => [folder for (_, _, folder) in SCENARIOS],
+        "weighted_rms_residual" => round(rms; digits = 5),
+        "fit" => Dict(string(k) => round(v; digits = 4) for (k, v) in pairs(fit)),
+        "conversion_in_force" => Dict(string(k) => v for (k, v) in pairs(conv))))
+    @info "Wrote points.csv and fit.yaml to $dir."
+end
+
+save && (write_fit(fit); write_record(points, fit, rms))
 nothing
