@@ -11,9 +11,7 @@ per tether length (150 / 200 / 300 m, 7 m/s of wind, depower 0.27).
   points of `data/course_link_measured.csv` times the course PD at the run's
   `v_a` and the guidance, as `measured_loop` in `validate_margins.jl` forms it;
 - **model**: the pattern model `stability_fig8.jl` uses (the pattern law's dead
-  time and lag, `kite_correction`, `guidance_tf`);
-- **inner model**: `C · P` with the table's dead time and lag alone, the
-  model before the validation.
+  time and lag, `kite_correction`, `guidance_tf`).
 
 The guidance corner is `ω_g = 0.96 · v_a / (L · D)` for both, `D` from
 `attractor_distance`. Writes `docs/course_loop_frf.png`.
@@ -35,13 +33,16 @@ using Printf
 using GLMakie
 
 const FRF_POINTS = [
-    (key = "F150_f8a42_f8b17", project = "system_fig8_150m.yaml", title = "150 m (pattern 42 × 17°)"),
+    (key = "F150_f8a42_f8b17", project = "system_fig8_150m.yaml", title = "150 m"),
     (key = "A", project = "system_fig8_200m.yaml", title = "200 m"),
     (key = "D", project = "system_fig8_300m.yaml", title = "300 m"),
 ]
 const FRF_DEPOWER = 0.27
 "Ratio of the kite's speed to its airspeed in the pattern, as in `stability_fig8.jl`"
 const FRF_VK_OVER_VA = 0.96
+"TeX Gyre Termes, the Times clone closest to the paper's font (the Copernicus class loads `times`)"
+const FRF_FONTS = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+                   italic = "TeX Gyre Termes Italic")
 
 "The measured command → course points of `key`: frequency [Hz], response, `v_a` [m/s]."
 function read_course_link(key)
@@ -75,15 +76,12 @@ function frf_point(p)
     c2 = tc.c2
     gravity = -cosd(fcs.pattern.el_center)
     lag = 1 / set.steering_gain
-    P = turn_rate_plant(tc.c1, c2, kite_dead_time(tc, v_a), v_a, gravity, Ts; lag,
-                        kite_lag = kite_lag(tc, v_a))
     τp, Tp = pattern_dead_time_lag(tc, v_a, FRF_DEPOWER)
     Pp = turn_rate_plant(tc.c1, c2, τp, v_a, gravity, Ts; lag, kite_lag = Tp)
     model = C * Pp * guidance_tf(ω_g, Ts) * kite_correction(Ts, v_a)
-    inner = C * P
     # Measured loop: the PD and the guidance applied to each measured line, as `measured_loop`.
     L_meas = [evalfr(C, cis(2π * fi * Ts))[1] * Gi * (1 + ω_g / (im * 2π * fi)) for (fi, Gi) in zip(f, G)]
-    return (; f, L_meas, model, inner, v_a, Ts)
+    return (; f, L_meas, model, v_a, Ts)
 end
 
 _resp(L, f, Ts) = [evalfr(L, cis(2π * fi * Ts))[1] for fi in f]
@@ -101,37 +99,36 @@ end
 Draw and save the figure (see the file's docstring).
 """
 function plot_frf_validation(; file = joinpath(@__DIR__, "..", "docs", "course_loop_frf.png"))
-    fig = Figure(size = (1500, 800), fontsize = 18)
+    fig = Figure(size = (500, 300), fontsize = 9, fonts = FRF_FONTS, figure_padding = 4)
     fgrid = exp10.(range(log10(0.15), log10(4.5); length = 400))
     for (j, p) in enumerate(FRF_POINTS)
         r = frf_point(p)
         ticks = ([0.2, 0.5, 1.0, 2.0, 4.0], ["0.2", "0.5", "1", "2", "4"])
-        ax1 = Axis(fig[1, j]; xscale = log10, xticks = ticks, title = @sprintf("%s, v_a %.1f m/s", p.title, r.v_a),
-                   ylabel = j == 1 ? "|L| [dB]" : "")
+        title = rich(p.title, ", v", subscript("a"), @sprintf(" = %.1f m/s", r.v_a))
+        ax1 = Axis(fig[1, j]; xscale = log10, xticks = ticks, title, titlefont = :regular,
+                   ylabel = j == 1 ? rich("|L", subscript("g"), "| [dB]") : "")
         ax2 = Axis(fig[2, j]; xscale = log10, xticks = ticks, xlabel = "frequency [Hz]",
-                   ylabel = j == 1 ? "phase of L [deg]" : "", yticks = -540:90:0)
+                   ylabel = j == 1 ? rich("phase of L", subscript("g"), " [deg]") : "", yticks = -540:90:0)
         linkxaxes!(ax1, ax2)
-        for (L, label, style) in ((r.model, "model (pattern)", :solid), (r.inner, "inner model C·P (table)", :dash))
-            x = _resp(L, fgrid, r.Ts)
-            lines!(ax1, fgrid, _db(x); label, linestyle = style, linewidth = 2.5)
-            lines!(ax2, fgrid, _phase(x); linestyle = style, linewidth = 2.5)
-        end
+        x = _resp(r.model, fgrid, r.Ts)
+        lines!(ax1, fgrid, _db(x); label = "model", linewidth = 1.2)
+        lines!(ax2, fgrid, _phase(x); linewidth = 1.2)
         ph_model = _phase(_resp(r.model, r.f, r.Ts))
         # A measured phase is only known modulo 360°: put each point on the branch nearest the model's.
         ph_meas = rad2deg.(angle.(r.L_meas))
         ph_meas = [pm + 360 * round((pmod - pm) / 360) for (pm, pmod) in zip(ph_meas, ph_model)]
-        scatter!(ax1, r.f, _db(r.L_meas); color = :black, markersize = 9, label = "measured (V2 injection)")
-        scatter!(ax2, r.f, ph_meas; color = :black, markersize = 9)
+        scatter!(ax1, r.f, _db(r.L_meas); color = :black, markersize = 4, label = "measured (multisine injection)")
+        scatter!(ax2, r.f, ph_meas; color = :black, markersize = 4)
         hlines!(ax1, [0.0]; color = :gray, linestyle = :dot)
         hlines!(ax2, [-180.0]; color = :gray, linestyle = :dot)
         xlims!(ax1, 0.15, 4.5)
         ylims!(ax1, -30, 25)
         ylims!(ax2, -450, 0)
-        j == 3 && axislegend(ax1; position = :lb)
     end
-    Label(fig[0, :], "Course loop L = C·P·(1 + ω_g/s): measured by injection (simple_fig8.jl) against course_loop_model.jl, 7 m/s, depower 0.27";
-          fontsize = 20)
-    GLMakie.save(file, fig)
+    Legend(fig[3, 1:length(FRF_POINTS)], content(fig[1, 1]); orientation = :horizontal, framevisible = false,
+           padding = (0, 0, 0, 0), patchsize = (14, 8))
+    rowgap!(fig.layout, 2, 4)
+    GLMakie.save(file, fig; px_per_unit = 3)
     @info "plot_frf_validation: wrote $(normpath(file))"
     return fig
 end
