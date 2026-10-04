@@ -43,18 +43,18 @@ The examples are described on four pages: [general](examples_general.md), [ident
 and the docstrings of all exported types and functions are on the [API](api/index.md) page.
 The YAML files that make up a run, and how a system project ties them together, are
 explained on the [Settings](settings.md) page.
+The [How the controller works](control_algorithm.md) page goes from the optimal trajectory
+through path following and the steering set point to the reel-out speed, and says what is
+and is not verified by the test suite.
 
 ## Further documentation
 
-- [simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
-- [How the controller works](control_algorithm.md) — from the
-  optimal trajectory through path following and the steering set point to the reel-out speed,
-  plus what is and is not verified by the test suite
+- [Simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
 - [docs/thesis.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
   from the reference formulation
-- [docs/reelout_state_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md) — the flight phases and winch
+- [docs/reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md) — the flight phases and winch
   states of `examples/simple_reelout.jl`, with the transition conditions
-- [docs/fig8_tuning_log.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md) — the dated record of the parameter
+- [docs/fig8\_tuning\_log.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md) — the dated record of the parameter
   experiments behind the shipped tuning, including which levers turned out to be dead ends
 - [docs/ScratchUsage.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/ScratchUsage.md) — startup cost and where the generated model and settling caches land
 - [docs/TrajectoryOptimization.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/TrajectoryOptimization.md) — notes on the trajectory

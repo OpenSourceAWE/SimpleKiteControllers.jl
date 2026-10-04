@@ -119,7 +119,7 @@ above the pattern, the great-circle course to any attractor is "straight down" a
 numerical noise, while the tangent is always well defined.
 
 The **entry** to the pattern is not part of the guidance. It is the phase ladder of the course
-controller (§3), see [reelout_state_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
+controller (§3), see [reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
 
 ## 3. Steering set point from position and desired course
 
@@ -244,7 +244,7 @@ Reel-out starts `reelout_delay` after phase 3, or earlier once the force reaches
 ([`src/low_wind_schedule.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/low_wind_schedule.jl)) sets a longer start length, a lower
 startup elevation guess, a lower `v_app_min` and a larger phase-5 lift. The full phase/winch
 gating, including which timer starts what, is in
-[reelout_state_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
+[reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
 
 ## Stability and robustness
 
@@ -252,8 +252,8 @@ The **course loop** has a margin analysis; the **winch** loop does not.
 
 ### Course loop: disk margins
 
-[course_loop_stability.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability.md) (figure of eight) and
-[course_loop_stability_reelout.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability_reelout.md) (reel-out, over the full
+[course\_loop\_stability.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability.md) (figure of eight) and
+[course\_loop\_stability\_reelout.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability_reelout.md) (reel-out, over the full
 tether length) linearize the course loop, with the steering tape modelled as a lag and the
 kite's dead time and lag depending on `v_a`. They compute disk margins for the inner loop alone
 and for the loop closed through the attractor guidance ("guided"). The plant model is

@@ -114,7 +114,7 @@ Not named by any project:
 - The struct docstrings (on the [API](api/index.md) pages) say in one line what a field
   is. The comments in the YAML files give the longer notes and the reason for the value
   chosen there. The history of the tuning is in
-  [docs/fig8_tuning_log.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md).
+  [docs/fig8\_tuning\_log.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md).
 - `fc_settings_fig8_150m.yaml` and `fc_settings_reelout.yaml` started as copies of
   `fc_settings.yaml`. Keys they share must be kept in step by hand.
 - An example script can override single fields for one run without editing a file, see
