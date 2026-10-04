@@ -67,7 +67,10 @@ wc_settings:
   kbf_high:      1.0       # anti-windup back-calculation, upper force ctrl     [-]
   ktf_high:      10.0      # tracking constant, upper force controller          [-]
   winch_iter:    10        # iterations of WinchControllers' own winch model (unused here) [-]
-  max_acc:       8.0       # acceleration limit, step!'s acceleration_limit  [m/s^2]
+  # max_acc is NOT the plant's `winch: max_acc:` (4.0, the length loop's default on the hold
+  # paths). This one limits the rate of the speed law's v_set, and the reel-out scripts pass it
+  # to winch_torque! as acceleration_limit; why 8 and not 4 is measured in simple_reelout.jl.
+  max_acc:       8.0       # rate limit of v_set; the reel-out's acceleration_limit [m/s^2]
   damage_factor: 0.2       # winch damage weighting (unused here)               [-]
   jerk_factor:   0.9       # jerk weighting in the damage calculation (unused here) [-]
   # kv: `v_set = kv * sqrt(force)`, one value at every wind speed. It used to be

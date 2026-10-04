@@ -28,8 +28,17 @@ using WinchControllers: WCSettings, WinchPosController, WinchForceController,
     winch_position_torque!, winch_force_torque!, winch_acc_limit
 
 """
+    winch_speed_limit(set) -> Float64
+
+The largest reel speed [m/s] the plant settings allow in either direction,
+`max(v_ro_max, -v_ro_min)`. One number because the length loop clamps its speed
+setpoint symmetrically to `±speed_limit`.
+"""
+winch_speed_limit(set) = max(set.v_ro_max, -set.v_ro_min)
+
+"""
     winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
-                  v_ff=0.0, speed_limit=Inf,
+                  v_ff=0.0, speed_limit=winch_speed_limit(s.set),
                   acceleration_limit=winch_acc_limit(s.set.max_acc)) -> torque
 
 Run WinchControllers.jl's cascaded length loop against `s` and return the winch
@@ -37,14 +46,15 @@ torque [N·m] for `step!`'s `set_torque`. Replaces the `set_length` keyword
 `step!` used to carry before the winch controllers moved out of V3Kite.
 
 `acceleration_limit` comes from the plant's own `winch: max_acc:`
-([`winch_acc_limit`](@ref)), which is what `step!` defaulted it to. `v_ff` [m/s]
+([`winch_acc_limit`](@ref)), which is what `step!` defaulted it to, and
+`speed_limit` from its `v_ro_max`/`v_ro_min` ([`winch_speed_limit`](@ref)). `v_ff` [m/s]
 is the speed feed-forward: a caller integrating a speed setpoint into
 `set_length` should pass that same speed, or the outer P loop has to rediscover
 it from a length error at a cost of `1/kp_pos` of lag. The plant's drum inertia
 is passed along for the acceleration feed-forward, which `wpc.acc_ff` scales.
 """
 function winch_torque!(wpc::WinchPosController, s::V3KITE, set_length;
-                       v_ff = 0.0, speed_limit = Inf,
+                       v_ff = 0.0, speed_limit = winch_speed_limit(s.set),
                        acceleration_limit = winch_acc_limit(s.set.max_acc))
     r, G, friction = drum_params(s)
     return winch_position_torque!(wpc, set_length, unstretched_length(s),
