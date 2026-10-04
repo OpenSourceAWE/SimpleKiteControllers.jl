@@ -171,11 +171,9 @@ re-plots that log without re-simulating.
 
 ## Documentation
 
-- [HTML documentation](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev)
-- [simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
-- [How the controller works](https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/dev/control_algorithm/) ([source](docs/src/control_algorithm.md)) — from the
-  optimal trajectory through path following and the steering set point to the reel-out speed,
-  plus what is and is not verified by the test suite
+- [HTML documentation](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev) — this is the main entry point
+- [Simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
+- [How the controller works](https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/dev/control_algorithm/) — from the optimal trajectory through path following and the steering set point to the reel-out speed
 - [docs/thesis.md](docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
   from the reference formulation
 - [docs/reelout_state_machine.md](docs/reelout_state_machine.md) — the flight phases and winch
