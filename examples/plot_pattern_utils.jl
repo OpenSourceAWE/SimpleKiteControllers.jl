@@ -39,7 +39,9 @@ as phase 0): a path is flown from its install on, so one installed in phase 5 is
 flown by phase 5 alone, which the pattern plot masks out of the flown curve too.
 Likewise only the paths installed before `t_max` [s]: one installed later is
 flown only in the window the pattern plot hides ahead of phase 5 (see
-`hide_before_final`), so nothing of the flown curve belongs to it. `nothing`
+`hide_before_final`), so nothing of the flown curve belongs to it; the pattern
+plot passes `t_max` early by the path blend time, so a path still being blended in
+when the curve is cut off is left out as well. `nothing`
 when the file is absent (a lemniscate run, or a log from before it was written)
 or no path is left.
 """
@@ -135,14 +137,31 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
     i5 = findfirst(==(5), sl.sys_state)
     hide_s = something(hide_before_final, fcs.reelout.el_offset_lead)
     t_hide = isnothing(i5) ? Inf : sl.time[i5] - hide_s
-    hidden(i) = sl.sys_state[i] == 5 || sl.time[i] >= t_hide
-    az_deg = [hidden(i) ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
-    el_deg = [hidden(i) ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
     # The optimizer's uncorrected curves, when the run wrote them and the caller
     # passed none: the reference the correction is meant to land the kite on.
-    # A path installed inside the hidden window would be drawn against nothing.
-    isnothing(opt_raw) && (opt_raw = load_opt_paths(scenario_dir, log_name; t_max = t_hide))
+    # Only the paths fully blended in before the hidden window: one installed later
+    # is never flown on its own in the plotted curve, only as part of the blend
+    # from the path before it, and would be drawn against nothing (Maasvlakte 10 m/s
+    # of 2026-10-04, a small eight installed at 71.8 s that phase 5 then fell back from).
+    # The flown curve then ends where the first such path starts to blend in, so
+    # it is only shown against paths that are drawn.
+    if isnothing(opt_raw)
+        tos_file = joinpath(scenario_dir, "traj_opt.yaml")
+        blend_s = (isfile(tos_file) ? TrajOptSettings(tos_file) :
+                   TrajOptSettings("traj_opt.yaml")).reopt.path_blend_time
+        opt_raw = load_opt_paths(scenario_dir, log_name; t_max = t_hide - blend_s)
+        paths_file = joinpath(scenario_dir, log_name * "_opt_paths.yaml")
+        if isfile(paths_file)
+            installs = [Float64(get(p, "installed_t", 0.0))
+                        for p in get(V3Kite.YAML.load_file(paths_file), "paths", [])]
+            left_out = filter(t -> t_hide - blend_s <= t < t_hide, installs)
+            isempty(left_out) || (t_hide = minimum(left_out))
+        end
+    end
+    hidden(i) = sl.sys_state[i] == 5 || sl.time[i] >= t_hide
+    az_deg = [hidden(i) ? NaN : rad2deg(sl.azimuth[i]) for i in rng]
+    el_deg = [hidden(i) ? NaN : rad2deg(sl.elevation[i]) for i in rng]
 
     # Reference path: the logged attractor (live, walking every path under re-opt)
     # or fallback to the lemniscate. Phase 5 is left out, matching the flown mask.
