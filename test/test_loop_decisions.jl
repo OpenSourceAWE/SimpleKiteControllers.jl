@@ -41,6 +41,24 @@ import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower
         @test feedforward_step(f, 0.011, nothing, 5, 0.0, 25.0, 200.0, 0.0, 0.0, 0.25, 1.0, 0.1, 0.2)[1:2] == (0.0, 0.0)
     end
 
+    @testset "feedforward_gravity_term" begin
+        # A horizontal circle segment flown towards +azimuth: the gravity term turns the kite
+        # down, so the feed-forward steers against it by c3·sin(χ)·cos(β)/(c1·v_a).
+        r = 5.0
+        th = range(0, 2π; length = 181)[1:end-1]
+        fec = FigureEightController(FigureEightSettings(; dt = 0.02, attractor_distance = 4.0))
+        set_path!(fec, 20.0 .+ r .* cos.(th), 25.0 .+ r .* sin.(th))
+        fec.last_idx = argmax(fec.el_path)
+        f = FC_Settings(; ff_gain = 0.7, v_app_min = 10.0, ff_lead_time = 0.35, ff_smooth = 6.0,
+             ff_d_fade = 6.0, ff_err_fade = 60.0, ff_tau = 0.0)
+        args = (0.011, fec, 4, 0.0, 25.0, 200.0, 30.0, 0.0, 0.25, 1.0, 0.0, 0.0)
+        u0 = feedforward_step(f, args...)[1]
+        fg = FC_Settings(f; ff_gravity_rate = 0.3)
+        shape = path_gravity_shape(fec, 0.35 * rad2deg(30.0 / 200.0))
+        @test abs(shape) > 0.5                            # near the top, read 3° of arc ahead
+        @test feedforward_step(fg, args...)[1] ≈ u0 - 0.3 * shape / (0.25 * 25.0)
+    end
+
     @testset "depower_ramps" begin
         @test blended_depower(0.3, nothing, 0.0, 5.0, 2.0, 0.27) == (1.0, 0.27)
         @test blended_depower(0.3, 0.2, 10.0, 11.0, 2.0, 0.27) == (0.5, 0.25)

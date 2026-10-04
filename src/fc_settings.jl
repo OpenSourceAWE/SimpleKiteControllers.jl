@@ -100,6 +100,8 @@ $(TYPEDFIELDS)
     ff_d_fade = 6.0
     "Course error [deg] of full feed-forward fade-out"
     ff_err_fade = 60.0
+    "Gravity turn rate [1/s] the feed-forward cancels, `c3` of the law; 0 = off"
+    ff_gravity_rate = 0.0
 end
 
 """

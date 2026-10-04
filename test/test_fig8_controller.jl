@@ -1043,6 +1043,26 @@ end
         @test sign(path_chord_offset(fec)) == -sign(chord)
     end
 
+    @testset "path_gravity_shape" begin
+        # Same circle. At its top the path is horizontal, so sin(χ)·cos(β) is ±cos(β), positive
+        # when it runs towards +azimuth; at its right-hand end it climbs or sinks, so ~0.
+        r = 5.0
+        th = range(0, 2π; length = 181)[1:end-1]
+        az = 20.0 .+ r .* cos.(th); el = 10.0 .+ r .* sin.(th)
+        fec = FigureEightController(FigureEightSettings(; dt = 0.02, attractor_distance = 4.0))
+        for up_loops in (true, false)
+            set_path!(fec, az, el; up_loops)
+            n = length(fec.az_path)
+            k = argmax(fec.el_path)
+            fec.last_idx = k
+            shape = path_gravity_shape(fec, 0.0)
+            @test abs(shape) ≈ cosd(fec.el_path[k]) rtol = 0.01
+            @test sign(shape) == sign(fec.az_path[mod1(k + 1, n)] - fec.az_path[mod1(k - 1, n)])
+            fec.last_idx = argmax(fec.az_path)
+            @test abs(path_gravity_shape(fec, 0.0)) < 0.05
+        end
+    end
+
     @testset "traj_opt_settings" begin
         tos = TrajOptSettings("traj_opt.yaml")
         # The shipped file loads, and its guess is NOT the reel-out pattern: those

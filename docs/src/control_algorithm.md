@@ -171,6 +171,10 @@ the PID never sees it. It fades out with large cross-track (`ff_d_fade`) or cour
 the path reads a steady course error, and the PD would steer the curvature a second time.
 `chi_ff` ([`path_chord_offset`](@ref)) is therefore subtracted from the commanded course. Without that
 correction the two add up and the kite overturns. Both signals are low-passed over `ff_tau`.
+With `ff_gravity_rate > 0`, `u_ff` also cancels the law's gravity turn in its fixed-`c3` form,
+`−ff_gravity_rate·sin χ·cos β/(c1·v_app)`, with χ and β read off the path at the same
+lead point ([`path_gravity_shape`](@ref)). Without it the PD holds the gravity turn off with a steady
+course error, and the kite flies below the path on every horizontal leg.
 
 The output is fed to `rel_steering` **unnegated**: positive `rel_steering` produces a positive
 heading rate on this plant (measured, r = +0.998). Other kites in the ecosystem negate; that does

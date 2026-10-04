@@ -48,6 +48,12 @@ fc_settings:
     ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
     ff_d_fade:          6.0      # Cross-track error at which the ff is fully off; fades from half [deg]
     ff_err_fade:        60.0     # Course error at which the ff is fully off; fades from half  [deg]
+    # Gravity turn of the turn-rate law in its fixed-c3 form, c3·sin(χ)·cos(β), read off the path at the
+    # lead point (2026-10-04). Without it the P-only loop holds the gravity turn off with a course error and
+    # the kite flies 1.1-2.2° below the path on horizontal legs at every wind speed. The free-c2 form
+    # c2/v_a overshoots at low v_a and falls short at high v_a. 0.23 is the identified c3
+    # (docs/turn_rate_fixed_c3.md); with el_offset_wing 0.5 the 22 replays pass, RMS d -2 to -31 % in 19.
+    ff_gravity_rate:     0.23    # Gravity turn rate cancelled by the feed-forward, c3; 0 = off [1/s]
 
   pattern:  # pattern geometry and attractor; a SMALLER lemniscate is a TIGHTER one
     f8_a:               20.0     # Width of the eight, azimuth spans ±A; sweep optimum [deg]
@@ -92,7 +98,9 @@ fc_settings:
     el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
     el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
     final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back; 0 = off [-]
-    el_offset_wing:      1.0     # Extra lift at the LOBES, none in the centre       [deg]
+    # 1.0 -> 0.5 with ff_gravity_rate 0.23 (2026-10-04): the kite no longer sags at the lobes, and the full
+    # lift cost Maasvlakte 8.5-11 m/s 1.3-2.9 % of power and +12-28 % RMS d to the unlifted path.
+    el_offset_wing:      0.5     # Extra lift at the LOBES, none in the centre       [deg]
     el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
     el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring  [same units]
     el_offset_wing_mode: "azimuth"  # azimuth (deg) | azimuth_frac (of the path's own A)

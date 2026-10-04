@@ -35,6 +35,10 @@ turn-rate coefficient at the flown depower and the kite's speed are known; other
 the filters are returned unchanged. It is faded out when the kite is off this branch of the path,
 by the cross-track error `dmin` and the course error `err` [rad]; `u_filt` and `chi_filt` are the
 filter states of the previous step.
+
+With `fcs.feedforward.ff_gravity_rate > 0`, `u_ff` also cancels the gravity turn
+`ff_gravity_rate·sin(χ)·cos(β)` of the turn-rate law in its fixed-`c3` form, read off the path at
+the same lead point ([`path_gravity_shape`](@ref)) and faded and filtered with the curvature term.
 """
 function feedforward_step(fcs, dt, fec, phase, err, v_app, l_tether, v_kite, dmin, c1_setpoint,
                           gain_scale, u_filt, chi_filt)
@@ -45,15 +49,18 @@ function feedforward_step(fcs, dt, fec, phase, err, v_app, l_tether, v_kite, dmi
         v_app_ff = max(v_app, fcs.course.v_app_min)
         speed_ff = rad2deg(v_kite / l_tether)  # [deg/s]
         if isfinite(c1_ff) && c1_ff > 0 && speed_ff > 0
-            psi_dot_ff = path_turn_rate(fec, fcs.feedforward.ff_lead_time * speed_ff, speed_ff;
-                                        smooth = fcs.feedforward.ff_smooth)
+            lead_ff = fcs.feedforward.ff_lead_time * speed_ff
+            psi_dot_ff = path_turn_rate(fec, lead_ff, speed_ff; smooth = fcs.feedforward.ff_smooth)
             # Faded out when the kite is not on this branch (a Q swap hands it the other lobe's curvature).
             fade_d = clamp((fcs.feedforward.ff_d_fade - dmin) / (0.5 * fcs.feedforward.ff_d_fade), 0.0, 1.0)
             fade_e = clamp((deg2rad(fcs.feedforward.ff_err_fade) - abs(err)) /
                            (0.5 * deg2rad(fcs.feedforward.ff_err_fade)), 0.0, 1.0)
             g_ff = fcs.feedforward.ff_gain * fade_d * fade_e
             alpha_ff = fcs.feedforward.ff_tau > 0 ? dt / (dt + fcs.feedforward.ff_tau) : 1.0
-            u_filt += alpha_ff * (g_ff * psi_dot_ff / (c1_ff * v_app_ff) - u_filt)
+            # The gravity turn the kite makes unsteered; 0 = the PD holds it off with a course error.
+            psi_dot_grav = fcs.feedforward.ff_gravity_rate > 0 ?
+                           fcs.feedforward.ff_gravity_rate * fade_d * fade_e * path_gravity_shape(fec, lead_ff) : 0.0
+            u_filt += alpha_ff * ((g_ff * psi_dot_ff - psi_dot_grav) / (c1_ff * v_app_ff) - u_filt)
             chi_filt += alpha_ff * (g_ff * path_chord_offset(fec) - chi_filt)
             u_ff = u_filt
             chi_ff = chi_filt

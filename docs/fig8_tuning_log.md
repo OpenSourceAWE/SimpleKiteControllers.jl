@@ -6311,3 +6311,64 @@ were flown above):
 | 10 | 300 m | 0.33 | 30 x 16 | 38.0 m/s | 0.71° | 5.0 | 16.8° | 2.12 | all 8 pass |
 
 Above 10 m/s the schedule holds its 10 m/s values; not flown.
+
+## 2026-10-04 — Gravity feed-forward `ff_gravity_rate` 0.23 1/s; `el_offset_wing` 1.0 -> 0.5° (reel-out)
+
+The curvature feed-forward of 2026-09-21 left the gravity term of the turn-rate law,
+`ψ̇ = c1·v_a·u_s + c2/v_a·sin ψ·cos β`, to the PD as "~0.01 rad/s". With today's table it
+is ~0.1 rad/s. The course loop has no integral action, so the PD holds the gravity turn off
+with a steady course error, and the attractor guidance turns that error into a cross-track
+offset towards the ground.
+
+**Diagnosis.** The signed cross-track error to the path actually flown (lobe lift
+included), binned by `sin ψ·cos β`, on the archived v05.75 run: the kite sits 1.6-2.2°
+below the path on both horizontal legs, ~0 on the vertical ones. The regression on the
+quasi-steady offset `D·u_g/K` has slope 3.1 (R² 0.79). Over the 22 archived scenarios, the
+sag on horizontal legs is 1.1-2.2° at every wind speed. The slope needed grows with v_a
+(1.2 at Maasvlakte 3.5 m/s, v_a 11 m/s; 3.3 at Cabauw 10 m/s, 39 m/s). So the gravity turn
+the kite needs cancelled is roughly constant in v_a: the fixed-`c3` form of
+`turn_rate_fixed_c3.md`, not the free `c2/v_a`.
+
+**Change.** `FC_FeedForward.ff_gravity_rate` [1/s]: `u_ff` also carries
+`−ff_gravity_rate·sin χ·cos β/(c1·v_a)`, with χ and β read off the path at the same lead
+point as the curvature (`path_gravity_shape`), faded and filtered with it. It reads the
+path, not the kite, so the loop and its disk margins are unchanged. 0 = off; at 0 the
+v05.75 replay is identical to the archive.
+
+**Free-c2 form first, rejected.** `ff_gravity_gain` × the table's `c2/v_a`, all 22 replayed
+(`replay_paths`) at gain 2: the summary RMS d fell 9-31 % at Cabauw 5-10 m/s but rose
+38-75 % at Maasvlakte 3.5-5 m/s and Cabauw 3 m/s. There the kite flew 0.4° ABOVE the path, and
+power fell 3-5 %. Gain 3 without the lobe lift was worse at low wind (+82-119 %).
+
+**Fixed rate, three cases.** Sag to the flown path [deg] / summary RMS d [deg]:
+
+| rate [1/s] | Maasvlakte 3.5 | Cabauw 5.75 | Cabauw 10 |
+|--:|--|--|--|
+| 0 | +1.26 / 1.01 | +1.74 / 1.20 | +2.23 / 1.24 |
+| **0.23** | +0.78 / **0.57** | +0.93 / **1.05** | +1.48 / **0.91** |
+| 0.3 | +0.57 / 0.59 | +0.70 / 1.14 | +1.25 / 0.99 |
+| 0.4 | +0.27 / 0.75 | +0.41 / 1.34 | +0.99 / 1.23 |
+
+Larger rates fly the lifted path better but score worse on the summary metric (against the
+unlifted path), since the lifts were tuned against the old sag. 0.23 is the identified `c3`.
+
+**All 22 at 0.23, `el_offset_wing` 1.0.** All 10 criteria passed. RMS d to the flown path
+fell 26-47 % in every case, and the sag halved with no overshoot. But Maasvlakte 8-9 m/s
+scored +15-28 % on the summary metric, and Maasvlakte lost 1-3 % of power. The lobe lift
+was now delivered instead of eaten by the sag. A lobe-lift sweep on six cases
+(1 / 0.5 / 0°) recovers about half of that power at 0°. The rest is the kite flying nearer
+the optimizer's path than below it: the measured/predicted ratio drops 0.01-0.02. 0.5° keeps
+the low-wind and Cabauw gains of 1.0°.
+
+**All 22 at 0.23 and `el_offset_wing` 0.5, against the archive** (all 10 criteria passed,
+max d 4.9-5.0° unchanged):
+
+| site | wind | RMS d | power | min el. whole run | tape rate-limited |
+|---|--|--|--|--|--|
+| Cabauw | 3-10 m/s (11) | −2 to −24 % | −0.5 to +0.3 % | −0.5 to 0° | 0-3 points lower |
+| Maasvlakte | 3.5-7 m/s (5) | −7 to −31 % | −0.7 to −1.0 % | 0 to +0.2° | 2-3 points lower |
+| Maasvlakte | 8-11 m/s (6) | −12 to +12 % | −0.7 to −2.2 % | 0 to +0.4° | 1-2 points lower |
+
+Worse: Maasvlakte 8 m/s (+7 %), 8.5 (+11 %), 9 (+12 %). Open: the 0.5-1.5° of sag left at
+Cabauw 8-10 m/s is not gravity; `el_offset_final` and the low-wind schedule's lift were not
+re-tuned; Maasvlakte could get its own lobe lift (the two sites share this file).

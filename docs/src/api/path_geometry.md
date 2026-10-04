@@ -39,6 +39,7 @@ path_tangent
 path_normal
 path_distance
 path_turn_rate
+path_gravity_shape
 ```
 
 ## Checking a pattern

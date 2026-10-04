@@ -885,6 +885,34 @@ function signed_cross_track(fec::FigureEightController, az, el)
     return (az - fec.az_path[iq]) * cosd(el) * na + (el - fec.el_path[iq]) * ne
 end
 
+"Index of the path point `lead` degrees of arc ahead of the closest point Q of the last [`calc_attractor`](@ref) call."
+function _lead_index(fec::FigureEightController, lead)
+    n = length(fec.az_path)
+    k = fec.last_idx
+    cum = 0.0
+    while cum < lead
+        cum += fec.seg_len[k]
+        k = mod1(k + 1, n)
+        k == fec.last_idx && break
+    end
+    return k
+end
+
+"""
+    path_gravity_shape(fec::FigureEightController, lead) -> Float64
+
+`sin(χ)·cos(β)` of the reference path `lead` degrees of arc ahead of the closest point Q
+of the last [`calc_attractor`](@ref) call, with `χ` the path tangent there (the
+`chi_set`/`SysState.heading` convention, 0 = up) and `β` its elevation: the shape of the
+gravity term of the turn-rate law `ψ̇ = c1·v_a·u_s + c2/v_a·sin(ψ)·cos(β)`, read off the
+path instead of the kite so that a feed-forward on it stays outside the loop.
+"""
+function path_gravity_shape(fec::FigureEightController, lead)
+    length(fec.az_path) >= 3 || return 0.0
+    k = _lead_index(fec, lead)
+    return sin(fec.tangent[k]) * cosd(fec.el_path[k])
+end
+
 """
     path_turn_rate(fec::FigureEightController, lead, speed; smooth = 0.0) -> Float64
 
@@ -899,13 +927,7 @@ this curvature open loop is `path_turn_rate(...) / (c1 * v_a)`.
 function path_turn_rate(fec::FigureEightController, lead, speed; smooth = 0.0)
     n = length(fec.az_path)
     n >= 3 || return 0.0
-    k = fec.last_idx
-    cum = 0.0
-    while cum < lead
-        cum += fec.seg_len[k]
-        k = mod1(k + 1, n)
-        k == fec.last_idx && break
-    end
+    k = _lead_index(fec, lead)
     half = smooth / 2
     i0 = k; arc_back = 0.0
     while true
