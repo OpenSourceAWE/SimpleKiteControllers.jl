@@ -5,6 +5,8 @@
 The AWETrim server, the request caches and the winch law sent, part `server` of
 [`TrajOptSettings`](@ref), section `server:` of the YAML file.
 
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -27,6 +29,8 @@ end
 """
 The initial guess the startup solve starts from, part `guess` of
 [`TrajOptSettings`](@ref), section `guess:` of the YAML file.
+
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
 
 # Fields
 
@@ -51,6 +55,8 @@ end
 The depower seed of the solve, ramped with the wind, part `seed` of
 [`TrajOptSettings`](@ref), section `seed:` of the YAML file.
 
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -70,6 +76,8 @@ end
 The pattern box the optimizer solves UNDER, sent with every request so a reply cannot
 break it, part `box` of [`TrajOptSettings`](@ref), section `box:` of the YAML file.
 Each bound is off at `0.0`.
+
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
 
 # Fields
 
@@ -99,6 +107,8 @@ The gates every returned path must pass before it is flown, at startup and after
 re-optimization, part `gates` of [`TrajOptSettings`](@ref), section `gates:` of the YAML
 file. `min_feasibility_margin` is also sent with the request, as a minimum turn radius.
 
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -117,6 +127,8 @@ end
 """
 Re-optimization while the tether grows (`simple_opt_reelout.jl`), part `reopt` of
 [`TrajOptSettings`](@ref), section `reopt:` of the YAML file.
+
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
 
 # Fields
 
@@ -142,6 +154,8 @@ end
 """
 The extra gates of a re-optimization reply, part `reopt_gates` of
 [`TrajOptSettings`](@ref), section `reopt_gates:` of the YAML file.
+
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
 
 # Fields
 
@@ -192,6 +206,8 @@ makes the solve fail to converge, while 30°/12°, or the same eight centred at
 26°, converge — and to the same optimum, worth 6080 W, while the server's own
 parametric guess converges to a different one worth 1431 W. The problem is
 multi-modal, so the guess is a choice about the answer.
+
+YAML: [`traj_opt.yaml`](@ref example_traj_opt).
 
 # Fields
 

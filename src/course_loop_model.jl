@@ -20,6 +20,8 @@ file; the defaults are `NaN` so that a missing key cannot pass as a value.
 
 The session's instance is [`course_loop_model`](@ref).
 
+YAML: [`course_loop_model.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/course_loop_model.yaml).
+
 # Fields
 
 $(TYPEDFIELDS)

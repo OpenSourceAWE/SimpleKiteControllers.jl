@@ -7,6 +7,9 @@ file: the entry state machine, the depower flown on the pattern, the heading PID
 its gain schedule, the heading/course feedback blend and the entry descent limiter.
 [`CourseControllerSettings`](@ref) is built from it.
 
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -77,6 +80,9 @@ end
 The steering feed-forward from the reference path's curvature, section
 `feedforward:` of [`FC_Settings`](@ref)'s YAML file. Active from phase 4 on.
 
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -100,6 +106,9 @@ end
 The pattern geometry and the attractor guidance, section `pattern:` of
 [`FC_Settings`](@ref)'s YAML file, all angles in degrees; a SMALLER lemniscate is a
 TIGHTER one. [`FigureEightController`](@ref) is built from it.
+
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
 
@@ -128,7 +137,10 @@ end
 The wind schedule, section `wind_ramp:` of [`FC_Settings`](@ref)'s YAML
 file: `course.depower_setpoint`, `pattern.f8_a` and `pattern.f8_b` are flown up to
 `wind_ramp_low`, the `*_high` values from `wind_ramp_high` on, linear in between. See
-[`wind_schedule`](@ref).
+[`wind_schedule`](@ref). Applied once at the start of `simple_fig8.jl`; reel-out runs do
+not use it.
+
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml).
 
 # Fields
 
@@ -153,6 +165,9 @@ file: how compliant the force-mode winch is (see [`winch_force_gains`](@ref)) an
 force guards of the entry and the first lap. The winch gains themselves, of both
 modes, and the reel-out law are in `wc_settings.yaml`.
 
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -173,6 +188,8 @@ end
 The reel-out run of [`FC_Settings`](@ref), section `reelout:` of its YAML
 file: when reel-out starts and stops, and the depower and path flown once it has
 stopped (phase 5). Only read by reel-out runs.
+
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
 
@@ -232,6 +249,8 @@ schedule's `v_app_min` and the phase-5 lift, one value per wind speed at
 wind speed the schedule is off and the settings files' own values are flown. Empty
 vectors (the default) switch it off. See [`low_wind_schedule`](@ref).
 
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
+
 # Fields
 
 $(TYPEDFIELDS)
@@ -254,6 +273,9 @@ end
 """
 The simulation conditions and the pass criteria of [`FC_Settings`](@ref),
 section `run:` of its YAML file.
+
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
 
@@ -293,6 +315,9 @@ A field is reached through its part, e.g. `fcs.pattern.f8_a`. The field names ar
 unique over all parts, so the constructors and [`apply_overrides!`](@ref) also take a
 field by its bare name: `FC_Settings(; f8_a = 25.0)`, `FC_Settings(fcs; f8_a = 25.0)`
 for a modified copy.
+
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
 

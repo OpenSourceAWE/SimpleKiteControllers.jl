@@ -120,7 +120,7 @@ Not named by any project:
 - An example script can override single fields for one run without editing a file, see
   [`apply_overrides!`](@ref).
 
-## Example: `fc_settings_reelout.yaml`
+## [Example: `fc_settings_reelout.yaml`](@id example_fc_settings_reelout)
 
 The flight-controller settings of all reel-out projects, shown here as shipped:
 
@@ -138,7 +138,7 @@ Markdown.MD(Markdown.Code("yaml", read(file, String)))
 </div>
 ```
 
-## Example: `traj_opt.yaml`
+## [Example: `traj_opt.yaml`](@id example_traj_opt)
 
 The settings of the AWETrim client, read into [`TrajOptSettings`](@ref) and used by
 `simple_opt_fig8.jl` and `simple_opt_reelout.jl`, shown here as shipped:

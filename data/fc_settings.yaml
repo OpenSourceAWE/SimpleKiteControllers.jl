@@ -61,6 +61,7 @@ fc_settings:
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
   wind_ramp:  # wind schedule of depower_setpoint, f8_a and f8_b
+              # set once at the start of simple_fig8.jl; reel-out runs do not use it
     wind_ramp_low:      7.0      # Wind up to which depower_setpoint, f8_a, f8_b are flown [m/s]
     wind_ramp_high:     10.0     # Wind from which the *_high values are flown; linear between [m/s]
     depower_high:       0.33     # Held from wind_ramp_high on; keeps v_app < v_app_abort [-]
