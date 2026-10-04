@@ -29,6 +29,22 @@ include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 const PAPER_FIGURES_DIR = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
 
 """
+    PAPER_THEME
+
+Makie theme for the figures that go into the LearningControl paper: TeX Gyre
+Termes, the same Times design the Copernicus class sets the body text in (the
+PDF embeds it as Nimbus Roman), and tick labels large enough to stay readable
+once the figure is scaled down. Kept in step with the copies in
+`plot_patterns_paper.jl` and `plot_powercurve.jl`, so every figure of the paper
+is set in one face.
+"""
+const PAPER_THEME = Theme(
+    fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+               italic = "TeX Gyre Termes Italic"),
+    Axis = (; xticklabelsize = 20, yticklabelsize = 20),
+)
+
+"""
     ATTRACTOR_SCENARIOS
 
 `(site, scenario)` pairs drawn by [`plot_attractor_distance`](@ref): both sites
@@ -88,15 +104,19 @@ function plot_attractor_distance(scenarios = ATTRACTOR_SCENARIOS; t_max = 180.0,
     labels = ["$(uppercasefirst(site)) $(round(r[3]; digits = 1)) m/s"
               for ((site, _), r) in zip(scenarios, runs)]
 
-    p = MakieControlPlots.plot(time, arcs;
-        xlabel = "time [s]", ylabel = "attractor distance [m]",
-        labels = labels, xlims = (0.0, t_max), fig = "attractor distance", disp = disp)
-    if save && disp
-        pdf_file = joinpath(PAPER_FIGURES_DIR, "attractor_distance.pdf")
-        savefig(pdf_file)
-        @info "Saved attractor distance plot" pdf_file
+    # The save re-runs the builder, so it has to happen under the theme too.
+    with_theme(PAPER_THEME) do
+        p = MakieControlPlots.plot(time, arcs;
+            xlabel = "time [s]", ylabel = "attractor distance [m]",
+            labelsize = 22, legendsize = 16,
+            labels = labels, xlims = (0.0, t_max), fig = "attractor distance", disp = disp)
+        if save && disp
+            pdf_file = joinpath(PAPER_FIGURES_DIR, "attractor_distance.pdf")
+            savefig(pdf_file)
+            @info "Saved attractor distance plot" pdf_file
+        end
+        return p
     end
-    return p
 end
 
 plot_attractor_distance()

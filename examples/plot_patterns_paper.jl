@@ -42,7 +42,8 @@ Makie theme for the figures that go into the LearningControl paper: TeX Gyre
 Termes, the same Times design the Copernicus class sets the body text in (the
 PDF embeds it as Nimbus Roman), and tick labels large enough to stay readable
 once the figure is scaled down to half a text width. Kept in step with the
-copy in `plot_powercurve.jl`, so every figure of the paper is set in one face.
+copies in `plot_powercurve.jl` and `plots_extra.jl`, so every figure of the paper
+is set in one face.
 """
 const PAPER_THEME = Theme(
     fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
