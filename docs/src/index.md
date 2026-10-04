@@ -47,7 +47,7 @@ explained on the [Settings](settings.md) page.
 ## Further documentation
 
 - [simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
-- [docs/control_algorithm.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/control_algorithm.md) — how the controller works, from the
+- [How the controller works](control_algorithm.md) — from the
   optimal trajectory through path following and the steering set point to the reel-out speed,
   plus what is and is not verified by the test suite
 - [docs/thesis.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
