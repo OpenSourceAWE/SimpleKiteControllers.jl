@@ -26,11 +26,11 @@ traj_opt:
     input_depower_seed_max:  1.85  # ramp ceiling, below the server's 2.3 m  [m]
 
   box:  # pattern box the optimizer solves UNDER; 0.0 keeps the server default (|az| <= 45.8, 0.6 <= el <= 51.6)
-    pattern_azimuth_max: 28.0         # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
-    pattern_azimuth_max_high: 32.0    # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
-                                      # limit Cabauw 10 needs ±28.4-28.8° at 150 m and IPOPT 2-3° of room: 422 under
-                                      # 28 and 29 at r_min 22.8 m, under 30 at 23.5 m (quadratic depower
-                                      # conversion); converges under 31 and 32 (2026-10-03) [deg]
+    pattern_azimuth_max: 28.0        # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
+    pattern_azimuth_max_high: 32.0   # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
+                                     # limit Cabauw 10 needs ±28.4-28.8° at 150 m and IPOPT 2-3° of room: 422 under
+                                     # 28 and 29 at r_min 22.8 m, under 30 at 23.5 m (quadratic depower
+                                     # conversion); converges under 31 and 32 (2026-10-03) [deg]
     pattern_elevation_amplitude_max: 8.5   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg];
                                            # 8.0 left Maasvlakte 3.5 m/s infeasible at 8.12° (2026-09-24)
     pattern_elevation_amplitude_max_high:     11.0  # cap at/above the ref wind (a step, not a ramp) [deg]
@@ -41,14 +41,14 @@ traj_opt:
                                                     # 11° since 2026-09-23: Cabauw 10 at f_high 7200 N needs
                                                     # 10.5-10.7° at the 150 m startup [m/s]
     pattern_elevation_amplitude_max_wind_height: 100.0  # height that wind is taken at; 0 = the 6 m wind [m]
-    pattern_symmetric: true           # mirror-symmetric figure about azimuth 0; the solve is multi-modal and
-                                      # otherwise lands lopsided (Cabauw 2026-09-25: centre -2.3°, lobes 214/147 points)
-    pattern_climb_angle_max: 45.0     # steepest climb of the path in the az/el plane; descending is free; 0 is off [deg]
+    pattern_symmetric: true       # mirror-symmetric figure about azimuth 0; the solve is multi-modal and
+                                  # otherwise lands lopsided (Cabauw 2026-09-25: centre -2.3°, lobes 214/147 points)
+    pattern_climb_angle_max: 45.0 # steepest climb of the path in the az/el plane; descending is free; 0 is off [°]
 
   gates:  # every returned path, at startup and after a re-optimization
     min_feasibility_margin: 0.82  # curvature gate AND request (as min_turn_radius); 0.0 = off; an 8 m/s number [-]
     turn_radius_headroom: 1.25    # factor on the margin sent; covers the gate's own bites, makes slack [-]
-    min_height: 40.0              # clearance gate at the anchor radius; 40 not 50 because AWETrim's floor is at the END of the reel-out [m]
+    min_height: 40.0              # clearance gate at the anchor radius                                 [m]
     candidate_elevation_margin: 3.0   # gate margin above fc_settings' min_elevation [deg]
 
   reopt:  # re-optimization while the tether grows (simple_opt_reelout.jl)
@@ -58,11 +58,12 @@ traj_opt:
     path_blend_time: 6.0     # seconds over which the new path replaces the old  [s]
     blend_max_retries: 3     # fresh solves per rejected reply                   [-]
     size_box_growth: 1.3     # box SENT with a re-opt: this x the previous install's size; 0 is off [-]
-    challenge_growth: 1.1    # growth above which a reply predicting less than the previous install is cross-checked by a cold solve; 0 is off [-]
+    challenge_growth: 1.1    # growth above which a reply predicting less than the previous install 
+                             # is cross-checked by a cold solve; 0 is off        [-]
 
   reopt_gates:  # the extra gates of a re-optimization reply
-    min_power_frac: 0.3      # fraction of the startup install's power           [-]
-    min_power_frac_prev: 0.85 # fraction of the previous install's power; 0 is off [-]
-    power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses  [m/s]
+    min_power_frac: 0.3      # fraction of the startup install's power              [-]
+    min_power_frac_prev: 0.85 # fraction of the previous install's power; 0 is off  [-]
+    power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses     [m/s]
     max_size_growth: 1.3     # largest size ratio vs the previous install; 0 is off [-]
-    blend_fold_margin: 0.5   # blend_folds: fraction of the endpoints' own radius [-]
+    blend_fold_margin: 0.5   # blend_folds: fraction of the endpoints' own radius   [-]

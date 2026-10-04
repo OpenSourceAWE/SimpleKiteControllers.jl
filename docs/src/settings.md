@@ -137,3 +137,22 @@ Markdown.MD(Markdown.Code("yaml", read(file, String)))
 ```@raw html
 </div>
 ```
+
+## Example: `traj_opt.yaml`
+
+The settings of the AWETrim client, read into [`TrajOptSettings`](@ref) and used by
+`simple_opt_fig8.jl` and `simple_opt_reelout.jl`, shown here as shipped:
+
+```@raw html
+<div class="small-code">
+```
+
+```@eval
+using Markdown, SimpleKiteControllers
+file = joinpath(pkgdir(SimpleKiteControllers), "data", "traj_opt.yaml")
+Markdown.MD(Markdown.Code("yaml", read(file, String)))
+```
+
+```@raw html
+</div>
+```

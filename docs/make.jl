@@ -25,10 +25,12 @@ makedocs(;
         "Home" => "index.md",
         "Settings" => "settings.md",
         "How the controller works" => "control_algorithm.md",
-        "Examples - general" => "examples_general.md",
-        "Examples - identification" => "examples_identification.md",
-        "Examples - figure-of-eight" => "examples_fig8.md",
-        "Examples - reel-out" => "examples_reelout.md",
+        "Examples" => [
+            "General" => "examples_general.md",
+            "Identification" => "examples_identification.md",
+            "Figure-of-eight" => "examples_fig8.md",
+            "Reel-out" => "examples_reelout.md",
+        ],
         "API" => [
             "Overview" => "api/index.md",
             "Flight control" => "api/flight_control.md",
