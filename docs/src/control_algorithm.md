@@ -335,21 +335,6 @@ ControlSystemsBase extension.
    says to keep the two in step; nothing enforces it. A single copy would need a
    WinchControllers extension in V3Kite.
 
-Fixed on 2026-10-04:
-
-- **Winch anti-windup.** `WinchPosController` built its speed `DiscretePID` without `Tt`, so the
-  `DiscretePIDs` fallback `Tt = 10 s` applied against `winch_speed_ti = 2 s`, and after a
-  sustained `winch_torque_limit` saturation the integrator unwound five times slower than it
-  wound up. WinchControllers.jl now sets `Tt = winch_speed_ti` (from v0.6.5), tested by
-  `winch_position_torque! saturation recovery` in its `test/test_torque_controllers.jl`.
-- **`max_acc`.** The two values are not duplicates but two different limits:
-  `wc_settings.yaml`'s 8 m/s² limits the rate of the speed law's `v_set` and is the reel-out's
-  `acceleration_limit`, while the plant's `winch: max_acc:` 4 m/s² is the length loop's default
-  on the hold paths. The stale "step!'s acceleration_limit" comment now says so.
-- **`speed_limit`** in the adapter defaults to `winch_speed_limit(s.set) = max(v_ro_max,
-  -v_ro_min)` instead of `Inf`, so the fig8, parking and warm-up hold paths can no longer command
-  an unbounded speed setpoint. The reel-out still passes `v_sat` explicitly.
-
 ### Next step
 
 Run the parking-ripple metric as a small grid over wind speed and tether length to see how far
