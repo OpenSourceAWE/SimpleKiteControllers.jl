@@ -70,6 +70,16 @@ $(TYPEDFIELDS)
     input_depower_per_wind = 0.0
     "Soft ceiling on the ramped depower seed [m]; `0.0` = AWETrim's hard bound only"
     input_depower_seed_max = 0.0
+    """
+    Estimate of the tape length [m] the startup reply is flown at, at and below
+    `request_depower_wind_ref`; it sizes the turn-radius request, see
+    [`request_depower_estimate`](@ref). `0.0` = the seed, as before 2026-10-05
+    """
+    request_depower = 0.0
+    "Wind aloft (at the box caps' height) at which `request_depower` holds [m/s]"
+    request_depower_wind_ref = 0.0
+    "Tape length added to the estimate per m/s of wind aloft above that; one-sided [m/(m/s)]"
+    request_depower_per_wind = 0.0
 end
 
 """
@@ -425,6 +435,11 @@ function TrajOptSettings(filename::String; path = skc_data_path())
     tos.seed.input_depower_seed_max >= 0 ||
         error("input_depower_seed_max must be >= 0, got "*
               "$(tos.seed.input_depower_seed_max).")
+    for (name, value) in (("request_depower", tos.seed.request_depower),
+                          ("request_depower_wind_ref", tos.seed.request_depower_wind_ref),
+                          ("request_depower_per_wind", tos.seed.request_depower_per_wind))
+        value >= 0 || error("$name must be >= 0, got $value.")
+    end
     tos.gates.turn_radius_headroom >= 1 ||
         error("turn_radius_headroom must be >= 1, got $(tos.gates.turn_radius_headroom).")
     tos.gates.candidate_elevation_margin >= 0 ||

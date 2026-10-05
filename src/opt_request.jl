@@ -127,6 +127,31 @@ function depower_seed(tos, wind_speed)
 end
 
 """
+    request_depower_estimate(tos, wind_speed, cap_wind) -> Float64
+
+The tape length `l_dp` [m] the startup reply is expected to be flown at, which sizes the
+turn-radius request ([`request_constraints`](@ref)). With `tos.seed.request_depower` at 0 it is
+the seed, [`depower_seed`](@ref)`(tos, wind_speed)`, as before 2026-10-05. Otherwise it is
+`request_depower` plus `request_depower_per_wind` per m/s of the wind ALOFT (`cap_wind`, at
+`pattern_elevation_amplitude_max_wind_height`) above `request_depower_wind_ref`, clamped to
+[`DEPOWER_SEED_BOUNDS`](@ref).
+
+The seed is a poor estimate: it is ramped on the 6 m wind for the solve to CONVERGE, and the
+sites differ in shear, so Maasvlakte 8 m/s was seeded at 1.85 m and flew 1.42-1.46 m. With
+the drag of the wing in the plant (`wing_drag_coeff`) the depower conversion maps a tape
+length onto more depower, where the kite turns worse, and the request sized at the seed
+asked for a turn radius no pattern in the box could meet (2026-10-05). Only the estimate is
+moved; the seed the solve starts from is not.
+"""
+function request_depower_estimate(tos, wind_speed, cap_wind)
+    seed = tos.seed
+    seed.request_depower > 0 || return depower_seed(tos, wind_speed)
+    l_dp = seed.request_depower +
+           seed.request_depower_per_wind * max(0.0, cap_wind - seed.request_depower_wind_ref)
+    return clamp(l_dp, DEPOWER_SEED_BOUNDS...)
+end
+
+"""
     min_turn_radius_request(fcs, tos; scale = 1.0, c1 = nothing,
                             margin = tos.gates.min_feasibility_margin) -> Union{Float64, Nothing}
 
@@ -212,15 +237,16 @@ the startup solve actually CONVERGED at, which the retry ladder bisects toward.
 
 `depower_request` is the depower the reply will be FLOWN at, which is the c1 the request must
 be sized at, see [`min_turn_radius_request`](@ref). That is the optimizer's
-own and so unknown before the solve; the seed it starts from is the only estimate there is,
-and the setpoint is NOT one: it is the depower the loop is tuned at, typically far more
-powered, and a request sized there comes back a third too tight and is then gated out for a
-curvature the kite never had.
+own and so unknown before the solve; [`request_depower_estimate`](@ref) estimates it from the
+wind aloft (or takes the seed). The setpoint is NOT an estimate: it is the depower the loop is
+tuned at, typically far more powered, and a request sized there comes back a third too tight
+and is then gated out for a curvature the kite never had.
 """
 function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
     turn_radius_reel = turn_radius_lap_reelout(tos, inflow.wind_speed)
     opt_r_scale = (1 + turn_radius_reel / l_opt) * tos.gates.turn_radius_headroom
-    depower_request = awetrim_depower_to_v3kite(depower_seed(tos, inflow.wind_speed))
+    depower_request = awetrim_depower_to_v3kite(request_depower_estimate(tos, inflow.wind_speed,
+                                                                         cap_wind))
     c1_request = try
         turn_rate_coeffs(fcs.run.body_damping, depower_request).c1
     catch exc
@@ -242,8 +268,12 @@ function request_constraints(tos, fcs, inflow, cap_wind, l_opt)
                                     reel-out per lap and %.2f of headroom)",
                                     opt_r_min, tos.gates.min_feasibility_margin,
                                     depower_request,
-                                    " — the seed's, not the setpoint's, because the \
-                                     reply is flown at its own",
+                                    tos.seed.request_depower > 0 ?
+                                        @sprintf(" — estimated at %.1f m/s aloft, not the \
+                                                 setpoint's, because the reply is flown \
+                                                 at its own", cap_wind) :
+                                        " — the seed's, not the setpoint's, because the \
+                                         reply is flown at its own",
                                     opt_r_scale, turn_radius_reel,
                                     tos.gates.turn_radius_headroom),
                        isnothing(opt_box) ? "unset" : string(opt_box))
