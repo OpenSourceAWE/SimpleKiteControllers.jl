@@ -111,12 +111,12 @@ end
 isfile(csv_file) || error("$csv_file does not exist: fly first.")
 data, header = readdlm(csv_file, ','; header = true)
 col(name) = Float64.(data[:, findfirst(==(name), vec(header))])
-time = col("time")
-t_fit = time[findfirst(!isnan, col("us_delayed"))]
-rng = findall(t -> t_fit + plot_start <= t <= t_fit + plot_start + plot_span, time)
+t_log = col("time")   # not `time`: a global of that name in Main hides Base.time()
+t_fit = t_log[findfirst(!isnan, col("us_delayed"))]
+rng = findall(t -> t_fit + plot_start <= t <= t_fit + plot_start + plot_span, t_log)
 isempty(rng) && error("Nothing to plot between $(t_fit + plot_start) and $(t_fit + plot_start + plot_span) s.")
 # From zero, as in Fig. 3: the absolute simulation time says nothing here.
-t = time[rng] .- time[first(rng)]
+t = t_log[rng] .- t_log[first(rng)]
 band = col("band_center")[rng]
 # `HEADING_OFFSET` of build_turn_rate_table.jl, not loaded when replotting.
 band_offset = 10.0

@@ -6,37 +6,37 @@
 # 1/steering_gain of the KCU's P controller, from the project's settings file.
 course_loop_model:
   # The kite's dead time and lag over v_a, x ∝ v_a^-exp: joint fits of the low-elevation
-  # relay flights of build_turn_rate_table.jl at depower 0.275, v_wind 6.5, 8.0, 9.51 m/s
-  # (v_a 25.9, 32.5, 39.1 m/s): dead time 0.094, 0.072, 0.050 s, lag 0.089, 0.078, 0.078 s.
-  # Standard errors of the exponents ±0.218 and ±0.152. identify_kite_delay_scaling.jl,
-  # system_reelout_maasvlakte.yaml, 2026-10-02.
-  kite_dead_time_exp:  1.459  # [-]
-  kite_lag_exp:        0.371  # [-]
+  # relay flights of build_turn_rate_table.jl at depower 0.275, v_wind 6.5, 9.51 m/s (v_a
+  # 25.1, 38.0 m/s): dead time 0.083, 0.050 s, lag 0.067, 0.056 s. Standard errors of the
+  # exponents ±0.312 and ±0.333. identify_kite_delay_scaling.jl,
+  # system_reelout_maasvlakte.yaml, 2026-10-05.
+  kite_dead_time_exp:  1.225  # [-]
+  kite_lag_exp:        0.437  # [-]
 
   # Pattern law: the kite's response time in pattern flight, dead time + lag =
   # pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
   # (identify_turn_rate_law, phase 4 from 15.0 s after its start) on 6 logs at depower 0.27,
-  # v_a 11.8 - 35.2 m/s, projects system_fig8_150m, system_fig8_200m, system_fig8_300m,
-  # system_reelout_maasvlakte; standard error of the exponent ±0.053, log-RMS of the fit
-  # 0.041. identify_pattern_law.jl, 2026-10-02.
-  pattern_delay_ref:   0.144  # [s]
+  # v_a 10.8 - 32.8 m/s, projects system_fig8_150m, system_fig8_200m, system_fig8_300m,
+  # system_reelout_maasvlakte; standard error of the exponent ±0.056, log-RMS of the fit
+  # 0.045. identify_pattern_law.jl, 2026-10-05.
+  pattern_delay_ref:   0.108  # [s]
   pattern_v_ref:       34.0   # [m/s]
-  pattern_delay_exp:   0.641  # [-]
+  pattern_delay_exp:   0.932  # [-]
   # The lowest v_a the law was identified at; below it the law holds its value.
-  pattern_v_floor:     11.8   # [m/s]
+  pattern_v_floor:     10.8   # [m/s]
   pattern_law_depower: 0.27   # depower the pattern law was measured at [-]
   # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)): point D
-  # (system_fig8_300m, 7.0 m/s) flown at depower 0.270 / 0.300 / 0.330 / 0.360 gave x0.94 /
-  # 1.11 / 1.37 / 1.81 over the pattern law at the same v_a (identify_turn_rate_law, phase 4
-  # from 15.0 s after its start); standard error of the exponent ±0.62.
-  # identify_depower_factor.jl, 2026-10-02.
-  pattern_depower_exp: 5.98   # [-]
+  # (system_fig8_300m, 7.0 m/s) flown at depower 0.270 / 0.300 / 0.330 / 0.360 gave x0.96 /
+  # 1.06 / 1.18 / 1.64 over the pattern law at the same v_a (identify_turn_rate_law, phase 4
+  # from 15.0 s after its start); standard error of the exponent ±0.86.
+  # identify_depower_factor.jl, 2026-10-05.
+  pattern_depower_exp: 4.47   # [-]
 
   # Zero and pole of kite_correction, the causal stand-in for the measured kite correction
   # (kite_correction_measured.csv) in the transfer-function models: chosen as the best fit
-  # among the lag-leads conservative against it at point D (system_fig8_300m, v_a 33.3 m/s):
+  # among the lag-leads conservative against it at point D (system_fig8_300m, v_a 32.0 m/s):
   # gain not lower than measured below 0.8 Hz, phase not less lagging from 0.8 to 1.4 Hz;
-  # log-RMS against the table 0.293. identify_kite_correction.jl, 2026-10-02.
-  kite_corr_zero:      1.37   # [Hz]
-  kite_corr_pole:      0.99   # [Hz]
-  kite_corr_v_ref:     33.3   # v_a of the measurement; zero and pole scale with v_a [m/s]
+  # log-RMS against the table 0.266. identify_kite_correction.jl, 2026-10-05.
+  kite_corr_zero:      1.32   # [Hz]
+  kite_corr_pole:      0.98   # [Hz]
+  kite_corr_v_ref:     32.0   # v_a of the measurement; zero and pole scale with v_a [m/s]

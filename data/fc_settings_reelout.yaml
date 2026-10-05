@@ -76,7 +76,11 @@ fc_settings:
     # 1.05 -> 1.21 with heading_d 0.141 -> 0.146 (2026-10-05, retune_guided.jl, target 0.51): with wing drag
     # 0.03 Cabauw 9-10 m/s fly depower 0.365-0.393, where the kite responds slower; guided disk margin
     # 0.451/0.442 -> 0.524/0.515, worst of the 22 scenarios 0.513 (Maasvlakte 3.5 m/s).
-    attractor_lead_time: 1.21    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
+    # 1.21 -> 1.05 (2026-10-06, retune_guided.jl tighten, floor 0.505): with the pattern law, depower
+    # factor and kite correction re-identified with the wing drag the kite responds faster at high v_a;
+    # guided disk margin of Cabauw 9-10 m/s 0.672/0.677 -> 0.611/0.617, worst 0.506 (Maasvlakte 3.5 m/s,
+    # set by the arc's floor) unchanged.
+    attractor_lead_time: 1.05    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
