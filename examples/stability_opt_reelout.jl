@@ -118,7 +118,7 @@ reload_turn_rate_table!(project)
 reload_course_loop_model!(project)
 SET = Settings(project)
 # As the log was flown: the low-wind schedule (`fcs.low_wind`) at the log's wind speed, from its run
-# summary, moves the starting length (the first bin) and `v_app_min` (the gain schedule's floor).
+# summary, moves the starting length (the first bin).
 let summary = joinpath(something(inputs.log_dir, normpath(joinpath(@__DIR__, "..", "output"))),
                        basename(SET.log_file) * "_opt.yaml")
     wind = isfile(summary) ? get(get(YAML.load_file(summary), "simulation", Dict()), "wind_speed", nothing) : nothing

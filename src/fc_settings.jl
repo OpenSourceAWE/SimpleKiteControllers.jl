@@ -245,8 +245,8 @@ end
 
 """
 The low-wind schedule of a reel-out run, section `low_wind:` of [`FC_Settings`](@ref)'s
-YAML file: the starting tether length, the startup guess's centre elevation, the gain
-schedule's `v_app_min` and the phase-5 lift, one value per wind speed at
+YAML file: the starting tether length and the startup guess's centre elevation, one value per
+wind speed at
 `low_wind_height`, linear in between and held below the first. At and above the last
 wind speed the schedule is off and the settings files' own values are flown. Empty
 vectors (the default) switch it off. See [`low_wind_schedule`](@ref).
@@ -266,10 +266,6 @@ $(TYPEDFIELDS)
     low_wind_l_tether::Vector{Float64} = Float64[]
     "Startup guess's centre elevation [deg] (`guess_el_center`)"
     low_wind_guess_el_center::Vector{Float64} = Float64[]
-    "Floor [m/s] of the gain schedule (`v_app_min`)"
-    low_wind_v_app_min::Vector{Float64} = Float64[]
-    "Phase-5 path lift [deg] (`el_offset_final`)"
-    low_wind_el_offset_final::Vector{Float64} = Float64[]
 end
 
 """

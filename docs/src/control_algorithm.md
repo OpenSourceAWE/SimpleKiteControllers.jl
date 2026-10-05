@@ -245,8 +245,8 @@ Three refinements around the ends of the reel-out window, in
 
 Reel-out starts `reelout_delay` after phase 3, or earlier once the force reaches
 `reelout_f_trigger`. Below 6.4 m/s of wind at 100 m height, the `low_wind` schedule
-([`src/low_wind_schedule.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/low_wind_schedule.jl)) sets a longer start length, a lower
-startup elevation guess, a lower `v_app_min` and a larger phase-5 lift. The full phase/winch
+([`src/low_wind_schedule.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/low_wind_schedule.jl)) sets a longer start length and a lower
+startup elevation guess. The full phase/winch
 gating, including which timer starts what, is in
 [reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
 

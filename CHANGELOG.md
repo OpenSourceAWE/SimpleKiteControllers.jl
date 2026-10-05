@@ -4,6 +4,12 @@
 
 ### Changed
 
+- The low-wind schedule sets only the starting length and `guess_el_center`: the
+  `low_wind_v_app_min` and `low_wind_el_offset_final` columns are gone, so Maasvlakte
+  3.5 m/s flies `v_app_min` 10 m/s and `el_offset_final` 1.0° like every other run. With
+  the gravity feed-forward it passes all criteria either way (2026-10-05): minimum
+  elevation 9.2° (set in the entry; phase 5 9.47° with the 1.0° lift, 9.97° with 1.5°),
+  guided disk margin 0.51, 962 W.
 - `attractor_lead_time` of `fc_settings_reelout.yaml` is 1.05 s (was 0.96 s). At high
   wind the lead time sets the attractor arc, and with it the guidance corner `ω_g`; the
   longer lead lifts the guided disk margin of Cabauw 10 m/s from 0.48 to 0.53 and of
@@ -27,7 +33,7 @@
 - A low-wind schedule for `simple_opt_reelout.jl`: section `low_wind:` of
   `fc_settings_reelout.yaml` ([`FC_LowWind`], `low_wind_schedule`,
   `apply_low_wind_schedule!`) sets the starting tether length, the startup guess's
-  `guess_el_center`, `v_app_min` and `el_offset_final` per wind speed at 100 m height,
+  `guess_el_center` per wind speed at 100 m height,
   linear in between. At 150 m the guided disk margin was marginal at Cabauw 3 m/s and
   Maasvlakte 3.5 and 4 m/s (0.41-0.44); starting at 195 m lifts it to 0.57-0.61 at
   equal or higher power. `stability_opt_reelout.jl` applies the schedule at the log's
