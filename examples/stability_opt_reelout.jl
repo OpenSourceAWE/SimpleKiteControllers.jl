@@ -62,7 +62,8 @@ schedule uses. Four things differ in the reel-out:
 gravity pole) are read from the last log of `simple_opt_reelout.jl` for the
 selected project, `output/<log_file>_opt.arrow` (or the folder given as the input
 `log_dir`, e.g. an archive): phases 3-5 while the kite is within `attractor_dist` of the path
-(where `atan(d/D) ≈ d/D` holds; the approach from far off is not linear),
+(where `atan(d/D) ≈ d/D` holds; the approach from far off is not linear), up to the start of
+the parking climb (`park_start_time`), which flies a fixed course without the guidance,
 binned on tether length. Each bin is checked at its lowest, median and highest
 `v_a`, each with the highest `ω_g` its samples within `WG_VA_BAND` of that
 `v_a` fly (`ω_g ∝ v_k`, so the bin's highest `ω_g` is flown at its highest
@@ -174,8 +175,11 @@ if isfile(summary_file)
 end
 sl = load_log(log_name; path = output_path).syslog
 # On the path only: the guidance is linear for a cross-track error below the attractor's arc distance.
-in_pattern = findall(i -> 3 <= sl.sys_state[i] <= 5 && sl.var_01[i] <= fcs.pattern.attractor_dist,
-                     eachindex(sl.sys_state))
+# Not while parking: the climb flies a fixed course of 0 without the guidance, so L_g does not apply;
+# it starts `park_lead` seconds before the reel-out ends, still in phase 4.
+t_park = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf)
+in_pattern = findall(i -> 3 <= sl.sys_state[i] <= 5 && sl.var_01[i] <= fcs.pattern.attractor_dist &&
+                          sl.time[i] < t_park, eachindex(sl.sys_state))
 isempty(in_pattern) && error("$log_name.arrow never reached the path in phases 3-5.")
 log_L = [Float64(sl.l_tether[i][1]) for i in in_pattern]
 log_va = Float64.(sl.v_app[in_pattern])
