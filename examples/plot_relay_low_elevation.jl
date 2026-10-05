@@ -35,6 +35,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
+using GLMakie
 using MakieControlPlots
 using LaTeXStrings
 using DelimitedFiles: readdlm, writedlm
@@ -50,11 +51,27 @@ el_hold = 30.0
 
 plot_start = 20.0        # [s] start of the plotted span, after the start of the fit window
 plot_span = 40.0         # [s] length of the plotted span
+x_max = 50.0             # [s] end of the time axis: room after the span for the legends
 
 csv_file = normpath(joinpath(@__DIR__, "..", "output", "relay_low_elevation.csv"))
 fig_dir = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
 fig_name = "steering_response_low"
 csv_header = ["time", "heading", "band_center", "elevation", "set_steering", "steering", "us_delayed"]
+
+"""
+    COLUMN_THEME
+
+The `PAPER_THEME` of `plots_extra.jl` (TeX Gyre Termes, the face of the paper's
+body text) with larger tick labels: plotx draws 768 px (576 pt) wide, and the
+figure fills one column of the two-column layout, about 240 pt, so it is scaled
+to 0.42. With the label and legend sizes of the plotx call, the text prints at
+7 to 8 pt.
+"""
+const COLUMN_THEME = Theme(
+    fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+               italic = "TeX Gyre Termes Italic"),
+    Axis = (; xticklabelsize = 24, yticklabelsize = 24),
+)
 
 # ======================== FLIGHT ========================= #
 
@@ -104,22 +121,27 @@ band = col("band_center")[rng]
 # `HEADING_OFFSET` of build_turn_rate_table.jl, not loaded when replotting.
 band_offset = 10.0
 
-plotx(t,
-      [col("heading")[rng], band .+ band_offset, band .- band_offset],
-      [col("elevation")[rng], fill(el_hold, length(rng))],
-      [100.0 .* col("set_steering")[rng], 100.0 .* col("steering")[rng], 100.0 .* col("us_delayed")[rng]];
-      xlabel = L"\mathrm{time}~[\mathrm{s}]",
-      ysize = 18,
-      legendsize = 16,
-      ylabels = [L"\psi~[°]", L"\beta~[°]", L"u_{\mathrm{s}}~[\%]"],
-      labels = [
-          [L"\psi", L"+\psi_\mathrm{band}", L"-\psi_\mathrm{band}"],
-          [L"\beta", L"\beta_\mathrm{hold}"],
-          [L"u_{\mathrm{s,set}}", L"u_{\mathrm{s}}", L"u_{\mathrm{s,delayed}}"],
-      ],
-      disp = true,
-      fig = fig_name)
-mkpath(fig_dir)
-savefig(joinpath(fig_dir, fig_name * ".pdf"))
+# The save re-runs the builder, so it has to happen under the theme too.
+with_theme(COLUMN_THEME) do
+    plotx(t,
+          [col("heading")[rng], band .+ band_offset, band .- band_offset],
+          [col("elevation")[rng], fill(el_hold, length(rng))],
+          [100.0 .* col("set_steering")[rng], 100.0 .* col("steering")[rng], 100.0 .* col("us_delayed")[rng]];
+          xlabel = L"\mathrm{time}~[\mathrm{s}]",
+          labelsize = 26,
+          legendsize = 23,
+          xlims = (0.0, x_max),
+          legend_position = [:rt, :rt, :rt],
+          ylabels = [L"\psi~[°]", L"\beta~[°]", L"u_{\mathrm{s}}~[\%]"],
+          labels = [
+              [L"\psi", L"+\psi_\mathrm{band}", L"-\psi_\mathrm{band}"],
+              [L"\beta", L"\beta_\mathrm{hold}"],
+              [L"u_{\mathrm{s,set}}", L"u_{\mathrm{s}}", L"u_{\mathrm{s,delayed}}"],
+          ],
+          disp = true,
+          fig = fig_name)
+    mkpath(fig_dir)
+    savefig(joinpath(fig_dir, fig_name * ".pdf"))
+end
 
 nothing

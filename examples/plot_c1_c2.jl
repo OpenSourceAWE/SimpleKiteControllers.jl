@@ -22,6 +22,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
+using GLMakie
 using MakieControlPlots
 using SimpleKiteControllers: skc_data_path, turn_rate_coeffs_file, project_file, selected_project
 using LaTeXStrings
@@ -36,7 +37,22 @@ const FIG_DIR = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figu
 # Axis label size, in points. `plotx`' default of 16 is sized for a full-screen
 # window; these figures are included at column width, where the label shrinks
 # with the figure and 16 pt reads small on paper.
-const LABEL_SIZE = 22
+const LABEL_SIZE = 26
+
+"""
+    COLUMN_THEME
+
+The `PAPER_THEME` of `plots_extra.jl` (TeX Gyre Termes, the face of the paper's
+body text) with larger tick labels, as in `plot_relay_low_elevation.jl`: plotx
+draws 768 px (576 pt) wide, and the figure fills one column of the two-column
+layout, about 240 pt, so it is scaled to 0.42. With `LABEL_SIZE`, the text
+prints at 7 to 8 pt.
+"""
+const COLUMN_THEME = Theme(
+    fonts = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
+               italic = "TeX Gyre Termes Italic"),
+    Axis = (; xticklabelsize = 24, yticklabelsize = 24),
+)
 
 # Fraction of the depower span added at each end of the x axis. Without it the
 # stack clamps to the data range (`plotx`' default), which puts the first and
@@ -111,28 +127,31 @@ function plot_c1_c2()
 
         fig_name = "turn_rate_low_pattern" *
                    (length(dampings) > 1 ? "_" * join(round.(bd; digits = 1), "_") : "")
-        plotx(u_s, c1, c2, dead_time, kite_lag;
-              xlims = (minimum(u_s) - pad, maximum(u_s) + pad),
-              # Round ticks at the table's own 0.05 grid: the padded range makes
-              # Makie pick 0.27/0.30/0.33/... otherwise, which reads as if the
-              # cells had been identified at those settings.
-              xticks = 0.25:0.05:0.40,
-              # All-math labels with upright units: `L"..."` wraps a string with no
-              # `$` in it in math mode entirely, so a bare "delay [s]" would come
-              # out italicised letter by letter.
-              # u_d, not u_s: the paper (LearningControl/main.tex) writes the
-              # relative steering as u_s and the relative depower as u_d, and
-              # this axis is the depower.
-              xlabel = L"\mathrm{relative\ depower}\ u_\mathrm{d}\ [-]",
-              ylabels = [L"c_1\ [\mathrm{1/m}]", L"c_2\ [-]",
-                         L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
-              yerr = [_std_column(rows, "c1_se"), _std_column(rows, "c2_se"),
-                      _std_column(rows, "dead_time_se"),
-                      _std_column(rows, "kite_lag_se")],
-              scatter = true, disp = true, labelsize = LABEL_SIZE,
-              fig = fig_name)
-        mkpath(FIG_DIR)
-        savefig(joinpath(FIG_DIR, fig_name * ".pdf"))
+        # The save re-runs the builder, so it has to happen under the theme too.
+        with_theme(COLUMN_THEME) do
+            plotx(u_s, c1, c2, dead_time, kite_lag;
+                  xlims = (minimum(u_s) - pad, maximum(u_s) + pad),
+                  # Round ticks at the table's own 0.05 grid: the padded range makes
+                  # Makie pick 0.27/0.30/0.33/... otherwise, which reads as if the
+                  # cells had been identified at those settings.
+                  xticks = 0.25:0.05:0.40,
+                  # All-math labels with upright units: `L"..."` wraps a string with no
+                  # `$` in it in math mode entirely, so a bare "delay [s]" would come
+                  # out italicised letter by letter.
+                  # u_d, not u_s: the paper (LearningControl/main.tex) writes the
+                  # relative steering as u_s and the relative depower as u_d, and
+                  # this axis is the depower.
+                  xlabel = L"\mathrm{relative\ depower}\ u_\mathrm{d}\ [-]",
+                  ylabels = [L"c_1\ [\mathrm{1/m}]", L"c_2\ [-]",
+                             L"\tau_\mathrm{d}\ [\mathrm{s}]", L"T_\mathrm{k}\ [\mathrm{s}]"],
+                  yerr = [_std_column(rows, "c1_se"), _std_column(rows, "c2_se"),
+                          _std_column(rows, "dead_time_se"),
+                          _std_column(rows, "kite_lag_se")],
+                  scatter = true, disp = true, labelsize = LABEL_SIZE,
+                  fig = fig_name)
+            mkpath(FIG_DIR)
+            savefig(joinpath(FIG_DIR, fig_name * ".pdf"))
+        end
     end
 end
 
