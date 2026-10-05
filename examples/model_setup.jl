@@ -23,6 +23,9 @@ With `pad_final_time` the run gets room for a full phase 5 (`fcs.reelout.final_t
 the tape's rate limit. `aero_mode` is `ContinuousAero()` or `AeroDirect()`;
 `damping_per_stiffness` [s] is the tether/bridle structural damping as a ratio of
 stiffness, see `simple_fig8.jl`'s docstring.
+
+The wing drag of the project's kite settings is applied after settling and before
+the warm-up, see [`apply_wing_drag!`](@ref).
 """
 function init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_overrides = (),
                     aero_mode = ContinuousAero(), damping_per_stiffness = 0.002,
@@ -41,10 +44,32 @@ function init_model(project, project_set, fcs, wpc, sim_time; turbulence, set_ov
         damping_per_stiffness = damping_per_stiffness,
         elevation = fcs.run.elevation, depower_setpoint = fcs.course.depower_setpoint,
         system_yaml = project, use_turbulence = turbulence, aero_mode = aero_mode,
-        sim_time = sim_time, warmup_time = fcs.run.warmup_time,
-        # The warm-up must relax against the winch the loop will command.
-        warmup_torque = warmup_torque, remake_model = false)
+        # The warm-up follows below, once the wing drag is in place.
+        sim_time = sim_time, warmup_time = 0.0, remake_model = false)
+    apply_wing_drag!(s, project)
+    # The warm-up must relax against the winch the loop will command.
+    warmup!(s, fcs.run.warmup_time; depower = fcs.course.depower_setpoint,
+            winch_torque = warmup_torque)
     @info @sprintf("Run: %.0f s at dt = %.4f s (%d steps).", s.steps * s.dt, s.dt, s.steps)
     apply_overrides!(s.kcu.set, set_overrides, "set_overrides", "Settings", "plant")
     return s
+end
+
+"""
+    apply_wing_drag!(s, project)
+
+Apply the `wing_drag_coeff` of `project`'s `kite_settings:` file to the model `s`,
+which V3Kite's `init` reads but does not apply: `distribute_wing_drag!` splits the
+projected wing area equally over the wing nodes, each with that drag coefficient.
+`0` adds none. The kernel backend re-syncs point parameters every step, so the drag
+acts from the next step on. Every model this package flies goes through it,
+`init_model` and the relay flights of `build_turn_rate_table.jl` alike, so the turn-rate
+law is identified on the plant the runs fly.
+"""
+function apply_wing_drag!(s, project)
+    kite_set = load_kite(project; data_path = project_data_path(project, nothing))
+    kite_set.wing_drag_coeff > 0 || return nothing
+    sys = s.sam.sys_struct
+    distribute_wing_drag!(sys, sys.wings[1].vsm_aero.projected_area, kite_set.wing_drag_coeff)
+    return nothing
 end

@@ -73,6 +73,8 @@ import Dates
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))
 # V3Kite is torque-only; the winch length loop is ours (WinchControllers.jl).
 include(joinpath(@__DIR__, "winch_adapter.jl"))
+# `apply_wing_drag!`: the relay flights carry the wing drag the runs fly with.
+include(joinpath(@__DIR__, "model_setup.jl"))
 
 # ============== FIXED CONDITIONS (data/turn_rate_coeffs.yaml) ============== #
 # Only the depower varies across the grid. These must agree with the file's
@@ -196,6 +198,7 @@ function _fly_relay(depower, a; az_reverse::Real, el_hold_tilt::Real, v_wind::Re
         body_sim_damping = BODY_SIM_DAMPING, elevation,
         depower_setpoint = depower, sim_time = SWEEP_SIM_TIME, dt = DT,
         system_yaml = sweep_project(), aero_mode = SWEEP_AERO_MODE, remake_model = false)
+    apply_wing_drag!(s, sweep_project())
 
     l_set = s.sys_state.l_tether[1]
     wpc = WinchPosController(WCSettings(true; dt = s.dt); dt = s.dt)

@@ -3,9 +3,11 @@
 # and system_reelout_cabauw.yaml. V3Kite looks for a project's `kite_settings:` file
 # beside the project first, so this file is the one those runs fly.
 #
-# Against V3Kite's file it differs in three keys, of which only one acts:
+# Against V3Kite's file it differs in four keys, of which two act:
 #   - analytic_jacobian: true here (the kernel backend's default), false upstream.
 #     A Cabauw run at 10 m/s flew the same within 0.05 % either way (2026-10-02).
+#   - wing_drag_coeff: 0.07 here, 0.0 upstream (2026-10-05). V3Kite's `init` does
+#     not apply it; `init_model` in examples/model_setup.jl does, see its comment.
 #   - vsm_interval and body_sim_damping: both NOT read by this package's runs, see
 #     their comments below.
 kite_settings:
@@ -26,7 +28,11 @@ kite_settings:
   # "keep what the geometry carries" if this path ever does read it.
   wing_mass: 0.0                 # [kg] mass redistributed over the wing nodes
   wing_mass_le_frac: 0.75        # leading-edge share of `wing_mass`
-  wing_drag_coeff: 0.0           # parasitic drag spread over the wing nodes
+  # Applied by `init_model` (examples/model_setup.jl) with V3Kite's
+  # `distribute_wing_drag!`: the projected wing area split equally over the wing
+  # nodes, each with this drag coefficient. The value of V3Kite's flight replays
+  # (kite_settings_psm_replay.yaml); 0.0 adds no drag.
+  wing_drag_coeff: 0.07          # parasitic drag spread over the wing nodes
 
   adapter_dir: null              # SurfplanAdapter export for Comer-Levy bending
 
