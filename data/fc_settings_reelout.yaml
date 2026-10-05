@@ -25,7 +25,7 @@ fc_settings:
     # heading_p +8 % for guided α 0.306 and lower RMS d (2026-09-29).
     heading_p:          0.183805 # Gain at v_app_ref                                  [-]
     heading_i:          false    # Integral time [s], or false for no integral action
-    heading_d:          0.141    # Derivative time; raised for the guided disk margin (2026-09-28, 2026-09-29) [s]
+    heading_d:          0.146    # Derivative time; raised for the guided disk margin (2026-09-28, 2026-09-29, 2026-10-05) [s]
     heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
     v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
     v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
@@ -73,7 +73,10 @@ fc_settings:
     attractor_dist_ref_length: 175.0 # Tether length where attractor_dist holds, floor ∝ 1/L; 0 = fixed [m]
     # attractor_lead_time: ω_g below the course loop, guided disk margin >= 0.30 with c3 (2026-09-28);
     # 0.96 -> 1.05 (2026-10-03): Cabauw 10 m/s guided disk margin 0.477 -> 0.534, RMS cross-track error 1.27 -> 1.21°.
-    attractor_lead_time: 1.05    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
+    # 1.05 -> 1.21 with heading_d 0.141 -> 0.146 (2026-10-05, retune_guided.jl, target 0.51): with wing drag
+    # 0.03 Cabauw 9-10 m/s fly depower 0.365-0.393, where the kite responds slower; guided disk margin
+    # 0.451/0.442 -> 0.524/0.515, worst of the 22 scenarios 0.513 (Maasvlakte 3.5 m/s).
+    attractor_lead_time: 1.21    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
     reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
     up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
 
