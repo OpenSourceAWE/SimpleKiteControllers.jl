@@ -138,8 +138,8 @@ function fig8_metrics_block(fig8m, laps_flown; cross_track_ref = nothing,
 end
 
 """
-    reelout_block(sl, fcs, l_tether; stop_reason, laps_reeled, window_means = false)
-        -> (; block, rp, p4)
+    reelout_block(sl, fcs, l_tether; stop_reason, laps_reeled, window_means = false,
+                  t_end = Inf) -> (; block, rp, p4)
 
 The summary's `reelout` section of the log `sl`, printed as it is built: the
 apparent wind over phase 4 (against `fcs.course.v_app_ref`), the tether's reel-out from
@@ -152,9 +152,13 @@ Also returns `rp` ([`reelout_power`](@ref), `nothing` when the tether never reel
 out) and `p4`, the phase-4 power, force, reel-out speed and depower as
 `(; power, force, v_ro, depower_av)`, each of the first three `(; av, min, max)`,
 the minima without the last 2 s of phase 4; `nothing` when phase 4 was never reached.
+
+`t_end` [s] ends both windows, phase 4 and the reeling one, where a parking kite starts
+to climb out of the power zone (`park_final`); the apparent-wind statistics keep the
+whole of phase 4.
 """
 function reelout_block(sl, fcs::FC_Settings, l_tether; stop_reason::AbstractString,
-                       laps_reeled, window_means::Bool = false)
+                       laps_reeled, window_means::Bool = false, t_end = Inf)
     reelout_summary = OrderedDict{String, Any}()
     # On the LOGGED PHASE, not a time window; the mean is what v_app_ref should be.
     fig8 = findall(x -> Int(x) == 4, sl.sys_state)
@@ -181,15 +185,19 @@ function reelout_block(sl, fcs::FC_Settings, l_tether; stop_reason::AbstractStri
         # Same phase-4 window, for a recap's power/force/reel-out-speed/depower —
         # distinct from `reelout.force`/`reelout.power` below, which are scored over
         # the REELING window (length setpoint growing), not phase 4.
-        f4 = Float64.(getindex.(sl.winch_force, 1))[fig8]
-        vro4 = Float64.(getindex.(sl.v_reelout, 1))[fig8]
+        # Up to `t_end`: a parking climb is not reel-out power. Falls back to the whole
+        # of phase 4 if parking started before it.
+        pw_idx = filter(i -> sl.time[i] < t_end, fig8)
+        isempty(pw_idx) && (pw_idx = fig8)
+        f4 = Float64.(getindex.(sl.winch_force, 1))[pw_idx]
+        vro4 = Float64.(getindex.(sl.v_reelout, 1))[pw_idx]
         pw4 = f4 .* vro4
-        dp4 = Float64.(sl.depower[fig8])
+        dp4 = Float64.(sl.depower[pw_idx])
         # The power and speed minima skip the last 2 s of phase 4: the soft-stop
         # ramp winds the speed (and with it the power) down before the length stop
         # flips to phase 5, and that ramp is a setpoint move, not a dip. Falls back
         # to the whole window if phase 4 is shorter.
-        t4 = Float64.(sl.time[fig8])
+        t4 = Float64.(sl.time[pw_idx])
         i_min = findall(<=(t4[end] - 2.0), t4)
         isempty(i_min) && (i_min = eachindex(t4))
         p4 = (power = (av = mean(pw4), min = minimum(pw4[i_min]), max = maximum(pw4)),
@@ -215,7 +223,7 @@ function reelout_block(sl, fcs::FC_Settings, l_tether; stop_reason::AbstractStri
         "laps_reeled" => (round(laps_reeled; digits = 2),
             "figure-eight laps completed by the time reel-out ended"))
 
-    rp = reelout_power(sl)
+    rp = reelout_power(sl; t_end)
     if isnothing(rp)
         @warn "Tether never reeled out — no reel-out power to report."
     else

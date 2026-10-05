@@ -205,6 +205,42 @@ identified without the drag. Its re-identification with the drag
 (`build_turn_rate_table.jl`, 2026-10-05) is the first step; the depower
 conversion, the entry tuning and the scenarios follow.
 
+## (5) Low-wind tension with `wing_drag_coeff = 0.03`
+
+The table of (1) for the scenarios rebuilt on 2026-10-05 (SimulationResults
+1a83823, branch `wing_with_drag` at 36b665b): wing drag 0.03, the turn-rate law
+and depower conversion identified for it, the kite parked at the end of the
+reel-out. Path means over phase 4 as in (1), weighted by the time each path was
+flown, startup path excluded; the predicted reel-out speed is the reply's
+`speed_radial`. In brackets the drag-free values of (1) where they exist.
+
+| run | F predicted → measured [N] | v_r predicted → measured [m/s] | v_r/√F planner / kite | power ratio |
+|---|---|---|---|---|
+| Maasvlakte 3.5 | 1138 → 849, 0.75 (0.77) | 0.67 → 1.05, 1.57 (1.63) | 0.020 / 0.036 | 1.01 (1.09) |
+| Maasvlakte 4 | 1423 → 1232, 0.87 (0.88) | 1.07 → 1.34, 1.25 (1.28) | 0.028 / 0.038 | 1.06 (1.09) |
+| Cabauw 4 | 3082 → 3100, 1.01 (0.98) | 2.23 → 2.27, 1.02 (0.98) | 0.040 / 0.041 | 1.00 (1.01) |
+| Cabauw 6 | 6894 → 6643, 0.96 (0.97) | 3.47 → 3.43, 0.99 (0.97) | 0.042 / 0.042 | 0.94 (0.95) |
+| Maasvlakte 10 | 7024 → 6565, 0.93 (0.94) | 3.49 → 3.42, 0.98 (0.96) | 0.042 / 0.042 | 0.91 (0.92) |
+
+The power ratios are the scenarios' (`overview.md`); the bracketed ones are the
+drag-free scenarios (SimulationResults 6ac2a38), not the base runs of (1).
+
+The soft winch floor is untouched by the drag, as (4) expected: the kite still
+flies 25 % less tension and a 57 % faster reel-out than predicted at Maasvlakte
+3.5 m/s, and 13 % less and 25 % faster at 4 m/s. The
+planner's `v_r/√F` stays at 0.020 and 0.028 against the kite's 0.036–0.038
+(about k_v = 0.0408 less the reel-out ring), and both meet at 0.040–0.042 from
+about 3 kN up. Below about 1.5 kN the predicted tension therefore remains a
+wrong target for the depower identification, for the winch reason of (1), and
+Maasvlakte 3.5 and 4 m/s stay out of its fit.
+
+What did change is the power ratio at low wind: 1.01 at Maasvlakte 3.5 m/s,
+down from 1.09 (the base run of (2) flew 1.10 against free speed), with the same
+tension mismatch. With the drag the kite has a glide ratio close to the
+planner's instead of 5–14 % higher, so the part of the low-wind excess that came
+from the aerodynamics, (3), is largely gone; the winch-floor part, which shifts
+tension against reel-out speed, is not.
+
 ## Consequences
 
 - **Paper (main.tex:602):** the r_P spread of 0.94–1.10 is mainly this

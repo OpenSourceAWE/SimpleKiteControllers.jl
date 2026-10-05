@@ -323,7 +323,9 @@ try
             Float64(s.sys_state.course);
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
-            dmin, tangent = path_tangent(fec))
+            dmin, tangent = path_tangent(fec),
+            park = SimpleKiteControllers.park_should_start(fcs, cc.phase,
+                       Float64(s.sys_state.v_reelout[1]), l_set))
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Separate from the ladder inside calc_steering so it can fire the SAME
         # step as a 3->4 transition: reel-out finishing does not wait for settling.
@@ -541,7 +543,9 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs
                    min_elevation = fcs.run.min_elevation, az_center = 0.0,
                    az_amplitude = fcs.pattern.f8_a, el_height = fcs.pattern.f8_b,
                    min_span_frac = fcs.run.min_span_frac, require_final = true,
-                   max_force = project_set.max_force)
+                   max_force = project_set.max_force,
+                   # A parking kite leaves the path on purpose: the pattern ends where it parks.
+                   t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
 
 summary = OrderedDict{String, Any}()
 # The FIRST key of the file, the same words the console logs as "Success criteria:
@@ -558,7 +562,8 @@ fig8m === nothing ||
     (summary["fig8_metrics"] = fig8_metrics_block(fig8m, lap_durations(sl); nested_verdict = true))
 # The window's mean and peak force and power too.
 reelout_sections = reelout_block(sl, fcs, l_tether; stop_reason,
-                                 laps_reeled = fig8_idx_progress / n_path, window_means = true)
+                                 laps_reeled = fig8_idx_progress / n_path, window_means = true,
+                                 t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
 rp = reelout_sections.rp
 summary["reelout"] = reelout_sections.block
 performance_section = performance_block(t_sim, t_wall, s.dt, fcs.run.vsm_interval)

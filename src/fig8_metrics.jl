@@ -332,7 +332,7 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
 end
 
 """
-    reelout_power(sl) -> NamedTuple or `nothing`
+    reelout_power(sl; t_end = Inf) -> NamedTuple or `nothing`
 
 Mechanical reel-out power `winch_force * v_reelout` scored over the window where
 the tether length setpoint (`var_10`, `examples/simple_reelout.jl` only) was
@@ -356,13 +356,17 @@ sizing the generator and grid connection. `mean_force`/`peak_force`/`cf_force_ro
 `idx` is the sample indices making up that window, so a caller can score anything
 else over exactly the same samples — `sl.time[rp.idx]` are their timestamps.
 
+`t_end` [s] closes the window early: a run that parks (`park_final`) climbs out of
+the power zone while the winch still reels out, and that climb is the end of the
+cycle, not reel-out power. `energy_run` still covers the whole log.
+
 Headless, no plotting dependency, so a sweep can call it on every log.
 """
-function reelout_power(sl)
+function reelout_power(sl; t_end = Inf)
     l_set = Float64.(sl.var_10)
     length(l_set) > 1 || return nothing
     # +1: `diff` reports the change INTO sample i+1, which is the reeling one.
-    reeling = findall(>(0.0), diff(l_set)) .+ 1
+    reeling = filter(i -> sl.time[i] < t_end, findall(>(0.0), diff(l_set)) .+ 1)
     isempty(reeling) && return nothing
     dt = Float64(sl.time[2]) - Float64(sl.time[1])
     f_all = Float64.(getindex.(sl.winch_force, 1))

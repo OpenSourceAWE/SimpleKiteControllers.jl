@@ -732,8 +732,10 @@ function reelout_results(setup, st::RunState, timing)
     scored.fig8m === nothing ||
         (summary["fig8_metrics"] = fig8_metrics_block(scored.fig8m, scored.laps_flown;
                                                       cross_track_ref = "the unlifted optimizer path"))
+    # A parking climb ends the reel-out power (and the power ratio) where it starts.
     reelout = reelout_block(scored.sl, setup.fcs, setup.l_tether; stop_reason = st.stop_reason,
-                            laps_reeled = st.fig8_idx_progress / st.n_path)
+                            laps_reeled = st.fig8_idx_progress / st.n_path,
+                            t_end = something(SimpleKiteControllers.park_start_time(setup.fcs, scored.sl), Inf))
     summary["reelout"] = reelout.block
     power = power_comparison(setup, st, scored.sl, reelout.rp, reelout.p4)
     summary["traj_opt"] = traj_opt_block(setup, st, power.block, feasibility_block(setup, st), scored)
