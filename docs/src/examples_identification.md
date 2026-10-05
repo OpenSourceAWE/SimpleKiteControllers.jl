@@ -121,11 +121,10 @@ result and its provenance into the file.
    [`kite_correction`](@ref) stays as the causal stand-in in the transfer-function models;
    the script checks that it is conservative against the table (gain not lower than
    measured below 0.8 Hz, phase not less lagging from 0.8 to 1.4 Hz) and otherwise writes
-   the best-fitting conservative one. `data/course_link_measured.csv` and
-   `data/course_correction_measured.csv`, measured the same way, have no script that writes
-   them.
+   the best-fitting conservative one. `data/course_correction_measured.csv`, measured the
+   same way, has no script that writes it.
 
-Then check the model against the simulation with `validate_margins.jl` and
+Then check the model against the simulation with `measure_course_link.jl` and
 `plot_frf_validation.jl`: the model should stay below every measured margin.
 
 ## Validation of the course-loop model
@@ -134,6 +133,14 @@ Then check the model against the simulation with `validate_margins.jl` and
 Pushes the simulated course loop until it rings, by raising the steering gain or adding steering
 delay, and compares the critical gain factor and extra delay, and their ringing frequencies, with
 the gain margin, delay margin and crossover frequencies of the linear model of the course loop.
+
+### [`measure_course_link.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/measure_course_link.jl)
+Measures the command → course response of the course loop by multisine injection at 300, 200
+and 150 m (points `D`, `A` and `F`, 7 m/s), a baseline and an injection run each with the tape's
+rate limit raised, writes it to `data/course_link_measured.csv` and prints the delay and gain
+margins of the loop on the measured plant next to the model's. About 15 minutes;
+`run_example("measure_course_link.jl"; fly = false)` evaluates the saved runs in
+`output/course_link/` again.
 
 ### [`plot_frf_validation.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_frf_validation.jl)
 Plots the frequency response of the course loop measured by injection in `simple_fig8.jl` over
