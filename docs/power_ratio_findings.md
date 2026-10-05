@@ -28,6 +28,13 @@ and the follow-up on why those two runs do not fit.
   force coefficient costs power: ratio 0.94–0.97. At low wind no limit is
   active, and the plant harvests more than the planner thinks possible: ratio
   above 1.
+- **Adding wing drag to the plant does not close the gap** (2026-10-05, see (4)).
+  `wing_drag_coeff = 0.07` on the wing nodes lowers the apparent wind by 14–15 %,
+  but it also pitches the wing up by 3.5° of angle of attack, so the force per
+  dynamic pressure rises by 40 % and the tension and power do not fall. The power
+  ratio at low wind rises, to 1.30 at Maasvlakte 3.5 m/s and 1.11 at Cabauw 4 m/s.
+  The drag is kept in the plant; the identified values are being re-identified
+  on it.
 
 ## (1) Low-wind tension: the planner's soft winch floor
 
@@ -145,6 +152,59 @@ speeds, not only at 3.5 m/s. At Cabauw 4 m/s the plant beats its path
 prediction by 6 %, but no free-speed reference was computed there because the
 run's ratio stayed below the trigger.
 
+## (4) Wing drag in the plant: `wing_drag_coeff = 0.07`
+
+Since 2026-10-05 the plant carries parasitic drag on the wing. `wing_drag_coeff`
+in `data/kite_settings_psm_kernel.yaml` and `data/kite_settings_psm.yaml` is 0.07,
+the value of V3Kite's flight replays (`kite_settings_psm_replay.yaml`). Before, the
+key was 0.0 and inert in this package: V3Kite's `init` reads it but does not apply
+it. `apply_wing_drag!` (`examples/model_setup.jl`) now applies it with V3Kite's
+`distribute_wing_drag!` after settling, in `init_model` and in the relay flights
+of `build_turn_rate_table.jl`: the projected wing area (17.5 m²) is split equally
+over the 20 wing nodes, 0.88 m² each, each with a drag coefficient of 0.07. The
+kernel backend syncs the point drag and area every step; switching the drag off
+at a logged state changes the wing nodes' accelerations by up to 5.3 m/s².
+
+Two runs with the drag, flown with the turn-rate law and depower conversion
+identified WITHOUT it, against the base runs of 2026-10-03 (summaries) and the
+paper's scenario logs (AoA, pitch; phase 4, elevation below 40°):
+
+| | Maasvlakte 3.5: base → drag | Cabauw 4: base → drag |
+|---|---|---|
+| v_a [m/s] | 10.77 → 9.14 (−15 %) | 19.99 → 17.19 (−14 %) |
+| F [N] | 885 → 891 | 3059 → 3233 (+6 %) |
+| C = F/v_a² [N s²/m²] | 7.6 → 10.7 (+40 %) | 7.7 → 10.9 (+43 %) |
+| AoA [°] | 3.7 → 7.3 | 3.0 → 6.3 |
+| pitch [°] | 8.0 → 12.9 | 6.2 → 10.0 |
+| v_r [m/s] | 1.12 → 1.12 | 2.20 → 2.27 |
+| P [W] | 1012 → 1021 | 6742 → 7331 (+9 %) |
+| power ratio | 1.22 → 1.30 | 1.01 → 1.11 |
+| free-speed ratio | 1.10 → 1.11 | – |
+| cross-track RMS [°] | 1.01 → 1.37 | 0.88 → 1.29 |
+
+Both runs passed all 10 success criteria. The drag does slow the kite, but the
+wing nodes lie behind the pivot of the bridle, so their drag also pitches the wing
+up: about 3.5° more angle of attack, and with it a higher lift coefficient. The
+kite pulls the same or more tension at a lower apparent wind. The logged
+lift/drag ratio falls from about 7.7 to about 5 (the `CL2`/`CD2` columns of the
+logs are zero, so the coefficients themselves could not be read).
+
+Against (3): the plant's glide ratio, 5–14 % above the planner's before, falls by
+about the drop in apparent wind and now roughly matches it, while its force
+coefficient flips from 11–17 % below the planner's to roughly 20–25 % above. The
+low-wind power ratio therefore rises instead of falling. Point drag on the wing
+nodes is not a pure drag correction; a correction that lowers only the glide ratio
+would have to act without the pitching moment.
+
+Against (1): the tension does not fall, so the soft-floor error stays where it
+was (Maasvlakte 3.5 m/s at about 890 N), and Cabauw 4 m/s moves slightly away
+from it (3.2 kN).
+
+The cross-track error grows by about 40 %, because the turn-rate law was
+identified without the drag. Its re-identification with the drag
+(`build_turn_rate_table.jl`, 2026-10-05) is the first step; the depower
+conversion, the entry tuning and the scenarios follow.
+
 ## Consequences
 
 - **Paper (main.tex:602):** the r_P spread of 0.94–1.10 is mainly this
@@ -159,7 +219,12 @@ run's ratio stayed below the trigger.
   the dynamic model's lift and drag (an effective polar fitted from plant logs),
   or the dynamic model's drag is corrected towards the measurements. With
   matching aerodynamics, the free-speed ratio should drop below 1 and the
-  depower conversion should become simpler.
+  depower conversion should become simpler. The first attempt at the second
+  route, point drag of 0.07 on the wing nodes, shifts the trim and swaps the
+  mismatch in G for one in C, see (4).
+- **With the wing drag kept,** every identified value has to be re-identified on
+  the new plant (turn-rate law first, then the depower conversion), and the
+  results of this document re-checked: they were all obtained without it.
 - **The winch floor** remains a separate low-wind error in the winch-law
   predictions, until the planner can solve with a sharp floor or the plant flies
   the planner's soft one (`use_awe_trim = 1`, which first needs the run's
@@ -167,6 +232,10 @@ run's ratio stayed below the trigger.
   `AWE_TRIM_F_MAX` in `WinchControllers/src/wc_components.jl`).
 
 ## Data and reproduction
+
+- **Wing-drag runs (4):** `output/archives/2026-10-05_140859` (Maasvlakte 3.5 m/s)
+  and `output/archives/2026-10-05_141248` (Cabauw 4 m/s), on this machine,
+  `simple_opt_reelout.jl` without plots at the projects' own settings.
 
 - **Identification record:** `SimulationResults/depower_conversion/2026-10-03/runs/`,
   the 12 base runs (Cabauw 4–10, Maasvlakte 3.5, 4, 8, 10, 11 m/s), each with
