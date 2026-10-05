@@ -111,7 +111,14 @@ end
 # short of its own prediction or beat it by more than FREE_SPEED_RATIO_MIN_HIGH;
 # a ratio in between needs no upper bound.
 const FREE_SPEED_RATIO_MAX = 0.9
-const FREE_SPEED_RATIO_MIN_HIGH = 1.1
+const FREE_SPEED_RATIO_MIN_HIGH = 1.05
+# Phase-4 minimum tether force [N] below which the soft floor "bites". The optimizer's floor
+# (f_min 700 N, beta 1e-3) predicts F = T + 1000*ln(1 + exp(0.001*(700 - T))), T the plain
+# law's (v/k_v)^2: the floor is ~700 N of 1 kN, ~510 N of 1.5 kN, ~310 N of 2 kN (16 %),
+# ~140 N of 2.7 kN (5 %), so up to about 2 kN the prediction is off by more than 10 % for
+# a winch reason. 1000 N left Maasvlakte 4 m/s (minimum 1090 N, ratio 1.09) without a
+# reference (2026-10-05).
+const FREE_SPEED_FORCE_MAX = 2000.0
 
 """
     power_comparison(setup, st, sl, rp, p4) -> NamedTuple
@@ -180,7 +187,7 @@ function power_comparison(setup, st::RunState, sl, rp, p4)
                           (opt_power_meas / opt_power_pred_eff <= FREE_SPEED_RATIO_MAX ||
                            opt_power_meas / opt_power_pred_eff >= FREE_SPEED_RATIO_MIN_HIGH)
     if !isnothing(rp) && tos.server.free_speed_reference_points >= 2 && !isnothing(p4) &&
-       p4.force.min < 1000 && power_ratio_notable
+       p4.force.min < FREE_SPEED_FORCE_MAX && power_ratio_notable
         lengths_ro = Float64.(sl.var_10[rp.idx])
         fs_ref = free_speed_reference(tos, setup.rcs, setup.inflow, setup.guess_az, setup.guess_el,
                                       lengths_ro; min_turn_radius = st.opt_r_min,
