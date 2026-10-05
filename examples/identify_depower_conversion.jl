@@ -53,8 +53,13 @@ const SITE_RUNS = Dict("cabauw" => ("system_reelout_cabauw.yaml", "reelout_cabau
                        "maasvlakte" => ("system_reelout_maasvlakte.yaml", "reelout_150m_opt"))
 "The SimulationResults repository: `output/scenarios` links into it"
 const RESULTS = dirname(realpath(joinpath(@__DIR__, "..", "output", "scenarios")))
-"Folder (relative to `RESULTS`) of the identification record: its run folders, table and fit"
-const RECORD = "depower_conversion/2026-10-03"
+"""
+Folder (relative to `RESULTS`) of the identification record: its run folders, table and fit.
+2026-10-05: the base runs flown with `wing_drag_coeff = 0.03` and the conversion iterated to
+it (two rounds of base runs, see docs/power_ratio_findings.md); 2026-10-03 holds the runs
+without wing drag.
+"""
+const RECORD = "depower_conversion/2026-10-05"
 """
 Runs replayed: site, wind speed [m/s], run folder (relative to `RESULTS`). Maasvlakte 3.5 and
 4 m/s are in the record but not fitted: below about 1.5 kN the optimizer's soft winch floor

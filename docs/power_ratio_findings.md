@@ -20,8 +20,8 @@ and the follow-up on why those two runs do not fit.
   The plant beats even the planner's free-speed optimum, by 6–8 % at 3.5 m/s
   and 2–3 % at 4 m/s, with cold and warm solves agreeing. The planner's
   quasi-steady model and the dynamic plant **disagree about the aerodynamics at
-  every wind speed**: on the same path the plant has a 5–14 % higher glide ratio
-  and 11–17 % less force per unit of dynamic pressure, see (3) below.
+  every wind speed**: on the same path the simulated kite has a 5–14 % higher glide
+  ratio and 11–17 % less force per unit of dynamic pressure, see (3) below.
 - Whether that shows up as more or less power depends on which limits are
   active. From about 6 m/s up the reel-out speed is at its 3.5 m/s limit and the
   force near 7 kN, so the better glide ratio cannot be harvested, and the lower
@@ -142,7 +142,7 @@ both models swing the angle of attack much more over a lap, and only there the
 planner runs into its 14° bound. The polars reach maximum lift at 12°.
 
 Why the ratio flips sign: when neither the force limit nor `v_sat` is active,
-the power grows roughly with C·G², so the plant's better glide ratio wins. Above
+the power grows roughly with C·G², so the better glide ratio of the simulated kite wins. Above
 about 6 m/s both limits are active (v_r at 3.5 m/s, F near 7 kN); the glide
 ratio cannot be harvested and the lower force coefficient costs power. The
 depower conversion hides part of this: it is calibrated to match the tension, so
@@ -189,7 +189,7 @@ kite pulls the same or more tension at a lower apparent wind. The logged
 lift/drag ratio falls from about 7.7 to about 5 (the `CL2`/`CD2` columns of the
 logs are zero, so the coefficients themselves could not be read).
 
-Against (3): the plant's glide ratio, 5–14 % above the planner's before, falls by
+Against (3): the glide ratio of the simulated kite, 5–14 % above the planner's before, falls by
 about the drop in apparent wind and now roughly matches it, while its force
 coefficient flips from 11–17 % below the planner's to roughly 20–25 % above. The
 low-wind power ratio therefore rises instead of falling. Point drag on the wing

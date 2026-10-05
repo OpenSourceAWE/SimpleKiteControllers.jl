@@ -5,7 +5,7 @@
 # after, so this copy is the one flown, and a change upstream does not reach these
 # runs unnoticed. Keep it in step with V3Kite's file on purpose, not by accident.
 #
-# It differs from V3Kite's file in one key: `wing_drag_coeff` is 0.07 here, 0.0
+# It differs from V3Kite's file in one key: `wing_drag_coeff` is 0.03 here, 0.0
 # upstream (2026-10-05). V3Kite's `init` does not apply it; `init_model` in
 # examples/model_setup.jl does, see its comment below.
 #
@@ -36,9 +36,11 @@ kite_settings:
   wing_mass_le_frac: 0.75        # leading-edge share of `wing_mass`
   # Applied by `init_model` (examples/model_setup.jl) with V3Kite's
   # `distribute_wing_drag!`: the projected wing area split equally over the wing
-  # nodes, each with this drag coefficient. The value of V3Kite's flight replays
-  # (kite_settings_psm_replay.yaml); 0.0 adds no drag.
-  wing_drag_coeff: 0.07          # parasitic drag spread over the wing nodes
+  # nodes, each with this drag coefficient. 0.0 adds no drag. V3Kite's flight replays
+  # use 0.07 (kite_settings_psm_replay.yaml), which needed more depower at high wind
+  # than the kite can fly (docs/power_ratio_findings.md); 0.05 still ran out of depower
+  # (0.42) in phase 5 at Cabauw 10 m/s; 0.03 is under test (2026-10-05).
+  wing_drag_coeff: 0.03          # parasitic drag spread over the wing nodes
 
   adapter_dir: null              # SurfplanAdapter export for Comer-Levy bending
 

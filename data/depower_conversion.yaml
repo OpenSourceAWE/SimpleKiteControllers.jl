@@ -3,36 +3,39 @@
 #
 #   rel_depower = (pivot - 0.6)/5 + offset + slope*x + curvature*x^2,   x = l_dp - pivot
 #
-# With depower at the force limit the simulator pulls about 13x per unit of rel_depower more
-# steeply in ln(force) (Cabauw 7 m/s: 9440 N at 0.274 against 6546 N at 0.302), so a few
-# thousandths decide the force.
+# Near the force limit ln(force) falls by about 10 per unit of rel_depower (d ln F / d rel_depower
+# -7 to -11 in the 2026-10-05 replays), so a few thousandths decide the force.
 depower_conversion:
-  # Total offset [rel_depower] between the two models at equal power, at the pivot. Recalibrated
-  # 2026-08-29 after kite.mass rose from 6.2 kg to 10.9926 kg (commit 6443fbe) to match AWETrim's
-  # own LEI-V3 wing; at 6 m/s (8 mm tether, no turbulence) 0.1010 measured 7286 W against 7262 W
-  # predicted, ratio 1.00, twice, inside the 0.995..1.004 band. ~100 W measured per 0.001.
+  # Total offset [rel_depower] between the two models at equal tension, at the pivot. Since
+  # 2026-10-05 fitted together with slope and curvature (fit_offset = true), for the kite with
+  # wing drag (wing_drag_coeff = 0.03): the drag pitches the wing up, so the kite pulls more force
+  # per dynamic pressure and needs more depower at the same tape length.
   # History: 0.12 measured 2026-08-18 (docs/steering_depower.md: 0.08 the two tape-length zeros,
   # 0.04 genuine aero disagreement), 0.107 (ee1ecbd, not re-measured), 0.099 after the 8 mm tether,
-  # then this value. The offset is the FULL correction: do not also subtract the 0.4 m calibration
-  # offset. RE-MEASURE after any change to either model's depower axis, aero, or mass.
-  offset: 0.1010
+  # 0.1010 (2026-08-29, power ratio 1.00 at 6 m/s after kite.mass rose to 10.9926 kg), then this
+  # value. The offset is the FULL correction: do not also subtract the 0.4 m calibration offset.
+  # RE-MEASURE after any change to either model's depower axis, aero, drag, or mass.
+  offset: 0.1076
   # Tape length [m] the offset was calibrated at: the l_dp the optimizer flies at 6 m/s
   # (1.430 at 220 m, Cabauw 2026-10-03). Slope and curvature turn the conversion about it.
   pivot: 1.43
-  # Slope and curvature: identified 2026-10-03 by examples/identify_depower_conversion.jl, offset
-  # kept. 35 phase-4 paths of 10 scenarios (Cabauw 4-10, Maasvlakte 8, 10, 11 m/s), each replayed
-  # at depower shifts -0.01/0/+0.01; per path the shift at which the plant flies the predicted
-  # mean tension (d ln F / d rel_depower -8 to -12). Weighted RMS residual 0.0042, against 0.0064
-  # for the line of slope 0.1833 (which flew Cabauw 10 m/s at 8734 N, over the 8400 N limit).
+  # Offset, slope and curvature: identified 2026-10-05 by examples/identify_depower_conversion.jl
+  # (record SimulationResults/depower_conversion/2026-10-05) for wing_drag_coeff = 0.03. Base runs
+  # of Cabauw 4-10 and Maasvlakte 8, 10, 11 m/s flown twice: with a conversion interpolated between
+  # the no-drag fit and one for 0.07, then with the fit from those runs (per path a depower
+  # correction ln(F_meas/F_pred)/10); the second round flew power ratios 0.94-1.03. Its 30 phase-4
+  # paths were replayed at depower shifts -0.01/0/+0.01; per path the shift at which the kite flies
+  # the predicted mean tension (d ln F / d rel_depower -7 to -11). Weighted RMS residual 0.0034.
   # What the quadratic cannot take: within each run the later, longer-tether paths need
-  # 0.002-0.004 less depower per path at the same l_dp, and Maasvlakte 10-11 m/s about 0.005 less
-  # than Cabauw at equal l_dp (residual +0.004 to +0.010, i.e. less force than predicted).
-  # History of the slope: 0.2 (tape geometry), 0.1833 (2026-10-03 morning, half the 7 m/s error).
+  # 0.004-0.010 less depower per path at the same l_dp, and Maasvlakte 10-11 m/s about 0.004 less
+  # than Cabauw at equal l_dp (residual +0.003 to +0.006).
+  # History: 2026-10-03, without wing drag and offset kept at 0.1010: slope 0.1147, curvature
+  # 0.1905 (35 paths, RMS 0.0042); before that 0.2 (tape geometry) and 0.1833.
   # rel_depower per metre of tape at the pivot [1/m].
-  slope: 0.1147
+  slope: 0.1392
   # rel_depower per metre squared [1/m^2]; 0 is the straight line.
-  curvature: 0.1905
+  curvature: 0.2427
   # Tape lengths [m] the slope and curvature were identified on; outside them the conversion
   # continues along the tangent at the nearer end.
   l_dp_min: 1.4000
-  l_dp_max: 1.9400
+  l_dp_max: 1.9100
