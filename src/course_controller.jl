@@ -94,6 +94,8 @@ $(TYPEDFIELDS)
     instead of stepping to it. `0` restores the hard switch.
     """
     depower_blend_time = 4.0
+    "Phase 5 commands course 0 (straight up) instead of the path: parks the kite"
+    park_final::Bool = false
 end
 
 """
@@ -119,7 +121,8 @@ function CourseControllerSettings(fcs::FC_Settings; dt)
         dive_el_margin = fcs.course.dive_el_margin, el_center = fcs.pattern.el_center,
         fig8_d_gate = fcs.course.fig8_d_gate,
         depower_setpoint = fcs.course.depower_setpoint, entry_depower = fcs.course.entry_depower,
-        depower_final = fcs.reelout.depower_final, depower_blend_time = fcs.course.depower_blend_time)
+        depower_final = fcs.reelout.depower_final, depower_blend_time = fcs.course.depower_blend_time,
+        park_final = fcs.reelout.park_final)
 end
 
 """
@@ -254,7 +257,7 @@ are left on `cc` as [`chi_cmd`](@ref CourseController)/`w_lim`/`psi_prime`/
 """
 function calc_steering(cc::CourseController, chi_set, heading, course;
                        t, elevation, v_kite, v_app, dmin, tangent, gain_scale = 1.0,
-                       u_ff = 0.0, chi_ff = 0.0)
+                       u_ff = 0.0, chi_ff = 0.0, park::Bool = false)
     ccs = cc.ccs
     el_deg = rad2deg(elevation)
     if cc.phase == 0 && t >= ccs.park_time
@@ -288,7 +291,11 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     elseif phase == 2
         chi_cmd = deg2rad(ccs.chi_hold)
     end
-    if phase >= 4
+    # Parking: straight up, out of the power zone; the path's feedforward does not apply.
+    parking = park || (phase == 5 && ccs.park_final)
+    if parking
+        chi_cmd = 0.0
+    elseif phase >= 4
         chi_cmd = wrap2pi(chi_cmd - chi_ff)
     end
     cc.chi_cmd = chi_cmd
@@ -308,7 +315,7 @@ function calc_steering(cc::CourseController, chi_set, heading, course;
     v_app_eff = max(v_app, ccs.v_app_min, phase >= 3 ? ccs.v_app_min_pattern : 0.0)
     K_phase = phase >= 3 ? ccs.heading_p : ccs.entry_gain * ccs.heading_p
     set_K!(cc.pid, gain_scale * K_phase * ccs.v_app_ref / v_app_eff, 0.0, err)
-    u_ff_used = phase >= 4 ? u_ff : 0.0
+    u_ff_used = phase >= 4 && !parking ? u_ff : 0.0
     cc.u_ff = u_ff_used
     rel_steering = if phase == 0
         cc.pid(0.0, 0.0, 0.0)

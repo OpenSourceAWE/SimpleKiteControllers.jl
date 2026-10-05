@@ -57,7 +57,9 @@ function score_log(setup, st::RunState)
                        min_elevation = fcs.run.min_elevation, az_center = az_c_log,
                        az_amplitude = az_amp_log, el_height = el_h_log,
                        min_span_frac = fcs.run.min_span_frac, require_final = true,
-                       max_force = project_set.max_force, cross_track = d_raw_log)
+                       max_force = project_set.max_force, cross_track = d_raw_log,
+                       # A parking kite leaves the path on purpose: the pattern ends where it parks.
+                       t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
     st.fig8m = fig8m
     # A run that stopped before the metrics window scores nothing, and every line
     # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.

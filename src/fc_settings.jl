@@ -226,6 +226,20 @@ $(TYPEDFIELDS)
     "`depower_final_f_gain` during the soft stop"
     depower_final_f_gain_stop = 2e-5
 
+    """
+    Phase 5 parks the kite instead of flying the path: the course controller
+    commands course 0 (straight up) without the path feedforward, so the kite
+    leaves the power zone once reel-out has stopped, as before a reel-in. The
+    pattern metrics then end where phase 5 begins
+    """
+    park_final::Bool = false
+    """
+    Lead [s] of the parking climb: with `park_final`, it starts once the reel-out
+    would end within this many seconds at the current speed, so the kite has
+    left the power zone before the stopped winch lets the force jump; 0 = at phase 5
+    """
+    park_lead = 0.0
+
     # ---- Phase-5 path lift -----------------------------------------------------
     "Path lift [deg] from the reel-out stop latch on"
     el_offset_final = 0.0

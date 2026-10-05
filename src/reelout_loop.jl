@@ -108,7 +108,8 @@ function steering_command!(st::RunState, setup, plant, t, chi_set, dmin)
         Float64(ss.course);
         t, elevation = Float64(ss.elevation),
         v_kite, v_app = Float64(ss.v_app),
-        dmin, tangent = path_tangent(fec), gain_scale, u_ff, chi_ff)
+        dmin, tangent = path_tangent(fec), gain_scale, u_ff, chi_ff,
+        park = park_should_start(fcs, st.cc.phase, Float64(ss.v_reelout[1]), st.l_set))
     phase_before == 2 && phase == 3 && (st.transition_start = t)
     rel_depower, phase = depower_command!(st, setup, plant, t, phase_before, phase, rel_depower)
     return (; rel_steering, rel_depower, phase, u_ff, chi_cmd = st.cc.chi_cmd, w_lim = st.cc.w_lim,

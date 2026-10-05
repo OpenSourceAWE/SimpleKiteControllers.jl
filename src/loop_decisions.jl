@@ -121,6 +121,35 @@ lift_should_start(fcs, stop_start, phase, v_reelout, l_set) =
      fcs.reelout.reelout_l_max - l_set <= v_reelout * fcs.reelout.el_offset_lead)
 
 """
+    park_should_start(fcs, phase, v_reelout, l_set) -> Bool
+
+Whether the kite parks now (`fcs.reelout.park_final`): in phase 5, or `fcs.reelout.park_lead`
+seconds before the reel-out would end at the current speed. No latch is needed: through the
+soft stop the remaining length falls with the square of the speed, so the lead stays met.
+"""
+park_should_start(fcs, phase, v_reelout, l_set) =
+    fcs.reelout.park_final &&
+    (phase >= 5 ||
+     (phase >= 3 && fcs.reelout.park_lead > 0 && v_reelout > 0 &&
+      fcs.reelout.reelout_l_max - l_set <= v_reelout * fcs.reelout.park_lead))
+
+"""
+    park_start_time(fcs, sl) -> Union{Float64, Nothing}
+
+The time [s] the kite of log `sl` started to park ([`park_should_start`](@ref)), from the logged
+phase, reel-out speed and tether length; `nothing` when it never parked or `park_final` is off.
+"""
+function park_start_time(fcs, sl)
+    fcs.reelout.park_final || return nothing
+    first_value(x) = Float64(x isa AbstractVector ? x[1] : x)
+    i = findfirst(eachindex(sl.time)) do i
+        park_should_start(fcs, Int(sl.sys_state[i]), first_value(sl.v_reelout[i]),
+                          first_value(sl.l_tether[i]))
+    end
+    return isnothing(i) ? nothing : Float64(sl.time[i])
+end
+
+"""
     lap_index_step(last_idx, idx_prev, n_path) -> Int
 
 Points the closest path point Q moved since the last step, unwrapped across the `mod1` wrap of

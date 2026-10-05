@@ -42,7 +42,9 @@ first drop below `settle_d_threshold` degrees, capped at `t_start + settle_time`
 so a run that never converges still gets scored from a bounded window rather
 than an empty one; the elapsed value is returned as `settle_time_used`.
 `hf_window` [s] is the moving-average width subtracted out to isolate
-high-frequency content. Returns `nothing` if the window is empty.
+high-frequency content. Returns `nothing` if the window is empty. `t_end` [s] closes
+the window early: a run that parks the kite in phase 5 (`park_final`) leaves the
+path on purpose there, so its pattern is scored up to the start of phase 5.
 
 The elevation floor is reported both over the settled window and over the
 **whole run** (`min_elevation_all`) — the latter is the success criterion,
@@ -116,7 +118,8 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
                       hf_window = 0.5,
                       lap_frac = 0.5, min_excursion = deg2rad(5.0),
                       az_center = nothing, az_amplitude = nothing,
-                      el_height = nothing, v_steering = 0.2, cross_track = nothing)
+                      el_height = nothing, v_steering = 0.2, cross_track = nothing,
+                      t_end = Inf)
     t_all = Float64.(sl.time)
     d_all = cross_track === nothing ? Float64.(sl.var_01) : Float64.(cross_track)
     length(d_all) == length(t_all) ||
@@ -129,7 +132,8 @@ function fig8_metrics(sl; t_start = 0.0, settle_time = 10.0, settle_d_threshold 
                             eachindex(t_all))
     stats_start = converge_idx === nothing ? t_start + settle_time :
                   min(t_start + settle_time, t_all[converge_idx])
-    settled = findall(>=(stats_start), t_all)
+    # `t_end` closes the window where the pattern ends, e.g. a run that parks in phase 5.
+    settled = findall(t -> stats_start <= t < t_end, t_all)
     isempty(settled) && return nothing
 
     d = d_all[settled]
@@ -576,10 +580,10 @@ function print_fig8_metrics(sl; t_start = 0.0, settle_time = 10.0,
                             az_center = nothing, az_amplitude = nothing,
                             el_height = nothing, min_span_frac = 0.7,
                             v_steering = 0.2, require_final::Bool = false,
-                            max_force = nothing, cross_track = nothing)
+                            max_force = nothing, cross_track = nothing, t_end = Inf)
     m = fig8_metrics(sl; t_start, settle_time, settle_d_threshold, hf_window,
                      lap_frac, min_excursion,
-                     az_center, az_amplitude, el_height, v_steering, cross_track)
+                     az_center, az_amplitude, el_height, v_steering, cross_track, t_end)
     if m === nothing
         @warn "No settled samples — no figure-eight metrics."
         return nothing

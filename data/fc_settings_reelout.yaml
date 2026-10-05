@@ -95,6 +95,8 @@ fc_settings:
     depower_final_f_target: 7500.0 # Force the limiter holds, under 8400 N by the lobe swing [N]
     depower_final_f_gain: 6.0e-5 # Limiter integrator gain, depower per N per s    [1/(N s)]
     depower_final_f_gain_stop: 1.0e-4 # Same during the soft-stop ramp: 0.35 -> 0.40 in 3 s [1/(N s)]
+    park_final:         true     # Phase 5 steers straight up (course 0), out of the power zone [-]
+    park_lead:          6.0      # Parking climb starts this long before reel-out ends [s]
     el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
     el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
     final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back; 0 = off [-]
