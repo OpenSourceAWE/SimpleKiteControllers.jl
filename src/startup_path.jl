@@ -397,11 +397,20 @@ function finish_startup!(setup, st::RunState)
     (; fec, l_tether, fcs, tos, opt_r_on, opt_depower_log) = setup
     margin_startup = check_pattern_feasible(fec, l_tether, fcs.course.max_steering;
                                             c1 = st.c1_startup, prn = false).margin
-    if opt_r_on && !isnan(st.c1_startup) && margin_startup < tos.gates.min_feasibility_margin
+    below_gate = margin_startup < tos.gates.min_feasibility_margin
+    if below_gate && !isnothing(setup.replay_paths)
+        # A replay serves the archived results in order and holds no retries: the run it
+        # replays installed this path. A plant re-identified since can put it below the gate.
+        @info @sprintf("The startup path is at margin %.3f, below \
+                        min_feasibility_margin = %.2f; replaying, so it is flown without \
+                        retries.", margin_startup, tos.gates.min_feasibility_margin)
+        below_gate = false
+    end
+    if opt_r_on && !isnan(st.c1_startup) && below_gate
         retry_startup!(setup, st)
     end
 
-    if margin_startup < tos.gates.min_feasibility_margin
+    if below_gate
         # The incumbent is what the gates will refuse; `incumbent_score` exists exactly when this fires.
         save_failed_trajectory(setup, "startup_incumbent", st.inc_raw[1], st.inc_raw[2];
                                margin = st.incumbent_score.margin,
