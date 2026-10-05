@@ -33,7 +33,7 @@ using Printf
 using GLMakie
 
 const FRF_POINTS = [
-    (key = "F150_f8a42_f8b17", project = "system_fig8_150m.yaml", title = "150 m"),
+    (key = "F150", project = "system_fig8_150m.yaml", title = "150 m"),
     (key = "A", project = "system_fig8_200m.yaml", title = "200 m"),
     (key = "D", project = "system_fig8_300m.yaml", title = "300 m"),
 ]
