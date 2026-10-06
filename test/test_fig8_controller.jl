@@ -635,9 +635,10 @@ end
 
         # Canary: catch an accidental edit of the YAML. EXPECTED to change on a
         # deliberate re-identification -- update it then, nothing else here.
-        # The low crosswind flights re-identified on 2026-10-02 at the projects' time step (1/90 s)
-        # and VSM interval 5 (before: 0.3062365853867301, 2026-09-29, at 1/60 s).
-        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.31377205956495025
+        # Re-identified on 2026-10-05 with the wing drag (wing_drag_coeff 0.03, commit 36b665b;
+        # before: 0.31377205956495025, 2026-10-02, at 1/90 s and VSM interval 5, without drag;
+        # 0.3062365853867301, 2026-09-29, at 1/60 s).
+        @test turn_rate_coeffs([0.0, 0.0, 40.0], 0.25).c1 ≈ 0.2544866619072098
     end
 
     @testset "turn_rate_coeffs interpolation (conditions block)" begin
@@ -1081,14 +1082,17 @@ end
         # 8° -> 8.5°: Maasvlakte 3.5 m/s needs 8.12° (2026-09-24).
         @test tos.box.pattern_elevation_amplitude_max == 8.5
         # 10° -> 11°: Cabauw 10 at f_high 7200 N needs 10.5-10.7° at 150 m (2026-09-23).
-        @test tos.box.pattern_elevation_amplitude_max_high == 11.0
+        # 11° -> 13°: with the wing drag Cabauw 10 needs more (2026-10-05, commit 1290d50).
+        @test tos.box.pattern_elevation_amplitude_max_high == 13.0
         # Keyed on the 100 m wind: Maasvlakte 10 m/s is 12.9 there, Cabauw 7 m/s 13.5.
         @test tos.box.pattern_elevation_amplitude_max_wind_ref == 13.2
         @test tos.box.pattern_elevation_amplitude_max_wind_height == 100.0
         # 32° at and above the same wind: under the 45° climb limit Cabauw 10 needs ±28.4-28.8°,
-        # and the startup solve 2-3° of room beyond (2026-10-03).
+        # and the startup solve 2-3° of room beyond (2026-10-03). 32° -> 36° with the wing drag
+        # (1290d50), then 36° -> 34°: at 36° the re-optimizations at Cabauw 10 grew to ±32° x 21°
+        # and tracked worse (2026-10-05, b68455e).
         @test tos.box.pattern_azimuth_max == 28.0
-        @test tos.box.pattern_azimuth_max_high == 32.0
+        @test tos.box.pattern_azimuth_max_high == 34.0
         # The optimizer's lopsided basins are closed by the mirror-symmetry rows (2026-09-25).
         @test tos.box.pattern_symmetric === true
         @test TrajOptSettings().box.pattern_symmetric === false
