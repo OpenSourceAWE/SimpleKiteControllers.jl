@@ -88,14 +88,14 @@ function attractor_arc(site, scenario)
 end
 
 """
-    plot_attractor_distance(scenarios = ATTRACTOR_SCENARIOS; t_max = 180.0, disp = true, save = true)
+    plot_attractor_distance(scenarios = ATTRACTOR_SCENARIOS; t_max = 150.0, disp = true, save = true)
 
 Plot the attractor arc ([`attractor_arc`](@ref)) of each `(site, scenario)` pair
 in `scenarios` over time, one line per run. The runs share one time axis, that of
 the longest run; the others are sampled onto it, `NaN` beyond their own end.
 The time axis runs from 0 to `t_max` [s].
 """
-function plot_attractor_distance(scenarios = ATTRACTOR_SCENARIOS; t_max = 180.0, disp = true, save = true)
+function plot_attractor_distance(scenarios = ATTRACTOR_SCENARIOS; t_max = 150.0, disp = true, save = true)
     runs = [attractor_arc(site, scenario) for (site, scenario) in scenarios]
     time = argmax(r -> last(r[1]), runs)[1]
     arcs = map(runs) do (t_run, arc, _)
