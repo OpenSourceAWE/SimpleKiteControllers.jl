@@ -96,6 +96,12 @@ sweep_project() = project_file(selected_project())
 # The turn-rate table that project names.
 out_file() = turn_rate_coeffs_file(sweep_project())
 
+# The turn-rate table is identified on the Maasvlakte project; checked here, before `DT`
+# and `VSM_INTERVAL` are read from the selected project.
+@assert basename(sweep_project()) == "system_reelout_maasvlakte.yaml" "build_turn_rate_table: " *
+    "selected project is $(basename(sweep_project())), select system_reelout_maasvlakte.yaml " *
+    "with select_project() first."
+
 const V_WIND           = 9.51
 const TETHER_LENGTH    = 150.0
 const SWEEP_SIM_TIME   = 200.0
