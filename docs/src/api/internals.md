@@ -9,6 +9,8 @@ Non-exported names that the docstrings of the other API pages refer to.
 ```@docs
 SimpleKiteControllers.BUDGET_KNOT
 SimpleKiteControllers.DEPOWER_SEED_BOUNDS
+SimpleKiteControllers.IDENTIFICATION_STEPS
+SimpleKiteControllers.KITE_SETTINGS_KEYS
 SimpleKiteControllers.RETIRED_YAML_KEYS
 SimpleKiteControllers.FC_PARTS
 SimpleKiteControllers.FC_FIELD_PART
@@ -20,8 +22,12 @@ SimpleKiteControllers.gate_candidate
 SimpleKiteControllers.wants_challenge
 SimpleKiteControllers.set_yaml_fields!
 SimpleKiteControllers.depower_command!
+SimpleKiteControllers.depower_seed
 SimpleKiteControllers.elevation_min_request
 SimpleKiteControllers.merge_into!
+SimpleKiteControllers.min_turn_radius_request
+SimpleKiteControllers.request_constraints
+SimpleKiteControllers.request_depower_estimate
 SimpleKiteControllers.setup_run
 SimpleKiteControllers.solve_startup_path!
 SimpleKiteControllers.startup_feasibility

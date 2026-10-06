@@ -22,7 +22,8 @@ step, by a small increment, whichever lifts the worst scenario most, until it
 reaches `target`. Small steps on purpose: the model ranks settings only roughly,
 and a large jump that raised the modelled margin ("C", 2026-09-25) made tracking
 worse in flight. The result is a proposal: write it to `fc_settings_reelout.yaml`
-by hand and fly the regression runs before adopting it.
+by hand and fly the regression runs before adopting it. `collect_scenarios`, `retune` and
+`tighten` refuse to run on a model identified on another kite than the sites fly (`check_sites`).
 
 Result 2026-09-28 (c3 = 0.23 1/s, 22 scenarios): from lead 0.88 s and
 `heading_d` 0.126 s, worst α guided 0.257 (Cabauw 10 m/s) -> 0.305 with lead
@@ -46,10 +47,21 @@ end
 using Printf
 using Statistics: median
 using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
+using SimpleKiteControllers: project_file, check_model_provenance
 
 "Sites and their projects, as `stability_opt_reelout.jl` supports them"
 const RETUNE_SITES = ("cabauw" => "system_reelout_cabauw.yaml",
                       "maasvlakte" => "system_reelout_maasvlakte.yaml")
+
+"""
+    check_sites(sites = RETUNE_SITES)
+
+Throw unless the identified model belongs to the kite each site's project flies
+([`check_model_provenance`](@ref)). A margin drop after a change of the kite is a reason to
+finish the re-identification, not to retune.
+"""
+check_sites(sites = RETUNE_SITES) =
+    foreach(((site, project),) -> check_model_provenance(project_file(project)), sites)
 
 """
 Step per setting: relative for `heading_p`, absolute otherwise [-, s, deg, s].
@@ -76,6 +88,7 @@ The linear bins of every archived scenario of `sites`, one
 `(; site, name, bins, lag, Ts)` per scenario.
 """
 function collect_scenarios(; sites = RETUNE_SITES)
+    check_sites(sites)
     data = NamedTuple[]
     for (site, project) in sites
         root = normpath(joinpath(@__DIR__, "..", "output", "scenarios", site))
@@ -130,6 +143,7 @@ move that lifts the worst scenario most is taken; stops at `target`, after
 move)` per step, the live settings first.
 """
 function retune(data; target = 0.3, settings_keys = keys(RETUNE_STEPS), max_steps = 20)
+    check_sites()
     f = live_settings()
     trail = [(; settings = f, α = worst_margin(data, f), move = "live")]
     @info @sprintf("live: worst α guided = %.4f", trail[end].α)
@@ -165,6 +179,7 @@ the live settings first; `trail[end]` is the last setting that kept `floor`.
 """
 function tighten(data; key = :attractor_dist, step = 0.1, floor = 0.51, max_steps = 30,
                  settings = live_settings())
+    check_sites()
     f = settings
     trail = [(; settings = f, α = worst_margin(data, f), move = "start")]
     @info @sprintf("start: %s = %.5g, worst α guided = %.4f", key, get_fc_field(f, key), trail[end].α)

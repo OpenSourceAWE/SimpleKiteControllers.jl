@@ -99,6 +99,8 @@ project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 reload_turn_rate_table!(project)
 reload_course_loop_model!(project)
+# Rate only on a model identified on the kite the project flies.
+check_model_provenance(project)
 SET = Settings(project)
 Ts = 1 / SET.sample_freq
 

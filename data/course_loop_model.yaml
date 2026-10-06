@@ -40,3 +40,14 @@ course_loop_model:
   kite_corr_zero:      1.32   # [Hz]
   kite_corr_pole:      0.98   # [Hz]
   kite_corr_v_ref:     32.0   # v_a of the measurement; zero and pole scale with v_a [m/s]
+
+# The kite each step identified its values on: `kite_id` (src/kite_fingerprint.jl) of the
+# projects it flew, written by the step's script. check_model_provenance compares them with
+# the kite a project flies and refuses to rate or retune on a model of another kite. Step 1's
+# is in each row of the turn-rate table. Backfilled 2026-10-06 from the git history: steps
+# 2 - 5 were flown in commit 8217ddc, after the last change of the kite (36b665b).
+provenance:
+  kite_delay_scaling: "54a9ec8ae951"  # step 2, identify_kite_delay_scaling.jl
+  pattern_law:        "54a9ec8ae951"  # step 3, identify_pattern_law.jl
+  depower_factor:     "54a9ec8ae951"  # step 4, identify_depower_factor.jl
+  kite_correction:    "54a9ec8ae951"  # step 5, identify_kite_correction.jl

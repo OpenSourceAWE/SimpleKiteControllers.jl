@@ -23,6 +23,10 @@ where the guided worst case sits (tether length, `v_a`, depower), and writes the
 scenario of both sites with plots on, which shows its Bode plot and the margins over
 tether length, and leaves its `L` in `Main` for `diskmargin(L)`.
 
+Refuses to start unless the identified model belongs to the kite each site flies
+([`check_model_provenance`](@ref)): after a change of the kite, finish steps 1 – 5 of the
+re-identification first.
+
 About 4 s per scenario (94 s for the 22 of 2026-10-03).
 `run_example("stability_global.jl"; verbose = true)` shows each scenario's full per-bin output
 (`src/script_inputs.jl`).
@@ -40,6 +44,7 @@ import YAML
 
 using SimpleKiteControllers: selected_scenarios_dir, read_gui_field, set_selected_project
 using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
+using SimpleKiteControllers: project_file, check_model_provenance
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
 "Project analyzed at each site, as in `build_all_scenarios.jl`; comment out a line to skip that site"
@@ -164,6 +169,8 @@ function analyse_site(site, project)
     return merge(worst_scenario, (; site, project))
 end
 
+# Before the first scenario: a model identified on another kite than a site flies is not rated.
+foreach(((site, project),) -> check_model_provenance(project_file(project)), SITE_PROJECTS)
 project0 = read_gui_field("project")
 worst_scenario = try
     worst_per_site = map(SITE_PROJECTS) do (site, project)

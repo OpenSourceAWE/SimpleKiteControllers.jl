@@ -18,6 +18,18 @@ pattern_dead_time_lag
 turn_rate_plant
 ```
 
+## Provenance
+
+Which kite the turn-rate table and the course-loop model were identified on. The rating
+and retuning scripts refuse a model of another kite.
+
+```@docs
+kite_fingerprint
+kite_id
+stale_identification_steps
+check_model_provenance
+```
+
 ## Controller and guidance
 
 ```@docs

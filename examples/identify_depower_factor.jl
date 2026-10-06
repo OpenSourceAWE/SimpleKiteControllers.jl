@@ -56,6 +56,8 @@ const T_SETTLE = 15.0
     script_inputs(@__FILE__, (; depowers = [0.27, 0.30, 0.33, 0.36], fly = true, save = true))
 
 points = [merge(DEPOWER_POINT, (; depower = Float64(depower))) for depower in depowers]
+# Step 4: steps 1 - 3 must be the kite's own, and point D must fly that kite.
+check_model_provenance(project_file(selected_project()); through = 3, flown = (DEPOWER_POINT.project,))
 fly && foreach(point -> fly_point(point, LOG_DIR), points)
 clm = course_loop_model()
 "The pattern law at `pattern_law_depower` and `v_a` [m/s], floored as `pattern_dead_time_lag` does"
@@ -94,7 +96,8 @@ if save
         "over the pattern law at the same v_a (identify_turn_rate_law, phase 4 from $(T_SETTLE) s after its start); " *
         @sprintf("standard error of the exponent ±%.2f. ", se_exp) *
         "identify_depower_factor.jl, $(Dates.today()).")
-    update_yaml_values!(file, ["pattern_depower_exp" => @sprintf("%.2f", depower_exp)];
+    update_yaml_values!(file, ["pattern_depower_exp" => @sprintf("%.2f", depower_exp),
+                               "depower_factor" => "\"$(kite_id(project))\""];
                         comments = Dict("pattern_depower_exp" => comment))
     reload_course_loop_model!(project)
     @info "identify_depower_factor: wrote pattern_depower_exp to data/$(basename(file))."

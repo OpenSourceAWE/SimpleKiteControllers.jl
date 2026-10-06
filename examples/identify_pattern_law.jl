@@ -67,6 +67,9 @@ const DEPOWER_TOL = 0.01
 # The caller's inputs (`run_example`); a plain `include` flies with these defaults.
 (; points, fly, save) = script_inputs(@__FILE__, (; points = PATTERN_POINTS, fly = true, save = true))
 
+# Step 3: steps 1 and 2 must be the kite's own, and every point must fly that kite.
+check_model_provenance(project_file(selected_project()); through = 2,
+                       flown = unique(point.project for point in points))
 fly && foreach(point -> fly_point(point, LOG_DIR), points)
 clm = course_loop_model()
 results = [point_delay(point, LOG_DIR; t_settle = T_SETTLE) for point in points]
@@ -114,7 +117,8 @@ if save
     floor_comment = wrap_comment("The lowest v_a the law was identified at; below it the law holds its value.")
     update_yaml_values!(file, ["pattern_delay_ref" => @sprintf("%.3f", delay_ref),
                                "pattern_delay_exp" => @sprintf("%.3f", delay_exp),
-                               "pattern_v_floor" => @sprintf("%.1f", v_floor)];
+                               "pattern_v_floor" => @sprintf("%.1f", v_floor),
+                               "pattern_law" => "\"$(kite_id(project))\""];
                         comments = Dict("pattern_delay_ref" => law_comment,
                                         "pattern_v_floor" => floor_comment))
     reload_course_loop_model!(project)

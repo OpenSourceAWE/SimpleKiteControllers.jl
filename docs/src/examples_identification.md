@@ -77,7 +77,15 @@ under new names, enter the new names in the `system:` section of the kite's proj
 that project and re-identify in the order below; each step uses the results of the steps
 before it. The steering tape's lag needs no identification: it is `1/steering_gain` of the
 KCU's P controller, from the project's settings file. Each step has a script that writes its
-result and its provenance into the file.
+result and its provenance into the file, including the [`kite_id`](@ref) of the kite it
+flew: step 1 in each row of the turn-rate table, steps 2 – 5 in the `provenance:` section
+of the course-loop model file. [`check_model_provenance`](@ref) compares them with the kite
+a project flies. The script of each step refuses to start before the steps ahead of it are
+done on the same kite, and the scripts of step 6 refuse a model that is not complete.
+
+Steps 1 and 2 fly the project selected in the example menu (`select_project()`), not the one
+named in the turn-rate table. That must be the project in the table's `conditions: system`;
+otherwise the law is identified on a different kite than the one it is written for.
 
 1. **The turn-rate law.** Set `conditions: system` in the copied turn-rate table to the
    kite's project and `conditions: dt` to its time step (`1/sample_freq`), then run `build_turn_rate_table.jl`; it flies the selected project,
@@ -124,8 +132,12 @@ result and its provenance into the file.
    the best-fitting conservative one. `data/course_correction_measured.csv`, measured the
    same way, has no script that writes it.
 
-Then check the model against the simulation with `measure_course_link.jl` and
-`plot_frf_validation.jl`: the model should stay below every measured margin.
+6. **Rate and retune.** Never retune the controller or rate its margins before steps 1 – 5
+   are all done: until then the margins come from a model that mixes the new kite with
+   the old one. Check the model against the simulation with `measure_course_link.jl` and
+   `plot_frf_validation.jl` first; the model should stay below every measured margin. Only
+   then run `stability_global.jl`, which rates the live settings on every archived scenario,
+   and `retune_guided.jl`.
 
 ## Validation of the course-loop model
 

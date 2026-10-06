@@ -153,6 +153,9 @@ function fit_conservative(freqs, ratio)
     return best
 end
 
+# Step 5: steps 1 - 4 must be the kite's own, and point D must fly that kite.
+check_model_provenance(project_file(selected_project()); through = 4,
+                       flown = (V1_POINTS[KC_POINT].project,))
 mkpath(KC_DIR)
 log_file = joinpath(KC_DIR, "kite_correction_injection")
 if fly
@@ -164,8 +167,10 @@ if fly
                         Dict("period" => period, "freqs" => freqs, "amp" => AMPLITUDE))
         injected = run_v1(KC_POINT; label = "kc_injection", injection = multisine, sim_time = KC_SIM_TIME)
         cp(injected.log_path * ".arrow", log_file * ".arrow"; force = true)
+        record_log_kite!(log_file, V1_POINTS[KC_POINT].project)
     end
 end
+check_log_kite(log_file, V1_POINTS[KC_POINT].project)
 lines = YAML.load_file(joinpath(KC_DIR, "lines.yaml"))
 multisine = Multisine(; period = lines["period"], freqs = Float64.(lines["freqs"]), amp = lines["amp"])
 kc_run = analyze(KC_POINT, log_file)
@@ -237,7 +242,8 @@ if save
         "identify_kite_correction.jl, $(Dates.today()).")
     update_yaml_values!(file, ["kite_corr_zero" => @sprintf("%.2f", fit.zero),
                                "kite_corr_pole" => @sprintf("%.2f", fit.pole),
-                               "kite_corr_v_ref" => @sprintf("%.1f", kc_run.v_a_mean)];
+                               "kite_corr_v_ref" => @sprintf("%.1f", kc_run.v_a_mean),
+                               "kite_correction" => "\"$(kite_id(project))\""];
                         comments = Dict("kite_corr_zero" => comment))
     reload_course_loop_model!(project)
     @info "identify_kite_correction: wrote kite_corr_zero and kite_corr_pole to data/$(basename(file))."

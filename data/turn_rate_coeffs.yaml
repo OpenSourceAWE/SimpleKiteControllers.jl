@@ -10,6 +10,7 @@ entries:
     dead_time: 0.03888888888888889
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.05555555555555555
     v_app: 40.567688
@@ -35,6 +36,7 @@ entries:
     dead_time: 0.05
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.05555555555555555
     v_app: 38.04616
@@ -60,6 +62,7 @@ entries:
     dead_time: 0.05
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.06666666666666667
     v_app: 34.825493
@@ -85,6 +88,7 @@ entries:
     dead_time: 0.07222222222222223
     n_runs: 2
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.044444444444444446
     v_app: 33.3011
@@ -110,6 +114,7 @@ entries:
     dead_time: 0.11666666666666667
     n_runs: 2
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.011111111111111112
     v_app: 28.647713
@@ -135,6 +140,7 @@ entries:
     dead_time: 0.1277777777777778
     n_runs: 1
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "time_limit"
     kite_lag: 0.022222222222222223
     v_app: 26.444283
@@ -160,6 +166,7 @@ entries:
     dead_time: 0.0
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "low_elevation"
     kite_lag: 0.17777777777777778
     v_app: 16.129753
@@ -185,6 +192,7 @@ entries:
     dead_time: 0.15
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "low_elevation"
     kite_lag: 0.07777777777777778
     v_app: 17.900446
@@ -214,6 +222,7 @@ entries:
     dead_time: 0.2611111111111111
     n_runs: 3
     date: "2026-10-05"
+    kite_id: "54a9ec8ae951"
     outcome: "low_elevation"
     kite_lag: 0.022222222222222223
     v_app: 18.428026

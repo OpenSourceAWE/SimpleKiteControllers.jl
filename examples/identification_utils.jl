@@ -4,8 +4,8 @@
 # Helpers of the identification scripts that write their results into the course-loop model
 # file (`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl`,
 # `identify_depower_factor.jl`): flying a run of an example script and identifying the kite's
-# response time on its log, and rewriting values of the file, which keeps its comments, line
-# by line instead of with YAML.write_file.
+# response time on its log, recording the kite each log was flown on, and rewriting values of
+# the file, which keeps its comments, line by line instead of with YAML.write_file.
 
 using Printf
 using Statistics: median
@@ -55,6 +55,34 @@ function fly_point(point, log_dir)
     src = normpath(joinpath(skc_data_path(), "..", "output", log_name * ".arrow"))
     mkpath(log_dir)
     cp(src, joinpath(log_dir, log_label(point) * ".arrow"); force = true)
+    record_log_kite!(joinpath(log_dir, log_label(point)), point.project)
+    return nothing
+end
+
+"""
+    record_log_kite!(log_path, project)
+
+Record the `kite_id` of `project` ([`kite_id`](@ref)) beside the log `log_path` (without
+extension), in `<log_path>.kite_id`, for [`check_log_kite`](@ref).
+"""
+record_log_kite!(log_path, project) = write(log_path * ".kite_id", kite_id(project))
+
+"""
+    check_log_kite(log_path, project)
+
+Throw if the log `log_path` (without extension) was flown on another kite than `project`
+flies now, so that a refit of saved logs (`fly = false`) cannot write a value of an old kite
+with the provenance of the new one. Warns for a log flown before the record was kept.
+"""
+function check_log_kite(log_path, project)
+    file = log_path * ".kite_id"
+    if !isfile(file)
+        @warn "$(basename(log_path)): no record of the kite it was flown on; fly it again if the kite changed since."
+        return nothing
+    end
+    flown, current = strip(read(file, String)), kite_id(project)
+    flown == current || error("$(basename(log_path)) was flown on kite $flown, $(basename(project)) " *
+                              "flies kite $current: fly it again (fly = true).")
     return nothing
 end
 
@@ -66,6 +94,7 @@ The pure delay [s] of the turn rate behind the steering on phase 4 of `point`'s 
 its correlation and the median `v_a` [m/s] and depower [-] of that window.
 """
 function point_delay(point, log_dir; t_settle = 15.0)
+    check_log_kite(joinpath(log_dir, log_label(point)), point.project)
     sl = load_log(log_label(point); path = log_dir).syslog
     p4 = findall(==(4), Int.(sl.sys_state))
     isempty(p4) && error("$(log_label(point)): phase 4 never reached.")

@@ -71,6 +71,9 @@ binned on tether length. Each bin is checked at its lowest, median and highest
 the gravity pole, and the worst case is reported. A bin the log does not cover is an error: the whole range must be
 flown before it can be checked.
 
+The turn-rate table and the course-loop model must both have been identified on the kite the
+project flies ([`check_model_provenance`](@ref)); otherwise the script stops before rating.
+
 The guided loop is also rated with the measured kite correction
 ([`kite_correction_file`](@ref), written by `identify_kite_correction.jl`) in place of the
 lag-lead `kite_correction`, on frequency points (column "α meas. kite"): the lag-lead is
@@ -117,6 +120,9 @@ project = project_file(PROJECT)
 fcs = FC_Settings(fc_settings(project))
 reload_turn_rate_table!(project)
 reload_course_loop_model!(project)
+# Rate only on a model identified on the kite the project flies: after a change of the kite,
+# steps 1 - 5 of the re-identification come first.
+check_model_provenance(project)
 SET = Settings(project)
 # As the log was flown: the low-wind schedule (`fcs.low_wind`) at the log's wind speed, from its run
 # summary, moves the starting length (the first bin).

@@ -70,6 +70,8 @@ function fit_exponent(v_a, values, se)
 end
 
 project = sweep_project()
+# Step 2: the turn-rate law of step 1 must be the kite's own.
+check_model_provenance(project; through = 1)
 @info @sprintf("identify_kite_delay_scaling: project %s, depower %.3f, wind speeds %s m/s.",
                basename(project), depower, join(winds, ", "))
 points = map(winds) do v_wind
@@ -105,7 +107,8 @@ if save
         @sprintf("Standard errors of the exponents ±%.3f and ±%.3f. ", dead_fit.se, lag_fit.se) *
         "identify_kite_delay_scaling.jl, $(basename(project)), $(Dates.today()).")
     update_yaml_values!(file, ["kite_dead_time_exp" => @sprintf("%.3f", dead_fit.exp),
-                               "kite_lag_exp" => @sprintf("%.3f", lag_fit.exp)];
+                               "kite_lag_exp" => @sprintf("%.3f", lag_fit.exp),
+                               "kite_delay_scaling" => "\"$(kite_id(project))\""];
                         comments = Dict("kite_dead_time_exp" => provenance))
     reload_course_loop_model!(project)
     @info "identify_kite_delay_scaling: wrote both exponents to data/$(basename(file))."

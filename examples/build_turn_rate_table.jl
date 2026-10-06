@@ -24,7 +24,8 @@ identifies a kite nobody flies. It flies the project's time step (`1/sample_freq
 and VSM interval (`run.vsm_interval` of its `fc_settings`) too. The table's
 `conditions:` must name that project (`system`) and time step (`dt`); for a new kite,
 copy the table, name the copy in the kite's project and set both before the first
-run.
+run. Every row records the `kite_id` of the kite it was flown on ([`kite_id`](@ref)), which
+`check_model_provenance` compares with the kite a project flies before a margin is rated.
 
 Writes incrementally: after every depower the whole file is re-read, that cell's
 row inserted or replaced, and the file rewritten, so a diverged run costs one cell
@@ -376,12 +377,14 @@ _entry_passed(e) = get(e, "outcome", "") == "time_limit"
 """
     _entry_is_legacy(e, conditions) -> Bool
 
-`true` if entry `e` overrides any key of the table's `conditions` block. Such a
-row is never treated as "already passing": the point of re-running its cell is to
-replace it with one at the current conditions.
+`true` if entry `e` overrides any key of the table's `conditions` block, or was flown
+on another kite than the selected project flies (its `kite_id`, none for a row older than
+the record). Such a row is never treated as "already passing": the point of re-running its
+cell is to replace it with one at the current conditions.
 """
 function _entry_is_legacy(e, conditions)
-    any(haskey(e, String(k)) && e[String(k)] != v for (k, v) in conditions)
+    any(haskey(e, String(k)) && e[String(k)] != v for (k, v) in conditions) ||
+        get(e, "kite_id", nothing) != kite_id(sweep_project())
 end
 
 """
@@ -471,7 +474,7 @@ function build_turn_rate_table(; depowers = TABLE_DEPOWERS, remake::Bool = true)
             "body_sim_damping" => Float64.(BODY_SIM_DAMPING),
             "depower" => dp, "outcome" => outcome,
             "n_runs" => length(joint_flights), "n_flights" => length(flights),
-            "date" => string(Dates.today()),
+            "date" => string(Dates.today()), "kite_id" => kite_id(sweep_project()),
         )
         se = nothing
         if !isnothing(joint)

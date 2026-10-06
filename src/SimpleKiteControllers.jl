@@ -79,6 +79,8 @@ export CourseLoopModel, course_loop_model, reload_course_loop_model!
 export kite_dead_time, kite_lag, pattern_dead_time_lag
 export course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
 export frd_margins, frd_diskmargin, rate_disk_margin, load_course_correction, course_correction
+# Provenance of the identified model: the kite it was identified on
+export kite_fingerprint, kite_id, stale_identification_steps, check_model_provenance
 
 # Data
 export skc_data_path
@@ -164,6 +166,8 @@ include("run_setup.jl")
 include("startup_path.jl")
 # Linear course-loop model; after skc_data_path, which locates its measured course correction.
 include("course_loop_model.jl")
+# Which kite the turn-rate table and the course-loop model were identified on.
+include("kite_fingerprint.jl")
 # Base only, so an older checkout can include it to log its runs.
 include("run_log.jl")
 

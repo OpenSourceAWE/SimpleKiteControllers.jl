@@ -51,6 +51,33 @@ using SimpleKiteControllers: project_file
         end
     end
 
+    @testset "provenance: the model belongs to the kite flown" begin
+        projects = filter(f -> startswith(f, "system_"), readdir(skc_data_path()))
+        id = kite_id("system_reelout_maasvlakte.yaml")
+        @test all(project -> kite_id(project) == id, projects)
+        for project in projects
+            @test isempty(stale_identification_steps(project))
+            @test isnothing(check_model_provenance(project))
+        end
+        # A copy of the project with another wing drag is another kite: every step is stale.
+        mktempdir() do dir
+            project = project_file("system_reelout_maasvlakte.yaml")
+            system = SimpleKiteControllers.YAML.load_file(project)["system"]
+            cp(project, joinpath(dir, "system_copy.yaml"))
+            cp(joinpath(dirname(project), system["sim_settings"]), joinpath(dir, system["sim_settings"]))
+            kite = read(joinpath(dirname(project), system["kite_settings"]), String)
+            write(joinpath(dir, system["kite_settings"]),
+                  replace(kite, r"wing_drag_coeff: *[0-9.]+" => "wing_drag_coeff: 0.05"))
+            kite_copy = joinpath(dir, "system_copy.yaml")
+            @test kite_fingerprint(kite_copy)["wing_drag_coeff"] == 0.05
+            @test kite_id(kite_copy) != id
+            @test [s.step for s in stale_identification_steps(kite_copy)] == 1:5
+            @test [s.step for s in stale_identification_steps(kite_copy; through = 2)] == 1:2
+            @test_throws ErrorException check_model_provenance(kite_copy)
+            @test_throws ErrorException check_model_provenance(project; through = 0, flown = (kite_copy,))
+        end
+    end
+
     @testset "plant: DC gain, shift-register states, actuator step" begin
         c1, c2, v_app, Ts = 0.25, 0.06, 27.0, 0.01
         P = turn_rate_plant(c1, c2, 0.0, v_app, 0.0, Ts; lag = 0.0, kite_lag = 0.0)
@@ -89,10 +116,12 @@ using SimpleKiteControllers: project_file
         τ8, T8 = pattern_dead_time_lag(tc, 8.0, dp0)
         @test τ8 + T8 ≈ τf + Tf
         @test τ8 / T8 ≈ τf / Tf
-        # the factor reproduces the depower runs within 5 %: ×1.17 / 1.39 / 1.78 at 0.30 / 0.33 / 0.36
-        for (dp, g) in ((0.30, 1.17), (0.33, 1.39), (0.36, 1.78))
-            @test exp(clm.pattern_depower_exp * (dp - dp0)) ≈ g rtol=0.05
-        end
+        # the exponent is the fit through the origin of the depower runs of identify_depower_factor.jl
+        # (2026-10-05, wing drag 0.03): ×0.96 / 1.06 / 1.18 / 1.64 at 0.27 / 0.30 / 0.33 / 0.36,
+        # within the rounding of the ratios to two digits
+        runs = ((0.27, 0.96), (0.30, 1.06), (0.33, 1.18), (0.36, 1.64))
+        fitted = sum((dp - dp0) * log(g) for (dp, g) in runs) / sum((dp - dp0)^2 for (dp, _) in runs)
+        @test clm.pattern_depower_exp ≈ fitted rtol=0.01
     end
 
     @testset "scaling: kite_dead_time / kite_lag" begin
