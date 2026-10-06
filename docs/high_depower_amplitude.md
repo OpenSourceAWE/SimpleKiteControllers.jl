@@ -61,7 +61,10 @@ preferred for its margin at 0.325. Elsewhere both bottom out only 0.6 – 1.1° 
 Steps 1 – 3 are done (2026-10-07: `flight_settings(depower)`, `FLIGHT_SETTINGS_HIGH`,
 `HIGH_DEPOWER` in `examples/build_turn_rate_table.jl`; the cells 0.325 – 0.40 rebuilt in
 11.5 min, all four `time_limit` with 3 / 3 / 2 / 1 steady flights and the coefficients of
-the table above to the last digit). Step 4 is open.
+the table above to the last digit). Step 4 is done too: the paper's section, table and
+figure. At 0.425, flown with the 0.10 / 0.125 / 0.15 flights without writing the table,
+all three sank below the 10° floor, after 31, 32 and 49 s; the 0.425 and 0.45 rows stay
+`low_elevation` (flown 2026-10-05 with 0.075 – 0.125).
 
 1. Make `FLIGHT_SETTINGS` depend on the depower: 0.075 / 0.10 / 0.125 up to 0.30;
    0.10 / 0.125 / 0.15 (`az_reverse` 30°, `el_hold_tilt` 15°) from 0.325 on.
