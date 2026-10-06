@@ -56,7 +56,12 @@ Joint fit, current flights → with the 0.15 flight at 15° tilt:
 With 25° tilt the fits are nearly the same (`c2` 2.90, 2.98, 3.14, 3.26); 15° is
 preferred for its margin at 0.325. Elsewhere both bottom out only 0.6 – 1.1° above the floor.
 
-## Next steps (not done)
+## Next steps
+
+Steps 1 – 3 are done (2026-10-07: `flight_settings(depower)`, `FLIGHT_SETTINGS_HIGH`,
+`HIGH_DEPOWER` in `examples/build_turn_rate_table.jl`; the cells 0.325 – 0.40 rebuilt in
+11.5 min, all four `time_limit` with 3 / 3 / 2 / 1 steady flights and the coefficients of
+the table above to the last digit). Step 4 is open.
 
 1. Make `FLIGHT_SETTINGS` depend on the depower: 0.075 / 0.10 / 0.125 up to 0.30;
    0.10 / 0.125 / 0.15 (`az_reverse` 30°, `el_hold_tilt` 15°) from 0.325 on.
