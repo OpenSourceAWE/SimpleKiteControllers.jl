@@ -126,6 +126,12 @@ runs; it takes 15 – 60 minutes and is optional.
 Writes the segment table of `v3_segments.jl` to `output/v3_segments.csv`. It builds the structure
 from V3Kite's geometry file without building the model, so it runs in about a second.
 
+### [`kite_model.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/kite_model.jl)
+Draws the structural discretisation of the kite the reel-out runs fly: the wing frame, the bridle,
+the VSM panels and the point masses, in the body frame. It builds the structure without settling
+or flying it, and saves the paper's figure `kite_model.pdf` as a vector PDF in the `figures/`
+folder of the paper's repository.
+
 ## Shared helper files
 
 These files are not run on their own; the examples on the other pages `include` them.
