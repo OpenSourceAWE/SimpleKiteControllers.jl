@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Settings · SimpleKiteControllers.jl</title><meta name="title" content="Settings · SimpleKiteControllers.jl"/><meta property="og:title" content="Settings · SimpleKiteControllers.jl"/><meta property="twitter:title" content="Settings · SimpleKiteControllers.jl"/><meta name="description" content="Documentation for SimpleKiteControllers.jl."/><meta property="og:description" content="Documentation for SimpleKiteControllers.jl."/><meta property="twitter:description" content="Documentation for SimpleKiteControllers.jl."/><meta property="og:url" content="https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/settings/"/><meta property="twitter:url" content="https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/settings/"/><link rel="canonical" href="https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/settings/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">SimpleKiteControllers.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Settings</a><ul class="internal"><li><a class="tocitem" href="#The-system-project"><span>The system project</span></a></li><li><a class="tocitem" href="#The-files-a-project-names"><span>The files a project names</span></a></li><li><a class="tocitem" href="#Rules-shared-by-the-settings-files"><span>Rules shared by the settings files</span></a></li><li><a class="tocitem" href="#example_fc_settings_reelout"><span>Example: <code>fc_settings_reelout.yaml</code></span></a></li><li><a class="tocitem" href="#example_traj_opt"><span>Example: <code>traj_opt.yaml</code></span></a></li></ul></li><li><a class="tocitem" href="../control_algorithm/">How the controller works</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../examples_general/">General</a></li><li><a class="tocitem" href="../examples_identification/">Identification</a></li><li><a class="tocitem" href="../examples_fig8/">Figure-of-eight</a></li><li><a class="tocitem" href="../examples_reelout/">Reel-out</a></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../api/">Overview</a></li><li><a class="tocitem" href="../api/flight_control/">Flight control</a></li><li><a class="tocitem" href="../api/path_geometry/">Flight-path geometry</a></li><li><a class="tocitem" href="../api/winch/">Winch</a></li><li><a class="tocitem" href="../api/settings/">Settings and data files</a></li><li><a class="tocitem" href="../api/reelout_run/">Reel-out runs</a></li><li><a class="tocitem" href="../api/evaluation/">Run evaluation</a></li><li><a class="tocitem" href="../api/stability/">Course-loop stability</a></li><li><a class="tocitem" href="../api/internals/">Internals</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Settings</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Settings</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/src/settings.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Settings"><a class="docs-heading-anchor" href="#Settings">Settings</a><a id="Settings-1"></a><a class="docs-heading-anchor-permalink" href="#Settings" title="Permalink"></a></h1><p>All settings of a run are YAML files in the <code>data/</code> directory of this package. The example scripts call <code>set_data_path</code> on that directory, so the kite model reads them from here instead of from its own data directory. You can change the wind, the tether, the winch or the controller tuning without editing V3Kite.</p><h2 id="The-system-project"><a class="docs-heading-anchor" href="#The-system-project">The system project</a><a id="The-system-project-1"></a><a class="docs-heading-anchor-permalink" href="#The-system-project" title="Permalink"></a></h2><p>A run starts from one <strong>system project</strong>, a file <code>data/system_*.yaml</code>. It holds no settings of its own. Its <code>system:</code> section lists the YAML files that together describe the complete system and its controllers. For example, <code>data/system_reelout_180m.yaml</code>:</p><pre><code class="language-yaml hljs">system:
+    sim_settings: &quot;settings_reelout_180m.yaml&quot;
+    wc_settings: &quot;wc_settings.yaml&quot;
+    fc_settings: &quot;fc_settings_reelout.yaml&quot;
+    traj_opt_settings: &quot;traj_opt.yaml&quot;
+    winch_table: &quot;winch_table.yaml&quot;
+    turn_rate_coeffs: &quot;turn_rate_coeffs.yaml&quot;
+    course_loop_model: &quot;course_loop_model.yaml&quot;
+    kite_correction: &quot;kite_correction_measured.csv&quot;
+    kite_settings: &quot;kite_settings_psm.yaml&quot;
+    structural_geometry: &quot;struc_geometry.yaml&quot;
+    aero_geometry: &quot;cfd_aero_geometry.yaml&quot;
+    vsm_settings: &quot;vsm_settings.yaml&quot;
+    settle_settings: &quot;settle_settings_default.yaml&quot;
+    heading_settings: &quot;heading_settings_psm.yaml&quot;</code></pre><p><a href="../api/settings/#SimpleKiteControllers.project_file"><code>project_file</code></a> resolves a project name such as <code>&quot;system_reelout_180m.yaml&quot;</code> to this package&#39;s <code>data/</code> directory. The functions <a href="../api/flight_control/#SimpleKiteControllers.fc_settings"><code>fc_settings</code></a>, <a href="../api/settings/#SimpleKiteControllers.turn_rate_coeffs_file"><code>turn_rate_coeffs_file</code></a>, <a href="../api/settings/#SimpleKiteControllers.course_loop_model_file"><code>course_loop_model_file</code></a>, <a href="../api/settings/#SimpleKiteControllers.kite_correction_file"><code>kite_correction_file</code></a>, <a href="../api/settings/#SimpleKiteControllers.winch_table_file"><code>winch_table_file</code></a> and <a href="../api/settings/#SimpleKiteControllers.traj_opt_settings_file"><code>traj_opt_settings_file</code></a> each return one entry of the <code>system:</code> section, in the same way as <code>KiteUtils.wc_settings</code>.</p><p>These projects are included (all names without the <code>.yaml</code> extension):</p><table><tr><th style="text-align: left">Project</th><th style="text-align: left">Run</th><th style="text-align: left"><code>sim_settings</code></th><th style="text-align: left"><code>fc_settings</code></th></tr><tr><td style="text-align: left"><code>system_fig8_150m</code></td><td style="text-align: left">fig8, 150 m</td><td style="text-align: left"><code>settings_fig8_150m</code></td><td style="text-align: left"><code>fc_settings_fig8_150m</code></td></tr><tr><td style="text-align: left"><code>system_fig8_200m</code></td><td style="text-align: left">fig8, 200 m</td><td style="text-align: left"><code>settings_fig8_200m</code></td><td style="text-align: left"><code>fc_settings</code></td></tr><tr><td style="text-align: left"><code>system_fig8_300m</code></td><td style="text-align: left">fig8, 300 m</td><td style="text-align: left"><code>settings_fig8_300m</code></td><td style="text-align: left"><code>fc_settings</code></td></tr><tr><td style="text-align: left"><code>system_reelout_maasvlakte</code></td><td style="text-align: left">reel-out, 150 m</td><td style="text-align: left"><code>settings_reelout_150m</code></td><td style="text-align: left"><code>fc_settings_reelout</code></td></tr><tr><td style="text-align: left"><code>system_reelout_180m</code></td><td style="text-align: left">reel-out, 180 m</td><td style="text-align: left"><code>settings_reelout_180m</code></td><td style="text-align: left"><code>fc_settings_reelout</code></td></tr><tr><td style="text-align: left"><code>system_reelout_cabauw</code></td><td style="text-align: left">reel-out, Cabauw</td><td style="text-align: left"><code>settings_reelout_cabauw</code></td><td style="text-align: left"><code>fc_settings_reelout</code></td></tr></table><p><code>system_fig8_200m.yaml</code> is the default project: <a href="../api/settings/#SimpleKiteControllers.project_file"><code>project_file</code></a> uses it when no name is given, and the turn-rate table and the course-loop model are loaded against it when the package loads.</p><h2 id="The-files-a-project-names"><a class="docs-heading-anchor" href="#The-files-a-project-names">The files a project names</a><a id="The-files-a-project-names-1"></a><a class="docs-heading-anchor-permalink" href="#The-files-a-project-names" title="Permalink"></a></h2><ul><li><code>sim_settings</code> → <code>settings_*.yaml</code>, read into <code>KiteUtils.Settings</code>: the plant and the simulation. Wind speed and profile, tether length, mass, winch model, KCU, solver, <code>sim_time</code> and <code>sample_freq</code> (the time step).</li><li><code>wc_settings</code> → <code>wc_settings.yaml</code>, read into <code>WCSettings</code>: the winch controllers. The torque block (V3Kite&#39;s position and force modes) and the speed block (WinchControllers.jl&#39;s reel-out law and its force limiters).</li><li><code>fc_settings</code> → <code>fc_settings*.yaml</code>, read into <a href="../api/flight_control/#SimpleKiteControllers.FC_Settings"><code>FC_Settings</code></a>: the flight controller. Entry state machine, pattern geometry, heading/course PID, feed-forward, reel-out phases and the run&#39;s pass criteria.</li><li><code>traj_opt_settings</code> → <code>traj_opt.yaml</code>, read into <a href="../api/path_geometry/#SimpleKiteControllers.TrajOptSettings"><code>TrajOptSettings</code></a>: the AWETrim client, one section per part: server, guess, depower seed, pattern box, gates and re-optimization; only used by <code>simple_opt_fig8.jl</code> and <code>simple_opt_reelout.jl</code>.</li><li><code>winch_table</code> → <code>winch_table.yaml</code>, read by <a href="../api/winch/#SimpleKiteControllers.winch_f_low"><code>winch_f_low</code></a> and <a href="../api/winch/#SimpleKiteControllers.winch_force_limit"><code>winch_force_limit</code></a>: wind-dependent winch-law parameters. Reel-out projects only.</li><li><code>turn_rate_coeffs</code> → <code>turn_rate_coeffs.yaml</code>, read by <a href="../api/flight_control/#SimpleKiteControllers.turn_rate_coeffs"><code>turn_rate_coeffs</code></a>: the identified turn-rate law (<code>c1</code>, <code>c2</code>, <code>delay</code>) per body damping and depower.</li><li><code>course_loop_model</code> → <code>course_loop_model.yaml</code>, read into <a href="../api/stability/#SimpleKiteControllers.CourseLoopModel"><code>CourseLoopModel</code></a>: the other identified parameters of the linear course-loop model of the stability analysis (tape lag, scaling of the kite&#39;s dead time and lag, pattern law, kite correction). Every key is required.</li><li><code>kite_correction</code> → <code>kite_correction_measured.csv</code>, read with <a href="../api/stability/#SimpleKiteControllers.load_course_correction"><code>load_course_correction</code></a>: the measured kite correction, gain and phase over frequency, written by <code>examples/identify_kite_correction.jl</code>; the guided-loop margins of <code>stability_opt_reelout.jl</code> are also evaluated with it.</li><li><code>kite_settings</code> → <code>kite_settings_psm*.yaml</code> in this package, read into V3Kite&#39;s <code>V3KiteConfig</code>: wing model, aerodynamics mode, backend and in-flight damping.</li><li><code>structural_geometry</code>, <code>aero_geometry</code>, <code>vsm_settings</code>, <code>settle_settings</code>, <code>heading_settings</code> → V3Kite&#39;s own files: geometry, polars, VSM and settling settings, read from V3Kite&#39;s data directory.</li></ul><p>V3Kite looks for each of these files beside the project first and in its own data directory after. The figure-of-eight projects and <code>system_reelout_180m.yaml</code> name <code>kite_settings_psm.yaml</code>, a local copy of V3Kite&#39;s file, so an upstream change does not reach these runs unnoticed. <code>system_reelout_maasvlakte.yaml</code> and <code>system_reelout_cabauw.yaml</code> name <code>kite_settings_psm_kernel.yaml</code>, a local variant whose only difference in effect is <code>analytic_jacobian: true</code>. The <code>vsm_interval</code> in these files is not read by the runs of this package: they pass <code>run.vsm_interval</code> of <code>fc_settings</code> to <code>step!</code>.</p><p>Not named by any project:</p><ul><li><code>gui.yaml</code>: the choices of the example menu (project, simulation time, plots, wind speed), see <a href="../api/settings/#State-of-the-example-menu">State of the example menu</a>. It is created from <code>gui.yaml.default</code> on first use and is not under version control.</li></ul><h2 id="Rules-shared-by-the-settings-files"><a class="docs-heading-anchor" href="#Rules-shared-by-the-settings-files">Rules shared by the settings files</a><a id="Rules-shared-by-the-settings-files-1"></a><a class="docs-heading-anchor-permalink" href="#Rules-shared-by-the-settings-files" title="Permalink"></a></h2><ul><li>Every key of <code>traj_opt.yaml</code> is a field of the struct it is loaded into. A missing key falls back to the struct default; an unknown key is an error (see <a href="../api/settings/#SimpleKiteControllers.load_yaml_fields!"><code>load_yaml_fields!</code></a>).</li><li><code>fc_settings*.yaml</code> has one section per part of <a href="../api/flight_control/#SimpleKiteControllers.FC_Settings"><code>FC_Settings</code></a>: <code>course</code>, <code>feedforward</code>, <code>pattern</code>, <code>wind_ramp</code>, <code>winch</code>, <code>reelout</code> and <code>run</code>. Each key of a section is a field of that part, with the same rules. A figure-of-eight run can leave out the <code>reelout</code> section. Files archived before this layout, with all keys directly under <code>fc_settings:</code>, still load.</li><li>The struct docstrings (on the <a href="../api/">API</a> pages) say in one line what a field is. The comments in the YAML files give the longer notes and the reason for the value chosen there. The history of the tuning is in <a href="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md">docs/fig8_tuning_log.md</a>.</li><li><code>fc_settings_fig8_150m.yaml</code> and <code>fc_settings_reelout.yaml</code> started as copies of <code>fc_settings.yaml</code>. Keys they share must be kept in step by hand.</li><li>An example script can override single fields for one run without editing a file, see <a href="../api/settings/#SimpleKiteControllers.apply_overrides!"><code>apply_overrides!</code></a>.</li></ul><h2 id="example_fc_settings_reelout"><a class="docs-heading-anchor" href="#example_fc_settings_reelout">Example: <code>fc_settings_reelout.yaml</code></a><a id="example_fc_settings_reelout-1"></a><a class="docs-heading-anchor-permalink" href="#example_fc_settings_reelout" title="Permalink"></a></h2><p>The flight-controller settings of all reel-out projects, shown here as shipped:</p><div class="small-code"><pre><code class="language-yaml hljs"># Flight-controller settings flown by examples/simple_reelout.jl and
+# simple_opt_reelout.jl, named by the system_reelout_*.yaml projects next to it.
+# A copy of fc_settings.yaml (simple_fig8.jl) with `compliance: 0`: REEL_OUT and
+# V3Kite&#39;s FORCE mode both drive the winch, and simple_reelout.jl errors rather
+# than picking one. Each section is a part of `FC_Settings` (src/fc_settings.jl)
+# and each key a field of that part. The docstrings there stay on one line, the
+# comments below carry the longer notes; a missing key falls back to the struct default,
+# an unknown key is an error. The plant (sim_time, sample_freq, v_wind,
+# l_tethers) is in the system project&#39;s settings file, the winch gains in
+# wc_settings.yaml. Tuning history: docs/fig8_tuning_log.md.
+fc_settings:
+  course:  # heading/course loop: entry state machine, depower, PID, feedback, descent limiter
+    park_time:          2.0      # Park: zero steering while the transients decay     [s]
+    chi_dive:          -145.0    # Dive course; &gt;90 descends, &lt;90 climbs, 90 flat    [deg]
+    chi_hold:           -90.0    # Course commanded during the hold                 [deg]
+    dive_el_margin:     17.0     # Margin above el_center where the dive ends       [deg]
+    hold_time:          0.8      # Duration of the hold                               [s]
+    fig8_d_gate:        4.0      # Cross-track error, transition -&gt; fig8            [deg]
+    # 0.25 with the 73° relay sweeps&#39; table; /1.084 = 0.23 with the low-elevation table, whose
+    # c1(depower_setpoint)/c1(entry_depower) is 1.084 x higher, so the entry flies as tuned (2026-09-29).
+    entry_gain:         0.23     # Factor on heading_p during the entry phases        [-]
+    entry_depower:      0.34     # Depower during the entry phases                    [-]
+    depower_setpoint:   0.274    # Depower on the pattern; 0.278 is the curvature ceiling at 150 m [-]
+    depower_blend_time: 2.5      # Ramp of `rel_depower` to a new ladder target; 0 = step [s]
+    # heading_p +8 % for guided α 0.306 and lower RMS d (2026-09-29).
+    heading_p:          0.183805 # Gain at v_app_ref                                  [-]
+    heading_i:          false    # Integral time [s], or false for no integral action
+    heading_d:          0.146    # Derivative time; raised for the guided disk margin (2026-09-28, 2026-09-29, 2026-10-05) [s]
+    heading_d_n:        2.0      # Derivative filter, max gain of the D path          [-]
+    v_app_ref:          27.0     # Speed flown in phase 3; anchors the gain schedule [m/s]
+    v_app_min:          10.0     # Lower clamp on v_app, limits the gain boost      [m/s]
+    v_kite_heading:     5.0      # At/below: pure heading feedback                  [m/s]
+    v_kite_course:      10.0     # At/above: pure course feedback                   [m/s]
+    fig8_pure_course:   false    # Course alone from phase 3 on; schedule governs entry
+    max_steering:       0.32     # Command limit; raising it is CLOSED, see the log    [-]
+    entry_chi_max:      95.0     # Steepest course while off-path; 180 disables it   [deg]
+    entry_d_gate:       12.0     # Cross-track error below which it is bypassed     [deg]
+    entry_d_blend:      4.0      # Blend band above the gate, 0 = hard switch       [deg]
+    entry_cut_margin:   30.0     # Distance from ±180° where chi_set&#39;s sign is noise [deg]
+
+  feedforward:  # steering feed-forward from the path&#39;s curvature, phase 4 on
+    # 0.7 with the 73° relay sweeps&#39; table (deleted 2026-10-01); x1.084 = 0.76 with the low-elevation
+    # table, turn_rate_coeffs.yaml, whose c1 at depower_setpoint is 1.084 x higher, so u_ff stays as
+    # tuned (2026-09-29).
+    ff_gain:            0.76     # Curvature feed-forward, u_ff = psi_dot_path/(c1 v_app); 0 = off, 1 = the law [-]
+    ff_lead_time:       0.35     # Read the path&#39;s course rate this far ahead of Q; ~the dead time [s]
+    ff_smooth:          6.0      # Arc the tangent change is averaged over               [deg]
+    ff_tau:             0.2      # Low-pass on u_ff and the chord correction; 0 = none    [s]
+    ff_d_fade:          6.0      # Cross-track error at which the ff is fully off; fades from half [deg]
+    ff_err_fade:        60.0     # Course error at which the ff is fully off; fades from half  [deg]
+    # Gravity turn of the turn-rate law in its fixed-c3 form, c3·sin(χ)·cos(β), read off the path at the
+    # lead point (2026-10-04). Without it the P-only loop holds the gravity turn off with a course error and
+    # the kite flies 1.1-2.2° below the path on horizontal legs at every wind speed. The free-c2 form
+    # c2/v_a overshoots at low v_a and falls short at high v_a. 0.23 is the identified c3
+    # (docs/turn_rate_fixed_c3.md); with el_offset_wing 0.5 the 22 replays pass, RMS d -2 to -31 % in 19.
+    ff_gravity_rate:     0.23    # Gravity turn rate cancelled by the feed-forward, c3; 0 = off [1/s]
+
+  pattern:  # pattern geometry and attractor; a SMALLER lemniscate is a TIGHTER one
+    f8_a:               20.0     # Width of the eight, azimuth spans ±A; sweep optimum [deg]
+    f8_b:               11.0     # Height, elevation spans ±B/2; picked for margin 1.07 [deg]
+    el_center:          18.0     # Centre elevation; lower turns easier, costs energy [deg]
+    # 8.0 -&gt; 9.75 (2026-10-02, retune_guided.jl, target 0.4): worst guided disk margin of the 22
+    # scenarios 0.332 -&gt; 0.401 (weak winds, where this floor sets the attractor); replays at
+    # maasvlakte 3.5/8.0 and cabauw 3.0 m/s pass all criteria, RMS d +20 - 29 %, power unchanged.
+    # 9.75 -&gt; 8.25 (2026-10-03, retune_guided.jl tighten, floor 0.51): worst guided disk margin
+    # 0.523 -&gt; 0.515, now maasvlakte 5 m/s; 8 m/s and up unchanged. Aim: lower RMS tracking error.
+    # Floor ∝ 1/L since 2026-10-03: a fixed arc of 25.3 m, 8.35° at 175 m (9.7° at 150 m, 3.8° at
+    # 380 m). Only attractor_dist * attractor_dist_ref_length matters; the smallest product keeping
+    # the worst guided margin of the 22 scenarios &gt;= 0.51 is 8.31° x 175 m (the same at L_ref 150-300).
+    # Replays on the archived paths: RMS d -31 % maasvlakte 3.5, -28 % 5, -20 % 8, -25 % cabauw 4,
+    # -5 % 6, -3 % 9 m/s; power within 2 %, max force unchanged, all criteria passed.
+    attractor_dist:      8.35    # Arc distance Q -&gt; attractor at attractor_dist_ref_length; the FLOOR under a lead time [deg]
+    attractor_dist_ref_length: 175.0 # Tether length where attractor_dist holds, floor ∝ 1/L; 0 = fixed [m]
+    # attractor_lead_time: ω_g below the course loop, guided disk margin &gt;= 0.30 with c3 (2026-09-28);
+    # 0.96 -&gt; 1.05 (2026-10-03): Cabauw 10 m/s guided disk margin 0.477 -&gt; 0.534, RMS cross-track error 1.27 -&gt; 1.21°.
+    # 1.05 -&gt; 1.21 with heading_d 0.141 -&gt; 0.146 (2026-10-05, retune_guided.jl, target 0.51): with wing drag
+    # 0.03 Cabauw 9-10 m/s fly depower 0.365-0.393, where the kite responds slower; guided disk margin
+    # 0.451/0.442 -&gt; 0.524/0.515, worst of the 22 scenarios 0.513 (Maasvlakte 3.5 m/s).
+    # 1.21 -&gt; 1.05 (2026-10-06, retune_guided.jl tighten, floor 0.505): with the pattern law, depower
+    # factor and kite correction re-identified with the wing drag the kite responds faster at high v_a;
+    # guided disk margin of Cabauw 9-10 m/s 0.672/0.677 -&gt; 0.611/0.617, worst 0.506 (Maasvlakte 3.5 m/s,
+    # set by the arc&#39;s floor) unchanged.
+    attractor_lead_time: 1.05    # Lead as flight time, arc = t*v_app/L; 0 = off   [s]
+    reacquire_margin:    6.0     # Global best must beat the in-window best by this  [deg]
+    up_loops:           false    # Up-loops instead of down-loops; down crosses the centre
+
+  winch:  # compliance of the force-mode winch (its gains are in wc_settings.yaml) and force guards
+    compliance:         0.0      # Fixed at POSITION mode; REEL_OUT needs the drum free [-]
+    entry_f_min:        350.0    # Entry-guard (guard_lfc) force floor, phases 0-2; not wc&#39;s f_low [N]
+    first_lap_force_frac: 0.93   # f_high x this in lap 1 AND for the startup solve; 1.0 = no lap-1 de-rating [-]
+
+  reelout:  # REEL_OUT winch and phase 5; kv/f_low/f_high/v_sat are in wc_settings.yaml
+    reelout_l_max:      380.0    # Length at which reel-out stops; AWETrim&#39;s reopt ceiling is ~325 m [m]
+    n_fig_eight:        0        # Laps after which reel-out stops; 0 = length only [-]
+    reelout_softstart:  12.0     # Ramps the COMMANDED speed 0 -&gt; v_set over this long  [s]
+    reelout_softstop:   1.5      # Linear decel trigger at the far end               [s]
+    reelout_delay:      4.2      # Wait after phase 3 before reel-out starts          [s]
+    reelout_f_trigger:  6400.0   # Force that releases reel-out EARLY; Inf disables it [N]
+    final_time:         30.0     # Sim time flown in phase 5 before the run ends; Inf = full run [s]
+    depower_final:      0.35     # Flown from phase 5; tuned to hold ~3458 N at 6 m/s [-]
+    depower_final_max:  0.42     # Ceiling of the phase-5 force limiter; = depower_final is OFF [-]
+    depower_final_f_target: 7500.0 # Force the limiter holds, under 8400 N by the lobe swing [N]
+    depower_final_f_gain: 6.0e-5 # Limiter integrator gain, depower per N per s    [1/(N s)]
+    depower_final_f_gain_stop: 1.0e-4 # Same during the soft-stop ramp: 0.35 -&gt; 0.40 in 3 s [1/(N s)]
+    park_final:         true     # Phase 5 steers straight up (course 0), out of the power zone [-]
+    park_lead:          6.0      # Parking climb starts this long before reel-out ends [s]
+    el_offset_final:     1.0     # Extra lift of the path once reel-out ends       [deg]
+    el_offset_lead:      8.0     # How early the lift starts; gets it past the phase-5 gate [s]
+    final_margin_min:    1.5     # Phase-5 path below this curvature margin falls back; 0 = off [-]
+    # 1.0 -&gt; 0.5 with ff_gravity_rate 0.23 (2026-10-04): the kite no longer sags at the lobes, and the full
+    # lift cost Maasvlakte 8.5-11 m/s 1.3-2.9 % of power and +12-28 % RMS d to the unlifted path.
+    el_offset_wing:      0.5     # Extra lift at the LOBES, none in the centre       [deg]
+    el_offset_wing_az:  10.0     # |azimuth| beyond which that lift is full   [deg or fraction of A]
+    el_offset_wing_blend: 8.0    # Ramp width below it; NOT monotone, see the docstring  [same units]
+    el_offset_wing_mode: &quot;azimuth&quot;  # azimuth (deg) | azimuth_frac (of the path&#39;s own A)
+
+  low_wind:  # per wind speed at low_wind_height, linear in between, first row held below; off from the last row on
+    # Flown 2026-10-02, the guided disk margin was 0.41-0.44 at 150 m: Maasvlakte 3.5 m/s (4.51 at 100 m),
+    # Maasvlakte 4 m/s (5.15), Cabauw 3 m/s (5.80); Maasvlakte 5 m/s (6.44) is robust as the files fly it.
+    # The last row is the files&#39; own values: l_tethers and traj_opt&#39;s guess_el_center.
+    low_wind_height:          100.0                      # Height of the wind the schedule is keyed on [m]
+    low_wind_speeds:          [4.51, 5.15, 5.80, 6.40]   # Wind speed at low_wind_height, ascending [m/s]
+    low_wind_l_tether:        [195.0, 195.0, 195.0, 150.0] # Tether length reel-out starts at; less guidance phase lag [m]
+    low_wind_guess_el_center: [25.0, 27.0, 27.0, 29.0]   # Startup guess; 29° at 195 m lands in a 470 W optimum [deg]
+
+  run:  # simulation conditions and pass criteria
+    vsm_interval:       5        # Steps between VSM aero updates, 1 = tightest; at 10 the identification flights sink at depower 0.375 (2026-10-02) [-]
+    elevation:          73.0     # Where init settles the kite; in the settled-state cache key [deg]
+    warmup_time:        2.0      # Discarded warm-up run, right after `init`          [s]
+    body_damping:       [0.0, 0.0, 40.0]  # Per axis; the turn_rate_coeffs key (settles to 0.8x)
+    v_app_abort:        55.0     # Stop the run above this apparent wind speed      [m/s]
+    entry_time:         62.0     # Settle time after park_time before the metrics     [s]
+    min_elevation:       6.5     # Floor criterion over the WHOLE run; also the reopt install gate [deg]
+    min_span_frac:      0.7      # Pattern-SIZE criterion, fraction of f8_a / f8_b    [-]
+</code></pre></div><h2 id="example_traj_opt"><a class="docs-heading-anchor" href="#example_traj_opt">Example: <code>traj_opt.yaml</code></a><a id="example_traj_opt-1"></a><a class="docs-heading-anchor-permalink" href="#example_traj_opt" title="Permalink"></a></h2><p>The settings of the AWETrim client, read into <a href="../api/path_geometry/#SimpleKiteControllers.TrajOptSettings"><code>TrajOptSettings</code></a> and used by <code>simple_opt_fig8.jl</code> and <code>simple_opt_reelout.jl</code>, shown here as shipped:</p><div class="small-code"><pre><code class="language-yaml hljs"># Externally optimized path settings. Loaded into a `TrajOptSettings` struct; each section
+# below is a part of that struct (src/traj_opt_settings.jl) and each key a field of that
+# part. A missing key falls back to the struct default, an unknown key is an error.
+# Tuning record in docs/fig8_tuning_log.md.
+traj_opt:
+  server:  # AWETrim server, request caches and the winch law sent
+    base_url: &quot;http://127.0.0.1:8000&quot;  # address of the AWETrim server
+    opt_failure_cache: true  # skip requests recorded as failing; see the docstring
+    opt_success_cache: true  # replay applied results of an identical request chain; clear after an AWETrim change
+    opt_warm_start_awe_trim: 1.0   # use_awe_trim of the seeding solve; 0.0 = off  [-]
+    opt_awe_trim:      1.0 # use_awe_trim sent to the server; &lt; 0 follows wc_settings [-]
+    free_speed_reference_points: 6  # free_speed solves for the reference power AFTER the run; 0 = off [-]
+
+  guess:  # initial guess; seeds a multi-modal solve: changes the answer, not the run time
+    guess_a:          30.0   # width of the guess; azimuth spans ±guess_a    [deg]
+    guess_b:          12.0   # height of the guess, peak to peak             [deg]
+    guess_el_center:  29.0   # centre elevation of the guess; first knob to move on a 422 [deg]
+    guess_el_center_high:      30.0   # centre elevation at/above the ref wind (a step, not a ramp) [deg]
+    guess_el_center_wind_ref:   8.0   # wind at/above which guess_el_center_high applies [m/s]
+    startup_retry_el_offsets: [-1.0, 2.0]   # seeds tried in order on a startup 422; [] never retries [deg]
+
+  seed:  # depower seed of the solve, ramped with the wind
+    input_depower:     1.6   # depower SEED in metres of tape (server bounds 1.1-2.3), not depower_setpoint [m]
+    input_depower_wind_ref:  7.0   # wind at which input_depower IS the seed  [m/s]
+    input_depower_per_wind:  0.25  # tape added per m/s above that; one-sided [m/(m/s)]
+    input_depower_seed_max:  1.85  # ramp ceiling, below the server&#39;s 2.3 m  [m]
+    # Estimate of the tape length the startup reply is FLOWN at, which sizes the turn-radius
+    # request; 0 takes the seed above. Fitted 2026-10-05 to the startup replies of the base
+    # runs (Cabauw 4-10, Maasvlakte 8, 11 m/s) against the wind at the caps&#39; height (100 m):
+    # 1.43-1.47 m up to ~12 m/s there, then ~0.05 m per m/s (Cabauw 10 m/s, 19.3 m/s: 1.91 m).
+    # The seed ramps on the 6 m wind and seeded Maasvlakte 8 m/s at 1.85 m against 1.46 m flown.
+    request_depower:          1.45  # estimate at and below the ref wind aloft [m]
+    request_depower_wind_ref: 10.4  # wind at the caps&#39; height above which it ramps [m/s]
+    request_depower_per_wind: 0.05  # tape added per m/s of wind aloft above that [m/(m/s)]
+
+  box:  # pattern box the optimizer solves UNDER; 0.0 keeps the server default (|az| &lt;= 45.8, 0.6 &lt;= el &lt;= 51.6)
+    pattern_azimuth_max: 28.0        # closes the wide basin seen at 5.5 m/s; good runs fly ±18-25 [deg]
+    pattern_azimuth_max_high: 34.0   # cap at/above pattern_elevation_amplitude_max_wind_ref: under the 45° climb
+                                     # limit Cabauw 10 needs ±28.4-28.8° at 150 m and IPOPT 2-3° of room: 422 under
+                                     # 28 and 29 at r_min 22.8 m, under 30 at 23.5 m (quadratic depower
+                                     # conversion); converges under 31 and 32 (2026-10-03). 36 -&gt; 34 (2026-10-05):
+                                     # at 36 the re-optimizations at Cabauw 10 grew to ±32° x 21°, RMS d 1.61°;
+                                     # at 34 ±22° x 16°, RMS d 1.44°, 22.7 instead of 20.4 kW [deg]
+    pattern_elevation_amplitude_max: 8.5   # largest elevation HALF-SPAN of the figure; 0.0 = off [deg];
+                                           # 8.0 left Maasvlakte 3.5 m/s infeasible at 8.12° (2026-09-24)
+    pattern_elevation_amplitude_max_high:     13.0  # cap at/above the ref wind (a step, not a ramp) [deg]
+    pattern_elevation_amplitude_max_wind_ref: 13.2  # wind AT the height below at/above which the high cap
+                                                    # applies: Maasvlakte 10 m/s is 12.9 there and flies under
+                                                    # 8°, Maasvlakte 11 (14.2) and Cabauw 7-10 (13.5-19.3) need
+                                                    # 10° or the startup solve loses its basin (2026-09-21);
+                                                    # 11° since 2026-09-23: Cabauw 10 at f_high 7200 N needs
+                                                    # 10.5-10.7° at the 150 m startup [m/s]
+    pattern_elevation_amplitude_max_wind_height: 100.0  # height that wind is taken at; 0 = the 6 m wind [m]
+    pattern_symmetric: true       # mirror-symmetric figure about azimuth 0; the solve is multi-modal and
+                                  # otherwise lands lopsided (Cabauw 2026-09-25: centre -2.3°, lobes 214/147 points)
+    pattern_climb_angle_max: 45.0 # steepest climb of the path in the az/el plane; descending is free; 0 is off [°]
+
+  gates:  # every returned path, at startup and after a re-optimization
+    min_feasibility_margin: 0.82  # curvature gate AND request (as min_turn_radius); 0.0 = off; an 8 m/s number [-]
+    turn_radius_headroom: 1.25    # factor on the margin sent; covers the gate&#39;s own bites, makes slack [-]
+    min_height: 40.0              # clearance gate at the anchor radius                                 [m]
+    candidate_elevation_margin: 3.0   # gate margin above fc_settings&#39; min_elevation [deg]
+
+  reopt:  # re-optimization while the tether grows (simple_opt_reelout.jl)
+    reopt_every_n_laps: 1    # laps between requests; never two solves at once   [-]
+    max_reopt: 7             # bound on re-optimizations per run                 [-]
+    reopt_blocking: true     # freeze the simulation until the reply lands       [-]
+    path_blend_time: 6.0     # seconds over which the new path replaces the old  [s]
+    blend_max_retries: 3     # fresh solves per rejected reply                   [-]
+    size_box_growth: 1.3     # box SENT with a re-opt: this x the previous install&#39;s size; 0 is off [-]
+    challenge_growth: 1.1    # growth above which a reply predicting less than the previous install 
+                             # is cross-checked by a cold solve; 0 is off        [-]
+
+  reopt_gates:  # the extra gates of a re-optimization reply
+    min_power_frac: 0.3      # fraction of the startup install&#39;s power              [-]
+    min_power_frac_prev: 0.85 # fraction of the previous install&#39;s power; 0 is off  [-]
+    power_gate_wind_min: 4.0 # mean wind below which a negative pred bypasses     [m/s]
+    max_size_growth: 1.3     # largest size ratio vs the previous install; 0 is off [-]
+    blend_fold_margin: 0.5   # blend_folds: fraction of the endpoints&#39; own radius   [-]
+</code></pre></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../control_algorithm/">How the controller works »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 6 October 2026 18:26">Tuesday 6 October 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
