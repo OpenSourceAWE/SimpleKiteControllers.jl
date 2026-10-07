@@ -77,7 +77,7 @@ when the package loads.
   identified turn-rate law (`c1`, `c2`, `delay`) per body damping and depower.
 - `course_loop_model` → `course_loop_model.yaml`, read into [`CourseLoopModel`](@ref):
   the other identified parameters of the linear course-loop model of the stability
-  analysis (tape lag, scaling of the kite's dead time and lag, pattern law, kite
+  analysis (tape lag, scaling of the kite's dead time and lag, pattern delay approximation, kite
   correction). Every key is required.
 - `kite_correction` → `kite_correction_measured.csv`, read with [`load_course_correction`](@ref):
   the measured kite correction, gain and phase over frequency, written by

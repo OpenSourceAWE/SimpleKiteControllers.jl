@@ -72,7 +72,7 @@ another project.
 |---|---|---|---|
 | 1 | `build_turn_rate_table.jl`, then `plot_c1_c2.jl` | the turn-rate table rows | ~12 min |
 | 2 | `identify_kite_delay_scaling.jl` | `kite_dead_time_exp`, `kite_lag_exp` | ~5 min |
-| 3 | `identify_pattern_law.jl` | `pattern_delay_ref`, `pattern_delay_exp`, `pattern_v_floor` | ~10 min |
+| 3 | `identify_pattern_delay.jl` | `pattern_delay_ref`, `pattern_delay_exp`, `pattern_v_floor` | ~10 min |
 | 4 | `identify_depower_factor.jl` | `pattern_depower_exp` | ~6 min |
 | 5 | `identify_kite_correction.jl` | `kite_corr_*` and the kite-correction table | ~4 min |
 
@@ -85,7 +85,7 @@ After each step:
 - If a step fails a gate or a fit, find the root cause. Never relax a gate, a tolerance or
   a margin to get past it.
 
-The run scripts in steps 3 – 5 keep their logs (`output/pattern_law/`,
+The run scripts in steps 3 – 5 keep their logs (`output/pattern_delay/`,
 `output/depower_factor/`, `output/kite_correction/`), and each log has a `.kite_id`
 record. `fly = false` refits saved logs only when they were flown on the current kite. If
 the record is missing, it warns: fly again after a change of the kite.

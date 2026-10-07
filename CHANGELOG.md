@@ -4,6 +4,11 @@
 
 ### Changed
 
+- The "pattern law" is called the pattern delay approximation, since it is an empirical
+  fit, not a physical law: `identify_pattern_law.jl` is `identify_pattern_delay.jl`, the
+  key `pattern_law_depower` of the course-loop model file is `pattern_delay_depower`, its
+  provenance key `pattern_law` is `pattern_delay`, and the logs are kept in
+  `output/pattern_delay/`.
 - The low-wind schedule sets only the starting length and `guess_el_center`: the
   `low_wind_v_app_min` and `low_wind_el_offset_final` columns are gone, so Maasvlakte
   3.5 m/s flies `v_app_min` 10 m/s and `el_offset_final` 1.0° like every other run. With

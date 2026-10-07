@@ -8,7 +8,7 @@ and check the linear course-loop model used by the stability analyses against fl
 How to install and start the examples is described on
 [Examples - general](examples_general.md). `menu2()`, in a REPL started with `bin/run_julia`,
 offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl`,
-`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl`, `identify_depower_factor.jl`,
+`identify_kite_delay_scaling.jl`, `identify_pattern_delay.jl`, `identify_depower_factor.jl`,
 `identify_kite_correction.jl` and, to check the result, `stability_opt_reelout.jl`.
 
 ## Turn-rate law
@@ -30,14 +30,14 @@ wind speeds, fits how the kite's dead time and lag scale with the apparent wind 
 `x ∝ v_a^-exp`, and writes the two exponents, with their provenance, into the course-loop model
 file of the selected project.
 
-### [`identify_pattern_law.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_pattern_law.jl)
+### [`identify_pattern_delay.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_pattern_delay.jl)
 Flies figures of eight at three tether lengths and several wind speeds and a weak-wind reel-out,
-identifies the kite's response time on each log and fits the pattern law, the response time over
+identifies the kite's response time on each log and fits the pattern delay approximation, the response time over
 the apparent wind speed, which it writes into the course-loop model file of the selected project.
 
 ### [`identify_depower_factor.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_depower_factor.jl)
 Flies the figure of eight at 300 m and 7 m/s at several depower settings, identifies the kite's
-response time on each log and fits how it grows with the depower relative to the pattern law,
+response time on each log and fits how it grows with the depower relative to the pattern delay approximation,
 which it writes into the course-loop model file of the selected project.
 
 ### [`identify_kite_correction.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_kite_correction.jl)
@@ -99,21 +99,21 @@ otherwise the law is identified on a different kite than the one it is written f
    into the course-loop model file. `run_example("identify_kite_delay_scaling.jl"; save = false)`
    only prints them.
 
-3. **The pattern law** (`pattern_delay_ref`, `pattern_delay_exp`, `pattern_v_floor`), the
-   kite's response time `τ + T` in pattern flight. Run `identify_pattern_law.jl`: it flies
+3. **The pattern delay approximation** (`pattern_delay_ref`, `pattern_delay_exp`, `pattern_v_floor`), the
+   kite's response time `τ + T` in pattern flight. Run `identify_pattern_delay.jl`: it flies
    `simple_fig8.jl` at 150, 200 and 300 m and several wind speeds and a weak-wind
    `simple_reelout.jl`, so that `v_a` spans about 13 – 35 m/s, identifies the pure delay on
    phase 4 of each log with `identify_turn_rate_law` (V3Kite), fits
    `delay = pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp` to the logs flown at
-   `pattern_law_depower`, and writes the three values and their provenance into the
-   course-loop model file. The logs are kept in `output/pattern_law/`;
-   `run_example("identify_pattern_law.jl"; fly = false)` refits them.
+   `pattern_delay_depower`, and writes the three values and their provenance into the
+   course-loop model file. The logs are kept in `output/pattern_delay/`;
+   `run_example("identify_pattern_delay.jl"; fly = false)` refits them.
 
 4. **`pattern_depower_exp`**, the growth of the response time with depower. Run
    `identify_depower_factor.jl`: it flies point `D` (`system_fig8_300m`, 7 m/s) with
    `simple_fig8.jl` at depower 0.27, 0.30, 0.33 and 0.36 (the input `fcs_overrides` of
-   `simple_fig8.jl`), identifies the delay as in step 3, divides it by the pattern law at the
-   same `v_a`, fits `exp(pattern_depower_exp · (depower − pattern_law_depower))` to these
+   `simple_fig8.jl`), identifies the delay as in step 3, divides it by the pattern delay approximation at the
+   same `v_a`, fits `exp(pattern_depower_exp · (depower − pattern_delay_depower))` to these
    ratios and writes the exponent and its provenance into the course-loop model file.
 
 5. **The kite correction** (`kite_correction` → `kite_correction_measured.csv`, and
@@ -122,7 +122,7 @@ otherwise the law is identified on a different kite than the one it is written f
    project's settings file, restored afterwards), a baseline for the lap period and a run
    with a multisine added to the steering command at lines halfway between the lap's
    harmonics, 0.5 – 2.1 Hz, and divides the measured tape → heading response by the
-   turn-rate law with the pattern law's dead time and lag. The ratio loses gain with
+   turn-rate law with the pattern delay approximation's dead time and lag. The ratio loses gain with
    frequency without the phase lag a causal transfer function would have with it, so it is
    kept as a table: the script writes it to the project's kite-correction file, and
    `stability_opt_reelout.jl` also rates the guided loop with it. The lag-lead

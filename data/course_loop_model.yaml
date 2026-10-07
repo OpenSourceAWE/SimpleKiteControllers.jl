@@ -13,22 +13,23 @@ course_loop_model:
   kite_dead_time_exp:  1.225  # [-]
   kite_lag_exp:        0.437  # [-]
 
-  # Pattern law: the kite's response time in pattern flight, dead time + lag =
-  # pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
+  # Pattern delay approximation: the kite's response time in pattern flight,
+  # dead time + lag = pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified
   # (identify_turn_rate_law, phase 4 from 15.0 s after its start) on 6 logs at depower 0.27,
   # v_a 10.8 - 32.8 m/s, projects system_fig8_150m, system_fig8_200m, system_fig8_300m,
   # system_reelout_maasvlakte; standard error of the exponent ±0.056, log-RMS of the fit
-  # 0.045. identify_pattern_law.jl, 2026-10-05.
+  # 0.045. identify_pattern_delay.jl, 2026-10-05.
   pattern_delay_ref:   0.108  # [s]
   pattern_v_ref:       34.0   # [m/s]
   pattern_delay_exp:   0.932  # [-]
-  # The lowest v_a the law was identified at; below it the law holds its value.
+  # The lowest v_a the approximation was identified at; below it, it holds its value.
   pattern_v_floor:     10.8   # [m/s]
-  pattern_law_depower: 0.27   # depower the pattern law was measured at [-]
-  # Growth with depower, exp(pattern_depower_exp * (depower - pattern_law_depower)): point D
+  pattern_delay_depower: 0.27 # depower the pattern delay approximation was measured at [-]
+  # Growth with depower, exp(pattern_depower_exp * (depower - pattern_delay_depower)): point D
   # (system_fig8_300m, 7.0 m/s) flown at depower 0.270 / 0.300 / 0.330 / 0.360 gave x0.96 /
-  # 1.06 / 1.18 / 1.64 over the pattern law at the same v_a (identify_turn_rate_law, phase 4
-  # from 15.0 s after its start); standard error of the exponent ±0.86.
+  # 1.06 / 1.18 / 1.64 over the pattern delay approximation at the same v_a
+  # (identify_turn_rate_law, phase 4 from 15.0 s after its start); standard error of the
+  # exponent ±0.86.
   # identify_depower_factor.jl, 2026-10-05.
   pattern_depower_exp: 4.47   # [-]
 
@@ -48,6 +49,6 @@ course_loop_model:
 # 2 - 5 were flown in commit 8217ddc, after the last change of the kite (36b665b).
 provenance:
   kite_delay_scaling: "54a9ec8ae951"  # step 2, identify_kite_delay_scaling.jl
-  pattern_law:        "54a9ec8ae951"  # step 3, identify_pattern_law.jl
+  pattern_delay:      "54a9ec8ae951"  # step 3, identify_pattern_delay.jl
   depower_factor:     "54a9ec8ae951"  # step 4, identify_depower_factor.jl
   kite_correction:    "54a9ec8ae951"  # step 5, identify_kite_correction.jl

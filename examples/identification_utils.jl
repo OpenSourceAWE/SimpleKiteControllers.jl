@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 # Helpers of the identification scripts that write their results into the course-loop model
-# file (`identify_kite_delay_scaling.jl`, `identify_pattern_law.jl`,
+# file (`identify_kite_delay_scaling.jl`, `identify_pattern_delay.jl`,
 # `identify_depower_factor.jl`): flying a run of an example script and identifying the kite's
 # response time on its log, recording the kite each log was flown on, and rewriting values of
 # the file, which keeps its comments, line by line instead of with YAML.write_file.

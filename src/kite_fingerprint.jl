@@ -25,7 +25,7 @@ in the `provenance:` section of the course-loop model file.
 const IDENTIFICATION_STEPS = (
     (key = "turn_rate_law", script = "build_turn_rate_table.jl"),
     (key = "kite_delay_scaling", script = "identify_kite_delay_scaling.jl"),
-    (key = "pattern_law", script = "identify_pattern_law.jl"),
+    (key = "pattern_delay", script = "identify_pattern_delay.jl"),
     (key = "depower_factor", script = "identify_depower_factor.jl"),
     (key = "kite_correction", script = "identify_kite_correction.jl"),
 )

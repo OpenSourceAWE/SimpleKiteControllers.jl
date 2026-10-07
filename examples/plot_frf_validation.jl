@@ -10,7 +10,7 @@ per tether length (150 / 200 / 300 m, 7 m/s of wind, depower 0.27).
 - **measured**: `C · (command → course) · (1 + ω_g/s)`, the command → course
   points of `data/course_link_measured.csv` times the course PD at the run's
   `v_a` and the guidance, as `measured_loop` in `validate_margins.jl` forms it;
-- **model**: the pattern model `stability_fig8.jl` uses (the pattern law's dead
+- **model**: the pattern model `stability_fig8.jl` uses (the pattern delay approximation's dead
   time and lag, `kite_correction`, `guidance_tf`).
 
 The guidance corner is `ω_g = 0.96 · v_a / (L · D)` for both, `D` from

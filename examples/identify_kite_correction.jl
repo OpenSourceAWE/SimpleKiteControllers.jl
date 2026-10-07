@@ -3,7 +3,7 @@
 
 """
 Measure the kite correction, the ratio of the kite's steering → heading response, as an
-injected multisine measures it, to the turn-rate law with the pattern law's dead time and
+injected multisine measures it, to the turn-rate law with the pattern delay approximation's dead time and
 lag, and
 
 1. write it as a table, gain and phase per frequency, to the project's kite-correction file
@@ -24,7 +24,7 @@ A lag-lead is not fitted freely: the measured ratio loses gain with frequency wi
 phase lag a causal correction has to have with it (Bode's gain-phase relation), so a free
 fit trades the gain at the crossover for the phase and ends below the band. Step 5 of
 "Re-identifying after a change of the kite" (documentation page "Examples -
-identification"); run it after `identify_pattern_law.jl` and `identify_depower_factor.jl`,
+identification"); run it after `identify_pattern_delay.jl` and `identify_depower_factor.jl`,
 whose dead time and lag the correction goes with.
 
 Point D of `validate_margins.jl` (`system_fig8_300m.yaml`, 7 m/s, no turbulence) is flown
@@ -38,7 +38,7 @@ the tape stays linear:
    command. `frf_injection` gives the tape → heading response at each line.
 
 The measured response is divided by the model's, `c1·v_a·e^(−sτ)/((1 + sT)·s)`, with `c1`
-of the turn-rate table and the dead time `τ` and lag `T` of the pattern law
+of the turn-rate table and the dead time `τ` and lag `T` of the pattern delay approximation
 (`pattern_dead_time_lag`) at the run's `v_a` and depower; the gravity pole is left out,
 it is far below the lines.
 
@@ -200,7 +200,7 @@ for (line, measured) in zip(in_band, ratio)
     @printf("  %.3f                    %5.2f  %6.1f°               %5.2f  %6.1f°   %4.1f %%\n", line.f,
             abs(measured), rad2deg(angle(measured)), abs(model), rad2deg(angle(model)), 100 * line.heading_sd)
 end
-@printf("\n operating point: v_a %.1f m/s, depower %.3f, pattern-law dead time %.3f s + lag %.3f s\n",
+@printf("\n operating point: v_a %.1f m/s, depower %.3f, pattern delay approximation, dead time %.3f s + lag %.3f s\n",
         kc_run.v_a_mean, kc_run.depower, τ_pattern, T_pattern)
 if keep
     @printf(" The lag-lead %.2f / %.2f Hz is conservative against the measurement; kept (log-RMS %.3f).\n",
@@ -218,7 +218,7 @@ if save
     table_file = joinpath(skc_data_path(), kite_correction_file(project))
     open(table_file, "w") do io
         println(io, "# Kite correction M_k(f) = (tape -> heading, measured) / (turn-rate law c1 v_a e^(-s tau) / ((1 + s T) s)")
-        println(io, "# with the pattern law's dead time tau and lag T, course_loop_model.jl), measured with an injected")
+        println(io, "# with the pattern delay approximation's dead time tau and lag T, course_loop_model.jl), measured with an injected")
         @printf(io, "# multisine at point %s (%s, %.1f m/s, v_a %.1f m/s, depower %.3f), v_steering %g, amplitude %g\n",
                 KC_POINT, splitext(V1_POINTS[KC_POINT].project)[1], V1_POINTS[KC_POINT].wind, kc_run.v_a_mean,
                 kc_run.depower, V_STEERING, AMPLITUDE)

@@ -11,7 +11,7 @@ turn-rate law of that project's kite and rewrites the turn-rate table the projec
 names (about 12 minutes for the whole grid); `plot_c1_c2.jl` plots the result.
 `identify_kite_delay_scaling.jl` identifies how the dead time and lag scale with
 `v_a` and writes the two exponents into the project's course-loop model file;
-`identify_pattern_law.jl` identifies the response time in pattern flight and
+`identify_pattern_delay.jl` identifies the response time in pattern flight and
 `identify_depower_factor.jl` its growth with the depower, and
 `identify_kite_correction.jl` the kite correction; `stability_opt_reelout.jl` checks the
 reel-out course loop with the identified model. See
@@ -37,7 +37,7 @@ const IDENTIFICATION_SCRIPTS = [
     "build_turn_rate_table.jl       - identify the turn-rate law of every depower (12 min!)" => "build_turn_rate_table.jl",
     "plot_c1_c2.jl                  - plot c1, c2, the dead time and the lag over depower" => "plot_c1_c2.jl",
     "identify_kite_delay_scaling.jl - scaling of dead time and lag over v_a (5 min!)" => "identify_kite_delay_scaling.jl",
-    "identify_pattern_law.jl        - response time in pattern flight over v_a (10 min!)" => "identify_pattern_law.jl",
+    "identify_pattern_delay.jl      - response time in pattern flight over v_a (10 min!)" => "identify_pattern_delay.jl",
     "identify_depower_factor.jl     - growth of the response time with depower (6 min!)" => "identify_depower_factor.jl",
     "identify_kite_correction.jl    - measured kite correction by multisine injection (5 min!)" => "identify_kite_correction.jl",
     "stability_opt_reelout.jl       - disk margins of the reel-out course loop with the identified model" => "stability_opt_reelout.jl",

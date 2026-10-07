@@ -852,10 +852,10 @@ The follow-ups are in [Next steps](#next-steps).
 
 `stability_opt_reelout.jl` now evaluates the guided loop with the pattern model
 validated for the fig8 (`oldplans/Plan_model_validation.md`), as `stability_fig8.jl`
-does: the kite's dead time + lag from the pattern law
+does: the kite's dead time + lag from the pattern delay approximation
 (`pattern_dead_time_lag`, with the measured depower factor), times
 `kite_correction`, with the guidance as `guidance_tf`. The inner loop `C·P`
-keeps the turn-rate table's dead time and lag, for comparison. The pattern law
+keeps the turn-rate table's dead time and lag, for comparison. The pattern delay approximation
 was re-identified on pattern logs that include this reel-out (12.8 m/s: 0.292 s
 measured, 0.289 s law, 0.43 s table).
 
@@ -875,7 +875,7 @@ Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
   `v_a` 11 – 17 m/s, where the worst case combines the bin's highest `ω_g`
   with every `v_a` corner (see [Caveats](#caveats)); the other linear bins
   give 0.57 – 0.95.
-- **Still conservative in the delay:** the pattern law gives 15 % more than
+- **Still conservative in the delay:** the pattern delay approximation gives 15 % more than
   the log at 12.2 m/s (0.321 s against 0.278 s); below ~13 m/s the kite's
   response time stops growing (`oldplans/Plan_model_validation.md`).
 - `kite_correction` was measured at `v_a` ≈ 34 m/s; at the reel-out's
@@ -890,8 +890,8 @@ Maasvlakte, 4 m/s, no turbulence (run of 2026-09-27 18:54, commit `7ddaf69`),
    `ω_g ∝ v_k`, so a bin's highest `ω_g` (0.78 rad/s at 154 m) is flown at its
    highest `v_a` (15.5 m/s); the old worst case paired it with the lowest
    (8.4 m/s, where the kite flies ~0.42 rad/s).
-2. **The pattern law is floored at 12.8 m/s** (`pattern_v_floor`). Below it
-   the law kept growing (0.46 s at 8.4 m/s, depower 0.294); the reel-out logs
+2. **The pattern delay approximation is floored at 12.8 m/s** (`pattern_v_floor`). Below it
+   the unfloored approximation kept growing (0.46 s at 8.4 m/s, depower 0.294); the reel-out logs
    measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s.
 
 | Maasvlakte 3.5 m/s, linear bins | Before the fixes | After |
