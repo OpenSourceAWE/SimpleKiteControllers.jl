@@ -11,7 +11,10 @@ a retune. Its folder is re-analysed with `stability_opt_reelout.jl` (plots off, 
 muted), which leaves the worst bin's loop `L` in `Main`. Its Bode plot, drawn with
 `MakieControlPlots.bode_plot` from 0.01 to 2 Hz with the phase shifted by -360° and
 reference lines at 0 dB and -180°, is shown in a window and
-written to `../LearningControl/figures/worst_loop_bode.pdf`.
+written to `../LearningControl/figures/worst_loop_bode.pdf`. Then its disk margin over the
+same frequencies, `diskmargin(L, 0, ω)`: the margin `α` with the robustness threshold
+0.5, and the gain and phase variations each frequency's disk tolerates, written to
+`../LearningControl/figures/worst_loop_disk_margin.pdf`.
 
     include("examples/plot_worst_margin_bode.jl")
 """
@@ -32,9 +35,13 @@ const SITE_PROJECTS = [
     "cabauw" => "system_reelout_cabauw.yaml",
 ]
 const SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "output", "scenarios"))
-const FIG_FILE = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures", "worst_loop_bode.pdf"))
+const FIG_DIR = normpath(joinpath(@__DIR__, "..", "..", "LearningControl", "figures"))
 "Frequency range of the plot [Hz]"
 const F_RANGE = (0.01, 2.0)
+"Frequency ticks of both figures [Hz]"
+const F_TICKS = ([0.01, 0.1, 1.0], ["0.01", "0.1", "1"])
+"Disk margin from which the loop is rated robust [-]"
+const α_ROBUST = 0.5
 "Axis label size [pt]; `bode_plot` draws 768 px wide, scaled to one column of the paper, as in `plot_c1_c2.jl`"
 const LABEL_SIZE = 26
 
@@ -68,11 +75,49 @@ function worst_scenario()
 end
 
 """
-    plot_worst_margin_bode(; file = FIG_FILE)
+    plot_disk_margin(L, file)
 
-Analyse the worst scenario, show its Bode plot and save it (see the file's docstring).
+Show the disk margin of the loop `L` over frequency and save it to `file`: `α`, and the
+gain [dB] and phase [deg] variations the disk of each frequency tolerates. With skew
+σ = 0 the disk is symmetric in dB, so one curve each gives ± the variation.
 """
-function plot_worst_margin_bode(; file = FIG_FILE)
+function plot_disk_margin(L, file)
+    f = exp10.(range(log10.(F_RANGE)...; length = 400))
+    dms = diskmargin(L, 0, 2π .* f)
+    α = [d.α for d in dms]
+    # From α = 2 on the disk contains every gain increase: the upper gain margin is infinite
+    # (the formula turns negative), and the curve is left out there.
+    gain = [d.α < 2 ? 20log10(d.gainmargin[2]) : NaN for d in dms]
+    phase = [d.phasemargin for d in dms]
+    # The phase margin of the disk, at its minimum: the phase variation the loop tolerates
+    # together with the gain variation of the same disk.
+    i = argmin(α)
+    pm_label = rich("P", subscript("m"), @sprintf(" = ±%.1f°", phase[i]))
+    # Its gain margin in dB, as the axis: with σ = 0 the disk is symmetric in dB, so ± one value
+    # (the factors, 0.60 – 1.68 for α = 0.506, go into the caption).
+    gm_label = rich("G", subscript("m"), @sprintf(" = ±%.1f dB", gain[i]))
+    with_theme(COLUMN_THEME) do
+        plotx(f, [α, fill(α_ROBUST, length(f))], gain, phase;
+              xlabel = "Frequency [Hz]", xscale = :log10, xticks = F_TICKS, xlims = F_RANGE,
+              ylabels = ["α [-]", "gain ± [dB]", "phase ± [deg]"],
+              # From 0: the threshold is not on the edge. The gain grows without bound towards α = 2.
+              ylims = [(0, 2.2), (0, 20), (0, 90)],
+              ann = [nothing, (f[i], (0.0, gain[i]), gm_label), (f[i], (0.0, phase[i]), pm_label)],
+              linestyle = [[:solid, :dot], nothing, nothing],
+              color = [[:black, :gray], :black, :black],
+              labelsize = LABEL_SIZE, fig = "worst_loop_disk_margin", disp = true)
+        savefig(file)
+    end
+    return nothing
+end
+
+"""
+    plot_worst_margin_bode(; dir = FIG_DIR)
+
+Analyse the worst scenario, show its Bode plot and its disk margin over frequency, and
+save both into `dir` (see the file's docstring).
+"""
+function plot_worst_margin_bode(; dir = FIG_DIR)
     ws = worst_scenario()
     project0 = read_gui_field("project")
     try
@@ -94,10 +139,11 @@ function plot_worst_margin_bode(; file = FIG_FILE)
         # the usual range: -360° moves the margins to -180°.
         bode_plot(L; from = log10(2π * F_RANGE[1]), to = log10(2π * F_RANGE[2]), hz = true, bw = true, fontsize = LABEL_SIZE,
                   show_title = false, phase_offset = -360, ref_lines = true,
-                  xticks = ([0.01, 0.1, 1.0], ["0.01", "0.1", "1"]), fig = "worst_loop_bode", disp = true)
-        mkpath(dirname(file))
-        savefig(file)
+                  xticks = F_TICKS, fig = "worst_loop_bode", disp = true)
+        mkpath(dir)
+        savefig(joinpath(dir, "worst_loop_bode.pdf"))
     end
+    plot_disk_margin(L, joinpath(dir, "worst_loop_disk_margin.pdf"))
     return nothing
 end
 
