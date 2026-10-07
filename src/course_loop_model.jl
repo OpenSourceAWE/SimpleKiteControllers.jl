@@ -31,17 +31,17 @@ $(TYPEDFIELDS)
     kite_dead_time_exp = NaN
     "Exponent of the kite's lag over `v_a`, `T ∝ v_a^-exp` [-]"
     kite_lag_exp = NaN
-    "Pattern law: the kite's response time `τ + T` [s] at `pattern_v_ref`"
+    "Pattern delay approximation: the kite's response time `τ + T` [s] at `pattern_v_ref`"
     pattern_delay_ref = NaN
-    "Pattern law: reference airspeed [m/s]"
+    "Pattern delay approximation: reference airspeed [m/s]"
     pattern_v_ref = NaN
-    "Pattern law: exponent over `v_a`, `τ + T ∝ v_a^-exp` [-]"
+    "Pattern delay approximation: exponent over `v_a`, `τ + T ∝ v_a^-exp` [-]"
     pattern_delay_exp = NaN
-    "Airspeed [m/s] below which the pattern law holds its value"
+    "Airspeed [m/s] below which the pattern delay approximation holds its value"
     pattern_v_floor = NaN
-    "Depower [-] the pattern law was measured at"
-    pattern_law_depower = NaN
-    "Growth of the pattern response time with depower, `exp(exp·(depower - pattern_law_depower))` [-]"
+    "Depower [-] the pattern delay approximation was measured at"
+    pattern_delay_depower = NaN
+    "Growth of the pattern response time with depower, `exp(exp·(depower - pattern_delay_depower))` [-]"
     pattern_depower_exp = NaN
     "Zero [Hz] of [`kite_correction`](@ref)"
     kite_corr_zero = NaN
@@ -105,21 +105,21 @@ kite_lag(tc, v_app; clm = course_loop_model()) = _scaled_row(tc, :kite_lag, v_ap
 """
     pattern_dead_time_lag(tc, v_app, depower; clm = course_loop_model()) -> (τ, T)
 
-The kite's dead time and lag [s] in pattern flight. Their sum follows the pattern law
+The kite's dead time and lag [s] in pattern flight. Their sum follows the pattern delay approximation
 of [`CourseLoopModel`](@ref), `pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp`,
 times the measured depower factor `exp(pattern_depower_exp · (depower −
-pattern_law_depower))`. It is split in the ratio `tc.dead_time : tc.kite_lag` of the
+pattern_delay_depower))`. It is split in the ratio `tc.dead_time : tc.kite_lag` of the
 turn-rate coefficients `tc`, which must be those at `depower`.
 
-The pattern law was identified in the low crosswind pattern (elevation 15 – 26°), so
+The pattern delay approximation was identified in the low crosswind pattern (elevation 15 – 26°), so
 this function holds for the pattern loop only, not for the entry, which flies at a
-much higher elevation. Below `pattern_v_floor` the law holds its value (the measured
+much higher elevation. Below `pattern_v_floor` the approximation holds its value (the measured
 response time stops growing at about 0.28 s).
 """
 function pattern_dead_time_lag(tc, v_app, depower; clm = course_loop_model())
     target = clm.pattern_delay_ref *
              (clm.pattern_v_ref / max(v_app, clm.pattern_v_floor))^clm.pattern_delay_exp *
-             exp(clm.pattern_depower_exp * (depower - clm.pattern_law_depower))
+             exp(clm.pattern_depower_exp * (depower - clm.pattern_delay_depower))
     (isnan(tc.dead_time) || isnan(tc.kite_lag)) && error("pattern_dead_time_lag: the turn-rate " *
         "table row has no dead_time or kite_lag; re-identify it with examples/build_turn_rate_table.jl.")
     φ = tc.dead_time / (tc.dead_time + tc.kite_lag)
@@ -209,7 +209,7 @@ its features sit at a fixed distance flown, so they move in frequency with `v_a`
 heading response to what an injected multisine measures in the simulation:
 from ~0.9 Hz up the kite turns less than the relay-identified law says (0.8 at
 1.1 Hz, 0.6 – 0.7 above 1.4 Hz) with ~10° more lag. Multiply the plant by it,
-together with the pattern law's dead time and lag (`pattern_dead_time_lag`),
+together with the pattern delay approximation's dead time and lag (`pattern_dead_time_lag`),
 against which it is chosen. It is the causal stand-in for the measured kite correction
 ([`kite_correction_file`](@ref)), which loses gain without the matching phase lag and so
 has no low-order causal form: the zero and pole are chosen conservative against it

@@ -28,14 +28,14 @@ schedule uses. Four things differ in the reel-out:
 
 - **The kite's dead time and lag.** As in `stability_fig8.jl`: the loop with
   the guidance is the validated pattern model (`oldplans/Plan_model_validation.md`),
-  with the kite's response time from the pattern law
+  with the kite's response time from the pattern delay approximation
   ([`pattern_dead_time_lag`](@ref), re-identified on pattern logs including
   this reel-out, 0.29 s at 12.8 m/s against the table's 0.43 s) and
   [`kite_correction`](@ref); the inner loop `C·P·kite_correction` uses the same
   plant. The log cannot split dead time from lag: closed-loop steering has no
   steps, and its own split read 0 s + 0.27 s. It checks their sum instead: the
   pure delay identified on settled phase 4 (`identify_turn_rate_law`) against
-  the pattern law's and the table's at the same `v_a` and depower.
+  the pattern delay approximation's and the table's at the same `v_a` and depower.
   `kite_correction` was measured at `v_a` ≈ 33 m/s and is scaled with `v_a`
   to the reel-out's 11 – 20 m/s, like the measured table.
 
@@ -267,7 +267,7 @@ log_ωg = guidance_rate.(Ref(fcs), log_va, log_L, log_vk)
 
 Disk and delay margins of the inner loop `C·P·kite_correction` and of the pattern
 loop `C·(1 + ω_g/s)·P·kite_correction` at one operating point, both with the same
-plant `P`: the kite's dead time and lag of the pattern law
+plant `P`: the kite's dead time and lag of the pattern delay approximation
 ([`pattern_dead_time_lag`](@ref)): tether length `L` [m],
 `v_app` [m/s], the guidance's corner `ω_g` [rad/s] (see [`guidance_rate`](@ref)),
 `depower` [-] (clamped to the turn-rate table's
@@ -353,7 +353,7 @@ end
                 depower_setpoint = %.3f (c1 = %.4f), v_app_min = %.1f m/s, v_app_min_pattern = %.1f m/s, \
                 attractor_dist = %.1f°, attractor_lead_time = %.2f s, actuator lag %.3f s fitted on the whole log \
                 (unexplained %.0f %%), \
-                guided loop: kite correction %.2f/%.2f Hz at %.1f m/s, scaled with v_a, kite dead time + lag from the pattern law \
+                guided loop: kite correction %.2f/%.2f Hz at %.1f m/s, scaled with v_a, kite dead time + lag from the pattern delay approximation \
                 %.3f + %.3f = %.3f s at %.1f m/s (turn-rate table: %.3f + %.3f = %.3f s), \
                 against the log's pure delay %.3f s there (correlation %.3f); plant c1, c2 from the low pattern, \
                 c2 = %.2f at depower_setpoint (gravity scale %.1f).",

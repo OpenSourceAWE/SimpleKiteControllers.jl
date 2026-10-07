@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-Identify the pattern law, the kite's response time in pattern flight,
+Identify the pattern delay approximation, the kite's response time in pattern flight,
 
     τ_kite + T_kite = pattern_delay_ref · (pattern_v_ref / v_a)^pattern_delay_exp,
 
@@ -16,22 +16,22 @@ Each entry of `points` is flown once, without turbulence: the figure of eight
 reel-out (`simple_reelout.jl`), so that `v_a` spans about 13 – 35 m/s. On each log
 the pure delay of the turn rate behind the steering is identified with V3Kite's
 `identify_turn_rate_law` on phase 4, from `T_SETTLE` after its start, together with
-the median `v_a` and depower of that window. Only logs flown at `pattern_law_depower`
+the median `v_a` and depower of that window. Only logs flown at `pattern_delay_depower`
 (within `DEPOWER_TOL`) enter the fit: above `wind_ramp_low` the figure-of-eight
 projects raise the depower, which step 4 (`pattern_depower_exp`) is about. The fit
 is linear least squares of `log(delay)` over `log(pattern_v_ref / v_a)`;
 `pattern_v_ref` stays as it is (a reference speed, not identified), and
 `pattern_v_floor` becomes the lowest `v_a` of the logs fitted.
 
-The logs are kept in `output/pattern_law/`, so `fly = false` refits them without
+The logs are kept in `output/pattern_delay/`, so `fly = false` refits them without
 flying. The selections of the example menu (project, wind speed, simulation time,
 turbulence) are restored afterwards, also after an error. Each run takes one to two
 minutes. The inputs are passed with `run_example` (`src/script_inputs.jl`):
 
-    include("examples/identify_pattern_law.jl")                        # fly every point, fit, write
-    run_example("identify_pattern_law.jl"; fly = false)                # refit the saved logs
-    run_example("identify_pattern_law.jl"; save = false)               # print only
-    run_example("identify_pattern_law.jl";
+    include("examples/identify_pattern_delay.jl")                        # fly every point, fit, write
+    run_example("identify_pattern_delay.jl"; fly = false)                # refit the saved logs
+    run_example("identify_pattern_delay.jl"; save = false)               # print only
+    run_example("identify_pattern_delay.jl";
                 points = [(project = "system_fig8_300m.yaml", wind = 6.0, sim_time = 120.0,
                            script = "simple_fig8.jl")])                # other points
 """
@@ -58,10 +58,10 @@ const PATTERN_POINTS = [
     (project = "system_reelout_maasvlakte.yaml", wind = 4.0, sim_time = nothing, script = "simple_reelout.jl"),
 ]
 "Where the logs of the runs are kept"
-const LOG_DIR = normpath(joinpath(@__DIR__, "..", "output", "pattern_law"))
+const LOG_DIR = normpath(joinpath(@__DIR__, "..", "output", "pattern_delay"))
 "Start of the fit window after the start of phase 4 [s]: the transient of the hand-over is left out"
 const T_SETTLE = 15.0
-"Largest difference of a log's median depower from `pattern_law_depower` that is fitted [-]"
+"Largest difference of a log's median depower from `pattern_delay_depower` that is fitted [-]"
 const DEPOWER_TOL = 0.01
 
 # The caller's inputs (`run_example`); a plain `include` flies with these defaults.
@@ -73,9 +73,9 @@ check_model_provenance(project_file(selected_project()); through = 2,
 fly && foreach(point -> fly_point(point, LOG_DIR), points)
 clm = course_loop_model()
 results = [point_delay(point, LOG_DIR; t_settle = T_SETTLE) for point in points]
-used = filter(res -> abs(res.depower - clm.pattern_law_depower) <= DEPOWER_TOL, results)
+used = filter(res -> abs(res.depower - clm.pattern_delay_depower) <= DEPOWER_TOL, results)
 length(used) >= 3 || error(@sprintf("Only %d logs at depower %.2f ± %.2f; the fit needs at least 3.",
-                                    length(used), clm.pattern_law_depower, DEPOWER_TOL))
+                                    length(used), clm.pattern_delay_depower, DEPOWER_TOL))
 
 # log(delay) = log(pattern_delay_ref) + pattern_delay_exp · log(pattern_v_ref / v_a)
 log_ratio = log.(clm.pattern_v_ref ./ [res.v_a for res in used])
@@ -88,11 +88,11 @@ residual = log_delay .- (delay0 .+ delay_exp .* (log_ratio .- ratio0))
 se_exp = sqrt(sum(residual .^ 2) / (length(used) - 2) / sxx)
 v_floor = minimum(res.v_a for res in used)
 
-println("\n log                               v_a     depower   delay     law      corr   window   fitted")
+println("\n log                               v_a     depower   delay     approx      corr   window   fitted")
 for res in results
-    law = delay_ref * (clm.pattern_v_ref / max(res.v_a, v_floor))^delay_exp
+    approx = delay_ref * (clm.pattern_v_ref / max(res.v_a, v_floor))^delay_exp
     @printf("  %-32s %5.1f   %.3f     %.3f s   %.3f s   %.3f   %3.0f s    %s\n", res.label, res.v_a,
-            res.depower, res.delay, law, res.corr, res.window, res in used ? "yes" : "no (depower)")
+            res.depower, res.delay, approx, res.corr, res.window, res in used ? "yes" : "no (depower)")
 end
 @printf("\n pattern_delay_ref = %.3f s at %.1f m/s   (was %.3f)\n", delay_ref, clm.pattern_v_ref, clm.pattern_delay_ref)
 @printf(" pattern_delay_exp = %.3f ± %.3f        (was %.3f)\n", delay_exp, se_exp, clm.pattern_delay_exp)
@@ -104,24 +104,24 @@ if save
     file = joinpath(skc_data_path(), course_loop_model_file(project))
     projects = sort(unique(splitext(point.project)[1] for point in points
                            if any(res -> res.label == log_label(point), used)))
-    law_comment = wrap_comment(
-        "Pattern law: the kite's response time in pattern flight, dead time + lag = " *
+    approx_comment = wrap_comment(
+        "Pattern delay approximation: the kite's response time in pattern flight, dead time + lag = " *
         "pattern_delay_ref * (pattern_v_ref / v_a)^pattern_delay_exp. Identified " *
         "(identify_turn_rate_law, phase 4 from $(T_SETTLE) s after its start) on $(length(used)) logs " *
-        @sprintf("at depower %.2f, v_a %.1f - %.1f m/s, ", clm.pattern_law_depower, v_floor,
+        @sprintf("at depower %.2f, v_a %.1f - %.1f m/s, ", clm.pattern_delay_depower, v_floor,
                  maximum(res.v_a for res in used)) *
         "projects $(join(projects, ", ")); " *
         @sprintf("standard error of the exponent ±%.3f, log-RMS of the fit %.3f. ", se_exp,
                  sqrt(sum(residual .^ 2) / length(used))) *
-        "identify_pattern_law.jl, $(Dates.today()).")
-    floor_comment = wrap_comment("The lowest v_a the law was identified at; below it the law holds its value.")
+        "identify_pattern_delay.jl, $(Dates.today()).")
+    floor_comment = wrap_comment("The lowest v_a the approximation was identified at; below it, it holds its value.")
     update_yaml_values!(file, ["pattern_delay_ref" => @sprintf("%.3f", delay_ref),
                                "pattern_delay_exp" => @sprintf("%.3f", delay_exp),
                                "pattern_v_floor" => @sprintf("%.1f", v_floor),
-                               "pattern_law" => "\"$(kite_id(project))\""];
-                        comments = Dict("pattern_delay_ref" => law_comment,
+                               "pattern_delay" => "\"$(kite_id(project))\""];
+                        comments = Dict("pattern_delay_ref" => approx_comment,
                                         "pattern_v_floor" => floor_comment))
     reload_course_loop_model!(project)
-    @info "identify_pattern_law: wrote the pattern law to data/$(basename(file))."
+    @info "identify_pattern_delay: wrote the pattern delay approximation to data/$(basename(file))."
 end
 nothing

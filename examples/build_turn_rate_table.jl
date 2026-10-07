@@ -6,7 +6,7 @@ Fill the turn-rate table of the selected project (`select_project()`; the table 
 the project's `turn_rate_coeffs` file) with the depower cells this package needs, so
 [`turn_rate_coeffs`](@ref) can interpolate instead of throwing. The turn-rate law is
 identified LOW in the wind window, where the kite flies its patterns: per depower,
-one relay flight per entry of `FLIGHT_SETTINGS`, each at a fixed steering amplitude
+one relay flight per entry of `flight_settings(depower)`, each at a fixed steering amplitude
 for `SWEEP_SIM_TIME` (`_fly_relay`), and one joint fit of the flights that stayed
 airborne (`_fly_low_flights`, V3Kite's `joint_delay_lag_fit`): `c1`, `c2`, the
 dead time and the kite's lag.
@@ -46,8 +46,9 @@ the definitions, which is how the plotting scripts that fly the same flights use
     run_example("build_turn_rate_table.jl"; identify = false)                   # definitions only
 
 The whole grid took about 12 minutes (six depowers, 1/90 s time step, VSM interval 10,
-2026-10-02), with a settling-cache miss on every new depower. The grid ends at 0.375: at 0.40 no
-flight stayed airborne (2026-09-29 and 2026-10-02). Afterwards the table is reloaded into the running session, so
+2026-10-02), with a settling-cache miss on every new depower. The grid ends at 0.40: with the
+amplitudes 0.10 – 0.15 of `FLIGHT_SETTINGS_HIGH` one flight stays airborne there; with
+0.075 – 0.125 none did (2026-09-29, 2026-10-02 and 2026-10-06). Afterwards the table is reloaded into the running session, so
 `test/test_fig8_controller.jl` can be re-run without restarting.
 """
 
@@ -96,6 +97,12 @@ sweep_project() = project_file(selected_project())
 # The turn-rate table that project names.
 out_file() = turn_rate_coeffs_file(sweep_project())
 
+# The turn-rate table is identified on the Maasvlakte project; checked here, before `DT`
+# and `VSM_INTERVAL` are read from the selected project.
+@assert basename(sweep_project()) == "system_reelout_maasvlakte.yaml" "build_turn_rate_table: " *
+    "selected project is $(basename(sweep_project())), select system_reelout_maasvlakte.yaml " *
+    "with select_project() first."
+
 const V_WIND           = 9.51
 const TETHER_LENGTH    = 150.0
 const SWEEP_SIM_TIME   = 200.0
@@ -132,6 +139,17 @@ const REELOUT_L_MAX    = 380.0
 const FLIGHT_SETTINGS = [(a = 0.075, az_reverse = 20.0, el_hold_tilt = 45.0),
                          (a = 0.100, az_reverse = 30.0, el_hold_tilt = 45.0),
                          (a = 0.125, az_reverse = 30.0, el_hold_tilt = 25.0)]
+# From `HIGH_DEPOWER` on, 0.075 sinks below the floor at every depower and 0.10 from 0.375
+# on, so the cells rested on one or two flights and none at 0.40. These flights drop 0.075
+# for 0.15, which flies the full time at 0.325 – 0.40; its tilt of 15° keeps it 5° above
+# the floor at 0.325, where 25° bottoms out at 10.2° (2026-10-06, docs/high_depower_amplitude.md).
+const HIGH_DEPOWER = 0.325
+const FLIGHT_SETTINGS_HIGH = [(a = 0.100, az_reverse = 30.0, el_hold_tilt = 45.0),
+                              (a = 0.125, az_reverse = 30.0, el_hold_tilt = 25.0),
+                              (a = 0.150, az_reverse = 30.0, el_hold_tilt = 15.0)]
+
+"The relay flights flown at `depower`: `FLIGHT_SETTINGS`, from `HIGH_DEPOWER` on `FLIGHT_SETTINGS_HIGH`."
+flight_settings(depower) = depower >= HIGH_DEPOWER - 1e-9 ? FLIGHT_SETTINGS_HIGH : FLIGHT_SETTINGS
 # `G` mask of `identify_turn_rate_law`, below the smallest amplitude.
 const MIN_STEERING_FIT = 0.025
 
@@ -142,9 +160,9 @@ const DELAY_BLOCK_TMAX = 3.0
 # [s] length of the blocks the standard errors of a row are taken over (`block_standard_errors`).
 const BLOCK_LENGTH     = 20.0
 
-# The grid the reel-out run needs, see `build_turn_rate_table`. Not 0.40: no flight stays
-# airborne there.
-const TABLE_DEPOWERS = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375]
+# The grid the reel-out run needs, see `build_turn_rate_table`. 0.40 only with the flights
+# of `FLIGHT_SETTINGS_HIGH`: none of `FLIGHT_SETTINGS` stays airborne there.
+const TABLE_DEPOWERS = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40]
 
 """
     _check_conditions(dict)
@@ -301,7 +319,7 @@ _split_delay(fit) = fit_delay_lag(fit, DT; lag_max = KITE_LAG_MAX, t_max = DELAY
 """
     _fly_low_flights(depower; v_wind=V_WIND, v_reelout=0.0) -> NamedTuple
 
-One relay flight per entry of `FLIGHT_SETTINGS` at `depower` (`_fly_relay`), each
+One relay flight per entry of `flight_settings(depower)` (`_fly_relay`), each
 fitted on its own window (`_fit_window`, then `_split_delay`), and the joint fit of
 the steady ones (`joint_delay_lag_fit`; of all of them if none flew the full time):
 one dead time, lag, `c1` and `c2` for every flight, the steering of each flight
@@ -315,7 +333,7 @@ identification and delay-lag fit, and `v_τ/v_a` in the window. `joint` is
 """
 function _fly_low_flights(depower; v_wind::Real = V_WIND, v_reelout::Real = 0.0)
     flights = NamedTuple[]
-    for (; a, az_reverse, el_hold_tilt) in FLIGHT_SETTINGS
+    for (; a, az_reverse, el_hold_tilt) in flight_settings(depower)
         r = _fly_relay(depower, a; az_reverse, el_hold_tilt, v_wind, v_reelout)
         label = @sprintf("Amplitude %.3f", a)
         w = _fit_window(r.sl; label)

@@ -126,7 +126,7 @@ delay is the cause, and the 1 % gain change hardly matters.
   Cabauw 3 m/s: 0.721 → 0.780). It uses the table's dead time and lag
   directly, and their sum is 0.02 – 0.04 s shorter.
 - **The guided loop, the rated one, does not change.** Its kite response time
-  comes from the pattern law (`pattern_dead_time_lag`), which rescales the
+  comes from the pattern delay approximation (`pattern_dead_time_lag`), which rescales the
   table's dead time + lag to the pattern's measured sum. Only the split moves,
   a little towards lag. The worst scenario and bin stay the same (Cabauw
   10 m/s, 175 m). A few scenarios move their worst bin by one bin.

@@ -1,5 +1,5 @@
 # Kite correction M_k(f) = (tape -> heading, measured) / (turn-rate law c1 v_a e^(-s tau) / ((1 + s T) s)
-# with the pattern law's dead time tau and lag T, course_loop_model.jl), measured with an injected
+# with the pattern delay approximation's dead time tau and lag T, course_loop_model.jl), measured with an injected
 # multisine at point D (system_fig8_300m, 7.0 m/s, v_a 32.0 m/s, depower 0.270), v_steering 1, amplitude 0.004
 # per line; tau = 0.053 s, T = 0.061 s there. identify_kite_correction.jl, 2026-10-05.
 # Its features move in frequency with v_a (course_correction scales the table by v_a).

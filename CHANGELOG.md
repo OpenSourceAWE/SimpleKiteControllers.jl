@@ -4,6 +4,47 @@
 
 ### Changed
 
+- The plant flies with wing drag: `wing_drag_coeff` 0.03 in both kite settings files.
+  V3Kite's `init` reads the value but does not apply it; `apply_wing_drag!`
+  (`examples/model_setup.jl`) spreads it over the wing nodes after settling, in
+  `init_model` and in the relay flights of `build_turn_rate_table.jl`. 0.07 (the value
+  of V3Kite's flight replays) and 0.05 needed more depower at high wind than the kite
+  can fly; 0.03 flies all 22 scenarios, and the low-wind power ratio is now about 1.
+- Re-identified with the wing drag, in order: the turn-rate table; the depower
+  conversion (offset 0.1076, slope 0.1392, curvature 0.2427); the course-loop model
+  (`kite_dead_time_exp` 1.459 → 1.225, `kite_lag_exp` 0.371 → 0.437, pattern delay
+  0.144 s (34/v_a)^0.641 → 0.108 s (34/v_a)^0.932, `pattern_depower_exp` 5.98 → 4.47,
+  kite correction re-measured at v_a 32 m/s); and the course link, re-measured by
+  multisine injection at 150, 200 and 300 m. The kite responds about 25 % faster at
+  high apparent wind, so `attractor_lead_time` stays at 1.05 s (a retune to 1.21 s on
+  the old model was undone). All 22 scenarios pass all criteria; worst guided disk
+  margin 0.506 (Maasvlakte 3.5 m/s).
+- The turn-rate table flies relay amplitudes 0.10-0.15 from depower 0.325 on (0.075,
+  which sank at every high depower, is dropped) and has a cell at 0.40:
+  3/3/2/1 steady flights at 0.325-0.40, was 2/2/1/0. `build_turn_rate_table.jl`
+  asserts that the Maasvlakte project is selected.
+- The kite parks at the end of the reel-out: with `park_final` (on) phase 5 steers
+  course 0, straight up, and `park_lead` (6 s) starts that climb before the reel-out
+  ends. Without it the force jumped by about 35 % when the winch stopped, beyond what
+  the depower limiter could hold at Cabauw 10 m/s. The pattern metrics, the reel-out
+  power (`reelout_power`, `reelout_block` with `t_end`), the power ratio and the
+  stability rating of `stability_opt_reelout.jl` end where the climb starts; the
+  elevation floor, the force limit and `energy_run` still cover the whole run.
+- The turn-radius request is sized at `request_depower_estimate`, a depower ramped on
+  the wind at 100 m, instead of the depower of the solve's seed, which seeded
+  Maasvlakte 8 m/s at 1.85 m of tape against 1.42-1.46 m flown.
+- High-wind pattern box: `pattern_azimuth_max_high` 32 → 34° and
+  `pattern_elevation_amplitude_max_high` 11 → 13°, which Cabauw 10 m/s needs with drag.
+  At 36° the re-optimizations grew to ±32° and tracked worse.
+- Free-speed reference in `reelout_results.jl` also for power ratios ≥ 1.05 (was 1.1)
+  and minimum forces below `FREE_SPEED_FORCE_MAX` = 2000 N (was 1000 N).
+- Font sizes of `plot_c1_c2.jl` and `plot_relay_low_elevation.jl` for the paper; the
+  attractor-distance plot of `plots_extra.jl` runs to 150 s.
+- The "pattern law" is called the pattern delay approximation, since it is an empirical
+  fit, not a physical law: `identify_pattern_law.jl` is `identify_pattern_delay.jl`, the
+  key `pattern_law_depower` of the course-loop model file is `pattern_delay_depower`, its
+  provenance key `pattern_law` is `pattern_delay`, and the logs are kept in
+  `output/pattern_delay/`.
 - The low-wind schedule sets only the starting length and `guess_el_center`: the
   `low_wind_v_app_min` and `low_wind_el_offset_final` columns are gone, so Maasvlakte
   3.5 m/s flies `v_app_min` 10 m/s and `el_offset_final` 1.0° like every other run. With
@@ -68,6 +109,31 @@
   settings ramp from 7 to 10 m/s to depower 0.33 and a taller (150 m: also wider)
   pattern, so 10 m/s no longer stops on the overspeed guard. All three projects pass
   all 8 criteria at 8.5 and 10 m/s.
+- `examples/plot_path3d_paper.jl`: Fig. 14 of the LearningControl paper, the 3D view of
+  the Cabauw 5.75 m/s run (`v05.75`), saved as `pattern_cabauw_5.8ms.png` in
+  `../LearningControl/figures`. The path is cut at a height of 320 m, before the final
+  climb towards the zenith.
+- Model provenance: every identification step records the `kite_id` (a hash of
+  `kite_fingerprint`: masses, body damping, geometry files, wing drag, bridle) of the
+  kite it flew, step 1 per row of the turn-rate table and steps 2-5 in a `provenance:`
+  section of `course_loop_model.yaml`. `check_model_provenance` compares them with the
+  kite a project flies; `stability_opt_reelout.jl`, `stability_fig8.jl`,
+  `stability_global.jl` and `retune_guided.jl` refuse a model of another kite, and
+  step k refuses to start before steps 1..k-1 are done on the same kite.
+- `reidentify-kite` skill (`.claude/skills/`): the re-identification after a change of
+  the kite, in order, then validation, rating and retuning.
+- `examples/measure_course_link.jl`: flies the multisine injection at 300, 200 and
+  150 m, writes `data/course_link_measured.csv` and prints the delay and gain margins
+  on the measured plant next to the model's.
+- `examples/kite_model.jl`: the paper's figure of the structural discretisation of the
+  kite (`kite_model.pdf`).
+- `examples/plot_worst_margin_bode.jl`: re-analyses the scenario with the lowest guided
+  disk margin and writes `worst_loop_bode.pdf`, with the phase and gain margins marked,
+  and `worst_loop_disk_margin.pdf`, the disk margin over frequency, to
+  `LearningControl/figures`. Needs MakieControlPlots 0.1.20.
+- Notes in `docs/`: the wing-drag test and the low-wind tension with drag in
+  `power_ratio_findings.md`, `c1_c2_sweep.md` and `high_depower_amplitude.md`.
+- `presentation/Robust_kite_control_Fechner.odp` and its PDF.
 
 ### Removed
 
@@ -77,6 +143,12 @@
 
 ### Fixed
 
+- Replays failed with `KeyError "reply"` when a re-identified plant put the archived
+  startup path below `min_feasibility_margin`: the retry ladder asked for answers the
+  archive does not hold. A replay now flies the archived path as installed.
+- `plot_relay_low_elevation.jl` defined a global `time`, which hid `Base.time()` in the
+  REPL and broke later `simple_fig8.jl` runs; it is `t_log` now.
+- Broken `@ref` links on the internals page of the documentation.
 - `DelayedInjection` in `validate_margins.jl` never switched on in `simple_opt_reelout.jl`.
 - `simple_fig8.jl` flew whatever turn-rate table the session held, so a run after a
   reel-out script silently used the reel-out table; it now reloads its project's.

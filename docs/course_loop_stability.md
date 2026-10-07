@@ -68,7 +68,7 @@ old model.
   - The plant is ZOH-discretized at `1/sample_freq`, and the dead time is an
     exact `round(τ_kite/Ts)`-sample shift register.
 - **Pattern (phase ≥ 3) only:** three changes, from the validation.
-  - The kite's response time follows the **pattern law**,
+  - The kite's response time follows the **pattern delay approximation**,
     `τ_kite + T_kite = 0.14 s · (34/v_a)^0.74` (`pattern_dead_time_lag`), the
     table's dead time and lag scaled by one factor so their sum follows it
     (at other depowers times the measured factor
@@ -77,14 +77,14 @@ old model.
     the relay sweeps, which fly at 73° and give the kite 50 % more delay at
     13 m/s. The depower factor comes from pattern runs at 0.30 / 0.33 / 0.36
     (×1.17 / 1.39 / 1.78); the table's rows grow only ×1.05 – 1.15 over that
-    range. Below 12.8 m/s (`pattern_v_floor`) the law holds its value there:
+    range. Below 12.8 m/s (`pattern_v_floor`) the approximation holds its value:
     weak-wind reel-outs measured 0.279 s at 10.6 m/s and 0.285 s at 10.1 m/s,
-    where the unfloored law gave 0.33 – 0.35 s. The entry keeps the table:
+    where the unfloored approximation gave 0.33 – 0.35 s. The entry keeps the table:
     it flies high, close to the sweeps' conditions.
   - `kite_correction`: from ~0.9 Hz up the kite turns less than the relay-
     identified law says (0.8 at 1.1 Hz, 0.6 – 0.7 above 1.4 Hz, ~10° more
     lag); a lag-lead, zero 0.80 Hz, pole 0.58 Hz, fitted at `v_a` ≈ 34 m/s
-    against the plant with the pattern law.
+    against the plant with the pattern delay approximation.
   - `guidance_tf`: the attractor guidance, `1 + ω_g/s` with
     `ω_g = v_k/(L·D)`, `v_k = 0.96·v_a` (measured at 200 and 300 m), `L` the
     project's tether length and `D` the attractor's arc distance. The
@@ -237,11 +237,11 @@ the time and the loop is not linear enough to measure.
 
 `examples/stability_fig8.jl`, project `system_fig8_200m.yaml`, dt = 0.01 s,
 same controller settings as below, tape lag 0.1 s, guidance corner
-`ω_g` = 0.93 rad/s at 27 m/s, kite response time from the pattern law.
+`ω_g` = 0.93 rad/s at 27 m/s, kite response time from the pattern delay approximation.
 
 Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
 
-| v_a | Kite dead time + lag (pattern law) | α | Critical frequency | Delay margin | Inner loop alone (table): α / delay margin |
+| v_a | Kite dead time + lag (pattern delay approximation) | α | Critical frequency | Delay margin | Inner loop alone (table): α / delay margin |
 |---|---|---|---|---|---|
 | 5 m/s | 0.080 + 0.208 s | 1.22 | 0.05 Hz | 2.12 s | 0.98 / 2.18 s |
 | 10 m/s | 0.092 + 0.196 s | 1.12 | 0.45 Hz | 0.94 s | 1.02 / 1.14 s |
@@ -251,7 +251,7 @@ Pattern (phase ≥ 3, full gain, floor 23 m/s), depower 0.27:
 | 35 m/s | 0.055 + 0.082 s | 0.66 | 0.82 Hz | 0.24 s | 0.78 / 0.36 s |
 | 45 m/s | 0.048 + 0.066 s | 0.68 | 0.84 Hz | 0.22 s | 0.86 / 0.37 s |
 
-The rows below 12.8 m/s hold the pattern law's value at 12.8 m/s
+The rows below 12.8 m/s hold the pattern delay approximation's value at 12.8 m/s
 (`pattern_v_floor`; measured in the reel-out: about 0.28 s at 10 – 11 m/s). The same pattern at other
 tether lengths (the guidance corner scales as 1/L): minimum α 0.71 at 300 m,
 0.66 at 200 m, 0.58 at 150 m. Against every margin measured (150 – 300 m,

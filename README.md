@@ -130,7 +130,7 @@ Choose identification script to run or `q` to quit:
    build_turn_rate_table.jl       - identify the turn-rate law of every depower (12 min!)
    plot_c1_c2.jl                  - plot c1, c2, the dead time and the lag over depower
    identify_kite_delay_scaling.jl - scaling of dead time and lag over v_a (5 min!)
-   identify_pattern_law.jl        - response time in pattern flight over v_a (10 min!)
+   identify_pattern_delay.jl      - response time in pattern flight over v_a (10 min!)
    identify_depower_factor.jl     - growth of the response time with depower (6 min!)
    identify_kite_correction.jl    - measured kite correction by multisine injection (5 min!)
    stability_opt_reelout.jl       - disk margins of the reel-out course loop with the identified model

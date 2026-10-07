@@ -36,15 +36,15 @@ simulation at 200 and 300 m (`oldplans/Plan_model_validation.md`, V1 step 1):
   with `v_k = V_K_OVER_V_A · v_a` and `L` the project's tether length;
 - `kite_correction`: from ~0.9 Hz up the kite turns less than the turn-rate
   law says, a lag-lead chosen at `v_a` ≈ 33 m/s and scaled with `v_a`;
-- the kite's response time from the pattern law, `τ + T =
+- the kite's response time from the pattern delay approximation, `τ + T =
   pattern_delay_ref · (pattern_v_ref/v_a)^pattern_delay_exp`
   (`pattern_dead_time_lag`, the values in `data/course_loop_model.yaml`),
   identified on pattern logs from 12.8 to 40.6 m/s; at other depowers times
-  the measured `exp(pattern_depower_exp·(depower − pattern_law_depower))`.
+  the measured `exp(pattern_depower_exp·(depower − pattern_delay_depower))`.
 
 With them the model under-predicts the simulation's margins at every point
 measured (150 – 300 m, `v_a` 22 – 40 m/s): the delay margin by 0 – 42 %, the gain
-margin by 21 – 45 %. Below `pattern_v_floor` the pattern law holds its
+margin by 21 – 45 %. Below `pattern_v_floor` the pattern delay approximation holds its
 value, as weak-wind reel-outs measured (0.28 s at 10.1 – 10.6 m/s). What
 it still lacks is the dynamics of the fed-back course, which have no low-order
 model; `frd_margins` evaluates measured data instead. The pattern tables print
@@ -120,14 +120,14 @@ Disk margin, its gain/phase margins and the delay margin of the loop transfer
 `±c2/v_a·cos(β)` (`c2` of [`turn_rate_coeffs`](@ref)).
 `v_min` [m/s] is the floor of the gain schedule, see [`V_MIN_PATTERN`](@ref).
 `pattern = true` multiplies in the guidance and the kite correction, and takes
-the kite's dead time and lag from the pattern law (`pattern_dead_time_lag`).
+the kite's dead time and lag from the pattern delay approximation (`pattern_dead_time_lag`).
 """
 function loop_margins(depower, K_phase, v_app; v_min = fcs.course.v_app_min, pattern = false)
     tc = turn_rate_coeffs(fcs.run.body_damping, depower)
     K = K_phase * fcs.course.v_app_ref / max(v_app, v_min)
     C = course_pid(K, fcs.course.heading_i, fcs.course.heading_d, fcs.course.heading_d_n, Ts)
     cos_beta = cosd(fcs.pattern.el_center)
-    # In the pattern the kite's response time follows the pattern law (V4), elsewhere the table.
+    # In the pattern the kite's response time follows the pattern delay approximation (V4), elsewhere the table.
     τ, T_kite = pattern ?
         pattern_dead_time_lag(tc, v_app, depower) :
         (kite_dead_time(tc, v_app), kite_lag(tc, v_app))

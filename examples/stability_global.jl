@@ -158,7 +158,7 @@ function analyse_site(site, project)
         println(io)
         println(io, "α inner is the disk margin of the course PID closed only around the turn-rate ",
                      "plant (no guidance law); α guided is the disk margin of the actual flown loop, ",
-                     "PID → guidance law → pattern-law kite dynamics, and is the value that is rated; ",
+                     "PID → guidance law → kite dynamics with the pattern delay approximation, and is the value that is rated; ",
                      "DM guided is that same guided loop's delay margin, the extra pure delay it could ",
                      "absorb before going unstable. The gravity term of the turn-rate law is ",
                      "c2(u_d)/v_a·sin(ψ)·cos(β), with c1(u_d) and c2(u_d) of the plant identified in the low ",

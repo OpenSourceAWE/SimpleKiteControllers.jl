@@ -12,7 +12,7 @@ a crosswind heading (`±HEADING_CENTER`), reverses at `±az_reverse` of azimuth 
 tilts the band to hold `EL_HOLD`, so the kite flies a lazy-eight-like pattern low
 in the wind window, at `v_a` ≈ 20 – 50 m/s (depower 0.275, 2026-09-29).
 
-One flight per entry of `FLIGHT_SETTINGS`, each at a fixed amplitude for
+One flight per entry of `flight_settings(depower)`, each at a fixed amplitude for
 `SWEEP_SIM_TIME`. Each is fitted on its own (`identify_turn_rate_law`, then
 `fit_delay_lag`), and all steady ones together (`joint_delay_lag_fit`; all of them
 if none flew the full time): one dead time, lag, `c1` and `c2` for every flight,

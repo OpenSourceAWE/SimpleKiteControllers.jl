@@ -101,12 +101,12 @@ using SimpleKiteControllers: project_file
 
     @testset "scaling: pattern_dead_time_lag" begin
         clm = course_loop_model()
-        dp0 = clm.pattern_law_depower
+        dp0 = clm.pattern_delay_depower
         tc = (v_app = 13.3, dead_time = 0.141, kite_lag = 0.267)
         for v in (12.8, 22.4, 34.0, 40.0)
-            law = clm.pattern_delay_ref * (clm.pattern_v_ref / v)^clm.pattern_delay_exp   # all at or above the floor
+            approx = clm.pattern_delay_ref * (clm.pattern_v_ref / v)^clm.pattern_delay_exp   # all at or above the floor
             τ, T = pattern_dead_time_lag(tc, v, dp0)
-            @test τ + T ≈ law                                      # the law at the reference depower
+            @test τ + T ≈ approx                                      # the approximation at the reference depower
             @test τ / (τ + T) ≈ tc.dead_time / (tc.dead_time + tc.kite_lag)   # tc's split
             τ2, T2 = pattern_dead_time_lag(tc, v, dp0 + 0.09)
             @test (τ2 + T2) / (τ + T) ≈ exp(clm.pattern_depower_exp * 0.09)  # the measured depower factor
