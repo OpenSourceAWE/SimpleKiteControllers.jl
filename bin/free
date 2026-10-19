@@ -33,7 +33,7 @@ JULIA_IMAGE_FLAG=()
 [[ -f $SOFILE ]] && JULIA_IMAGE_FLAG=(-J "$SOFILE")
 
 URL="https://github.com/OpenSourceAWE/V3Kite.jl"
-DEFAULT_REV=v1.0.2
+DEFAULT_REV=v2.0.0
 
 memo=$(awk '
     /^\[/ { in_sources = ($0 ~ /^\[sources\]/) }
