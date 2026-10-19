@@ -4,6 +4,11 @@
 
 ### Changed
 
+- The examples use V3Kite v2.0.0 (was the `delay-lag-fit` branch), which needs
+  SymbolicAWEModels 0.20, KiteUtils 0.13, VortexStepMethod 6 and KiteViewers 0.7; the
+  compat bounds of `examples/Project.toml` and both default manifests are updated. The
+  first run compiles the new model and re-settles the wing. `bin/free` falls back to
+  `v2.0.0`.
 - The plant flies with wing drag: `wing_drag_coeff` 0.03 in both kite settings files.
   V3Kite's `init` reads the value but does not apply it; `apply_wing_drag!`
   (`examples/model_setup.jl`) spreads it over the wing nodes after settling, in
@@ -71,6 +76,9 @@
 
 ### Added
 
+- `bin/update_default_manifests [--update]` refreshes `Manifest-v1.12.toml.default` and
+  `Manifest-v1.13.toml.default`, each only after precompilation and tests pass on that
+  Julia version.
 - A low-wind schedule for `simple_opt_reelout.jl`: section `low_wind:` of
   `fc_settings_reelout.yaml` ([`FC_LowWind`], `low_wind_schedule`,
   `apply_low_wind_schedule!`) sets the starting tether length, the startup guess's

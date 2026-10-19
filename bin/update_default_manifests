@@ -1,0 +1,47 @@
+#!/bin/bash
+# Copyright (c) 2026 Uwe Fechner
+# SPDX-License-Identifier: MIT
+#
+# Update Manifest-v<version>.toml.default for each supported Julia version.
+# Each version resolves and instantiates the workspace (root + examples), then
+# precompiles the examples and runs the tests; the .default manifest is only
+# replaced if all of that succeeds. Needs the juliaup channels 1.12 and 1.13.
+#
+# Without --update the versions already in Manifest-v<version>.toml are kept and
+# only brought in line with the Project.toml files (e.g. after bin/free); a
+# manifest pinning a package below a compat floor falls back to a full update.
+# --update upgrades every package as far as the compat bounds allow.
+#
+# Usage: bin/update_default_manifests [--update]
+set -euo pipefail
+
+if [[ $(basename "$(pwd)") == "bin" ]]; then
+    cd ..
+fi
+
+pkg_cmd='try Pkg.resolve() catch; @warn "Resolve failed, the manifest is below a compat floor; updating instead"; Pkg.update() end'
+if [[ ${1:-} == "--update" ]]; then
+    pkg_cmd='Pkg.update()'
+elif [[ -n ${1:-} ]]; then
+    echo "Usage: bin/update_default_manifests [--update]" >&2
+    exit 1
+fi
+
+for stale_manifest in Manifest.toml examples/Manifest.toml; do
+    if [[ -f $stale_manifest ]]; then
+        rm -f "$stale_manifest"
+        echo "Removed $stale_manifest"
+    fi
+done
+
+for julia_major in 1.12 1.13; do
+    echo "Updating the manifest for Julia ${julia_major}..."
+    manifest="Manifest-v${julia_major}.toml"
+    if [[ ! -f $manifest ]]; then
+        cp "$manifest.default" "$manifest"
+    fi
+    julia +"$julia_major" --project=examples -e "using Pkg; $pkg_cmd; Pkg.instantiate(); Pkg.precompile()"
+    julia +"$julia_major" --project=. -e 'using Pkg; Pkg.test()'
+    cp "$manifest" "$manifest.default"
+    echo "Updated $manifest.default !"
+done

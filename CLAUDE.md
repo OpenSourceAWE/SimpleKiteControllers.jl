@@ -299,9 +299,9 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 
 ## Current state
 
-- Branch `main`. V3Kite is at `v1.0.2`, but sourced from a **local checkout** — see
-  "Sourcing V3Kite" above; `examples/Project.toml` must be put back on `url`/`rev`
-  before pushing.
+- Branch `main`. V3Kite is at `v2.0.0`, sourced from its `v2.0.0` tag
+  (`url`/`rev`, committable); this needs KiteUtils 0.13, SymbolicAWEModels 0.20,
+  VortexStepMethod 6 and KiteViewers 0.7.
 
 ## Coding conventions
 
