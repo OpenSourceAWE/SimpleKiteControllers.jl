@@ -370,6 +370,8 @@ because a cache nobody can read is a cache nobody trusts.
 function record_opt_failure!(p::InitParams, reason::AbstractString;
                              file::AbstractString = OPT_FAILURE_CACHE)
     mkpath(dirname(file))
+    dp = p.depower
+    depower_mode = dp === nothing ? "optimize" : dp.mode
     with_file_lock(file * ".lock") do
         entries = opt_failures(; file)
         entries[opt_request_key(p)] = Dict(
@@ -378,7 +380,7 @@ function record_opt_failure!(p::InitParams, reason::AbstractString;
                                            length(p.trajectory.elevation); digits = 2),
             "wind_speed_m_s" => p.inflow_conditions.wind_speed,
             "min_turn_radius_m" => something(p.min_turn_radius, 0.0),
-            "depower_mode" => p.depower === nothing ? "optimize" : p.depower.mode,
+            "depower_mode" => depower_mode,
             "reason" => String(reason),
             "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
         open(file, "w") do io
@@ -508,6 +510,7 @@ function post(path, payload; url = AWETRIM_URL, timeout = 600, attempts = 3)
             sleep(0.2)
         end
     end
+    error("unreachable: the last attempt returns or rethrows")
 end
 
 get_json(path; url = AWETRIM_URL) = JSON3.read(HTTP.get(url * path).body, Dict{String,Any})
@@ -942,9 +945,10 @@ sent.
 """
 function chain_step(oc::OptChain, sp::StepParams; wait = true,
                     inflow_conditions = nothing, max_iter = nothing)
-    isnothing(oc.config) && error("chain_step before chain_init: there is no session to step.")
+    cfg = oc.config
+    isnothing(cfg) && error("chain_step before chain_init: there is no session to step.")
     step_fields = (_key_fields(sp), _key_fields(inflow_conditions), max_iter)
-    config = _step_config(oc.config, sp, inflow_conditions)
+    config = _step_config(cfg, sp, inflow_conditions)
     if !isnothing(oc.replay)
         isempty(oc.replay) && throw(_cached_422(Dict{String, Any}("when" => "replay",
             "reason" => "the replayed run installed no further path")))
@@ -971,7 +975,7 @@ function chain_step(oc::OptChain, sp::StepParams; wait = true,
         key = chain_key(chain_key(oc.state, "rebuilt"), step_fields)
         entry = _chain_entry(oc, key)
     end
-    if usable(entry)
+    if entry !== nothing && usable(entry)
         oc.hits += 1
         oc.state = key
         oc.config = config
