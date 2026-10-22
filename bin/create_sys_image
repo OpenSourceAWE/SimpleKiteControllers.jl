@@ -111,15 +111,26 @@ for project in . test docs examples; do
     julia --startup-file=no --project="$project" -J "$SOFILE" -e 'using Pkg; Pkg.precompile()'
 done
 
-# bin/run_julia loads Revise from the global environment, and KaimonGate (if installed)
-# loads Profile, which is not in the image; precompile both so the first session doesn't.
-echo "--- Precompiling Revise and Profile with the new system image ---"
-julia --startup-file=no --project -J "$SOFILE" -e '
-if Base.find_package("Revise") !== nothing
-    using Revise
-end
+# Workaround for https://github.com/kahliburke/Kaimon.jl/issues/104: precompile KaimonGate
+# (and ZMQ) here, since compiled later inside KaimonGate's precompile process ZMQ segfaults
+# with a custom system image. KaimonGate also loads Profile, which is not in the image.
+echo "--- Precompiling KaimonGate and Revise with the new system image ---"
+if ! julia --startup-file=no --project="@v${julia_major}" -J "$SOFILE" -e '
 if Base.identify_package("KaimonGate") !== nothing
+    using Pkg; Pkg.precompile("KaimonGate")
     Base.require(Base.PkgId(Base.UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"), "Profile"))
-end'
+end'; then
+    echo "Warning: Precompiling KaimonGate failed." >&2
+fi
+
+# bin/run_julia loads Revise from the global environment; loading it with Distributed also
+# compiles its extension DistributedExt.
+if ! julia --startup-file=no --project="@v${julia_major}" -J "$SOFILE" -e '
+if Base.identify_package("Revise") !== nothing
+    using Pkg; Pkg.precompile("Revise")
+    using Distributed, Revise
+end'; then
+    echo "Warning: Precompiling Revise failed." >&2
+fi
 
 echo "Done."
