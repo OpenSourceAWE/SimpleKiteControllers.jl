@@ -155,16 +155,7 @@ of the type the cached SciML specializations are keyed to.
 
 ## Environments
 
-Root `Project.toml` declares `[workspace] projects = ["examples", "test", "docs"]`, so
-`examples/` keeps its own `Project.toml` (GLMakie, V3Kite and its solver chain —
-deliberately *not* deps of the library), as do `test/` and `docs/` (Documenter), but all
-resolve against the **single Manifest.toml at the root**. A dependency the library shares is
-therefore the same version in a script as in the package it exercises. Needs Pkg 1.11+;
-older Pkg silently resolves `examples/` standalone.
-
-Both `Project.toml` files carry comment blocks explaining *why* each compat bound and
-`[sources]` pin exists (a `RuntimeGeneratedFunctions` exact pin that keeps the model cache
-loadable, the V3Kite source). Read them before touching a version bound.
+Root `Project.toml` declares `[workspace] projects = ["examples", "test", "docs"]`, so `examples/` keeps its own `Project.toml` (GLMakie, V3Kite and its solver chain — deliberately *not* deps of the library), as do `test/` and `docs/` (Documenter), but all resolve against the **single Manifest.toml at the root**. A dependency the library shares is therefore the same version in a script as in the package it exercises. Needs Pkg 1.11+; older Pkg silently resolves each of the three standalone.
 
 ### Sourcing V3Kite
 
@@ -312,5 +303,4 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   story behind it.
 - Remove or make inline comments 1 line where you see them.
 - In YAML files, consider the comments at the top of the file as docstring where you can add multiline comments.
-- Everything with a docstring should be added to the docs, otherwise you get an
-  error when building the docs (`include("docs/make.jl")`, `checkdocs = :exports`).
+- Everything with a docstring should be added to the docs, otherwise you get an error when building the docs (`include("docs/make.jl")`, `checkdocs = :exports`).
