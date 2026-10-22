@@ -6,9 +6,11 @@
 # V3Kite's own dependency chain precompiled for the example scripts;
 # bin/run_julia picks it up automatically. It speeds up package load time, not
 # init(). examples/create_sys_image.jl also bakes in ModelingToolkit and
-# SymbolicAWEModels everywhere except Windows, where the full image is too
-# large. Neither RobustKiteControllers nor V3Kite goes into the image, so Revise
-# keeps applying to both sources; V3Kite is left to Pkg's ordinary
+# SymbolicAWEModels; on Windows the image is compressed with Julia 1.13+ and
+# leaves out SymbolicAWEModels with older Julia versions, where it is too large.
+# Neither RobustKiteControllers nor V3Kite goes into the image, so Revise keeps
+# applying to both sources, but RobustKiteControllers' dependencies do
+# (docs/sysimage.md, "What goes into the image"); V3Kite is left to Pkg's ordinary
 # precompilation, which this script warms up below. The memory and thread rules
 # the build should follow are in docs/sysimage.md.
 #

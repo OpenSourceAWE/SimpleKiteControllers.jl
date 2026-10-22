@@ -21,6 +21,44 @@ When creating a system image for a package checked out with git, never add the p
 to the system image. Instead, add all of its large dependencies. By doing so, editing the
 source code of the package and using Revise stays possible, even with the system image.
 
+### Load times
+
+Time of `@time using <package>` in a fresh Julia process, with `--project=examples`, without
+and with the system image `bin/kps-image-1.13.so`; the shortest of three runs. Each package is
+loaded alone, so its time includes loading its dependencies that are not loaded yet, and the
+times don't add up. The last row loads what the example scripts need; V3Kite and
+RobustKiteControllers aren't in the image, so loading them still takes about 1 s.
+
+Packages loading in less than 0.2 s without the image are not listed in
+`examples/create_sys_image.jl`; they are only in the image if a listed package depends on
+them.
+
+| Package                                          | Without image (s) | With image (s) |
+|--------------------------------------------------|------------------:|---------------:|
+| SymbolicAWEModels                                | 10.50             | 0.0003         |
+| ModelingToolkit                                  | 4.31              | 0.0003         |
+| MakieControlPlots                                | 2.93              | 0.0002         |
+| OrdinaryDiffEqBDF                                | 1.80              | 0.0002         |
+| OrdinaryDiffEqNonlinearSolve                     | 1.67              | 0.0002         |
+| NonlinearSolve                                   | 1.60              | 0.0002         |
+| AtmosphericModels                                | 1.02              | 0.0002         |
+| SteadyStateDiffEq                                | 0.95              | 0.0002         |
+| WinchControllers                                 | 0.80              | 0.0002         |
+| KiteUtils                                        | 0.76              | 0.0002         |
+| ControlSystemsBase                               | 0.48              | 0.0003         |
+| OrdinaryDiffEqCore                               | 0.31              | 0.0002         |
+| Rotations                                        | 0.13              | 0.0002         |
+| HTTP                                             | 0.13              | 0.0002         |
+| StaticArrays                                     | 0.11              | 0.0002         |
+| JSON3                                            | 0.06              | 0.0002         |
+| SymbolicIndexingInterface                        | 0.05              | 0.0002         |
+| DiscretePIDs                                     | 0.004             | 0.0002         |
+| V3Kite, MakieControlPlots, RobustKiteControllers | 15.46             | 1.07           |
+
+(Julia 1.13.2, AMD Ryzen 7 7840U, 16 CPU threads, 30 GB of RAM, Linux; 2026-10-22. On Windows
+the image holds the same packages, compressed, from Julia 1.13 on; with older Julia versions
+it lacks SymbolicAWEModels, so the last row would be slower there.)
+
 ## Definitions
 
 - **RAM**: physical memory.

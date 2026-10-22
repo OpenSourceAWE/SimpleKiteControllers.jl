@@ -14,11 +14,16 @@ JIT, so the remaining cost is *loading* `ModelingToolkit` (~5.8 s alone) and
 `SymbolicAWEModels` (~5.1 s more on top), neither a dependency of the solver
 packages and so not pulled in by `include_transitive_dependencies`. Those two
 are also most of what makes V3Kite's own image large, so there is no package
-set that is both small and fast — `WINDOWS_IMAGE` below trades speed for size
-on that platform only, where the full image doesn't fit.
+set that is both small and fast. On Windows the full image only fits when it is
+compressed (`compress_sysimage`, Julia 1.13+); `SMALL_IMAGE` below drops
+SymbolicAWEModels on older Windows Julia versions, trading speed for size.
 
 Neither V3Kite nor RobustKiteControllers goes into the image, so Revise keeps
-applying to both packages' sources. V3Kite is left to Pkg's ordinary
+applying to both packages' sources (`docs/sysimage.md`, "What goes into the
+image"). Instead, `RKC_DEPENDENCIES` adds RobustKiteControllers' own
+dependencies that the solver stack does not pull in. Packages that load in under
+0.2 s without the image (table in `docs/sysimage.md`) are not listed; they still go
+in when a listed package depends on them. V3Kite is left to Pkg's ordinary
 precompilation, where its `@compile_workload` (see its `src/precompile.jl`) covers
 the model.
 
@@ -155,14 +160,15 @@ write(workload, """
     rm(log_path; recursive = true)
     """)
 
-const SOLVER_PACKAGES = [:MakieControlPlots, :KiteUtils, :StaticArrays, :Rotations, :NonlinearSolve,
-    :OrdinaryDiffEqBDF, :OrdinaryDiffEqCore, :OrdinaryDiffEqNonlinearSolve,
-    :SteadyStateDiffEq, :SymbolicIndexingInterface]
-const WINDOWS_IMAGE = Sys.iswindows()
-packages = WINDOWS_IMAGE ? [SOLVER_PACKAGES; :ModelingToolkit] :
-                            [SOLVER_PACKAGES; :ModelingToolkit; :SymbolicAWEModels]
+const SOLVER_PACKAGES = [:MakieControlPlots, :KiteUtils, :NonlinearSolve, :OrdinaryDiffEqBDF,
+    :OrdinaryDiffEqCore, :OrdinaryDiffEqNonlinearSolve, :SteadyStateDiffEq]
+const RKC_DEPENDENCIES = [:AtmosphericModels, :ControlSystemsBase, :WinchControllers]
+const COMPRESS_IMAGE = Sys.iswindows() && VERSION >= v"1.13"
+const SMALL_IMAGE = Sys.iswindows() && !COMPRESS_IMAGE
+packages = SMALL_IMAGE ? [SOLVER_PACKAGES; RKC_DEPENDENCIES; :ModelingToolkit] :
+                         [SOLVER_PACKAGES; RKC_DEPENDENCIES; :ModelingToolkit; :SymbolicAWEModels]
 
-@info "Creating sysimage..." packages
+@info "Creating sysimage..." packages compress = COMPRESS_IMAGE
 try
     PackageCompiler.create_sysimage(
         packages;
@@ -171,6 +177,7 @@ try
         precompile_execution_file = workload,
         # Julia 1.13 otherwise builds for several CPU targets, needing over twice the memory (JuliaLang/julia#63141).
         cpu_target = "native",
+        (COMPRESS_IMAGE ? (; compress_sysimage = true) : (;))...,
     )
 finally
     rm(workload)
