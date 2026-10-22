@@ -15,6 +15,12 @@ The shell script `bin/create_sys_image` runs first and starts Julia with
 `examples/create_sys_image.jl`. The rules are the same as in Tethers.jl, KiteModels.jl and
 KiteControllers.jl; keep the memory and thread code of the scripts identical to theirs.
 
+## What goes into the image
+
+When creating a system image for a package checked out with git, never add the package itself
+to the system image. Instead, add all of its large dependencies. By doing so, editing the
+source code of the package and using Revise stays possible, even with the system image.
+
 ## Definitions
 
 - **RAM**: physical memory.
