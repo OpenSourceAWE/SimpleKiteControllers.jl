@@ -25,8 +25,11 @@ julia --project -e 'using Pkg; Pkg.test()'    # full suite, ~7 s (pure geometry)
 In a live REPL, `include("test/runtests.jl")` for everything, or
 `include("test/test_fig8_controller.jl")` for the figure-eight / metrics / turn-rate
 testsets alone (it activates nothing, so `using RobustKiteControllers` must already work
-in that environment). `bin/run_julia` starts a REPL on the project, picking up a system
-image at `bin/kps-image-<version>-<branch>.so` if one exists.
+in that environment). `bin/run_julia` starts a REPL on the project with Revise (if
+available) and `RobustKiteControllers` loaded and `menu()`/`menu2()` defined, picking up a
+system image at `bin/kps-image-<major>.so` (e.g. `kps-image-1.13.so`) if one exists;
+`bin/run_julia -h` lists its options. `bin/create_sys_image` builds that image, choosing
+memory checks and image threads by the rules in `docs/sysimage.md`.
 
 The example is run by `include`, not from the shell — it activates `examples/` itself:
 
