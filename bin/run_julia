@@ -1,43 +1,80 @@
-#!/bin/bash
-# Copyright (c) 2025, 2026 Uwe Fechner
+#!/bin/bash -eu
+# SPDX-FileCopyrightText: 2025, 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
 
-if [[ $(basename $(pwd)) == "bin" ]]; then
+print_usage() {
+    cat <<'EOF'
+Usage: bin/run_julia [-h|--help] [julia options] [script.jl [script args...]]
+
+Start an interactive Julia REPL for RobustKiteControllers, usually via the alias `jl`.
+
+The script
+  - sets JULIA_PKG_SERVER_REGISTRY_PREFERENCE=eager, MKL_NUM_THREADS=4 and PLOT=1
+  - starts Julia with --project, using the project in the repository root; the
+    examples and the tests activate their own projects
+  - uses all threads (-t auto) and, for Julia 1.10 and newer, --gcthreads=4,1
+  - uses the system image bin/kps-image-<julia version>.so if it exists
+    (create it with bin/create_sys_image)
+  - loads Revise, if it is available (e.g. in the global environment), and then
+    RobustKiteControllers
+  - defines the functions
+      menu()   menu of the examples (examples/menu.jl)
+      menu2()  menu of the identification examples (examples/menu2.jl)
+
+All arguments are passed to Julia. If the first argument that is not an option ends
+with .jl, that file is included after RobustKiteControllers is loaded, the remaining
+arguments are available in ARGS, and the REPL stays open afterwards.
+
+Examples:
+  bin/run_julia
+  bin/run_julia -t 4
+  bin/run_julia examples/simple_fig8.jl
+  bin/run_julia -e 'println("ok")'
+EOF
+}
+
+case "${1:-}" in
+    -h|--help)
+        print_usage
+        exit 0
+        ;;
+esac
+
+if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
 fi
 
-if command -v nproc &> /dev/null; then
-    FAST_CORES=$(($(nproc) / 2 - 1))
-else
-    FAST_CORES=3 # default value
-fi
-
-GCT="--gcthreads=4,1"
 export JULIA_PKG_SERVER_REGISTRY_PREFERENCE=eager
 export MKL_NUM_THREADS=4
+export PLOT=1
 
-julia_version=$(julia --version | awk '{print($3)}')
-julia_major=${julia_version:0:3} 
-if [[ $julia_major == "1.1" ]]; then
-    julia_major=${julia_version:0:4}
-else
-    GCT=""
+julia_major=$(julia --version | sed -E 's/^julia version ([0-9]+\.[0-9]+).*/\1/')
+
+JULIA_ARGS=(--project -t auto)
+if [[ $julia_major =~ ^1\.[1-9][0-9]$ ]]; then
+    JULIA_ARGS+=("--gcthreads=4,1")
 fi
 
-# Without arguments an interactive session starts with menu() and menu2() defined,
-# which bring up examples/menu.jl and the identification menu examples/menu2.jl.
-# With arguments they are passed to julia unchanged.
-julia_init='function menu(); include("examples/menu.jl"); end; function menu2(); include("examples/menu2.jl"); end'
-
-if [[ $# -gt 0 ]]; then
-    JULIA_ARGS=("$@")
-else
-    JULIA_ARGS=(-i -e "$julia_init")
+SOFILE="bin/kps-image-${julia_major}.so"
+if [[ -f "$SOFILE" ]]; then
+    echo "Found system image $SOFILE"
+    JULIA_ARGS+=(-J "$SOFILE")
 fi
 
-if test -f "bin/kps-image-${julia_major}.so"; then
-    echo "Found system image!"
-    PLOT=1 julia -J  bin/kps-image-${julia_major}.so -t auto $GCT --project "${JULIA_ARGS[@]}"
-else
-    PLOT=1 julia --project -t auto  $GCT "${JULIA_ARGS[@]}"
-fi
+julia_init='if Base.find_package("Revise") !== nothing
+    using Revise
+end
+using RobustKiteControllers
+function menu()
+    include("examples/menu.jl")
+end
+function menu2()
+    include("examples/menu2.jl")
+end
+if !isempty(ARGS) && endswith(ARGS[1], ".jl")
+    include(popfirst!(ARGS))
+end'
+
+JULIA_ARGS+=(-i -e "$julia_init")
+
+exec julia "${JULIA_ARGS[@]}" "$@"
