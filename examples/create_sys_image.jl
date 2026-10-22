@@ -161,7 +161,6 @@ write(workload, """
     save_log(s.logger, "precompile_workload"; path = log_path, colmeta = timestamp_colmeta())
     sl = load_log("precompile_workload"; path = log_path).syslog
     log_created_at("precompile_workload"; path = log_path)
-    rm(log_path; recursive = true)
 
     using GLMakie, LaTeXStrings
     GLMakie.activate!(visible = false)
