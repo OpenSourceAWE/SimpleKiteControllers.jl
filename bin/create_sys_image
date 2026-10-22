@@ -18,7 +18,7 @@
 
 set -eu
 
-if [[ $(basename $(pwd)) == "bin" ]]; then
+if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
 fi
 
@@ -94,7 +94,9 @@ JULIA_LOAD_PATH="@:${TMPENV}:@stdlib" julia --startup-file=no --project=examples
     examples/create_sys_image.jl
 
 SOFILE="bin/kps-image-${julia_major}.so"
-rm -f "$SOFILE"
+if [[ -f "$SOFILE" ]]; then
+    mv -f "$SOFILE" "$SOFILE.bak"
+fi
 mv -f kps-image_tmp.so "$SOFILE"
 echo "System image created at $SOFILE"
 
@@ -103,5 +105,21 @@ echo "System image created at $SOFILE"
 # its PrecompileTools workload lands in a pkgimage cache keyed to it.
 echo "--- Precompiling examples/ with the new system image ---"
 julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots, RobustKiteControllers'
+
+echo "--- Precompiling all projects with the new system image ---"
+for project in . test docs examples; do
+    julia --startup-file=no --project="$project" -J "$SOFILE" -e 'using Pkg; Pkg.precompile()'
+done
+
+# bin/run_julia loads Revise from the global environment, and KaimonGate (if installed)
+# loads Profile, which is not in the image; precompile both so the first session doesn't.
+echo "--- Precompiling Revise and Profile with the new system image ---"
+julia --startup-file=no --project -J "$SOFILE" -e '
+if Base.find_package("Revise") !== nothing
+    using Revise
+end
+if Base.identify_package("KaimonGate") !== nothing
+    Base.require(Base.PkgId(Base.UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"), "Profile"))
+end'
 
 echo "Done."

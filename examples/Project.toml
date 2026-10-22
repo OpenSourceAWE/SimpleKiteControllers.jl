@@ -49,6 +49,3 @@ RuntimeGeneratedFunctions = "0.5.24"
 SymbolicAWEModels = "0.20"
 V3Kite = "2"
 WinchControllers = "0.6.2"
-
-[extras]
-Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
