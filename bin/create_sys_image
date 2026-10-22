@@ -5,11 +5,12 @@
 # Creates a PackageCompiler system image with MakieControlPlots and most of
 # V3Kite's own dependency chain precompiled for the example scripts;
 # bin/run_julia picks it up automatically. It speeds up package load time, not
-# init() — see docs/sysimage_notes.md and examples/create_sys_image.jl, which
-# also bakes in ModelingToolkit and SymbolicAWEModels everywhere except
-# Windows, where the full image is too large. Neither RobustKiteControllers nor
-# V3Kite goes into the image, so Revise keeps applying to both sources; V3Kite
-# is left to Pkg's ordinary precompilation, which this script warms up below.
+# init(). examples/create_sys_image.jl also bakes in ModelingToolkit and
+# SymbolicAWEModels everywhere except Windows, where the full image is too
+# large. Neither RobustKiteControllers nor V3Kite goes into the image, so Revise
+# keeps applying to both sources; V3Kite is left to Pkg's ordinary
+# precompilation, which this script warms up below. The memory and thread rules
+# the build should follow are in docs/sysimage.md.
 #
 # PackageCompiler is not a dependency of examples/ or the root project: it is
 # installed into a throwaway environment that is stacked onto examples/'s via
@@ -21,17 +22,61 @@ if [[ $(basename $(pwd)) == "bin" ]]; then
     cd ..
 fi
 
+# Memory checks and image threads, as specified in docs/sysimage.md; runs first so a small machine fails fast.
+if [[ "$OSTYPE" == linux* ]]; then
+    _total_mb=$(awk '/^(MemTotal|SwapTotal):/ {s += $2} END {printf "%i", s / 1024}' /proc/meminfo)
+    if [[ $_total_mb -lt 30720 ]]; then
+        echo "Error: At least 30 GB of RAM + swap is needed to create a system image, but only $(( _total_mb / 1024 )) GB is available." >&2
+        echo "Increase your swap file and retry." >&2
+        exit 1
+    fi
+fi
+
+totalmem=""
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    echo "Checking system memory on Windows..."
+    totalmem=$(powershell.exe -Command "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB" 2>/dev/null | awk '{printf "%i", $1}')
+    limit_27gb=27000
+    min_ram_mb=15000 min_ram_gb=15
+elif [[ "$OSTYPE" == darwin* ]]; then
+    echo "Checking system memory on macOS..."
+    totalmem=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%i", $1 / 1000000}')
+    limit_27gb=27000
+    min_ram_mb=7000 min_ram_gb=7
+else
+    totalmem=$(grep MemTotal /proc/meminfo | awk '{printf "%i", $2 / 1024}')
+    limit_27gb=26674
+    min_ram_mb=15000 min_ram_gb=15
+fi
+
+if [[ -z "$totalmem" ]]; then
+    echo "Warning: Could not determine the size of the RAM."
+elif [[ $totalmem -lt $min_ram_mb ]]; then
+    echo "Error: At least $min_ram_gb GB of RAM is needed to create a system image, but only $(( totalmem / 1024 )) GB is available." >&2
+    exit 1
+fi
+
+# SYSIMAGE_THREADS_AUTO tells examples/create_sys_image.jl that this choice was not the caller's.
+if [[ -n "${JULIA_IMAGE_THREADS:-}" ]]; then
+    echo "JULIA_IMAGE_THREADS already set to $JULIA_IMAGE_THREADS, leaving as is"
+elif [[ -z "$totalmem" ]]; then
+    export JULIA_IMAGE_THREADS=1 SYSIMAGE_THREADS_AUTO=true
+    echo "Using only one thread for sysimage compilation."
+elif [[ $totalmem -lt $limit_27gb ]]; then
+    _cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-2}")
+    if [[ $_cpus -ge 4 ]]; then
+        export JULIA_IMAGE_THREADS=2
+    else
+        export JULIA_IMAGE_THREADS=1
+    fi
+    export SYSIMAGE_THREADS_AUTO=true
+    echo "Less than 27GB of memory detected. Using $JULIA_IMAGE_THREADS thread(s) for sysimage compilation."
+fi
+
 julia_version=$(julia --version | awk '{print($3)}')
 julia_major=${julia_version:0:3}
 if [[ $julia_major == "1.1" ]]; then
     julia_major=${julia_version:0:4}
-fi
-
-# Compilation is memory-hungry; leave it single-threaded on small machines.
-totalmem=$(grep MemTotal /proc/meminfo | awk '{printf "%i", $2 / 1024}')
-if [[ $totalmem -lt 27000 ]]; then
-    echo "Warning: Less than 27GB of memory detected. Using only one thread for sysimage compilation."
-    export JULIA_IMAGE_THREADS=1
 fi
 
 TMPENV=$(mktemp -d)

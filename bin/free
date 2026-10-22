@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 #
 # Put examples/Project.toml back on the public V3Kite and re-resolve. This is
-# the committable state; the price is a ~34 s init(), see docs/sysimage_notes.md.
-# Undo with bin/dev.
+# the committable state; init() is as fast as with a local checkout, only Revise
+# no longer applies to V3Kite's source. Undo with bin/dev.
 #
 # The url/rev line bin/dev commented out is restored verbatim, so the pinned rev
 # survives the round trip. DEFAULT_REV applies only when that memo is missing —

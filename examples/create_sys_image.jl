@@ -39,6 +39,103 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using PackageCompiler
+using Base64
+
+"""
+PowerShell script printing RAM + the size in MB the pagefile can grow to. A pagefile
+without a maximum ("System managed", or `MaximumSize` 0) grows up to max(3 × RAM, 4 GB),
+but at most 1/8 of its volume.
+"""
+const PAGEFILE_MAX_PS = raw"""
+$cs = Get-CimInstance Win32_ComputerSystem
+$ram = [math]::Floor($cs.TotalPhysicalMemory / 1MB)
+function AutoMax($drive) {
+    $vol = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$drive'"
+    [math]::Min([math]::Max(3 * $ram, 4096), [math]::Floor($vol.Size / 1MB / 8))
+}
+$max = 0
+if ($cs.AutomaticManagedPagefile) {
+    $max = AutoMax $env:SystemDrive
+} else {
+    foreach ($s in @(Get-CimInstance Win32_PageFileSetting)) {
+        if ($s.MaximumSize -gt 0) { $max += $s.MaximumSize } else { $max += AutoMax $s.Name.Substring(0, 2) }
+    }
+}
+$ram + $max
+"""
+
+"""
+    total_ram_swap_gb()
+
+RAM + swap in GB (1024³ bytes), with swap as defined in `docs/sysimage.md`: `SwapTotal` on
+Linux, the size the pagefile can grow to on Windows (its current size if that can't be
+determined), and twice the free space of the swap volume minus 5 GB on macOS, which writes
+compressed memory to its swap files.
+"""
+function total_ram_swap_gb()
+    if Sys.iswindows()
+        # MEMORYSTATUSEX layout (x64): dwLength(u32), dwMemoryLoad(u32), then 7 x UInt64
+        buf = zeros(UInt8, 64)
+        unsafe_store!(Ptr{UInt32}(pointer(buf)), UInt32(64))
+        ok = ccall((:GlobalMemoryStatusEx, "kernel32"), stdcall, Cint, (Ptr{UInt8},), buf)
+        ok == 0 && error("GlobalMemoryStatusEx failed")
+        current = unsafe_load(Ptr{UInt64}(pointer(buf) + 24)) / 1_073_741_824
+        max_gb = try
+            # -EncodedCommand (Base64 of UTF-16LE) avoids quoting problems on the command line
+            script = Base64.base64encode(reinterpret(UInt8, transcode(UInt16, PAGEFILE_MAX_PS)))
+            parse(Float64, strip(read(`powershell.exe -NoProfile -EncodedCommand $script`, String))) / 1024
+        catch e
+            @warn "Could not determine the maximum pagefile size, using its current size" exception=e
+            0.0
+        end
+        max(current, max_gb)
+    elseif Sys.isapple()
+        vm = isdir("/System/Volumes/VM") ? "/System/Volumes/VM" : "/"
+        swap = 2 * max(0, diskstat(vm).available - 5 * 1_073_741_824)
+        (Sys.total_memory() + swap) / 1_073_741_824
+    else
+        info = read("/proc/meminfo", String)
+        memtotal = parse(Int, match(r"MemTotal:\s+(\d+)", info).captures[1])
+        swaptotal = parse(Int, match(r"SwapTotal:\s+(\d+)", info).captures[1])
+        (memtotal + swaptotal) / 1_048_576
+    end
+end
+
+"""
+    choose_image_threads!()
+
+Applies the Julia-script rules of `docs/sysimage.md`: error below 30 GB of RAM + swap, one
+image thread below 34 GB, otherwise keep a `JULIA_IMAGE_THREADS` set by the caller or by
+`bin/create_sys_image` (which marks its own choice with `SYSIMAGE_THREADS_AUTO`), else
+`clamp(Sys.CPU_THREADS ÷ 2, 1, 16)`. A caller's value is kept in every case.
+"""
+function choose_image_threads!()
+    total = total_ram_swap_gb()
+    @info "Total RAM + swap: $(round(total; digits=1)) GB"
+    if total < 30
+        error("At least 30 GB of RAM + swap is needed to create a system image even with " *
+              "one thread, but only $(round(total; digits=1)) GB is available. " *
+              (Sys.iswindows() ? "Increase the maximum size of the pagefile and retry." :
+               Sys.isapple()   ? "Free some disk space and retry." :
+                                 "Increase your swap file and retry."))
+    end
+
+    auto = get(ENV, "SYSIMAGE_THREADS_AUTO", "false") == "true"
+    if haskey(ENV, "JULIA_IMAGE_THREADS") && !auto
+        @info "JULIA_IMAGE_THREADS already set to $(ENV["JULIA_IMAGE_THREADS"]), leaving as is"
+    elseif total < 34
+        ENV["JULIA_IMAGE_THREADS"] = "1"
+        @info "Setting JULIA_IMAGE_THREADS=1 based on $(round(total; digits=1)) GB total memory"
+    elseif haskey(ENV, "JULIA_IMAGE_THREADS")
+        @info "Using JULIA_IMAGE_THREADS=$(ENV["JULIA_IMAGE_THREADS"]) as chosen by the shell script"
+    else
+        threads = clamp(Sys.CPU_THREADS ÷ 2, 1, 16)
+        ENV["JULIA_IMAGE_THREADS"] = string(threads)
+        @info "Setting JULIA_IMAGE_THREADS=$threads based on $(round(total; digits=1)) GB total memory"
+    end
+end
+
+choose_image_threads!()
 
 workload = tempname() * ".jl"
 write(workload, """
@@ -72,6 +169,8 @@ try
         sysimage_path = "kps-image_tmp.so",
         include_transitive_dependencies = true,
         precompile_execution_file = workload,
+        # Julia 1.13 otherwise builds for several CPU targets, needing over twice the memory (JuliaLang/julia#63141).
+        cpu_target = "native",
     )
 finally
     rm(workload)

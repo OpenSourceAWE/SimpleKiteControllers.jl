@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: MIT
 #
 # Point examples/Project.toml at a local V3Kite checkout (default: ../V3Kite,
-# a sibling of this repository) and re-resolve. A git-rev source makes init()
-# cost ~34 s instead of ~2 s; see docs/sysimage_notes.md. Undo with bin/free
-# before pushing.
+# a sibling of this repository) and re-resolve, so Revise applies to V3Kite's
+# source. init() is equally fast with either source. Undo with bin/free before
+# pushing.
 #
 # The public url/rev line is commented out rather than overwritten, so bin/free
 # restores the pinned rev verbatim instead of reconstructing it from a default.
