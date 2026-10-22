@@ -21,7 +21,7 @@ using Timers; tic()
 using MakieControlPlots   # for the pattern plot at the end
 
 # The optimizer client, part of the package but not exported (src/awetrim_client.jl).
-using SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
+using RobustKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
     ensure_server, opt_init, opt_step
 
 ensure_server()

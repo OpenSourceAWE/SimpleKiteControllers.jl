@@ -47,7 +47,7 @@ using LaTeXStrings
 using LinearAlgebra: norm
 using Statistics: median, var
 
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: run_example, script_inputs
 # `_fly_low_flights`, the fixed conditions of the flights, `out_file` and `_entry_key`.
 run_example("build_turn_rate_table.jl"; identify = false)
 
@@ -145,7 +145,7 @@ end
 # ======================== FLIGHTS ======================== #
 
 # The table's row for this cell, if any, to compare with.
-row = let entries = YAML.load_file(joinpath(skc_data_path(), out_file()))["entries"]
+row = let entries = YAML.load_file(joinpath(rkc_data_path(), out_file()))["entries"]
     k = findfirst(e -> _entry_key(e) == (BODY_START_DAMPING, depower), entries)
     isnothing(k) ? nothing : entries[k]
 end

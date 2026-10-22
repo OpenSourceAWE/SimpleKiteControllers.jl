@@ -27,8 +27,8 @@ using Dates
 using Downloads
 
 # `scenario_site`: the site of the active reel-out project.
-using SimpleKiteControllers: scenario_site
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: scenario_site
+using RobustKiteControllers: run_example, script_inputs
 
 SIMRESULTS_REPO = get(ENV, "SIMRESULTS_REPO",
                       normpath(joinpath(@__DIR__, "..", "..", "SimulationResults")))
@@ -146,7 +146,7 @@ else
     src_hash = strip(read(`git -C $(@__DIR__) rev-parse --short HEAD`, String))
     src_dirty = !isempty(read(`git -C $(@__DIR__) status --porcelain`, String))
     message = "Update exported $SITE results notebook\n\n" *
-              "SimpleKiteControllers @ $src_hash$(src_dirty ? "-dirty" : ""), " *
+              "RobustKiteControllers @ $src_hash$(src_dirty ? "-dirty" : ""), " *
               "$(Dates.format(now(), "yyyy-mm-dd HH:MM"))"
     run(git(`commit -m $message`))
     run(git(`push`))

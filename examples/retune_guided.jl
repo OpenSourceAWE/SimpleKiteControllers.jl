@@ -46,8 +46,8 @@ end
 
 using Printf
 using Statistics: median
-using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
-using SimpleKiteControllers: project_file, check_model_provenance
+using RobustKiteControllers: run_example, script_inputs, muted, latest_global
+using RobustKiteControllers: project_file, check_model_provenance
 
 "Sites and their projects, as `stability_opt_reelout.jl` supports them"
 const RETUNE_SITES = ("cabauw" => "system_reelout_cabauw.yaml",

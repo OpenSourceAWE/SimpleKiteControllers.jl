@@ -42,8 +42,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using KiteUtils
 using StaticArrays
 using Printf

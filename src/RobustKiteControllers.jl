@@ -1,7 +1,7 @@
 # Copyright (c) 2025, 2026 Uwe Fechner
 # SPDX-License-Identifier: MPL-2.0
 
-module SimpleKiteControllers
+module RobustKiteControllers
 
 using DiscretePIDs, DocStringExtensions, Parameters, KiteUtils, YAML
 using AtmosphericModels: AtmosphericModel, calc_wind_factor
@@ -83,7 +83,7 @@ export frd_margins, frd_diskmargin, rate_disk_margin, load_course_correction, co
 export kite_fingerprint, kite_id, stale_identification_steps, check_model_provenance
 
 # Data
-export skc_data_path
+export rkc_data_path
 
 # State of the example menu, data/gui.yaml (examples/select_*.jl)
 export gui_state_file, ensure_gui_state_file, read_gui_field, write_gui_field
@@ -104,7 +104,7 @@ export RunSetup
 export with_run_log, startup_ladder_report, ladder_line, startup_log_lines
 
 """
-    skc_data_path() -> String
+    rkc_data_path() -> String
 
 Absolute path of this package's bundled `data/` directory, holding
 `fc_settings.yaml` ([`FC_Settings`](@ref)), `turn_rate_coeffs.yaml`
@@ -114,9 +114,9 @@ the system project of a run ([`project_file`](@ref)).
 Not `KiteUtils.get_data_path()`: that points at the *kite model's* data
 directory during a run, while these settings belong to the controller.
 """
-skc_data_path() = joinpath(dirname(@__DIR__), "data")
+rkc_data_path() = joinpath(dirname(@__DIR__), "data")
 
-# State of the example menu, data/gui.yaml; after skc_data_path, which locates it.
+# State of the example menu, data/gui.yaml; after rkc_data_path, which locates it.
 include("gui_state.jl")
 # Caller inputs of the example scripts, passed as keywords to `run_example`.
 include("script_inputs.jl")
@@ -164,7 +164,7 @@ include("reelout_loop.jl")
 # Its setup and startup, before the loop; the model comes in as the caller's `init_model`.
 include("run_setup.jl")
 include("startup_path.jl")
-# Linear course-loop model; after skc_data_path, which locates its measured course correction.
+# Linear course-loop model; after rkc_data_path, which locates its measured course correction.
 include("course_loop_model.jl")
 # Which kite the turn-rate table and the course-loop model were identified on.
 include("kite_fingerprint.jl")

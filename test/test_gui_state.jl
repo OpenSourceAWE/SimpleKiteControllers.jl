@@ -7,7 +7,7 @@ the user's own menu state: the site of a project and the wind-speed override.
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 
 "The four fields `apply_windspeed_override!` reads and writes, without a settings file"
 mutable struct WindSettings
@@ -32,7 +32,7 @@ end
         @test startswith(default_project(), "system_fig8")
         @test startswith(default_reelout_project(), "system_reelout")
         @test "pattern" in default_plots()
-        @test gui_state_file() == joinpath(skc_data_path(), "gui.yaml")
+        @test gui_state_file() == joinpath(rkc_data_path(), "gui.yaml")
     end
 
     @testset "apply_windspeed_override!" begin

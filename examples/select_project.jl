@@ -18,7 +18,7 @@ between; a `system_reelout_*.yaml` chosen here does reach them.
 
 using REPL
 using REPL.TerminalMenus
-using SimpleKiteControllers: skc_data_path, selected_project, selected_reelout_project,
+using RobustKiteControllers: rkc_data_path, selected_project, selected_reelout_project,
     set_selected_project
 
 """
@@ -28,7 +28,7 @@ Ask which `system_*.yaml` project to fly and persist the choice to
 `data/gui.yaml`.
 """
 function select_project()
-    data_dir = skc_data_path()
+    data_dir = rkc_data_path()
     projects = sort(filter(f -> startswith(f, "system") && endswith(f, ".yaml"), readdir(data_dir)))
 
     if isempty(projects)

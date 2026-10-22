@@ -3,7 +3,7 @@
 
 # Julia client for the AWETrim reelout flight-path optimizer (REST). Part of the
 # package, not exported: the example scripts import the names they use
-# (`using SimpleKiteControllers: InitParams, opt_init, ...`). It leaves no
+# (`using RobustKiteControllers: InitParams, opt_init, ...`). It leaves no
 # state of its own behind; loading it neither starts nor contacts a server.
 #
 #     ensure_server()
@@ -50,7 +50,7 @@
 # `opt_trajectory`.
 
 "The repository root: `bin/run_server` and the `output/` caches are found from here."
-const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
+const RKC_ROOT = normpath(joinpath(@__DIR__, ".."))
 "Default server address; every function below takes `url` to override it."
 const AWETRIM_URL = "http://127.0.0.1:8000"
 
@@ -228,7 +228,7 @@ StructTypes.omitempties(::Type{PatternLimits}) = (:climb_angle_max,)
 The file recording failed optimizer requests, shared by every script and every
 sweep worker on this machine. Delete it to retry them all.
 """
-const OPT_FAILURE_CACHE = joinpath(SKC_ROOT, "output", "opt_failure_cache.yaml")
+const OPT_FAILURE_CACHE = joinpath(RKC_ROOT, "output", "opt_failure_cache.yaml")
 
 """
     opt_request_key(p::InitParams) -> String
@@ -720,7 +720,7 @@ end
 The directory of the solution cache, one JSON file per chain key, shared by
 every script and sweep worker on this machine. Delete it to re-solve everything.
 """
-const OPT_CHAIN_CACHE = joinpath(SKC_ROOT, "output", "opt_chain_cache")
+const OPT_CHAIN_CACHE = joinpath(RKC_ROOT, "output", "opt_chain_cache")
 
 """
     OptChain(url = AWETRIM_URL; successes = true, failures = true,
@@ -1254,8 +1254,8 @@ function ensure_server(url::AbstractString = AWETRIM_URL;
     host = m[1]
     port = isnothing(m[2]) ? "8000" : m[2]
     verbose && @info "No AWETrim server at $url — starting one (bin/run_server start)."
-    script = joinpath(SKC_ROOT, "bin", "run_server")
-    run(Cmd(`$script start --host $host --port $port`; dir = SKC_ROOT))
+    script = joinpath(RKC_ROOT, "bin", "run_server")
+    run(Cmd(`$script start --host $host --port $port`; dir = RKC_ROOT))
     server_running(url) ||
         error("bin/run_server reported success, but $url/health still does not answer.")
     return url
@@ -1274,8 +1274,8 @@ and one on another machine is not this script's to stop. Both cases leave a
 server answering at `url`, which is what the `false` return reports.
 """
 function stop_server(url::AbstractString = AWETRIM_URL; verbose = true)
-    script = joinpath(SKC_ROOT, "bin", "run_server")
-    run(Cmd(`$script stop`; dir = SKC_ROOT))
+    script = joinpath(RKC_ROOT, "bin", "run_server")
+    run(Cmd(`$script stop`; dir = RKC_ROOT))
     stopped = !server_running(url)
     if !stopped && verbose
         @warn "Something still answers at $url — a server started in the foreground, \

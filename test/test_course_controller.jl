@@ -7,7 +7,7 @@ arithmetic, no kite model, so this runs in well under a second.
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 import KiteUtils: wrap2pi
 
 @testset verbose = true "course_controller" begin

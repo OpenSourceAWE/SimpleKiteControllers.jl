@@ -9,8 +9,8 @@ step-lookup of the winch table.
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: GUI_STATE_FILE_OVERRIDE, ensure_gui_state_file, load_wc_settings,
+using RobustKiteControllers
+import RobustKiteControllers: GUI_STATE_FILE_OVERRIDE, ensure_gui_state_file, load_wc_settings,
     build_winch, load_yaml_fields!, WinchPosController
 using KiteUtils: KiteUtils
 
@@ -30,11 +30,11 @@ mutable struct Knobs
     a::Float64
     b::Int
 end
-const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
+const GUI_DEFAULT = read(joinpath(rkc_data_path(), "gui.yaml.default"), String)
 
 @testset verbose = true "settings_files" begin
     @testset "gui_state_read_write" begin
-        @test gui_state_file() == joinpath(skc_data_path(), "gui.yaml")   # no override
+        @test gui_state_file() == joinpath(rkc_data_path(), "gui.yaml")   # no override
         with_gui_file(GUI_DEFAULT) do file
             @test gui_state_file() == file
             # The shipped defaults: values unquoted, trailing comments dropped.
@@ -101,7 +101,7 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
         wc = load_wc_settings(file; dt = 0.01)
         @test wc.kv == 0.05 && wc.f_low == 400.0
         @test wc.dt == 0.01                                # the plant's step wins over the file's
-        @test wc.f_high == SimpleKiteControllers.WCSettings(; dt = 0.01).f_high   # absent: default
+        @test wc.f_high == RobustKiteControllers.WCSettings(; dt = 0.01).f_high   # absent: default
         write(file, "wc_settings:\n    kv: 0.05\n    no_such_field: 1\n")
         @test_throws ErrorException load_wc_settings(file; dt = 0.01)
     end
@@ -109,13 +109,13 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
     @testset "build_winch" begin
         data_path = KiteUtils.get_data_path()
         try
-            KiteUtils.set_data_path(skc_data_path())
+            KiteUtils.set_data_path(rkc_data_path())
             project = project_file("system_reelout_maasvlakte.yaml")
             set = KiteUtils.Settings(project)
             (; wc, wpc, dt0) = build_winch(project, set, FC_Settings(; compliance = 0.0))
             @test dt0 == 1 / set.sample_freq && wc.dt == dt0
             # The wind-dependent tables override the file's flat values; kv is not one of them.
-            @test wc.kv == SimpleKiteControllers._wc_settings_value(project, "kv")
+            @test wc.kv == RobustKiteControllers._wc_settings_value(project, "kv")
             @test wc.f_low == winch_f_low(set.v_wind; project)
             @test wc.force_limit == winch_force_limit(set.v_wind; project)
             @test wpc isa WinchPosController
@@ -144,14 +144,14 @@ const GUI_DEFAULT = read(joinpath(skc_data_path(), "gui.yaml.default"), String)
         @test winch_table_file(project) == "winch_table.yaml"
         @test turn_rate_coeffs_file(project) == "turn_rate_coeffs.yaml"
         for f in (traj_opt_settings_file(project), winch_table_file(project))
-            @test isfile(joinpath(skc_data_path(), f))
+            @test isfile(joinpath(rkc_data_path(), f))
         end
     end
 
     @testset "winch_table_select" begin
         project = project_file("system_reelout_maasvlakte.yaml")
-        rows = SimpleKiteControllers.YAML.load_file(
-            joinpath(skc_data_path(), winch_table_file(project)))["entries"]
+        rows = RobustKiteControllers.YAML.load_file(
+            joinpath(rkc_data_path(), winch_table_file(project)))["entries"]
         winds = sort([Float64(r["v_wind"]) for r in rows])
         value(w) = only(r["force_limit"] for r in rows if Float64(r["v_wind"]) == w)
         # A step lookup: the last row at or below the wind, the first row below the range.

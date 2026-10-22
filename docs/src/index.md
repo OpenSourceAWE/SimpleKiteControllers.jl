@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = SimpleKiteControllers
+CurrentModule = RobustKiteControllers
 ```
 
-# SimpleKiteControllers
+# RobustKiteControllers
 
 This package is part of Julia Kite Power Tools, which consists of the following packages:
 
 ![Julia Kite Power Tools package overview](kite_power_tools.png)
 
-SimpleKiteControllers also depends on [WinchControllers](https://github.com/OpenSourceAWE/WinchControllers.jl) and [AtmosphericModels](https://github.com/OpenSourceAWE/AtmosphericModels.jl).
+RobustKiteControllers also depends on [WinchControllers](https://github.com/OpenSourceAWE/WinchControllers.jl) and [AtmosphericModels](https://github.com/OpenSourceAWE/AtmosphericModels.jl).
 
 ## Introduction
 This package provides:
@@ -50,23 +50,23 @@ and is not verified by the test suite.
 ## Further documentation
 
 - [Simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
-- [docs/thesis.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
+- [docs/thesis.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
   from the reference formulation
-- [docs/reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md) — the flight phases and winch
+- [docs/reelout\_state\_machine.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/reelout_state_machine.md) — the flight phases and winch
   states of `examples/simple_reelout.jl`, with the transition conditions
-- [docs/fig8\_tuning\_log.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/fig8_tuning_log.md) — the dated record of the parameter
+- [docs/fig8\_tuning\_log.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/fig8_tuning_log.md) — the dated record of the parameter
   experiments behind the shipped tuning, including which levers turned out to be dead ends
-- [docs/ScratchUsage.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/ScratchUsage.md) — startup cost and where the generated model and settling caches land
-- [docs/TrajectoryOptimization.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/TrajectoryOptimization.md) — notes on the trajectory
+- [docs/ScratchUsage.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/ScratchUsage.md) — startup cost and where the generated model and settling caches land
+- [docs/TrajectoryOptimization.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/TrajectoryOptimization.md) — notes on the trajectory
   optimization test cases
 
 ## License
 
-This project is licensed under the MIT License. Please see the below `Copyright notice` in association with the license that can be found in the file [LICENSE](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/LICENSE).
+This project is licensed under the MIT License. Please see the below `Copyright notice` in association with the license that can be found in the file [LICENSE](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/LICENSE).
 
 ## Copyright notice
 
-Technische Universiteit Delft hereby disclaims all copyright interest in the package “SimpleKiteControllers.jl” (controllers for airborne wind energy systems) written by the Author(s).
+Technische Universiteit Delft hereby disclaims all copyright interest in the package “RobustKiteControllers.jl” (controllers for airborne wind energy systems) written by the Author(s).
 
 Prof.dr. H.G.C. (Henri) Werij, Dean of Aerospace Engineering, Technische Universiteit Delft.
 

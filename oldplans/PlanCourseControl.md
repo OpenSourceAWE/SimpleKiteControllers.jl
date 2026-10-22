@@ -78,7 +78,7 @@ NDI block and reads neither (except the ladder's elevation). Keep them out; see
 `create_heading_pid` → `DiscretePID(; K, Ti, Td, N, Ts = dt, umin, umax)` directly
 (`DiscretePIDs` is already a dependency of this package, and `set_K!` comes with it).
 `wrap_to_pi` → `KiteUtils.wrap2pi`, already `using`-ed in
-[SimpleKiteControllers.jl:6](src/SimpleKiteControllers.jl#L6). Both substitutions are
+[RobustKiteControllers.jl:6](src/RobustKiteControllers.jl#L6). Both substitutions are
 value-identical, so they cannot move a number in the regression runs; check that claim
 against `V3Kite/src/coordinate_utils.jl:15` and `KiteUtils/src/transformations.jl:254`
 once more before relying on it.
@@ -158,7 +158,7 @@ so the three scripts do not each copy ~20 fields. Fields to carry over, all alre
 ladder's 1→2 threshold. Keep `FC_Settings` the single YAML-backed source of truth and let
 both settings structs read it; do not add a second YAML file.
 
-Include order in [SimpleKiteControllers.jl](src/SimpleKiteControllers.jl): after
+Include order in [RobustKiteControllers.jl](src/RobustKiteControllers.jl): after
 `fc_settings.jl` (the `FC_Settings` constructor is defined with the type it constructs),
 before `optimization.jl`. Add the same kind of one-line "after X because Y" comment the
 file already uses.

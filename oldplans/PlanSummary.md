@@ -125,4 +125,4 @@ committed to `examples/`) that, for each folder:
 `SimulationResults` is its own git repository (see the workspace root list) —
 confirm before running the backfill that it's fine to modify committed
 reference data there, and commit the change separately from the
-`SimpleKiteControllers.jl` code change.
+`RobustKiteControllers.jl` code change.

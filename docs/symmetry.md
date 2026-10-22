@@ -49,7 +49,7 @@ M/2. The condition is therefore M linear equality rows:
     (`symmetrize_periodic_coefficients`), so IPOPT starts feasible, even from a
     lopsided previous optimum on `/step`.
   - Odd M is rejected with an error.
-- **SimpleKiteControllers**
+- **RobustKiteControllers**
   - `TrajOptSettings.pattern_symmetric` (default `false`), sent through
     `pattern_limits_from` in `src/awetrim_client.jl`.
   - `with_elevation_max`, `with_azimuth_amplitude_min` and `with_size_box` in

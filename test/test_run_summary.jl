@@ -7,7 +7,7 @@ Unit tests for the run-summary sections the two reel-out scripts share
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 using Statistics: mean
 import Dates
 

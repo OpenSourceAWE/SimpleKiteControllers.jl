@@ -6,7 +6,7 @@
 # kite's dead time and lag over v_a), the discrete PD and the margin helpers. The
 # functions that build transfer functions (`course_pid`, `turn_rate_plant`,
 # `delay_margin`, `guidance_tf`, `kite_correction`) are defined by the extension
-# ext/SimpleKiteControllersControlSystemsBaseExt.jl, loaded with `using ControlSystemsBase`.
+# ext/RobustKiteControllersControlSystemsBaseExt.jl, loaded with `using ControlSystemsBase`.
 
 """
 The identified parameters of the linear course-loop model, loaded from the file the
@@ -20,7 +20,7 @@ file; the defaults are `NaN` so that a missing key cannot pass as a value.
 
 The session's instance is [`course_loop_model`](@ref).
 
-YAML: [`course_loop_model.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/course_loop_model.yaml).
+YAML: [`course_loop_model.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/course_loop_model.yaml).
 
 # Fields
 
@@ -52,12 +52,12 @@ $(TYPEDFIELDS)
 end
 
 """
-    CourseLoopModel(filename::String; path = skc_data_path()) -> CourseLoopModel
+    CourseLoopModel(filename::String; path = rkc_data_path()) -> CourseLoopModel
 
 Load the `course_loop_model:` section of `filename`. Errors on an unknown key and on
 a key the file does not give.
 """
-function CourseLoopModel(filename::String; path = skc_data_path())
+function CourseLoopModel(filename::String; path = rkc_data_path())
     clm = load_yaml_fields!(CourseLoopModel(), filename, "course_loop_model"; path)
     missing_keys = [f for f in fieldnames(CourseLoopModel) if isnan(getfield(clm, f))]
     isempty(missing_keys) ||
@@ -258,7 +258,7 @@ crossover region for the course loop.
 frd_diskmargin(L) = 2 / maximum(abs.((1 .- L) ./ (1 .+ L)))
 
 "Path of the measured course correction, see [`load_course_correction`](@ref)"
-const COURSE_CORRECTION_FILE = joinpath(skc_data_path(), "course_correction_measured.csv")
+const COURSE_CORRECTION_FILE = joinpath(rkc_data_path(), "course_correction_measured.csv")
 
 """
     load_course_correction(path = COURSE_CORRECTION_FILE) -> Vector{NamedTuple}

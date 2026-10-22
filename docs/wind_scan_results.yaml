@@ -7,7 +7,7 @@
 # attractor_dist 8.0, depower_final 0.328, min_feasibility_margin 0.74).
 #
 # Force, power and speed are scored over the SAME window: the samples where the
-# length setpoint was still growing (SimpleKiteControllers.reelout_power), i.e.
+# length setpoint was still growing (RobustKiteControllers.reelout_power), i.e.
 # the actual reel-out phase. crest factor = peak / mean.
 #
 # Runs are deterministic: a repeat at identical settings reproduces every number

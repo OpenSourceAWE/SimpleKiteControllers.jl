@@ -299,7 +299,7 @@ the replays, as before.
    2.9 ms/step at 8.25 m/s before and after (one run in between read 3.4,
    noise), 2.2-2.3 at 3.5 m/s. The old 0.001
    baselines are `maasvlakte_*_d0.001`. `startup_log_lines` now also masks
-   the `SimpleKiteControllers.` prefix of printed types, which depends on
+   the `RobustKiteControllers.` prefix of printed types, which depends on
    what `Main` imports.
 
 A first `runtests.jl` after a flown script used to fail once

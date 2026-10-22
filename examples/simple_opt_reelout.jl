@@ -126,10 +126,10 @@ t_script_start = time()
 
 using Timers; tic()
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 # The run's setup and startup (src/run_setup.jl, src/startup_path.jl), not exported.
-using SimpleKiteControllers: setup_run, write_run_done, solve_startup_path!, log_startup_reply,
+using RobustKiteControllers: setup_run, write_run_done, solve_startup_path!, log_startup_reply,
     log_lobe_lift, adopt_startup_path!, finish_startup!, capture_startup_geometry!,
     startup_feasibility, init_phase5_and_controller!, init_loop_state!, merge_into!
 import WinchControllers   # module name, for the wc_overrides refresh (calc_vro)
@@ -141,9 +141,9 @@ import Dates
 using OrderedCollections: OrderedDict
 using YAML   # for reelout_results.jl: the optimizer paths
 # The optimizer client's helpers (src/awetrim_client.jl), used by reelout_results.jl, not exported.
-using SimpleKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite,
+using RobustKiteControllers: free_speed_reference, depower_seed, awetrim_depower_to_v3kite,
     save_opt_entries, first_error_line
-using SimpleKiteControllers: GUESS_POINTS   # read by reelout_results.jl
+using RobustKiteControllers: GUESS_POINTS   # read by reelout_results.jl
 
 run_script = basename(@__FILE__)
 

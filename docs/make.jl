@@ -2,21 +2,21 @@ using Pkg
 if ! ("Documenter" ∈ keys(Pkg.project().dependencies))
     Pkg.activate(@__DIR__)
 end
-using SimpleKiteControllers
+using RobustKiteControllers
 using Documenter
 
-DocMeta.setdocmeta!(SimpleKiteControllers, :DocTestSetup, :(using SimpleKiteControllers); recursive=true)
+DocMeta.setdocmeta!(RobustKiteControllers, :DocTestSetup, :(using RobustKiteControllers); recursive=true)
 
 makedocs(;
-    modules=[SimpleKiteControllers],
+    modules=[RobustKiteControllers],
     authors="Uwe Fechner <u.fechner-1@tudelft.nl> and contributors",
-    repo="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/{commit}{path}#{line}",
-    sitename="SimpleKiteControllers.jl",
+    repo="https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/{commit}{path}#{line}",
+    sitename="RobustKiteControllers.jl",
     checkdocs=:exports,
     format=Documenter.HTML(;
-        repolink = "https://github.com/OpenSourceAWE/SimpleKiteControllers.jl",
+        repolink = "https://github.com/OpenSourceAWE/RobustKiteControllers.jl",
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://OpenSourceAWE.github.io/SimpleKiteControllers.jl",
+        canonical="https://OpenSourceAWE.github.io/RobustKiteControllers.jl",
         assets=["assets/custom.css"],
         size_threshold_warn = 400 * 1024,
         size_threshold = 1024 * 1024,
@@ -46,7 +46,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/OpenSourceAWE/SimpleKiteControllers.jl",
+    repo="github.com/OpenSourceAWE/RobustKiteControllers.jl",
     devbranch="main",
     push_preview=true,
 )

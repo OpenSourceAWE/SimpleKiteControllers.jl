@@ -7,8 +7,8 @@ Unit tests for the run log (`src/run_log.jl`): `with_run_log` writes the message
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: with_run_log, startup_ladder_report, ladder_line, startup_log_lines
+using RobustKiteControllers
+import RobustKiteControllers: with_run_log, startup_ladder_report, ladder_line, startup_log_lines
 using Base.CoreLogging: with_logger
 using Test: TestLogger
 
@@ -28,7 +28,7 @@ const LADDER_RUN = """
 [ Info: Kept retry 3 as the best-so-far; trying again.
 [ Info: The startup path is at margin 1.041, below min_feasibility_margin = 1.30: retry 4/4 (ceiling step) at L = 150.0 m, turn radius 11.85 m (was 11.85 m), elevation ceiling 27.0° (the incumbent spans 17.8-28.8° over a 15.5° floor), azimuth half-width >= 19.9° (the incumbent's is 19.8°), targeting margin 1.339.
 [ Info: Startup retry 4 (ceiling step) could not converge (HTTP 422) at 11.85 m under a ceiling of 27.0°; the ceiling lever is spent, the radius steps next under the last converged ceiling (none).
-[ Info: Saved failed trajectory to /home/ufechner/repos/SimpleKiteControllers.jl/src/../trajectories/startup_incumbent_2026-10-01_0808.yaml (margin 1.0409472655186542).
+[ Info: Saved failed trajectory to /home/ufechner/repos/RobustKiteControllers.jl/src/../trajectories/startup_incumbent_2026-10-01_0808.yaml (margin 1.0409472655186542).
 [ Info: Pattern feasibility at the STARTING length: margin 1.04 — path radius 4.4°, kite 4.3° at L = 150 m, u_s = 0.320. BELOW the demanded min_feasibility_margin = 1.30.
 [ Error: the run threw: LoadError: The optimized path asks for a turn radius of 4.4° where the kite manages 4.3°
 """
@@ -83,7 +83,7 @@ const TAKES_OVER = """
         @test !any(l -> occursin("POST", l) || occursin("exact request failed", l), a)
         @test "[ Info: Received the optimized path in <t> s" in a
         @test any(l -> occursin("to trajectories/startup_incumbent_<stamp>.yaml", l), a)
-        @test startup_log_lines("[ Info: box SimpleKiteControllers.PatternLimits(28.0)") ==
+        @test startup_log_lines("[ Info: box RobustKiteControllers.PatternLimits(28.0)") ==
               ["[ Info: box PatternLimits(28.0)"]
         b = startup_log_lines(TAKES_OVER)
         @test last(b) == "[ Info: Pattern feasibility at the STARTING length: margin 0.90 — path radius 4.4°."

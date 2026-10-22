@@ -17,7 +17,7 @@ are also most of what makes V3Kite's own image large, so there is no package
 set that is both small and fast — `WINDOWS_IMAGE` below trades speed for size
 on that platform only, where the full image doesn't fit.
 
-Neither V3Kite nor SimpleKiteControllers goes into the image, so Revise keeps
+Neither V3Kite nor RobustKiteControllers goes into the image, so Revise keeps
 applying to both packages' sources. V3Kite is left to Pkg's ordinary
 precompilation, where its `@compile_workload` (see its `src/precompile.jl`) covers
 the model.

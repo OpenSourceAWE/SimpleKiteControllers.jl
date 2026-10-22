@@ -5,7 +5,7 @@
 # answers `/health`, `/init`, `/step`, `/status` and `/trajectory` at once, on a free local port,
 # and records every request. It knows nothing of the physics.
 
-import SimpleKiteControllers: HTTP, JSON3
+import RobustKiteControllers: HTTP, JSON3
 
 const FAKE_AZ = [0.0, 10.0, 0.0, -10.0]
 const FAKE_EL = [25.0, 30.0, 25.0, 20.0]
@@ -70,7 +70,7 @@ function fake_server(; fail = Float64[], fail_warm = false,
     url = "http://127.0.0.1:$(HTTP.port(server))"
     # The first request compiles the client and this handler, which on a cold CI runner takes
     # longer than the 2 s `server_running` allows; warm both up here and forget the request.
-    SimpleKiteControllers.server_running(url; timeout = 120) || error("Fake server at $url is not up.")
+    RobustKiteControllers.server_running(url; timeout = 120) || error("Fake server at $url is not up.")
     empty!(log)
     return (; server, url, log, state)
 end

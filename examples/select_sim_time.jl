@@ -14,7 +14,7 @@ reads the current selection straight off disk on every `include`.
 using REPL
 using REPL.TerminalMenus
 
-using SimpleKiteControllers: selected_sim_time, set_selected_sim_time
+using RobustKiteControllers: selected_sim_time, set_selected_sim_time
 
 """
     ask_sim_time_seconds() -> Union{Float64, Nothing}

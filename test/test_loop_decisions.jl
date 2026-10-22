@@ -6,8 +6,8 @@ Unit tests for the step-wise decisions of the reel-out loop (`src/loop_decisions
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
+using RobustKiteControllers
+import RobustKiteControllers: loop_gain_scale, feedforward_step, blended_depower, stop_depower,
     final_force_extra, lift_should_start, lap_index_step, reelout_release, reelout_command,
     soft_stop_speed
 

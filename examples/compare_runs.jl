@@ -34,7 +34,7 @@ end
 
 import YAML
 using KiteUtils
-using SimpleKiteControllers: startup_log_lines
+using RobustKiteControllers: startup_log_lines
 const Arrow = KiteUtils.Arrow
 
 "Summary keys (at any depth) that hold wall-clock or machine-dependent values"

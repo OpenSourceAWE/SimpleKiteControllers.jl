@@ -13,7 +13,7 @@ independent of the steering path and acts on the drum.
 
 The settings of steps 1–3 are in `data/fc_settings.yaml` (`simple_fig8.jl`) and
 `data/fc_settings_reelout.yaml` (`simple_reelout.jl`, `simple_opt_reelout.jl`), loaded into
-[`FC_Settings`](@ref) ([`src/fc_settings.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/fc_settings.jl)), with one YAML section per part:
+[`FC_Settings`](@ref) ([`src/fc_settings.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/fc_settings.jl)), with one YAML section per part:
 `course`, `feedforward`, `pattern`, `wind_ramp`, `winch`, `reelout`, `low_wind`, `run`. Below,
 `fcs.pattern.attractor_dist` and similar names refer to those parts. The winch settings of step 4
 are in `data/wc_settings.yaml`.
@@ -22,7 +22,7 @@ are in `data/wc_settings.yaml`.
 
 The reference path is a closed curve in **(azimuth, elevation), both in degrees**, discretized
 into `num_points` points and treated as cyclic. The default is a parameterized lemniscate,
-[`figure_eight_path`](@ref) in [`src/figure_eight_controller.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/figure_eight_controller.jl):
+[`figure_eight_path`](@ref) in [`src/figure_eight_controller.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/figure_eight_controller.jl):
 
 - `f8_a` — width, the azimuth half-span [deg]
 - `f8_b` — height, the elevation span [deg]
@@ -46,14 +46,14 @@ compresses the azimuth axis, which is why the pattern must be flown low and wide
 worst at the START of a reel-out run, because a longer tether only ever shrinks `ρ`.
 
 In `simple_opt_reelout.jl` the shape comes from the **external optimizer** AWETrim, through its
-REST client ([`src/awetrim_client.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/awetrim_client.jl)):
+REST client ([`src/awetrim_client.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/awetrim_client.jl)):
 
-- **Startup solve** ([`src/startup_path.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/startup_path.jl)): the inflow, the
+- **Startup solve** ([`src/startup_path.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/startup_path.jl)): the inflow, the
   first-lap winch, the minimum turn radius and a guess lemniscate fitted into the startup box
   go to `POST /init`. The server returns a closed trajectory. Failed solves are retried
-  ([`src/startup_retry.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/startup_retry.jl)).
+  ([`src/startup_retry.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/startup_retry.jl)).
 - **Re-optimizations during the reel-out**, as the tether grows. Before a reply is installed,
-  [`src/reopt_gate.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/reopt_gate.jl) checks its curvature margin at the current
+  [`src/reopt_gate.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/reopt_gate.jl) checks its curvature margin at the current
   length, its lowest height and elevation, whether blending into it folds the path, and its
   predicted power. A path that grew is cross-checked against a cold solve started inside the
   size box.
@@ -61,7 +61,7 @@ REST client ([`src/awetrim_client.jl`](https://github.com/OpenSourceAWE/SimpleKi
 The server maps the soft winch law of step 4 onto its own radial force model, so the optimized
 path already assumes that law. The depower it is given comes from the identified depower
 conversion (`data/depower_conversion.yaml`). See
-[TrajectoryOptimization.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/TrajectoryOptimization.md) for the interface. The path following
+[TrajectoryOptimization.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/TrajectoryOptimization.md) for the interface. The path following
 below does not care where the points came from: it can fly any closed (azimuth, elevation)
 curve.
 
@@ -69,7 +69,7 @@ curve.
 
 The guidance is the **attractor-point ("L0") law** of Fernandes et al., Energies 2022
 (https://www.mdpi.com/1996-1073/15/4/1390), implemented in [`calc_attractor`](@ref) and
-[`navigate_fig8`](@ref) ([`src/figure_eight_controller.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/figure_eight_controller.jl)):
+[`navigate_fig8`](@ref) ([`src/figure_eight_controller.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/figure_eight_controller.jl)):
 
 1. Find the closest point **Q** on the reference path. Its distance is the cross-track error
    `dmin` [deg].
@@ -82,9 +82,9 @@ approach mode and no controller switching.
 
 **The lead.** `attractor_distance` buys phase lead against the steering dead time, but too much
 lead cuts the corners of the pattern. In the reel-out runs it is not a fixed number:
-`attractor_distance(fcs, v_app, L)` ([`src/fc_settings.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/fc_settings.jl)) sets it each
+`attractor_distance(fcs, v_app, L)` ([`src/fc_settings.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/fc_settings.jl)) sets it each
 step to the arc flown in `attractor_lead_time` (1.05 s), `rad2deg(t·v_app/L)`. The arc is
-clamped to `[floor, 2·floor]`. The floor ([`attractor_floor`](@ref SimpleKiteControllers.attractor_floor)) is `attractor_dist` scaled by
+clamped to `[floor, 2·floor]`. The floor ([`attractor_floor`](@ref RobustKiteControllers.attractor_floor)) is `attractor_dist` scaled by
 `attractor_dist_ref_length/L`, a fixed arc *length* of 25.3 m (8.35° at 175 m), so the
 guidance rate it sets no longer drops as the tether grows. With `attractor_lead_time = 0` the
 floor alone is flown, which is what `simple_fig8.jl` does (`attractor_dist: 5.5`).
@@ -119,16 +119,16 @@ above the pattern, the great-circle course to any attractor is "straight down" a
 numerical noise, while the tangent is always well defined.
 
 The **entry** to the pattern is not part of the guidance. It is the phase ladder of the course
-controller (§3), see [reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
+controller (§3), see [reelout\_state\_machine.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
 
 ## 3. Steering set point from position and desired course
 
 The inner loop turns the commanded course into `rel_steering ∈ [-max_steering, max_steering]`,
 and sets `rel_depower` alongside it. It lives in [`CourseController`](@ref)/[`calc_steering`](@ref) in
-[`src/course_controller.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/course_controller.jl), called once per step by
+[`src/course_controller.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/course_controller.jl), called once per step by
 `simple_fig8.jl`, `simple_fig8_live.jl`, `simple_opt_fig8.jl` and `simple_reelout.jl`. The
-reel-out runs call it through [`steering_command!`](@ref SimpleKiteControllers.steering_command!) in
-[`src/reelout_loop.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/reelout_loop.jl), which also supplies the gain scale and the
+reel-out runs call it through [`steering_command!`](@ref RobustKiteControllers.steering_command!) in
+[`src/reelout_loop.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/reelout_loop.jl), which also supplies the gain scale and the
 feed-forward.
 
 **The phase ladder.** Phase 0 park (zero steering for `park_time`) → 1 dive (open-loop
@@ -160,7 +160,7 @@ the `DiscretePIDs` default of 10 rings) and output limits at `±max_steering`. I
   During park the PID is stepped with a zero error and its output discarded, so the controller
   engages without a jump.
 - by **depower** (`gain_scale`, reel-out runs only): `c1` changes with the depower actually
-  flown, so `loop_gain_scale` ([`src/loop_decisions.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/loop_decisions.jl)) scales the
+  flown, so `loop_gain_scale` ([`src/loop_decisions.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/loop_decisions.jl)) scales the
   gain by `c1(depower_setpoint)/c1(depower)`. This keeps the loop at the gain it was tuned at.
 
 **The curvature feed-forward** (from phase 4 on; `feedforward:` section). `u_ff` is the path's
@@ -217,14 +217,14 @@ and in the startup solve, `f_high` is de-rated by `first_lap_force_frac`.
 
 `step!` takes a torque, never a length or a speed, so the run integrates `v_set` into a length
 setpoint `l_set`, converts it to torque with WinchControllers.jl's cascaded length loop
-([`examples/winch_adapter.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/winch_adapter.jl)), and **also** passes `v_set` to that
+([`examples/winch_adapter.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/winch_adapter.jl)), and **also** passes `v_set` to that
 loop as `v_ff`. Without the feed-forward, the outer P loop (`winch_pos_kp`) sits between
 integrating here and differentiating there and acts as a 2 s first-order lag. That lag was
 measured at 1.16 s of delay and 0.49 of the commanded amplitude on the 5.7 s reel-out
 oscillation, plus a standing ≈5 m length error.
 
 Three refinements around the ends of the reel-out window, in
-[`src/reelout_loop.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/reelout_loop.jl):
+[`src/reelout_loop.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/reelout_loop.jl):
 
 - **Soft-start** ramps the *command* over `reelout_softstart`. The controller's own integrators
   and force limiters still see the unramped value, so the start-up transient is shaped without
@@ -245,10 +245,10 @@ Three refinements around the ends of the reel-out window, in
 
 Reel-out starts `reelout_delay` after phase 3, or earlier once the force reaches
 `reelout_f_trigger`. Below 6.4 m/s of wind at 100 m height, the `low_wind` schedule
-([`src/low_wind_schedule.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/low_wind_schedule.jl)) sets a longer start length and a lower
+([`src/low_wind_schedule.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/low_wind_schedule.jl)) sets a longer start length and a lower
 startup elevation guess. The full phase/winch
 gating, including which timer starts what, is in
-[reelout\_state\_machine.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
+[reelout\_state\_machine.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/reelout_state_machine.md).
 
 ## Stability and robustness
 
@@ -256,12 +256,12 @@ The **course loop** has a margin analysis; the **winch** loop does not.
 
 ### Course loop: disk margins
 
-[course\_loop\_stability.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability.md) (figure of eight) and
-[course\_loop\_stability\_reelout.md](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/course_loop_stability_reelout.md) (reel-out, over the full
+[course\_loop\_stability.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/course_loop_stability.md) (figure of eight) and
+[course\_loop\_stability\_reelout.md](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/course_loop_stability_reelout.md) (reel-out, over the full
 tether length) linearize the course loop, with the steering tape modelled as a lag and the
 kite's dead time and lag depending on `v_a`. They compute disk margins for the inner loop alone
 and for the loop closed through the attractor guidance ("guided"). The plant model is
-[`src/course_loop_model.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/src/course_loop_model.jl); the transfer functions are in the
+[`src/course_loop_model.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/src/course_loop_model.jl); the transfer functions are in the
 ControlSystemsBase extension.
 
 - **Validated** against the nonlinear simulation: by pushing the loop to instability, by injected
@@ -306,19 +306,19 @@ ControlSystemsBase extension.
   ramp; the `winch_force_min` floor; and that `f_lpf` starts at the measured force. V3Kite's
   `test/test-interface.jl` adds that `v_ff` *adds to* the P term rather than replacing it, and
   that `speed_limit` clamps the sum.
-- **Guidance** — [`test/test_fig8_controller.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/test/test_fig8_controller.jl) covers the
+- **Guidance** — [`test/test_fig8_controller.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/test/test_fig8_controller.jl) covers the
   crossing guards (`branch_disambiguation`, `search_window_continuity`,
   `set_path_keeps_branch_at_crossing`, `reacquire_respects_rate_limit`), the feasibility check
   (`turn_radius_feasibility`), the curvature feed-forward helpers (`path_turn_rate_and_chord`)
   and the turn-rate table lookup.
-- **Inner loop** — [`test/test_course_controller.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/test/test_course_controller.jl): bumpless
+- **Inner loop** — [`test/test_course_controller.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/test/test_course_controller.jl): bumpless
   park engagement, the `1/v_app` and `entry_gain` gain schedule, the `±max_steering` clamp, the
   wrapped error at the ±180° cut, the ψ' blend's endpoints and `course_offset`, the descent
   limiter's gate/blend/latch, the ladder's phase transitions (including `set_phase!`'s "never
   backwards"), and the unnegated `rel_steering` sign convention, plus a hand-checked numeric
-  fixture. [`test/test_steering_blocks.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/test/test_steering_blocks.jl) and
-  [`test/test_reelout_loop.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/test/test_reelout_loop.jl) cover the reel-out wiring around it.
-- **Stability model** — [`test/test_course_loop_model.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/test/test_course_loop_model.jl).
+  fixture. [`test/test_steering_blocks.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/test/test_steering_blocks.jl) and
+  [`test/test_reelout_loop.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/test/test_reelout_loop.jl) cover the reel-out wiring around it.
+- **Stability model** — [`test/test_course_loop_model.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/test/test_course_loop_model.jl).
 - **Closed loop against the nonlinear model** — V3Kite's `test/test_parking_ripple.jl` flies 600
   steps and fails if the detrended AoA ripple RMS exceeds 1.5× a measured 0.0064° baseline. It
   also reports the spectral peak, so a lightly damped mode that comes back shows up as a

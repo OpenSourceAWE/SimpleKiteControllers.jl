@@ -10,9 +10,9 @@ Pure arithmetic on synthetic logs, no simulation.
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 using Statistics: mean
-import SimpleKiteControllers: _longest_run
+import RobustKiteControllers: _longest_run
 
 @testset verbose = true "reelout_metrics" begin
 

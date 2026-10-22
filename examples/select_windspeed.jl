@@ -21,7 +21,7 @@ of seconds), same as picking a new turbulence level.
 using REPL
 using REPL.TerminalMenus
 
-using SimpleKiteControllers: selected_windspeed, set_selected_windspeed
+using RobustKiteControllers: selected_windspeed, set_selected_windspeed
 
 """
     ask_windspeed_ms() -> Union{Float64, Nothing}

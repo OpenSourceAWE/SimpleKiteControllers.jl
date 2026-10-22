@@ -10,8 +10,8 @@ The fake answers every request at once and records it; it knows nothing of the p
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
+using RobustKiteControllers
+import RobustKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
     OptChain, opt_request_key, post, opt_init, opt_step, opt_status, opt_trajectory,
     chain_init, chain_step, chain_status, chain_trajectory, record_opt_success!,
     stale_conn_error, server_running, ensure_server, replay_entries, save_opt_entries,
@@ -58,7 +58,7 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
         fs = fake_server(; fail = [160.0], detail = "IPOPT failure")
         try
             err = nothing
-            payload = merge(SimpleKiteControllers.as_dict(StepParams(160.0, WINCH)),
+            payload = merge(RobustKiteControllers.as_dict(StepParams(160.0, WINCH)),
                             Dict("wait" => true))
             @test_logs (:info, r"HTTP 422: IPOPT failure") begin
                 err = try
@@ -250,7 +250,7 @@ server_params(; kw...) = InitParams(; name = "v4", length = 150.0, winch_params 
             # Interpolated between the two, sample by sample: 1000, 1200, ..., 2000 W.
             @test r.weighted ≈ 1500.0
             inits = [b for (p, b) in fs.log if p == "/init"]
-            @test length(inits) == 3 && all(b -> b["name"] == SimpleKiteControllers.OPT_NAME * "-fsref", inits)
+            @test length(inits) == 3 && all(b -> b["name"] == RobustKiteControllers.OPT_NAME * "-fsref", inits)
             @test all(b -> b["winch_params"]["winch_mode"] == "free_speed", inits)
             # Below 1 m of span the probes are spread over 1 m; off or without samples: nothing.
             r = free_speed_reference(tos, wc, INFLOW, guess..., [160.0])

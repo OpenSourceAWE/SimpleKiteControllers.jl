@@ -61,7 +61,7 @@ end
 include(joinpath(@__DIR__, "validate_margins.jl"))
 # `wrap_comment` and `update_yaml_values!`.
 include(joinpath(@__DIR__, "identification_utils.jl"))
-using SimpleKiteControllers: run_example, script_inputs, project_file, skc_data_path
+using RobustKiteControllers: run_example, script_inputs, project_file, rkc_data_path
 using YAML
 using Printf
 using Statistics: mean
@@ -110,7 +110,7 @@ function with_fast_tape(f, point)
         set_selected_project(project0)
         set_selected_windspeed(wind0)
         set_selected_sim_time(sim_time0)
-        V3Kite.set_default_turbulence(turbulence0; data_path = skc_data_path())
+        V3Kite.set_default_turbulence(turbulence0; data_path = rkc_data_path())
     end
 end
 
@@ -215,7 +215,7 @@ end
 if save
     project = project_file(selected_project())
     # The table, in the format of course_correction_measured.csv (`load_course_correction`).
-    table_file = joinpath(skc_data_path(), kite_correction_file(project))
+    table_file = joinpath(rkc_data_path(), kite_correction_file(project))
     open(table_file, "w") do io
         println(io, "# Kite correction M_k(f) = (tape -> heading, measured) / (turn-rate law c1 v_a e^(-s tau) / ((1 + s T) s)")
         println(io, "# with the pattern delay approximation's dead time tau and lag T, course_loop_model.jl), measured with an injected")
@@ -231,7 +231,7 @@ if save
         end
     end
     @info "identify_kite_correction: wrote the measured kite correction to data/$(basename(table_file))."
-    file = joinpath(skc_data_path(), course_loop_model_file(project))
+    file = joinpath(rkc_data_path(), course_loop_model_file(project))
     comment = wrap_comment(
         "Zero and pole of kite_correction, the causal stand-in for the measured kite correction " *
         "($(basename(table_file))) in the transfer-function models: " *

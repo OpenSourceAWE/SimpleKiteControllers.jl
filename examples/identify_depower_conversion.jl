@@ -38,10 +38,10 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: run_example, script_inputs, read_gui_field, write_gui_field,
+using RobustKiteControllers
+using RobustKiteControllers: run_example, script_inputs, read_gui_field, write_gui_field,
     set_selected_project, with_run_log, replay_entries, depower_conversion,
-    with_depower_conversion, awetrim_depower_to_v3kite, skc_data_path, DEPOWER_CONVERSION_FILE,
+    with_depower_conversion, awetrim_depower_to_v3kite, rkc_data_path, DEPOWER_CONVERSION_FILE,
     DEPOWER_CONVERSION
 using KiteUtils: load_log
 using Printf
@@ -191,7 +191,7 @@ println(@sprintf("Fit over %d paths of %d scenarios: offset %.4f%s, slope %.4f 1
                  fit.curvature, fit.l_dp_min, fit.l_dp_max, rms, conv.offset, conv.slope, conv.curvature))
 
 "Write the values of `fit` into the conversion file, keeping its comments"
-function write_fit(fit, file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE))
+function write_fit(fit, file = joinpath(rkc_data_path(), DEPOWER_CONVERSION_FILE))
     yaml_text = read(file, String)
     for key in (:offset, :slope, :curvature, :l_dp_min, :l_dp_max)
         yaml_text = replace(yaml_text, Regex("(\\n  $key: )[-0-9.eE+]+") =>

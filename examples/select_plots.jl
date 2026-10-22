@@ -16,7 +16,7 @@ reads the current selection straight off disk on every `include`.
 using REPL
 using REPL.TerminalMenus
 
-using SimpleKiteControllers: selected_plots, set_selected_plots
+using RobustKiteControllers: selected_plots, set_selected_plots
 
 const PLOT_LABELS = ["pattern", "3d path", "3d path (webgl)", "time series", "power", "aerodynamics"]
 const PLOT_KEYS = ["pattern", "path_3d", "path_webgl", "time_series", "power", "aerodynamics"]

@@ -10,8 +10,8 @@ feasibility laws the loop reads, and the state the loop starts from. Each takes 
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: score_installed, install_optimized_path!, capture_startup_geometry!,
+using RobustKiteControllers
+import RobustKiteControllers: score_installed, install_optimized_path!, capture_startup_geometry!,
     startup_feasibility, init_phase5_and_controller!, init_loop_state!, TrajOptSettings, c1_at,
     phase5_margin, log_lobe_lift
 

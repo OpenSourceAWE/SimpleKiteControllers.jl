@@ -93,8 +93,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file
+using RobustKiteControllers
+using RobustKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
 using V3Kite: load_log, YAML, identify_turn_rate_law
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
@@ -160,7 +160,7 @@ const C1_SETPOINT = turn_rate_coeffs(fcs.run.body_damping, fcs.course.depower_se
 const GRAVITY_EVAL = Float64(inputs.gravity_scale)
 # The measured kite correction of the project (identify_kite_correction.jl), `nothing` if it
 # has none yet; the guided loop is also rated with it in place of the lag-lead.
-kite_corr_table = let file = joinpath(skc_data_path(), kite_correction_file(project))
+kite_corr_table = let file = joinpath(rkc_data_path(), kite_correction_file(project))
     isfile(file) ? load_course_correction(file) : nothing
 end
 
@@ -183,7 +183,7 @@ sl = load_log(log_name; path = output_path).syslog
 # On the path only: the guidance is linear for a cross-track error below the attractor's arc distance.
 # Not while parking: the climb flies a fixed course of 0 without the guidance, so L_g does not apply;
 # it starts `park_lead` seconds before the reel-out ends, still in phase 4.
-t_park = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf)
+t_park = something(RobustKiteControllers.park_start_time(fcs, sl), Inf)
 in_pattern = findall(i -> 3 <= sl.sys_state[i] <= 5 && sl.var_01[i] <= fcs.pattern.attractor_dist &&
                           sl.time[i] < t_park, eachindex(sl.sys_state))
 isempty(in_pattern) && error("$log_name.arrow never reached the path in phases 3-5.")

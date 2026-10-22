@@ -8,8 +8,8 @@ numbers, no optimizer.
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: PatternLimits, pattern_limits_from, elevation_min_request,
+using RobustKiteControllers
+import RobustKiteControllers: PatternLimits, pattern_limits_from, elevation_min_request,
     elevation_amplitude_max_at, azimuth_max_at, with_elevation_max, with_azimuth_amplitude_min, with_size_box,
     elevation_amplitude, guess_in_box
 

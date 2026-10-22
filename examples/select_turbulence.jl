@@ -20,7 +20,7 @@ seconds).
 """
 
 using V3Kite: set_default_turbulence
-using SimpleKiteControllers: skc_data_path, ensure_gui_state_file, selected_turbulence
+using RobustKiteControllers: rkc_data_path, ensure_gui_state_file, selected_turbulence
 
 """
     select_turbulence()
@@ -29,7 +29,7 @@ Ask for the turbulence level and persist it to `data/gui.yaml`.
 """
 function select_turbulence()
     ensure_gui_state_file()
-    set_default_turbulence(; data_path = skc_data_path())
+    set_default_turbulence(; data_path = rkc_data_path())
     return nothing
 end
 

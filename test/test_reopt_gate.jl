@@ -7,8 +7,8 @@ order, and whether it asks for a fresh reply or gives up. Pure numbers, no optim
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge,
+using RobustKiteControllers
+import RobustKiteControllers: gate_candidate, retried, blend_folds, opt_length, wants_challenge,
     ELEVATION_MIN_RETRY_MARGIN
 
 @testset verbose = true "reopt_gate" begin

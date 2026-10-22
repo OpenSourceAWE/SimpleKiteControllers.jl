@@ -59,9 +59,9 @@ end
 
 using V3Kite
 using V3Kite: init, step!
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers: run_example, script_inputs
 using WinchControllers: WCSettings, WinchPosController
 import KiteUtils   # for KiteUtils.syslog; V3Kite does not re-export it
 using YAML
@@ -471,7 +471,7 @@ flights fitted) and `n_flights`, and the standard errors `*_se` of
 """
 function build_turn_rate_table(; depowers = TABLE_DEPOWERS, remake::Bool = true)
     @info "build_turn_rate_table: project $(basename(sweep_project())), table data/$(out_file())."
-    path = joinpath(skc_data_path(), out_file())
+    path = joinpath(rkc_data_path(), out_file())
     _check_conditions(YAML.load_file(path))
 
     results = NamedTuple[]

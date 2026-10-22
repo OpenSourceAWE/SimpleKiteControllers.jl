@@ -1,14 +1,14 @@
-# SimpleKiteControllers
+# RobustKiteControllers
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev)
-[![Build Status](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenSourceAWE/SimpleKiteControllers.jl)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://opensourceawe.github.io/RobustKiteControllers.jl/dev)
+[![Build Status](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/OpenSourceAWE/RobustKiteControllers.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenSourceAWE/RobustKiteControllers.jl)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23015560-0A7BBB?style=flat-square)](https://doi.org/10.5281/zenodo.23015560)
 
 This package is part of Julia Kite Power Tools, which consists of the following packages:
 <p align="center"><img src="docs/kite_power_tools.png" alt="Julia Kite Power Tools package overview" width="500" /></p>
 
-SimpleKiteControllers also depends on [WinchControllers](https://github.com/OpenSourceAWE/WinchControllers.jl) and [AtmosphericModels](https://github.com/OpenSourceAWE/AtmosphericModels.jl).
+RobustKiteControllers also depends on [WinchControllers](https://github.com/OpenSourceAWE/WinchControllers.jl) and [AtmosphericModels](https://github.com/OpenSourceAWE/AtmosphericModels.jl).
 
 ## Introduction
 This package provides:
@@ -44,14 +44,14 @@ Planned:
 using [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) as the plant.
 
 <p align="center">
-  <img src="https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/docs/V3_Kite_system_fig8_200m_pattern.png" width="60%" alt="V3 Kite flying a 200 m figure-of-eight pattern">
+  <img src="https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/docs/V3_Kite_system_fig8_200m_pattern.png" width="60%" alt="V3 Kite flying a 200 m figure-of-eight pattern">
 </p>
 
 For easy use of the examples and scripts it is suggested to install the package using git:
 
 ```bash
-git clone https://github.com/OpenSourceAWE/SimpleKiteControllers.jl
-cd SimpleKiteControllers.jl/bin
+git clone https://github.com/OpenSourceAWE/RobustKiteControllers.jl
+cd RobustKiteControllers.jl/bin
 ./install
 ./create_sys_image
 cd ..
@@ -139,7 +139,7 @@ Choose identification script to run or `q` to quit:
 The identified coefficients are written into the files the selected project names, such as
 `data/turn_rate_coeffs.yaml` and the project's course-loop model file;
 `stability_opt_reelout.jl` then checks the reel-out course loop with the identified model.
-See [Examples - identification](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev/examples_identification/)
+See [Examples - identification](https://opensourceawe.github.io/RobustKiteControllers.jl/dev/examples_identification/)
 in the documentation.
 
 The runs themselves come in two families. `simple_fig8.jl` flies the pattern at constant
@@ -171,9 +171,9 @@ re-plots that log without re-simulating.
 
 ## Documentation
 
-- [HTML documentation](https://opensourceawe.github.io/SimpleKiteControllers.jl/dev) — this is the main entry point
+- [HTML documentation](https://opensourceawe.github.io/RobustKiteControllers.jl/dev) — this is the main entry point
 - [Simulation results and video in notebook format](https://opensourceawe.github.io/SimulationResults/)
-- [How the controller works](https://OpenSourceAWE.github.io/SimpleKiteControllers.jl/dev/control_algorithm/) — from the optimal trajectory through path following and the steering set point to the reel-out speed
+- [How the controller works](https://OpenSourceAWE.github.io/RobustKiteControllers.jl/dev/control_algorithm/) — from the optimal trajectory through path following and the steering set point to the reel-out speed
 - [docs/thesis.md](docs/thesis.md) — the heading/course fusion ψ' in detail, and how it differs
   from the reference formulation
 - [docs/reelout_state_machine.md](docs/reelout_state_machine.md) — the flight phases and winch
@@ -191,7 +191,7 @@ This project is licensed under the MIT License. Please see the below `Copyright 
 
 ## Copyright notice
 
-Technische Universiteit Delft hereby disclaims all copyright interest in the package “SimpleKiteControllers.jl” (controllers for airborne wind energy systems) written by the Author(s).
+Technische Universiteit Delft hereby disclaims all copyright interest in the package “RobustKiteControllers.jl” (controllers for airborne wind energy systems) written by the Author(s).
 
 Prof.dr. H.G.C. (Henri) Werij, Dean of Aerospace Engineering, Technische Universiteit Delft.
 

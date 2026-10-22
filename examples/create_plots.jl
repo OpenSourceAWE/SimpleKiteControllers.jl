@@ -38,8 +38,8 @@ import WGLMakie
 using MakieControlPlots
 using LaTeXStrings
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file
+using RobustKiteControllers
+using RobustKiteControllers: project_file
 
 # Include utility function for pattern plotting
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))

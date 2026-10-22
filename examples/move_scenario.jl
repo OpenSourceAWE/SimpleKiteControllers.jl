@@ -40,9 +40,9 @@ end
 
 using YAML
 # `compress_scenario`, run on the folder once the files have landed in it; it
-# does `using SimpleKiteControllers`, the home of `scenario_site`.
+# does `using RobustKiteControllers`, the home of `scenario_site`.
 include(joinpath(@__DIR__, "compress.jl"))
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: run_example, script_inputs
 
 const OUTPUT_DIR = normpath(joinpath(@__DIR__, "..", "output"))
 const RUN_DONE_FILE = joinpath(OUTPUT_DIR, "last_run_done.txt")

@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = SimpleKiteControllers
+CurrentModule = RobustKiteControllers
 ```
 
 # Settings and data files
@@ -18,7 +18,7 @@ get_tos_field
 ## Project and data files
 
 ```@docs
-skc_data_path
+rkc_data_path
 project_file
 turn_rate_coeffs_file
 course_loop_model_file

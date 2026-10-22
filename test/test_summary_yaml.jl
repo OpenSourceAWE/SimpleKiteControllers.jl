@@ -7,7 +7,7 @@ Unit tests for the commented run-summary writer in `summary_yaml.jl`:
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 
 @testset verbose = true "summary_yaml" begin
 

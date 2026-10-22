@@ -15,5 +15,5 @@ is exactly `move_scenario.jl`'s own behaviour.
     include("copy_scenario.jl")
 """
 
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: run_example, script_inputs
 run_example("move_scenario.jl"; unique_scenario = true)

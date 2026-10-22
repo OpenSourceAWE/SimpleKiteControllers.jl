@@ -28,7 +28,7 @@ using GLMakie
 using MakieControlPlots
 using LaTeXStrings
 using V3Kite
-using SimpleKiteControllers
+using RobustKiteControllers
 
 # Include utility function for pattern plotting
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))

@@ -31,7 +31,7 @@ exactly what the current table already is (`conditions.system: "system_reelout.y
 so the mass would not have changed at all. Set instead:
 
 ```julia
-PROJECT = "/home/ufechner/repos/SimpleKiteControllers.jl/data/system_reelout_150m.yaml"
+PROJECT = "/home/ufechner/repos/RobustKiteControllers.jl/data/system_reelout_150m.yaml"
 ```
 
 An absolute path is all that is needed, and nothing has to be copied between the
@@ -283,7 +283,7 @@ What the port changed:
   matching the current `steering_test_v3.jl`.
 - `PROJECT` is `project_file("system_reelout_150m.yaml")` at 150 m, not V3Kite's
   own `system_reelout.yaml` at 200 m, and the file is written under
-  `skc_data_path()`.
+  `rkc_data_path()`.
 - Grid default is the depower grid above at one damping level.
 - Each row now records `body_sim_damping` and `date` as provenance.
 - New `_check_conditions`: the script refuses to write a row unless the file's

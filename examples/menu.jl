@@ -64,7 +64,7 @@ const EXAMPLES = [
     "plot_powercurve.jl           - plot mean reel-out power vs wind speed across archived scenarios" => "plot_powercurve.jl",
 ]
 
-const DOCS_URL = "https://opensourceawe.github.io/SimpleKiteControllers.jl/dev/"
+const DOCS_URL = "https://opensourceawe.github.io/RobustKiteControllers.jl/dev/"
 
 """
     open_documentation(url=DOCS_URL)

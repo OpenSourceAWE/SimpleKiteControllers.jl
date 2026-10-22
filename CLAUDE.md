@@ -24,7 +24,7 @@ julia --project -e 'using Pkg; Pkg.test()'    # full suite, ~7 s (pure geometry)
 
 In a live REPL, `include("test/runtests.jl")` for everything, or
 `include("test/test_fig8_controller.jl")` for the figure-eight / metrics / turn-rate
-testsets alone (it activates nothing, so `using SimpleKiteControllers` must already work
+testsets alone (it activates nothing, so `using RobustKiteControllers` must already work
 in that environment). `bin/run_julia` starts a REPL on the project, picking up a system
 image at `bin/kps-image-<version>-<branch>.so` if one exists.
 
@@ -189,7 +189,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 
 ## Architecture
 
-`src/SimpleKiteControllers.jl` sets the include order — `turn_rate_table.jl` **before**
+`src/RobustKiteControllers.jl` sets the include order — `turn_rate_table.jl` **before**
 `figure_eight_controller.jl`, since the guidance's feasibility helpers default `c1` to
 `V3_TURN_RATE_C1` defined there.
 
@@ -231,7 +231,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 
 ### Things that will bite
 
-- **Two data paths.** `skc_data_path()` is this package's `data/`, always;
+- **Two data paths.** `rkc_data_path()` is this package's `data/`, always;
   `KiteUtils.get_data_path()` is whatever was last set. `examples/simple_fig8.jl`
   points it at this package's `data/` and it STAYS there for the whole run — the
   settings and `wc_settings.yaml` are here, while the arrow log goes to `output/`
@@ -249,7 +249,7 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 - **One state file, `data/gui.yaml`** (gitignored; `gui.yaml.default` is the template).
   Project, `sim_time`, plots and `default_turbulence` all live in its `gui:` section.
   `src/gui_state.jl` reads it with a line regex and writes it with KiteUtils'
-  `update_yaml_scalar`, and V3Kite's `set_default_turbulence(; data_path = skc_data_path())`
+  `update_yaml_scalar`, and V3Kite's `set_default_turbulence(; data_path = rkc_data_path())`
   writes the turbulence key into the same file — line-based on both sides, so the keys and
   the comments survive each other. `simple_fig8.jl` passes the level to `init` as
   `use_turbulence`: the model's own `data/gui.yaml` is never consulted, and is read-only

@@ -24,7 +24,7 @@ end
 
 using GLMakie
 using MakieControlPlots
-using SimpleKiteControllers: skc_data_path, turn_rate_coeffs_file, project_file, selected_project
+using RobustKiteControllers: rkc_data_path, turn_rate_coeffs_file, project_file, selected_project
 using LaTeXStrings
 using YAML
 
@@ -102,7 +102,7 @@ figure is also written to `$FIG_DIR` as a PDF, `turn_rate_low_pattern.pdf`, with
 damping appended when the table holds more than one.
 """
 function plot_c1_c2()
-    path = joinpath(skc_data_path(), turn_rate_coeffs_file(project_file(selected_project())))
+    path = joinpath(rkc_data_path(), turn_rate_coeffs_file(project_file(selected_project())))
     # Only the rows `turn_rate_coeffs` uses: a cell whose flights all sank keeps the fit of
     # those flights (`outcome: low_elevation`), and a diverged one no coefficients at all.
     entries = [e for e in YAML.load_file(path)["entries"]

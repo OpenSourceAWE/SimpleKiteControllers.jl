@@ -36,7 +36,7 @@ using SymbolicAWEModels
 using VortexStepMethod
 import KiteUtils
 import YAML
-using SimpleKiteControllers: skc_data_path
+using RobustKiteControllers: rkc_data_path
 
 # Where the PDF lands: LearningControl's figures/, the document that includes it, as in
 # plot_c1_c2.jl.
@@ -67,12 +67,12 @@ geometry file is resolved as V3Kite resolves it (`V3Kite.project_file`). KiteUti
 path is pointed at this package's `data/` to read the settings and restored afterwards.
 """
 function load_kite_model(project = KITE_FIG_PROJECT)
-    path = joinpath(skc_data_path(), project)
+    path = joinpath(rkc_data_path(), project)
     system = YAML.load_file(path)["system"]
     resolve(key) = V3Kite.project_file(path, system[key])
     data_path0 = KiteUtils.get_data_path()
     try
-        set_data_path(skc_data_path())
+        set_data_path(rkc_data_path())
         set = Settings(path)
         vsm_set = VortexStepMethod.VSMSettings(resolve("vsm_settings"); data_prefix = false)
         vsm_set.wings[1].geometry_file = resolve("aero_geometry")

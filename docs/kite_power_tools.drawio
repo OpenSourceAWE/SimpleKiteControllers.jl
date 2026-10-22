@@ -91,7 +91,7 @@
             <mxPoint x="116.96800000000007" y="438" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="BlHllgQ8ryy6FbMsw3fR-25" value="SimpleKiteControllers" style="rounded=0;whiteSpace=wrap;html=1;fontSize=18;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+        <mxCell id="BlHllgQ8ryy6FbMsw3fR-25" value="RobustKiteControllers" style="rounded=0;whiteSpace=wrap;html=1;fontSize=18;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
           <mxGeometry x="509" y="212" width="200" height="50" as="geometry" />
         </mxCell>
         <mxCell id="BlHllgQ8ryy6FbMsw3fR-27" value="" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endSize=5;" parent="1" edge="1">

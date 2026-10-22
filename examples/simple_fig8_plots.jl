@@ -60,12 +60,12 @@ using GLMakie
 using MakieControlPlots
 using LaTeXStrings
 using V3Kite                  # the log, its data path, wrap_to_pi
-using SimpleKiteControllers   # FC_Settings, figure_eight_path
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers   # FC_Settings, figure_eight_path
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
 @info "Loading simulation results..."
 # Where simple_fig8.jl saved the log; `init` no longer moves the data path.
-set_data_path(skc_data_path())
+set_data_path(rkc_data_path())
 
 # Read fresh from data/gui.yaml on every include, same as simple_fig8.jl,
 # so a manual re-include never plots against a stale project or fcs.

@@ -75,8 +75,8 @@ end
 
 using Timers; tic()
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using KiteUtils: wc_settings   # resolves the wc-settings file named in the project
 using AtmosphericModels: calc_wind_factor
 using LinearAlgebra: norm
@@ -96,8 +96,8 @@ include(joinpath(@__DIR__, "model_setup.jl"))
 # The optimizer client, part of the package but not exported (src/awetrim_client.jl), and
 # `HTTP.StatusError` for a 422.
 using HTTP
-using SimpleKiteControllers: OPT_NAME, GUESS_POINTS, RESAMPLE_POINTS, REG_WEIGHT
-using SimpleKiteControllers: Trajectory, InitParams, StepParams, ensure_server, opt_init,
+using RobustKiteControllers: OPT_NAME, GUESS_POINTS, RESAMPLE_POINTS, REG_WEIGHT
+using RobustKiteControllers: Trajectory, InitParams, StepParams, ensure_server, opt_init,
     opt_step, opt_trajectory, inflow_from_settings, winch_from_wc, cap_wind_speed,
     depower_seed, elevation_min_request, min_turn_radius_request, pattern_limits_from,
     guess_el_center_seed
