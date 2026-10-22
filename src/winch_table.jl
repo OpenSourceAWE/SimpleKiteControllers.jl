@@ -11,7 +11,7 @@ Only reel-out projects carry a `winch_table` entry, so calling this against a
 fig8 project throws, as does a table missing `key` in any row.
 """
 function winch_table_lookup(v_wind, key; project = project_file())
-    file = joinpath(skc_data_path(), winch_table_file(project))
+    file = joinpath(rkc_data_path(), winch_table_file(project))
     raw = YAML.load_file(file)
     rows = raw["entries"]
     all(r -> haskey(r, key), rows) ||
@@ -55,7 +55,7 @@ clamped to the first row below the identified range. The counterpart of
 is one thing or another at a given wind speed, never 40 % of the way between them.
 """
 function winch_table_select(v_wind, key; project = project_file())
-    file = joinpath(skc_data_path(), winch_table_file(project))
+    file = joinpath(rkc_data_path(), winch_table_file(project))
     raw = YAML.load_file(file)
     rows = raw["entries"]
     all(r -> haskey(r, key), rows) ||

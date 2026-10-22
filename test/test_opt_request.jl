@@ -8,8 +8,8 @@ Settings and the package's turn-rate table in, numbers out; no optimizer.
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: depower_conversion, with_depower_conversion, awetrim_depower_to_v3kite,
+using RobustKiteControllers
+import RobustKiteControllers: depower_conversion, with_depower_conversion, awetrim_depower_to_v3kite,
     DEPOWER_SEED_BOUNDS, depower_seed, min_turn_radius_request, request_constraints,
     pattern_limits_from, elevation_min_request
 
@@ -72,7 +72,7 @@ import SimpleKiteControllers: depower_conversion, with_depower_conversion, awetr
     end
 
     @testset "request_constraints" begin
-        tos = SimpleKiteControllers.TrajOptSettings()
+        tos = RobustKiteControllers.TrajOptSettings()
         inflow = (; wind_speed = 8.0)
         l_opt = 150.0
         rc = request_constraints(tos, fcs, inflow, 10.0, l_opt)

@@ -10,8 +10,8 @@ leaves it, without sending the `/init`.
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
+using RobustKiteControllers
+import RobustKiteControllers: InflowConditions, WinchParams, Trajectory, InitParams, StepParams,
     PatternLimits, DepowerSpec, opt_request_key, stable_hash, chain_key, _key_fields,
     opt_failures, opt_failed_before, record_opt_failure!, clear_opt_failures, OptChain,
     _write_chain_entry, _chain_entry, _cached_422, chain_step, chain_status, chain_trajectory,

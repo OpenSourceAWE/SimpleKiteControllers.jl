@@ -7,12 +7,12 @@ no simulation and no kite model, so the whole file runs in well under a second.
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 import KiteUtils: wrap2pi
 # Via the package: environments this runs from, like examples/, lack a direct YAML dep.
-import SimpleKiteControllers: YAML
+import RobustKiteControllers: YAML
 # The guidance's own metric, for checking a remapped Q landed near the old one.
-import SimpleKiteControllers: _dist as _skc_dist
+import RobustKiteControllers: _dist as _rkc_dist
 
 _make_test_controller(; kwargs...) =
     FigureEightController(FigureEightSettings(; dt = 0.02, A = 10.0, B = 5.0,
@@ -189,7 +189,7 @@ end
         q_az, q_el = fec4.az_path[fec4.last_idx], fec4.el_path[fec4.last_idx]
         set_path!(fec4, src.az_path, src.el_path; resample = 120)
         @test length(fec4.az_path) == 120
-        @test _skc_dist(q_az, q_el, fec4.az_path[fec4.last_idx],
+        @test _rkc_dist(q_az, q_el, fec4.az_path[fec4.last_idx],
                         fec4.el_path[fec4.last_idx]) < 1.0
 
         # A repeated point has no direction; it is rejected rather than flown.
@@ -260,7 +260,7 @@ end
         tb = fec.tangent[i2]
         az_new = az .+ 0.3 * sin(tb)
         el_new = el .+ 0.3 * cos(tb)
-        dists = [_skc_dist(az[i1], el[i1], az_new[i], el_new[i]) for i in 1:n]
+        dists = [_rkc_dist(az[i1], el[i1], az_new[i], el_new[i]) for i in 1:n]
         nearest = argmin(dists)
         near_gap(i, j) = min(mod(i - j, n), mod(j - i, n))
         @test near_gap(nearest, i2) < n ÷ 8     # the plain nearest point IS the other branch
@@ -557,7 +557,7 @@ end
         # accidental edit of the YAML.
         # The DEFAULT table, whatever a run of an example script left loaded in this session.
         reload_turn_rate_table!()
-        entries = SimpleKiteControllers._TURN_RATE_TABLE[].entries
+        entries = RobustKiteControllers._TURN_RATE_TABLE[].entries
 
         # A row that claims to have passed never leaves its numbers unusable:
         # no row is silently half-valid.
@@ -597,7 +597,7 @@ end
         # physical invariant of any valid identification, not a pinned number.
         bd = [0.0, 0.0, 40.0]
         usable = sort(filter(e -> e.body_damping == bd &&
-                                   SimpleKiteControllers._is_usable_turn_rate_entry(e),
+                                   RobustKiteControllers._is_usable_turn_rate_entry(e),
                               entries); by = e -> e.depower)
         @test length(usable) >= 2
         @test issorted(usable; by = e -> -e.c1)
@@ -659,11 +659,11 @@ end
              c2 = 0.0, delay = 0.0, c1_rel_std = 0.001, g_rel_std = 0.05,
              outcome = :sweep_done),
         ]
-        synthetic = SimpleKiteControllers.TurnRateTable(
+        synthetic = RobustKiteControllers.TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
                                :l_tether => 200.0, :dt => 0.05 / 3), entries)
-        old = SimpleKiteControllers._TURN_RATE_TABLE[]
-        SimpleKiteControllers._TURN_RATE_TABLE[] = synthetic
+        old = RobustKiteControllers._TURN_RATE_TABLE[]
+        RobustKiteControllers._TURN_RATE_TABLE[] = synthetic
         try
             # exact grid points reproduce the input exactly, not interpolated
             r30 = turn_rate_coeffs(bd, 0.30)
@@ -701,7 +701,7 @@ end
             # unknown body_damping still throws
             @test_throws ArgumentError turn_rate_coeffs([1.0, 1.0, 40.0], 0.40)
         finally
-            SimpleKiteControllers._TURN_RATE_TABLE[] = old
+            RobustKiteControllers._TURN_RATE_TABLE[] = old
         end
     end
 
@@ -716,11 +716,11 @@ end
             (body_damping = bd, depower = 0.60, c1 = 0.05, c2 = 0.0, delay = 0.6,
              c1_rel_std = 0.001, g_rel_std = 0.05, outcome = :sweep_done),
         ]
-        synthetic = SimpleKiteControllers.TurnRateTable(
+        synthetic = RobustKiteControllers.TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
                                :l_tether => 200.0, :dt => 0.05 / 3), entries)
-        old = SimpleKiteControllers._TURN_RATE_TABLE[]
-        SimpleKiteControllers._TURN_RATE_TABLE[] = synthetic
+        old = RobustKiteControllers._TURN_RATE_TABLE[]
+        RobustKiteControllers._TURN_RATE_TABLE[] = synthetic
         try
             @test_logs turn_rate_coeffs(bd, 0.20)           # exact hit, no warning
             @test turn_rate_coeffs(bd, 0.20).c1 == 0.5
@@ -729,7 +729,7 @@ end
             @test r.interpolated == true
             @test r.c1 ≈ sqrt(0.5 * 0.05)
         finally
-            SimpleKiteControllers._TURN_RATE_TABLE[] = old
+            RobustKiteControllers._TURN_RATE_TABLE[] = old
         end
     end
 
@@ -772,7 +772,7 @@ end
 
     @testset "winch_force_gains" begin
         fcs = FC_Settings()
-        wcs = SimpleKiteControllers.WCSettings(; dt = 0.02)
+        wcs = RobustKiteControllers.WCSettings(; dt = 0.02)
         fcs.winch.compliance = 1.0
         g = winch_force_gains(fcs, wcs)
         # Keys must match the winch controller's field names; the caller splats them.
@@ -849,7 +849,7 @@ end
         # default, "soft", since every measured wind speed in the table is
         # "soft" too. (Read from the YAML, not from a WCSettings: WinchControllers
         # is a dep of examples/, not of this package.)
-        let wcs_file = joinpath(skc_data_path(),
+        let wcs_file = joinpath(rkc_data_path(),
                                 YAML.load_file(p)["system"]["wc_settings"])
             @test YAML.load_file(wcs_file)["wc_settings"]["force_limit"] == "soft"
         end
@@ -869,9 +869,9 @@ end
         # NOT the entry guard's floor: that one is bounded by what a DEPOWERED
         # wing can pull, does not scale with the winch, and lives in FC_Settings.
         # Sharing one value crashed the 4 m/s run (2026-08-25).
-        @test haskey(SimpleKiteControllers.FC_FIELD_PART, :entry_f_min)
+        @test haskey(RobustKiteControllers.FC_FIELD_PART, :entry_f_min)
         @test FC_Settings().winch.entry_f_min == 350.0
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :f_low)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :f_low)
     end
 
     @testset "pattern_height" begin
@@ -1289,34 +1289,34 @@ end
     @testset "project_file" begin
         p = project_file()
         @test isabspath(p)
-        @test dirname(p) == skc_data_path()
+        @test dirname(p) == rkc_data_path()
         @test isfile(p)
         # KiteUtils resolves the sim settings relative to the project, so they must sit here.
         system = YAML.load_file(p)["system"]
-        settings = joinpath(skc_data_path(), system["sim_settings"])
+        settings = joinpath(rkc_data_path(), system["sim_settings"])
         @test isfile(settings)
         # wc_settings is a bare name; the example points the data path here before init.
-        @test isfile(joinpath(skc_data_path(), system["wc_settings"]))
+        @test isfile(joinpath(rkc_data_path(), system["wc_settings"]))
         # The run length and timestep come from there, not from FC_Settings.
         settings_dict = YAML.load_file(settings)
         sys = settings_dict["system"]
         @test sys["sim_time"] > 0
         @test sys["sample_freq"] >= 60
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :sim_time)
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :dt)
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :project)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :sim_time)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :dt)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :project)
         # The initial tether length is a plant condition (sim_settings' l_tethers), not FC_Settings.
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :tether_length)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :tether_length)
         @test haskey(settings_dict["initial"], "l_tethers")
         # So is the wind speed: it is read from `environment.v_wind` alone.
-        @test !haskey(SimpleKiteControllers.FC_FIELD_PART, :v_wind)
+        @test !haskey(RobustKiteControllers.FC_FIELD_PART, :v_wind)
         @test settings_dict["environment"]["v_wind"] > 0
         # A project this package does not carry stays a lookup under the active data path.
         @test project_file("no_such_system.yaml") == "no_such_system.yaml"
     end
 
     @testset "reelout_feasibility" begin
-        using SimpleKiteControllers: ReeloutFeasibility, Phase5MarginState, c1_at,
+        using RobustKiteControllers: ReeloutFeasibility, Phase5MarginState, c1_at,
                                      phase5_margin, check_startup_path
 
         # c1_at falls back to the pattern's c1 before phase 5 and when the final
@@ -1352,7 +1352,7 @@ end
     end
 
     @testset "check_reelout_feasibility" begin
-        import SimpleKiteControllers: TurnRateTable
+        import RobustKiteControllers: TurnRateTable
 
         # A synthetic table (same idiom as the interpolation testset above): two
         # rows only, so the pattern's own depower (0.26) and phase 5's
@@ -1368,8 +1368,8 @@ end
         synthetic = TurnRateTable(
             Dict{Symbol, Any}(:system => "test.yaml", :v_wind => 9.51,
                               :l_tether => 200.0, :dt => 0.05), entries)
-        old = SimpleKiteControllers._TURN_RATE_TABLE[]
-        SimpleKiteControllers._TURN_RATE_TABLE[] = synthetic
+        old = RobustKiteControllers._TURN_RATE_TABLE[]
+        RobustKiteControllers._TURN_RATE_TABLE[] = synthetic
         try
             fec = _make_test_controller(el_center = 45.0)
             fcs = FC_Settings(; body_damping = bd, depower_setpoint = 0.26,
@@ -1471,7 +1471,7 @@ end
             @test isnothing(check_startup_path(fec, fcs, tos_margin; l_tether,
                                                depower = 0.99).feas_start)
         finally
-            SimpleKiteControllers._TURN_RATE_TABLE[] = old
+            RobustKiteControllers._TURN_RATE_TABLE[] = old
         end
     end
 
@@ -1504,7 +1504,7 @@ end
         @test path_distance(az, el, az[17], el[17]) == 0
         @test path_distance(az, el, az[17], el[17] + 2.0) <= 2.0
         @test path_distance(az, el, az[17], el[17] + 2.0) ≈
-              minimum(_skc_dist(az[17], el[17] + 2.0, az[i], el[i]) for i in eachindex(az))
+              minimum(_rkc_dist(az[17], el[17] + 2.0, az[i], el[i]) for i in eachindex(az))
         # Azimuth counts less at high elevation: cos(elevation) compresses it.
         @test path_distance([0.0], [60.0], 2.0, 60.0) ≈ 2.0 * cosd(60.0)
         # The tangent at Q is the path's own direction there.

@@ -11,8 +11,8 @@ retries, which send `/init`, are served by the fake server of `fake_awetrim_serv
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, InflowConditions, WinchParams,
+using RobustKiteControllers
+import RobustKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, InflowConditions, WinchParams,
     TrajOptSettings, awetrim_depower_to_v3kite, opt_request_key, min_turn_radius_request
 @isdefined(fake_server) || include(joinpath(@__DIR__, "fake_awetrim_server.jl"))
 
@@ -55,11 +55,11 @@ import SimpleKiteControllers: reoptimize!, REOPT_POLL_INTERVAL, OptChain, Inflow
         set_path!(fec, flown...; up_loops)
         oc = isnothing(server) ? OptChain("http://127.0.0.1:1"; dir = mktempdir(), replay = replies) :
                                  OptChain(server.url; dir = mktempdir())
-        oc.config = SimpleKiteControllers.InitParams(; name = SimpleKiteControllers.OPT_NAME, length = l_tether,
+        oc.config = RobustKiteControllers.InitParams(; name = RobustKiteControllers.OPT_NAME, length = l_tether,
             winch_params = WinchParams("reelout", 0.04, 700.0, 7200.0),
             inflow_conditions = InflowConditions(; wind_speed = 8.0, wind_direction = 270.0,
                                                  profile_law = 3),
-            trajectory = SimpleKiteControllers.Trajectory(flown...))
+            trajectory = RobustKiteControllers.Trajectory(flown...))
         isnothing(server) || (oc.state = oc.server = opt_request_key(oc.config))
         setup = (; tos, fcs, fec, opt_chain = oc, opt_r_on = true,
                  c1_at_phase = (phase, x) -> 0.28, cap_wind = 8.0, el_center_seed = 30.0,

@@ -396,7 +396,7 @@ This work has been supported by the MERIDIONAL project, which receives funding f
 
 ## These results were achieved using the following research software:
 
-- [SimpleKiteControllers.jl](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl), path-following kite control software by Uwe Fechner, Delft, 2026
+- [RobustKiteControllers.jl](https://github.com/OpenSourceAWE/RobustKiteControllers.jl), path-following kite control software by Uwe Fechner, Delft, 2026
 - [AWETrim](https://github.com/awegroup/AWETrim/tree/develop) was used to provide optimal flight paths, depending on the inflow conditions, written by Oriol Canyon, Delft, 2026
 - [V3Kite.jl](https://github.com/OpenSourceAWE/V3Kite.jl) was used as detailed, validated
 kite model of the V3 kite of TU Delft. It was developed by Jelle Poland, Rotterdam, The Netherlands and Bart van de Lint, Delft, The Netherlands, 2026

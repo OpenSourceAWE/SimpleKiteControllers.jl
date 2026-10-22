@@ -93,13 +93,13 @@ using MakieControlPlots
 using LaTeXStrings
 using V3Kite                  # the log, its data path, wrap_to_pi
 using OrderedCollections: OrderedDict
-using SimpleKiteControllers   # reelout_power, apply_windspeed_override!
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers   # reelout_power, apply_windspeed_override!
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 
 # Where simple_reelout.jl saved the log; `init` no longer moves the data path.
-set_data_path(skc_data_path())
+set_data_path(rkc_data_path())
 
 """
     live_global(name) -> value or nothing

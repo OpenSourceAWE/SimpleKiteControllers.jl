@@ -36,8 +36,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: run_example, script_inputs, project_file, skc_data_path
+using RobustKiteControllers
+using RobustKiteControllers: run_example, script_inputs, project_file, rkc_data_path
 using Printf
 using Statistics: mean
 import Dates
@@ -97,7 +97,7 @@ clm = course_loop_model()
 @printf(" kite_lag_exp       = %.3f ± %.3f   (was %.3f)\n", lag_fit.exp, lag_fit.se, clm.kite_lag_exp)
 
 if save
-    file = joinpath(skc_data_path(), course_loop_model_file(project))
+    file = joinpath(rkc_data_path(), course_loop_model_file(project))
     fmt(values) = join([@sprintf("%.3f", value) for value in values], ", ")
     provenance = wrap_comment(
         "The kite's dead time and lag over v_a, x ∝ v_a^-exp: joint fits of the low-elevation " *

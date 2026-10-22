@@ -26,9 +26,9 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers: read_gui_field, write_gui_field, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs, with_run_log, first_error_line
-using SimpleKiteControllers: startup_ladder_report, ladder_line
+using RobustKiteControllers: read_gui_field, write_gui_field, set_selected_project
+using RobustKiteControllers: run_example, script_inputs, with_run_log, first_error_line
+using RobustKiteControllers: startup_ladder_report, ladder_line
 include(joinpath(@__DIR__, "compare_runs.jl"))
 
 const SITE_PROJECT = Dict("maasvlakte" => "system_reelout_maasvlakte.yaml",

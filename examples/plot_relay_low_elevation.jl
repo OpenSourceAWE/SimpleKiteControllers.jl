@@ -39,7 +39,7 @@ using GLMakie
 using MakieControlPlots
 using LaTeXStrings
 using DelimitedFiles: readdlm, writedlm
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: run_example, script_inputs
 
 # ==================== USER PARAMETERS ==================== #
 

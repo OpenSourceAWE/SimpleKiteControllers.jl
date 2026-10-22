@@ -41,7 +41,7 @@ simple_fig8_plots.jl
 
 ## Step 5 - DONE -
 
-In KiteControllers there is the first menu entry select_project. Can you add this to SimpleKiteControllers? Currently, there are three projects (system.yaml files) in the data folder.
+In KiteControllers there is the first menu entry select_project. Can you add this to RobustKiteControllers? Currently, there are three projects (system.yaml files) in the data folder.
 
 ## Step 6 Refactoring - DONE -
 
@@ -243,7 +243,7 @@ flies differs only in positions and rest lengths, not in topology.
 
 # Step 15 Live 3D view of a figure-eight run - IMPLEMENTED 2026-08-13, full run not yet flown -
 
-Integrate SimpleKiteControllers.jl with KiteViewers.jl: `examples/simple_fig8_live.jl`
+Integrate RobustKiteControllers.jl with KiteViewers.jl: `examples/simple_fig8_live.jl`
 shows the kite, bridle and tether **live**, updated from the simulation loop — not
 replayed from a log afterwards. `KiteViewers.jl/examples/park_v3.jl` was the
 reference for the API, not for the structure: it drives `update_segments!` from a

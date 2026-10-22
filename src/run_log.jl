@@ -175,7 +175,7 @@ optimizer answers write it: the messages up to the first progress line of the lo
 their continuation lines, without the optimizer client's transport messages (`RE_TRANSPORT`, which differ
 between a server run and a cached one), and with wall times (`… s`), file time stamps, the folder
 of saved trajectories (`…/trajectories/`, which differs between checkouts) and the
-`SimpleKiteControllers.` prefix of printed types (shown only when `Main` does not import the type)
+`RobustKiteControllers.` prefix of printed types (shown only when `Main` does not import the type)
 masked.
 """
 function startup_log_lines(log)
@@ -185,7 +185,7 @@ function startup_log_lines(log)
         occursin(r"^\[ Info: step\s+\d+ /", line) && break
         occursin(RE_TRANSPORT, line) && continue
         s = replace(line, r"\d+(\.\d+)? s\b" => "<t> s", r"\d{4}-\d{2}-\d{2}_\d{4}" => "<stamp>",
-                    r"\S*/trajectories/" => "trajectories/", "SimpleKiteControllers." => "")
+                    r"\S*/trajectories/" => "trajectories/", "RobustKiteControllers." => "")
         push!(out, s)
     end
     return out

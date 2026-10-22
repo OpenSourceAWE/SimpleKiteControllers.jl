@@ -149,8 +149,8 @@ end
 
 using Timers; tic()
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
+using RobustKiteControllers
+using RobustKiteControllers: project_file   # V3Kite exports a project_file(project, entry) of its own
 using WinchControllers: WCSettings, WinchController, calc_v_set, on_timer,
     get_state, get_f_err, wcsLowerForceLimit,
     LowerForceController, set_f_set, set_reset, set_v_sw, set_v_act,
@@ -324,7 +324,7 @@ try
             t, elevation = Float64(s.sys_state.elevation),
             v_kite, v_app = Float64(s.sys_state.v_app),
             dmin, tangent = path_tangent(fec),
-            park = SimpleKiteControllers.park_should_start(fcs, cc.phase,
+            park = RobustKiteControllers.park_should_start(fcs, cc.phase,
                        Float64(s.sys_state.v_reelout[1]), l_set))
         phase_before == 2 && phase == 3 && (global transition_start = t)
         # Separate from the ladder inside calc_steering so it can fire the SAME
@@ -545,7 +545,7 @@ fig8m = print_fig8_metrics(sl; t_start = fcs.course.park_time, settle_time = fcs
                    min_span_frac = fcs.run.min_span_frac, require_final = true,
                    max_force = project_set.max_force,
                    # A parking kite leaves the path on purpose: the pattern ends where it parks.
-                   t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
+                   t_end = something(RobustKiteControllers.park_start_time(fcs, sl), Inf))
 
 summary = OrderedDict{String, Any}()
 # The FIRST key of the file, the same words the console logs as "Success criteria:
@@ -563,7 +563,7 @@ fig8m === nothing ||
 # The window's mean and peak force and power too.
 reelout_sections = reelout_block(sl, fcs, l_tether; stop_reason,
                                  laps_reeled = fig8_idx_progress / n_path, window_means = true,
-                                 t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
+                                 t_end = something(RobustKiteControllers.park_start_time(fcs, sl), Inf))
 rp = reelout_sections.rp
 summary["reelout"] = reelout_sections.block
 performance_section = performance_block(t_sim, t_wall, s.dt, fcs.run.vsm_interval)

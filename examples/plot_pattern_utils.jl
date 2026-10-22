@@ -12,7 +12,7 @@ extracted from `simple_reelout_plots.jl` to enable batch processing in
 # using MakieControlPlots
 # using LaTeXStrings
 # using V3Kite
-# using SimpleKiteControllers
+# using RobustKiteControllers
 
 """
     scenario_system_file(scenario_dir) -> String
@@ -592,14 +592,14 @@ function save_path3d_html(html_file::AbstractString, fig)
         DOM.div(
             DOM.style("""
                 html, body { margin: 0; overflow: hidden; }
-                #skc-fit { overflow: hidden; width: $(w)px; height: $(h)px; }
-                #skc-scaler { transform-origin: top left; width: $(w)px; height: $(h)px; }
+                #rkc-fit { overflow: hidden; width: $(w)px; height: $(h)px; }
+                #rkc-scaler { transform-origin: top left; width: $(w)px; height: $(h)px; }
             """),
-            DOM.div(DOM.div(fig; id = "skc-scaler"); id = "skc-fit"),
+            DOM.div(DOM.div(fig; id = "rkc-scaler"); id = "rkc-fit"),
             DOM.script("""
                 (function () {
-                  const box = document.getElementById("skc-fit");
-                  const el = document.getElementById("skc-scaler");
+                  const box = document.getElementById("rkc-fit");
+                  const el = document.getElementById("rkc-scaler");
                   const fit = () => {
                     const k = Math.min(1, document.documentElement.clientWidth / $w);
                     el.style.transform = "scale(" + k + ")";

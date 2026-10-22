@@ -25,7 +25,7 @@ end
 using GLMakie
 using MakieControlPlots
 using V3Kite
-using SimpleKiteControllers
+using RobustKiteControllers
 
 include(joinpath(@__DIR__, "plot_pattern_utils.jl"))
 

@@ -13,7 +13,7 @@ the active data path (`joinpath(get_data_path(), filename)`) unless absolute.
 The file must have a top-level `wc_settings:` mapping whose keys are fields of
 `WCSettings`; a missing key keeps the struct default, an unknown key errors.
 
-This used to be V3Kite's own `WC_Settings(filename)`. It lives in SimpleKiteControllers now because
+This used to be V3Kite's own `WC_Settings(filename)`. It lives in RobustKiteControllers now because
 the struct belongs to WinchControllers.jl and the *file* belongs to the run —
 V3Kite itself no longer reads winch gains at all. `dt` always wins over the
 file's placeholder value: it is the plant's timestep, not a tuning choice.

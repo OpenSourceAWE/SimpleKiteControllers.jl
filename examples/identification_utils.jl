@@ -11,7 +11,7 @@ using Printf
 using Statistics: median
 using V3Kite: load_log, identify_turn_rate_law, set_default_turbulence
 using KiteUtils: Settings
-using SimpleKiteControllers
+using RobustKiteControllers
 
 """
     log_label(point) -> String
@@ -38,7 +38,7 @@ function fly_point(point, log_dir)
         set_selected_project(point.project)
         set_selected_windspeed(point.wind)
         set_selected_sim_time(point.sim_time)
-        set_default_turbulence(0.0; data_path = skc_data_path())
+        set_default_turbulence(0.0; data_path = rkc_data_path())
         overrides = haskey(point, :depower) ? Dict{Symbol, Any}(:depower_setpoint => point.depower) :
                                               Dict{Symbol, Any}()
         inputs = point.script == "simple_reelout.jl" ?
@@ -49,10 +49,10 @@ function fly_point(point, log_dir)
         set_selected_project(project0)
         set_selected_windspeed(wind0)
         set_selected_sim_time(sim_time0)
-        set_default_turbulence(turbulence0; data_path = skc_data_path())
+        set_default_turbulence(turbulence0; data_path = rkc_data_path())
     end
     log_name = basename(Settings(project_file(point.project)).log_file)
-    src = normpath(joinpath(skc_data_path(), "..", "output", log_name * ".arrow"))
+    src = normpath(joinpath(rkc_data_path(), "..", "output", log_name * ".arrow"))
     mkpath(log_dir)
     cp(src, joinpath(log_dir, log_label(point) * ".arrow"); force = true)
     record_log_kite!(joinpath(log_dir, log_label(point)), point.project)

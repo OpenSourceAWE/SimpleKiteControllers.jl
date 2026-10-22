@@ -12,14 +12,14 @@ const DEPOWER_CONVERSION_FILE = "depower_conversion.yaml"
 const DEPOWER_CONVERSION = Ref{Union{Nothing, NamedTuple}}(nothing)
 
 """
-    load_depower_conversion(file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE))
+    load_depower_conversion(file = joinpath(rkc_data_path(), DEPOWER_CONVERSION_FILE))
         -> NamedTuple
 
 The identified conversion `(; offset, pivot, slope, curvature, l_dp_min, l_dp_max)` of
 `data/depower_conversion.yaml`, see [`awetrim_depower_to_v3kite`](@ref) and the file for
 what each value is and how it was measured.
 """
-function load_depower_conversion(file = joinpath(skc_data_path(), DEPOWER_CONVERSION_FILE))
+function load_depower_conversion(file = joinpath(rkc_data_path(), DEPOWER_CONVERSION_FILE))
     d = YAML.load_file(file)["depower_conversion"]
     return (; offset = Float64(d["offset"]), pivot = Float64(d["pivot"]),
             slope = Float64(d["slope"]), curvature = Float64(d["curvature"]),

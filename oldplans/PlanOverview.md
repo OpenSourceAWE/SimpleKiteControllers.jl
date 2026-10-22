@@ -22,7 +22,7 @@ It shall have the following columns:
 
 One row for each wind speed. The wind speed is also part of the folder name, v03 means 3 m/s ground wind speed at 6 m height.
 
-The script `create_overview.jl` in the examples folder of the SimpleKiteControllers project shall generate the overview. It shall be added to the menu.jl file.
+The script `create_overview.jl` in the examples folder of the RobustKiteControllers project shall generate the overview. It shall be added to the menu.jl file.
 
 ## Corrections
 In the script create_overview.jl, change the column names of the generated table:

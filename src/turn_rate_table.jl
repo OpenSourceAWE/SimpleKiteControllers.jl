@@ -77,7 +77,7 @@ Read and parse the system project's `turn_rate_coeffs` file
 ([`turn_rate_coeffs_file`](@ref)) fresh from disk.
 """
 function _load_turn_rate_table(project = project_file())
-    path = joinpath(skc_data_path(), turn_rate_coeffs_file(project))
+    path = joinpath(rkc_data_path(), turn_rate_coeffs_file(project))
     raw = YAML.load_file(path)
     conditions = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in raw["conditions"])
     # NamedTuple[...] and not a bare comprehension: over an empty `entries: []` the

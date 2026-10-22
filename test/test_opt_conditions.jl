@@ -8,8 +8,8 @@ Unit tests for what the optimizer is sent about a run (`src/opt_conditions.jl`):
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: inflow_from_settings, cap_wind_speed, winch_from_wc,
+using RobustKiteControllers
+import RobustKiteControllers: inflow_from_settings, cap_wind_speed, winch_from_wc,
     optimizer_conditions, WCSettings, TrajOptSettings, AWETRIM_SOFTMINUS_BETA, AtmosphericModel,
     calc_wind_factor
 using KiteUtils: KiteUtils
@@ -49,7 +49,7 @@ using KiteUtils: KiteUtils
     @testset "cap_wind_speed" begin
         data_path = KiteUtils.get_data_path()
         try
-            KiteUtils.set_data_path(skc_data_path())
+            KiteUtils.set_data_path(rkc_data_path())
             set = KiteUtils.Settings(project_file("system_reelout_maasvlakte.yaml"))
             @test cap_wind_speed(TrajOptSettings(; pattern_elevation_amplitude_max_wind_height = 0.0), set, 8.0) === 8.0
             @test cap_wind_speed(TrajOptSettings(; pattern_elevation_amplitude_max_wind_height = 100.0), set, 8.0) ≈

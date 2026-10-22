@@ -9,8 +9,8 @@ optimizer. The winch controllers are the real ones, from `build_controllers` on 
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: count_laps!, advance_blend!, phase5_fallback!, release_reelout!,
+using RobustKiteControllers
+import RobustKiteControllers: count_laps!, advance_blend!, phase5_fallback!, release_reelout!,
     winch_setpoint!, compliant_hold!, reelout_speed!, entry_force_guard!, build_controllers,
     WCSettings, deliver_lift_in_air!, update_lift_target!, depower_command!, steering_hooks!
 

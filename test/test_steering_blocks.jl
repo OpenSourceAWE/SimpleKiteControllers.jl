@@ -9,8 +9,8 @@ NamedTuple with the fields the blocks read; the course controller and the path a
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: steering_command!, xtrack_input!, loop_gain_scale, _bearing
+using RobustKiteControllers
+import RobustKiteControllers: steering_command!, xtrack_input!, loop_gain_scale, _bearing
 using LinearAlgebra: norm
 
 @testset verbose = true "steering_blocks" begin

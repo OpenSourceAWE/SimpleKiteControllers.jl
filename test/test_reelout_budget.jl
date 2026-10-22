@@ -8,8 +8,8 @@ numbers, and of `sim_budget`, which reads its inputs from the Maasvlakte project
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: BUDGET_KNOT, BUDGET_F_COEF, BUDGET_REEL_MARGIN, BUDGET_ENTRY,
+using RobustKiteControllers
+import RobustKiteControllers: BUDGET_KNOT, BUDGET_F_COEF, BUDGET_REEL_MARGIN, BUDGET_ENTRY,
     BUDGET_TAIL, BUDGET_BELOW_KNOT_EXPONENT, AtmosphericModel, calc_wind_factor, _drum_speed_limit
 import KiteUtils
 
@@ -63,7 +63,7 @@ import KiteUtils
     @testset "sim_budget" begin
         data_path = KiteUtils.get_data_path()
         try
-            KiteUtils.set_data_path(skc_data_path())   # where the project's wc_settings file lives
+            KiteUtils.set_data_path(rkc_data_path())   # where the project's wc_settings file lives
             project = project_file("system_reelout_maasvlakte.yaml")
             set = KiteUtils.Settings(project)
             fcs = FC_Settings(fc_settings(project))
@@ -77,7 +77,7 @@ import KiteUtils
             for wind in (8.25, 3.5)
                 b = reelout_budget(wind, set.v_wind, set.sim_time;
                                    l_reel = fcs.reelout.reelout_l_max - set.l_tether,
-                                   kv = SimpleKiteControllers._wc_settings_value(project, "kv"),
+                                   kv = RobustKiteControllers._wc_settings_value(project, "kv"),
                                    v_cap = _drum_speed_limit(project), wind_factor)
                 @test sim_budget(project, set, fcs, nothing, wind, set.v_wind) ≈ b.time
             end

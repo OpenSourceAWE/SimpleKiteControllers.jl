@@ -13,7 +13,7 @@ offers the project selection, `build_turn_rate_table.jl`, `plot_c1_c2.jl`,
 
 ## Turn-rate law
 
-### [`build_turn_rate_table.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/build_turn_rate_table.jl)
+### [`build_turn_rate_table.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/build_turn_rate_table.jl)
 Fills `data/turn_rate_coeffs.yaml`, the table [`turn_rate_coeffs`](@ref) interpolates in. For
 each depower it flies three relay flights low in the wind window, at fixed steering amplitudes:
 each flight relays about a crosswind heading, reverses at a given azimuth and holds an elevation
@@ -24,40 +24,40 @@ do, and it rewrites the file after every depower, so a diverged run costs only o
 the script re-identifies every depower; `run_example("build_turn_rate_table.jl"; remake = false)`
 flies only the missing or failed ones.
 
-### [`identify_kite_delay_scaling.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_kite_delay_scaling.jl)
+### [`identify_kite_delay_scaling.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/identify_kite_delay_scaling.jl)
 Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower and two or more
 wind speeds, fits how the kite's dead time and lag scale with the apparent wind speed,
 `x ∝ v_a^-exp`, and writes the two exponents, with their provenance, into the course-loop model
 file of the selected project.
 
-### [`identify_pattern_delay.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_pattern_delay.jl)
+### [`identify_pattern_delay.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/identify_pattern_delay.jl)
 Flies figures of eight at three tether lengths and several wind speeds and a weak-wind reel-out,
 identifies the kite's response time on each log and fits the pattern delay approximation, the response time over
 the apparent wind speed, which it writes into the course-loop model file of the selected project.
 
-### [`identify_depower_factor.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_depower_factor.jl)
+### [`identify_depower_factor.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/identify_depower_factor.jl)
 Flies the figure of eight at 300 m and 7 m/s at several depower settings, identifies the kite's
 response time on each log and fits how it grows with the depower relative to the pattern delay approximation,
 which it writes into the course-loop model file of the selected project.
 
-### [`identify_kite_correction.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/identify_kite_correction.jl)
+### [`identify_kite_correction.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/identify_kite_correction.jl)
 Measures the kite's steering → heading response with a multisine injected into the steering
 command of a figure of eight at 300 m, writes its ratio to the turn-rate law as a table (the
 measured kite correction) and checks that the lag-lead correction in the course-loop model file
 stays conservative against it.
 
-### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
+### [`plot_c1_c2.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/plot_c1_c2.jl)
 Plots the turn-rate table: `c1`, `c2`, the dead time and the lag against the depower with error
 bars, one figure per `body_damping`. It writes the paper's figure of the turn-rate law,
 `turn_rate_low_pattern.pdf`.
 
-### [`plot_turn_rate_identification.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_turn_rate_identification.jl)
+### [`plot_turn_rate_identification.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/plot_turn_rate_identification.jl)
 Flies the low-elevation flights of `build_turn_rate_table.jl` at one depower, without writing
 the table, and compares the fit with the table's row and with an extended law. Each flight is
 fitted on its own and all steady flights together, and turn rate, apparent wind speed, kite speed
 and elevation are plotted over time.
 
-### [`plot_relay_low_elevation.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_relay_low_elevation.jl)
+### [`plot_relay_low_elevation.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/plot_relay_low_elevation.jl)
 Draws the relay excitation of one low-elevation identification flight as a figure for the paper:
 the heading with the edges of the relay band, the elevation, and the commanded, actual and
 delay-shifted steering.
@@ -141,12 +141,12 @@ otherwise the law is identified on a different kite than the one it is written f
 
 ## Validation of the course-loop model
 
-### [`validate_margins.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/validate_margins.jl)
+### [`validate_margins.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/validate_margins.jl)
 Pushes the simulated course loop until it rings, by raising the steering gain or adding steering
 delay, and compares the critical gain factor and extra delay, and their ringing frequencies, with
 the gain margin, delay margin and crossover frequencies of the linear model of the course loop.
 
-### [`measure_course_link.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/measure_course_link.jl)
+### [`measure_course_link.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/measure_course_link.jl)
 Measures the command → course response of the course loop by multisine injection at 300, 200
 and 150 m (points `D`, `A` and `F`, 7 m/s), a baseline and an injection run each with the tape's
 rate limit raised, writes it to `data/course_link_measured.csv` and prints the delay and gain
@@ -154,12 +154,12 @@ margins of the loop on the measured plant next to the model's. About 15 minutes;
 `run_example("measure_course_link.jl"; fly = false)` evaluates the saved runs in
 `output/course_link/` again.
 
-### [`plot_frf_validation.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/plot_frf_validation.jl)
+### [`plot_frf_validation.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/plot_frf_validation.jl)
 Plots the frequency response of the course loop measured by injection in `simple_fig8.jl` over
 the Bode plot of the linear model at the same operating point, one column per tether length
 (150, 200 and 300 m), and writes `docs/course_loop_frf.png`.
 
-### [`xtrack_step_analysis.jl`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/examples/xtrack_step_analysis.jl)
+### [`xtrack_step_analysis.jl`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/examples/xtrack_step_analysis.jl)
 Evaluates cross-track step tests of the guided course loop: the measured response of the
 cross-track error to a step of the attractor offset, at constant length and during the reel-out,
 fitted with a second-order model and compared with the closed-loop model of

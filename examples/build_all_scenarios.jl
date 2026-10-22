@@ -34,9 +34,9 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 import YAML
-using SimpleKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs, with_run_log, first_error_line
-using SimpleKiteControllers: startup_ladder_report, ladder_line
+using RobustKiteControllers: read_gui_field, write_gui_field, scenario_site, set_selected_project
+using RobustKiteControllers: run_example, script_inputs, with_run_log, first_error_line
+using RobustKiteControllers: startup_ladder_report, ladder_line
 
 "Project flown at each site, see `scenario_site`; comment out a line to skip that site"
 const SITE_PROJECTS = [

@@ -7,7 +7,7 @@
 # bin/run_julia picks it up automatically. It speeds up package load time, not
 # init() — see docs/sysimage_notes.md and examples/create_sys_image.jl, which
 # also bakes in ModelingToolkit and SymbolicAWEModels everywhere except
-# Windows, where the full image is too large. Neither SimpleKiteControllers nor
+# Windows, where the full image is too large. Neither RobustKiteControllers nor
 # V3Kite goes into the image, so Revise keeps applying to both sources; V3Kite
 # is left to Pkg's ordinary precompilation, which this script warms up below.
 #
@@ -57,6 +57,6 @@ echo "System image created at $SOFILE"
 # this triggers Pkg's ordinary precompilation of it against the new sysimage, so
 # its PrecompileTools workload lands in a pkgimage cache keyed to it.
 echo "--- Precompiling examples/ with the new system image ---"
-julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots, SimpleKiteControllers'
+julia --startup-file=no --project=examples -J "$SOFILE" -e 'using V3Kite, MakieControlPlots, RobustKiteControllers'
 
 echo "Done."

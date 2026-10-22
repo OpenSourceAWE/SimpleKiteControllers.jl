@@ -13,8 +13,8 @@ using DiscretePIDs
 using ControlSystemsBase
 using LinearAlgebra: diagm
 using Random
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file
+using RobustKiteControllers
+using RobustKiteControllers: project_file
 
 @testset verbose=true "course_loop_model.jl (V5)" begin
     @testset "controller: course_pid vs DiscretePID" begin
@@ -52,7 +52,7 @@ using SimpleKiteControllers: project_file
     end
 
     @testset "provenance: the model belongs to the kite flown" begin
-        projects = filter(f -> startswith(f, "system_"), readdir(skc_data_path()))
+        projects = filter(f -> startswith(f, "system_"), readdir(rkc_data_path()))
         id = kite_id("system_reelout_maasvlakte.yaml")
         @test all(project -> kite_id(project) == id, projects)
         for project in projects
@@ -62,7 +62,7 @@ using SimpleKiteControllers: project_file
         # A copy of the project with another wing drag is another kite: every step is stale.
         mktempdir() do dir
             project = project_file("system_reelout_maasvlakte.yaml")
-            system = SimpleKiteControllers.YAML.load_file(project)["system"]
+            system = RobustKiteControllers.YAML.load_file(project)["system"]
             cp(project, joinpath(dir, "system_copy.yaml"))
             cp(joinpath(dirname(project), system["sim_settings"]), joinpath(dir, system["sim_settings"]))
             kite = read(joinpath(dirname(project), system["kite_settings"]), String)

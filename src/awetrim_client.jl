@@ -3,7 +3,7 @@
 
 # Julia client for the AWETrim reelout flight-path optimizer (REST). Part of the
 # package, not exported: the example scripts import the names they use
-# (`using SimpleKiteControllers: InitParams, opt_init, ...`). It leaves no
+# (`using RobustKiteControllers: InitParams, opt_init, ...`). It leaves no
 # state of its own behind; loading it neither starts nor contacts a server.
 #
 #     ensure_server()
@@ -50,7 +50,7 @@
 # `opt_trajectory`.
 
 "The repository root: `bin/run_server` and the `output/` caches are found from here."
-const SKC_ROOT = normpath(joinpath(@__DIR__, ".."))
+const RKC_ROOT = normpath(joinpath(@__DIR__, ".."))
 "Default server address; every function below takes `url` to override it."
 const AWETRIM_URL = "http://127.0.0.1:8000"
 
@@ -228,7 +228,7 @@ StructTypes.omitempties(::Type{PatternLimits}) = (:climb_angle_max,)
 The file recording failed optimizer requests, shared by every script and every
 sweep worker on this machine. Delete it to retry them all.
 """
-const OPT_FAILURE_CACHE = joinpath(SKC_ROOT, "output", "opt_failure_cache.yaml")
+const OPT_FAILURE_CACHE = joinpath(RKC_ROOT, "output", "opt_failure_cache.yaml")
 
 """
     opt_request_key(p::InitParams) -> String
@@ -370,6 +370,8 @@ because a cache nobody can read is a cache nobody trusts.
 function record_opt_failure!(p::InitParams, reason::AbstractString;
                              file::AbstractString = OPT_FAILURE_CACHE)
     mkpath(dirname(file))
+    dp = p.depower
+    depower_mode = dp === nothing ? "optimize" : dp.mode
     with_file_lock(file * ".lock") do
         entries = opt_failures(; file)
         entries[opt_request_key(p)] = Dict(
@@ -378,7 +380,7 @@ function record_opt_failure!(p::InitParams, reason::AbstractString;
                                            length(p.trajectory.elevation); digits = 2),
             "wind_speed_m_s" => p.inflow_conditions.wind_speed,
             "min_turn_radius_m" => something(p.min_turn_radius, 0.0),
-            "depower_mode" => p.depower === nothing ? "optimize" : p.depower.mode,
+            "depower_mode" => depower_mode,
             "reason" => String(reason),
             "when" => format(now(), "yyyy-mm-dd HH:MM:SS"))
         open(file, "w") do io
@@ -508,6 +510,7 @@ function post(path, payload; url = AWETRIM_URL, timeout = 600, attempts = 3)
             sleep(0.2)
         end
     end
+    error("unreachable: the last attempt returns or rethrows")
 end
 
 get_json(path; url = AWETRIM_URL) = JSON3.read(HTTP.get(url * path).body, Dict{String,Any})
@@ -717,7 +720,7 @@ end
 The directory of the solution cache, one JSON file per chain key, shared by
 every script and sweep worker on this machine. Delete it to re-solve everything.
 """
-const OPT_CHAIN_CACHE = joinpath(SKC_ROOT, "output", "opt_chain_cache")
+const OPT_CHAIN_CACHE = joinpath(RKC_ROOT, "output", "opt_chain_cache")
 
 """
     OptChain(url = AWETRIM_URL; successes = true, failures = true,
@@ -942,9 +945,10 @@ sent.
 """
 function chain_step(oc::OptChain, sp::StepParams; wait = true,
                     inflow_conditions = nothing, max_iter = nothing)
-    isnothing(oc.config) && error("chain_step before chain_init: there is no session to step.")
+    cfg = oc.config
+    isnothing(cfg) && error("chain_step before chain_init: there is no session to step.")
     step_fields = (_key_fields(sp), _key_fields(inflow_conditions), max_iter)
-    config = _step_config(oc.config, sp, inflow_conditions)
+    config = _step_config(cfg, sp, inflow_conditions)
     if !isnothing(oc.replay)
         isempty(oc.replay) && throw(_cached_422(Dict{String, Any}("when" => "replay",
             "reason" => "the replayed run installed no further path")))
@@ -971,7 +975,7 @@ function chain_step(oc::OptChain, sp::StepParams; wait = true,
         key = chain_key(chain_key(oc.state, "rebuilt"), step_fields)
         entry = _chain_entry(oc, key)
     end
-    if usable(entry)
+    if entry !== nothing && usable(entry)
         oc.hits += 1
         oc.state = key
         oc.config = config
@@ -1250,8 +1254,8 @@ function ensure_server(url::AbstractString = AWETRIM_URL;
     host = m[1]
     port = isnothing(m[2]) ? "8000" : m[2]
     verbose && @info "No AWETrim server at $url — starting one (bin/run_server start)."
-    script = joinpath(SKC_ROOT, "bin", "run_server")
-    run(Cmd(`$script start --host $host --port $port`; dir = SKC_ROOT))
+    script = joinpath(RKC_ROOT, "bin", "run_server")
+    run(Cmd(`$script start --host $host --port $port`; dir = RKC_ROOT))
     server_running(url) ||
         error("bin/run_server reported success, but $url/health still does not answer.")
     return url
@@ -1270,8 +1274,8 @@ and one on another machine is not this script's to stop. Both cases leave a
 server answering at `url`, which is what the `false` return reports.
 """
 function stop_server(url::AbstractString = AWETRIM_URL; verbose = true)
-    script = joinpath(SKC_ROOT, "bin", "run_server")
-    run(Cmd(`$script stop`; dir = SKC_ROOT))
+    script = joinpath(RKC_ROOT, "bin", "run_server")
+    run(Cmd(`$script stop`; dir = RKC_ROOT))
     stopped = !server_running(url)
     if !stopped && verbose
         @warn "Something still answers at $url — a server started in the foreground, \

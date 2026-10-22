@@ -24,8 +24,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file, skc_data_path
+using RobustKiteControllers
+using RobustKiteControllers: project_file, rkc_data_path
 using KiteUtils: Settings
 using ControlSystemsBase
 using Statistics: mean
@@ -47,7 +47,7 @@ const FRF_FONTS = (; regular = "TeX Gyre Termes", bold = "TeX Gyre Termes Bold",
 "The measured command → course points of `key`: frequency [Hz], response, `v_a` [m/s]."
 function read_course_link(key)
     rows = filter(l -> !startswith(l, "#") && !startswith(l, "point,"),
-                  readlines(joinpath(skc_data_path(), "course_link_measured.csv")))
+                  readlines(joinpath(rkc_data_path(), "course_link_measured.csv")))
     rows = [split(l, ",") for l in rows if split(l, ",")[1] == key]
     f = [parse(Float64, r[3]) for r in rows]
     G = [complex(parse(Float64, r[4]), parse(Float64, r[5])) for r in rows]

@@ -55,8 +55,8 @@ function simulation_block(script, project, turbulence, wind_speed, run_time)
         "time" => (format(run_time, "HH:MM:SS"), "wall-clock time the run finished"),
         "date" => (format(run_time, "yyyy-mm-dd"), "wall-clock date the run finished"),
         "hostname" => (gethostname(), "machine the run executed on"),
-        "git_hash" => (git.hash, "SimpleKiteControllers.jl commit hash"),
-        "git_status" => (git.status, "SimpleKiteControllers.jl working tree: clean or dirty"))
+        "git_hash" => (git.hash, "RobustKiteControllers.jl commit hash"),
+        "git_status" => (git.status, "RobustKiteControllers.jl working tree: clean or dirty"))
 end
 
 """
@@ -377,9 +377,9 @@ function run_input_files(project, project_set)
     return [
         project,                                                  # system project
         joinpath(dirname(project), project_set.sim_settings),     # plant/solver settings
-        joinpath(skc_data_path(), KiteUtils.wc_settings(project)), # winch gains
-        joinpath(skc_data_path(), fc_settings(project)),          # flight-controller tuning
-        joinpath(skc_data_path(), "gui.yaml"),                    # project/sim_time/turbulence choice
+        joinpath(rkc_data_path(), KiteUtils.wc_settings(project)), # winch gains
+        joinpath(rkc_data_path(), fc_settings(project)),          # flight-controller tuning
+        joinpath(rkc_data_path(), "gui.yaml"),                    # project/sim_time/turbulence choice
     ]
 end
 

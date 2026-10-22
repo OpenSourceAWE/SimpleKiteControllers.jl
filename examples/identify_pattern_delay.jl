@@ -41,8 +41,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: run_example, script_inputs, project_file, skc_data_path
+using RobustKiteControllers
+using RobustKiteControllers: run_example, script_inputs, project_file, rkc_data_path
 using Printf
 import Dates
 # `fly_point`, `point_delay`, `log_label`, `wrap_comment` and `update_yaml_values!`.
@@ -101,7 +101,7 @@ end
 
 if save
     project = project_file(selected_project())
-    file = joinpath(skc_data_path(), course_loop_model_file(project))
+    file = joinpath(rkc_data_path(), course_loop_model_file(project))
     projects = sort(unique(splitext(point.project)[1] for point in points
                            if any(res -> res.label == log_label(point), used)))
     approx_comment = wrap_comment(

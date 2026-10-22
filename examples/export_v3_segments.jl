@@ -44,7 +44,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using V3Kite: v3_data_path, load_sys_struct_from_yaml, set_data_path, Settings, SymbolicAWEModels
-using SimpleKiteControllers: project_file, selected_project
+using RobustKiteControllers: project_file, selected_project
 
 # This package's data/ is the default for config file lookups; the model's is asked for by name.
 set_data_path(normpath(joinpath(@__DIR__, "..", "data")))

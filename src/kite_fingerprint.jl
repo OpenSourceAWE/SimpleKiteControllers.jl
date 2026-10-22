@@ -103,7 +103,7 @@ function stale_identification_steps(project = project_file(); through = length(I
     if through >= 1
         table_file = turn_rate_coeffs_file(path)
         rows = filter(e -> _is_usable_turn_rate_entry(_parse_turn_rate_entry(e)),
-                      YAML.load_file(joinpath(skc_data_path(), table_file))["entries"])
+                      YAML.load_file(joinpath(rkc_data_path(), table_file))["entries"])
         others = filter(e -> get(e, "kite_id", nothing) != id, rows)
         if isempty(rows)
             note(1, "$table_file has no usable row")
@@ -115,7 +115,7 @@ function stale_identification_steps(project = project_file(); through = length(I
     end
     if through >= 2
         model_file = course_loop_model_file(path)
-        provenance = something(get(YAML.load_file(joinpath(skc_data_path(), model_file)), "provenance", nothing),
+        provenance = something(get(YAML.load_file(joinpath(rkc_data_path(), model_file)), "provenance", nothing),
                                Dict{String, Any}())
         for step in 2:through
             found = get(provenance, IDENTIFICATION_STEPS[step].key, nothing)

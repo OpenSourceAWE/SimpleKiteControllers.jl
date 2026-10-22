@@ -52,13 +52,13 @@ using YAML
 using PrettyTables
 using MakieControlPlots
 using Base64
-using SimpleKiteControllers: skc_data_path
+using RobustKiteControllers: rkc_data_path
 # `scenario_site`: the site folder of the active project.
-using SimpleKiteControllers: scenario_site
+using RobustKiteControllers: scenario_site
 
 const SIMRESULTS_SCENARIOS_DIR = normpath(joinpath(@__DIR__, "..", "..", "SimulationResults", "scenarios"))
 const MAX_TETHER_FORCE_N =
-    YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
+    YAML.load_file(joinpath(rkc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
 # yaml key => displayed column header
 const COLUMNS = ("date" => "date", "time" => "time", "wind_speed_gnd" => "v_wind",
                  "power_ratio" => "power_ratio",

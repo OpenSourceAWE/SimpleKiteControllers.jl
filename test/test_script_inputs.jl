@@ -7,7 +7,7 @@ script it includes, and `script_inputs` merges them over the script's defaults.
 """
 
 using Test
-using SimpleKiteControllers
+using RobustKiteControllers
 
 @testset verbose = true "script_inputs" begin
     dir = mktempdir()

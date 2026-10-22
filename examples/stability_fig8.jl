@@ -84,8 +84,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file
+using RobustKiteControllers
+using RobustKiteControllers: project_file
 using KiteUtils: Settings, set_data_path
 using ControlSystemsBase, RobustAndOptimalControl, MakieControlPlots
 using Printf

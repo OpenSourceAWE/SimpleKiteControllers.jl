@@ -26,7 +26,7 @@ the run.
 
 using Downloads
 
-using SimpleKiteControllers: run_example, script_inputs
+using RobustKiteControllers: run_example, script_inputs
 
 # The caller's inputs, see the docstring; a plain `include` takes the environment's. Plain globals
 # instead of consts so this file can be included repeatedly into Main without "already declared"

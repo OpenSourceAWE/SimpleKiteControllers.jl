@@ -42,9 +42,9 @@ end
 using Printf
 import YAML
 
-using SimpleKiteControllers: selected_scenarios_dir, read_gui_field, set_selected_project
-using SimpleKiteControllers: run_example, script_inputs, muted, latest_global
-using SimpleKiteControllers: project_file, check_model_provenance
+using RobustKiteControllers: selected_scenarios_dir, read_gui_field, set_selected_project
+using RobustKiteControllers: run_example, script_inputs, muted, latest_global
+using RobustKiteControllers: project_file, check_model_provenance
 (; verbose) = script_inputs(@__FILE__, (; verbose = false))
 
 "Project analyzed at each site, as in `build_all_scenarios.jl`; comment out a line to skip that site"

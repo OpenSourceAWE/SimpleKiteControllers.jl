@@ -4,12 +4,12 @@
 # The transfer-function half of src/course_loop_model.jl, loaded with `using ControlSystemsBase`.
 # The docstrings are on the stubs there.
 
-module SimpleKiteControllersControlSystemsBaseExt
+module RobustKiteControllersControlSystemsBaseExt
 
 using ControlSystemsBase: tf, ss, c2d, feedback, isstable, margin
 using LinearAlgebra: diagm
-using SimpleKiteControllers: course_loop_model
-import SimpleKiteControllers: course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
+using RobustKiteControllers: course_loop_model
+import RobustKiteControllers: course_pid, turn_rate_plant, delay_margin, guidance_tf, kite_correction
 
 function course_pid(K, Ti, Td, N, Ts)
     z = tf("z", Ts)

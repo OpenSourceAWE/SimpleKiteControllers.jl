@@ -15,7 +15,7 @@
 # A copy of V3Kite's `examples/winch_adapter.jl` — the adapter belongs to the
 # APPLICATION, and this repo is one. Keep the two in step if either changes.
 #
-# Unlike V3Kite's copy it has no `load_wc_settings`: that is SimpleKiteControllers'
+# Unlike V3Kite's copy it has no `load_wc_settings`: that is RobustKiteControllers'
 # own now (`src/winch_setup.jl`), next to `build_winch`, which uses it.
 #
 # `include` it and construct a controller once per run:

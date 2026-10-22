@@ -278,7 +278,7 @@ The four items as answered:
   `el_offset_wing = 0` control at 6.5, each with laps, RMS and max cross-track
   error, and the mean / peak / crest-factor triple for power, tether force and
   reel-out speed — all three scored over the same reeling window
-  (`SimpleKiteControllers.reelout_power`), plus energy, the elevation span, the
+  (`RobustKiteControllers.reelout_power`), plus energy, the elevation span, the
   learnt bias profile and the re-optimization tally. The verdicts are in
   "Where to go next" above: the flown window is 5.5 to 7.0 m/s.
 - Regenerate it with

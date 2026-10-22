@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = SimpleKiteControllers
+CurrentModule = RobustKiteControllers
 ```
 
 # Reel-out runs

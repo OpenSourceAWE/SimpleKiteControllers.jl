@@ -66,8 +66,8 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using V3Kite
-using SimpleKiteControllers
-using SimpleKiteControllers: project_file
+using RobustKiteControllers
+using RobustKiteControllers: project_file
 using ControlSystemsBase, RobustAndOptimalControl
 using Statistics: mean, std
 using Dates
@@ -230,7 +230,7 @@ function run_v1(point::Symbol; gain_factor = 1.0, extra_delay = 0, feedback_only
     set_selected_project(p.project)
     set_selected_sim_time(sim_time)
     set_selected_windspeed(p.wind)
-    V3Kite.set_default_turbulence(0.0; data_path = skc_data_path())
+    V3Kite.set_default_turbulence(0.0; data_path = rkc_data_path())
 
     # The reel-out script takes a test input as `steer_disturbance`, called with the absolute time.
     test_input = p.script == "simple_opt_reelout.jl" ?
@@ -279,7 +279,7 @@ end
 """
     bandpass(x, dt; f_lo, f_hi) -> Vector{Float64}
 
-Crude band-pass, in the style of `SimpleKiteControllers.fig8_metrics`'s
+Crude band-pass, in the style of `RobustKiteControllers.fig8_metrics`'s
 `hf_std`: highpass by subtracting a centred moving average over `1/f_lo`
 seconds, then lowpass by moving-averaging the result over `1/f_hi` seconds.
 Adequate for V1's onset/ringing check, not a substitute for V2's proper FRF.
@@ -453,7 +453,7 @@ to the end of the run — restricted to samples still in phase 4, and, for point
 `:C` only, cut short at the first excursion of `v_a` more than 10 % from its
 own mean over that stretch (`oldplans/Plan_model_validation.md#operating-points`) —
 report the window's mean/std `v_a`, mean depower, the tape's rate-limited
-fraction (as `SimpleKiteControllers.print_fig8_metrics` does), and, if
+fraction (as `RobustKiteControllers.print_fig8_metrics` does), and, if
 `baseline` is given (another `analyze` result with `gain_factor = 1`,
 `extra_delay = 0`), the stability verdict from `onset`.
 """

@@ -47,7 +47,7 @@ end
 include(joinpath(@__DIR__, "validate_margins.jl"))
 # `update_yaml_values!`.
 include(joinpath(@__DIR__, "identification_utils.jl"))
-using SimpleKiteControllers: run_example, script_inputs, project_file, skc_data_path, frd_margins
+using RobustKiteControllers: run_example, script_inputs, project_file, rkc_data_path, frd_margins
 using YAML
 using Printf
 import Dates
@@ -94,7 +94,7 @@ function with_fast_tape_cl(f, point)
         set_selected_project(project0)
         set_selected_windspeed(wind0)
         set_selected_sim_time(sim_time0)
-        V3Kite.set_default_turbulence(turbulence0; data_path = skc_data_path())
+        V3Kite.set_default_turbulence(turbulence0; data_path = rkc_data_path())
     end
 end
 
@@ -143,7 +143,7 @@ all(x -> x.model.dm <= x.measured.dm && x.model.gm <= x.measured.gm, results) ||
     @warn "measure_course_link: the model is not conservative at every point, see the table above."
 
 if save
-    file = joinpath(skc_data_path(), "course_link_measured.csv")
+    file = joinpath(rkc_data_path(), "course_link_measured.csv")
     open(file, "w") do io
         println(io, "# Command -> course, rel_steering -> course [rad per unit steering], measured by injected")
         println(io, "# multisines in simple_fig8.jl (V2 of oldplans/Plan_model_validation.md), steering_gain 10,")

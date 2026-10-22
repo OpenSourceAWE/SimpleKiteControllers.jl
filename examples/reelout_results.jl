@@ -59,7 +59,7 @@ function score_log(setup, st::RunState)
                        min_span_frac = fcs.run.min_span_frac, require_final = true,
                        max_force = project_set.max_force, cross_track = d_raw_log,
                        # A parking kite leaves the path on purpose: the pattern ends where it parks.
-                       t_end = something(SimpleKiteControllers.park_start_time(fcs, sl), Inf))
+                       t_end = something(RobustKiteControllers.park_start_time(fcs, sl), Inf))
     st.fig8m = fig8m
     # A run that stopped before the metrics window scores nothing, and every line
     # below dereferences `fig8m`. Say so, instead of a `FieldError` on `Nothing`.
@@ -290,7 +290,7 @@ function traj_opt_block(setup, st::RunState, power_block, feasibility, scored)
     (; sl, fig8m, az_amp_mean, el_h_mean, span_margins, span_worst, el_min_final, lift_mean) = scored
     droop_mean = [st.droop_n[b] > 0 ? st.droop_flown[b] / st.droop_n[b] : NaN
                   for b in 1:st.n_droop_bins]
-    guess_a, guess_b, _ = SimpleKiteControllers.guess_in_box(tos.guess.guess_a, tos.guess.guess_b,
+    guess_a, guess_b, _ = RobustKiteControllers.guess_in_box(tos.guess.guess_a, tos.guess.guess_b,
                                                              el_center_seed, opt_box)
     OrderedDict{String, Any}(
         "power" => power_block,
@@ -666,14 +666,14 @@ function archive_run(setup, run_time, opt_paths_file)
     end
     input_files = [
         run_input_files(project, project_set);
-        joinpath(skc_data_path(), winch_table_file(project)); # f_low/force_limit(v_wind) table
+        joinpath(rkc_data_path(), winch_table_file(project)); # f_low/force_limit(v_wind) table
         # The identified c1/c2/delay: they set the steering response and the
         # curvature gate, and a re-identification replaces the rows in place.
-        joinpath(skc_data_path(), turn_rate_coeffs_file(project)); # turn-rate law
+        joinpath(rkc_data_path(), turn_rate_coeffs_file(project)); # turn-rate law
         # Without this the archive cannot reproduce its own run: the guess decides
         # WHICH optimum the solve converges to, and reopt_*/min_feasibility_margin
         # decide what is re-anchored and what is flown.
-        joinpath(skc_data_path(), traj_opt_settings_file(project))  # optimizer guess and knobs
+        joinpath(rkc_data_path(), traj_opt_settings_file(project))  # optimizer guess and knobs
     ]
     output_files = [
         joinpath(output_path, log_name * ".arrow"),
@@ -742,7 +742,7 @@ function reelout_results(setup, st::RunState, timing)
     # A parking climb ends the reel-out power (and the power ratio) where it starts.
     reelout = reelout_block(scored.sl, setup.fcs, setup.l_tether; stop_reason = st.stop_reason,
                             laps_reeled = st.fig8_idx_progress / st.n_path,
-                            t_end = something(SimpleKiteControllers.park_start_time(setup.fcs, scored.sl), Inf))
+                            t_end = something(RobustKiteControllers.park_start_time(setup.fcs, scored.sl), Inf))
     summary["reelout"] = reelout.block
     power = power_comparison(setup, st, scored.sl, reelout.rp, reelout.p4)
     summary["traj_opt"] = traj_opt_block(setup, st, power.block, feasibility_block(setup, st), scored)

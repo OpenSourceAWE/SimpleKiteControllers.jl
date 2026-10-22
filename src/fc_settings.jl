@@ -7,7 +7,7 @@ file: the entry state machine, the depower flown on the pattern, the heading PID
 its gain schedule, the heading/course feedback blend and the entry descent limiter.
 [`CourseControllerSettings`](@ref) is built from it.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -80,7 +80,7 @@ end
 The steering feed-forward from the reference path's curvature, section
 `feedforward:` of [`FC_Settings`](@ref)'s YAML file. Active from phase 4 on.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -109,7 +109,7 @@ The pattern geometry and the attractor guidance, section `pattern:` of
 [`FC_Settings`](@ref)'s YAML file, all angles in degrees; a SMALLER lemniscate is a
 TIGHTER one. [`FigureEightController`](@ref) is built from it.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -142,7 +142,7 @@ file: `course.depower_setpoint`, `pattern.f8_a` and `pattern.f8_b` are flown up 
 [`wind_schedule`](@ref). Applied once at the start of `simple_fig8.jl`; reel-out runs do
 not use it.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml).
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml).
 
 # Fields
 
@@ -167,7 +167,7 @@ file: how compliant the force-mode winch is (see [`winch_force_gains`](@ref)) an
 force guards of the entry and the first lap. The winch gains themselves, of both
 modes, and the reel-out law are in `wc_settings.yaml`.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -286,7 +286,7 @@ end
 The simulation conditions and the pass criteria of [`FC_Settings`](@ref),
 section `run:` of its YAML file.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -328,7 +328,7 @@ unique over all parts, so the constructors and [`apply_overrides!`](@ref) also t
 field by its bare name: `FC_Settings(; f8_a = 25.0)`, `FC_Settings(fcs; f8_a = 25.0)`
 for a modified copy.
 
-YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/SimpleKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
+YAML (fixed length): [`fc_settings.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings.yaml) and [`fc_settings_fig8_150m.yaml`](https://github.com/OpenSourceAWE/RobustKiteControllers.jl/blob/main/data/fc_settings_fig8_150m.yaml) \\
 YAML (reel-out): [`fc_settings_reelout.yaml`](@ref example_fc_settings_reelout).
 
 # Fields
@@ -438,10 +438,10 @@ function get_fc_field(fcs::FC_Settings, key::Symbol)
 end
 
 """
-    FC_Settings(filename::String; path=skc_data_path()) -> FC_Settings
+    FC_Settings(filename::String; path=rkc_data_path()) -> FC_Settings
 
 Load flight-controller settings from the YAML file `filename` under `path`, which
-defaults to this package's own [`skc_data_path`](@ref) rather than
+defaults to this package's own [`rkc_data_path`](@ref) rather than
 `KiteUtils.get_data_path()` — the latter points at the *kite model's* data
 directory during a run, and these settings belong to the controller. Pass `path`
 explicitly to load a variant from elsewhere; an absolute `filename` is used
@@ -454,7 +454,7 @@ setting directly under `fc_settings:` is accepted too: that is the layout of the
 files archived before the split into parts. Such a file may still carry the keys
 of [`MOVED_FC_KEYS`](@ref), which are skipped.
 """
-function FC_Settings(filename::String; path = skc_data_path())
+function FC_Settings(filename::String; path = rkc_data_path())
     file = isabspath(filename) ? filename : joinpath(path, filename)
     fcs = FC_Settings()
     for (key, value) in YAML.load_file(file)["fc_settings"]
@@ -505,7 +505,7 @@ const RETIRED_YAML_KEYS = Dict{String, Any}(
 retired_ok(key, value) = value == RETIRED_YAML_KEYS[key]
 
 """
-    load_yaml_fields!(obj, filename, section; path = skc_data_path()) -> obj
+    load_yaml_fields!(obj, filename, section; path = rkc_data_path()) -> obj
 
 Set every field `section` (a top-level key in the YAML file `filename`) names
 on the mutable struct `obj`, converting each value to the field's declared
@@ -523,7 +523,7 @@ gave that struct a single file reached through the project's `wc_settings:` key
 (PlanWinchcontrol.md), which is V3Kite's `WC_Settings(filename)`'s job now.
 """
 function load_yaml_fields!(obj, filename::AbstractString, section::AbstractString;
-                            path = skc_data_path())
+                            path = rkc_data_path())
     dict = YAML.load_file(isabspath(filename) ? filename :
                           joinpath(path, filename))[section]
     return set_yaml_fields!(obj, dict, filename)
@@ -603,7 +603,7 @@ FigureEightController(fcs::FC_Settings; dt, A = fcs.pattern.f8_a, B = fcs.patter
     project_file(project = "system_fig8_200m.yaml") -> String
 
 Path of the system project to hand to the kite model, absolute when this package
-carries it in [`skc_data_path`](@ref) and unchanged otherwise, which leaves it a
+carries it in [`rkc_data_path`](@ref) and unchanged otherwise, which leaves it a
 lookup under the active data path.
 
 The absolute form is what makes `sim_settings` this package's file: KiteUtils
@@ -614,7 +614,7 @@ Not a field of [`FC_Settings`](@ref): which plant a run is flown against is not 
 tuning parameter of the controller.
 """
 function project_file(project::String = "system_fig8_200m.yaml")
-    path = joinpath(skc_data_path(), project)
+    path = joinpath(rkc_data_path(), project)
     return isfile(path) ? path : project
 end
 

@@ -139,7 +139,7 @@ V3Kite shall use the WinchControllers package and continue to work as before.
 
 The tests in WinchControllers.jl and in V3Kite must pass.
 
-I already dev'd both packages in SimpleKiteControllers.jl.
+I already dev'd both packages in RobustKiteControllers.jl.
 
 ### DONE and VERIFIED (2026-08-16)
 
@@ -150,7 +150,7 @@ code takes PLAIN SCALARS — force, speed, length, `dt`, and the drum's
 radius/gear ratio/friction. V3Kite then keeps one-line `V3KITE`-typed methods
 that pull those scalars out of the model and delegate, which is what makes
 "continue to work as before" true: **V3Kite's public API is byte-for-byte the
-same**, so SimpleKiteControllers' three example scripts needed no edit at all.
+same**, so RobustKiteControllers' three example scripts needed no edit at all.
 
 **One struct.** WinchControllers' `WCSettings` absorbed all 9 of V3Kite's
 former `WC_Settings` fields (`winch_pos_kp`, `winch_speed_k`, `winch_speed_ti`,
@@ -183,7 +183,7 @@ and it now ERRORS on an unknown key instead of silently ignoring it.
 |:--|--:|
 | WinchControllers.jl `Pkg.test()` (incl. Aqua) | **126/126** |
 | V3Kite `Pkg.test()` | **405/405** |
-| SimpleKiteControllers `test/runtests.jl` | **120/120** |
+| RobustKiteControllers `test/runtests.jl` | **120/120** |
 | end-to-end `simple_reelout.jl` | all 8 criteria pass |
 
 The end-to-end run is the strongest evidence: every reported number is
@@ -234,7 +234,7 @@ HARDCODED FILENAME, because the project's `wc_settings:` key was already claimed
 by V3Kite's file — so switching projects could not switch the reel-out winch
 tuning. It routes through the project key like everything else now.
 
-**VERIFIED:** SimpleKiteControllers `test/runtests.jl` clean, and a reel-out run
+**VERIFIED:** RobustKiteControllers `test/runtests.jl` clean, and a reel-out run
 on the single file reproduces the two-file run EXACTLY — RMS d 1.24°, force mean
 3467 N (CV 3.9 %), reel-out force 3348 N, power 7943 W, ring period 2.62 s,
 E 682.1 kJ, 175 → 350 m, all 8 criteria pass. Not one digit moved, which is the
@@ -244,7 +244,7 @@ show up here.
 **Still open:**
 - **Two `[sources]` path entries must be dropped once a WinchControllers release
   ships the merge**: `V3Kite/Project.toml` → `../WinchControllers.jl`, and
-  `SimpleKiteControllers/examples/Project.toml` → `../../WinchControllers.jl`.
+  `RobustKiteControllers/examples/Project.toml` → `../../WinchControllers.jl`.
   Both are machine-specific and not committable as-is; each carries a comment
   saying so. The second was needed because this repo's manifest was pulling
   WinchControllers from the REGISTRY even though V3Kite was dev'd — so V3Kite's
@@ -306,9 +306,9 @@ regardless.)
   `load_wc_settings`. This is the plant/controller glue, and it belongs to the
   APPLICATION: V3Kite must not depend on a controller, WinchControllers must not
   depend on a kite model. It is duplicated in `V3Kite/examples/` and
-  `SimpleKiteControllers/examples/` — keep the two in step.
+  `RobustKiteControllers/examples/` — keep the two in step.
 - **Call sites converted:** V3Kite's 5 examples + 3 test files, and
-  SimpleKiteControllers' 3 scripts. `simple_reelout.jl` is the delicate one: its
+  RobustKiteControllers' 3 scripts. `simple_reelout.jl` is the delicate one: its
   `v_ff` and its non-default limits (`rcs.v_sat`, `rcs.max_acc` = 8 rather than
   the plant's 4 m/s²) are passed explicitly through the adapter.
 
@@ -323,7 +323,7 @@ not. `NLsolve` and the rest pruned out of V3Kite's manifest.
 | WinchControllers.jl | 126/126 |
 | V3Kite | **395/395** (was 405; the drop is test rewrites — the `WC_Settings` testset consolidated and the `winch_ctrl` assertions removed — not failures) |
 | KiteControllers.jl | 232/232 |
-| SimpleKiteControllers | 120/120 |
+| RobustKiteControllers | 120/120 |
 
 The end-to-end `simple_reelout.jl` run reproduces the pre-refactor result
 **bit-identically**: RMS d 1.24°, force mean 3467 N (CV 3.9 %), reel-out force
@@ -335,7 +335,7 @@ behaviour change would have hidden.
 **Still open:**
 - **Three `[sources]` path entries to drop once a WinchControllers release ships
   the merge**: `V3Kite/test/Project.toml`, `V3Kite/examples/Project.toml` and
-  `SimpleKiteControllers/examples/Project.toml`, all pointing at the local
+  `RobustKiteControllers/examples/Project.toml`, all pointing at the local
   `WinchControllers.jl` checkout. V3Kite's own `Project.toml` no longer needs one.
 - `winch_adapter.jl` is duplicated in two repos. Fine while it is ~90 lines of
   glue; if a third application appears, it wants a home of its own.

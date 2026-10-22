@@ -183,15 +183,15 @@ Stacktrace:
   [1] error(s::String)
     @ Base ./error.jl:44
   [2] top-level scope
-    @ ~/repos/SimpleKiteControllers.jl/examples/simple_opt_reelout.jl:660
+    @ ~/repos/RobustKiteControllers.jl/examples/simple_opt_reelout.jl:660
   [3] include(mapexpr::Function, mod::Module, _path::String)
     @ Base ./Base.jl:307
   [4] IncludeInto
     @ ./Base.jl:308 [inlined]
   [5] example_menu()
-    @ Main ~/repos/SimpleKiteControllers.jl/examples/menu.jl:79
+    @ Main ~/repos/RobustKiteControllers.jl/examples/menu.jl:79
   [6] top-level scope
-    @ ~/repos/SimpleKiteControllers.jl/examples/menu.jl:83
+    @ ~/repos/RobustKiteControllers.jl/examples/menu.jl:83
   [7] include(mapexpr::Function, mod::Module, _path::String)
     @ Base ./Base.jl:307
   [8] IncludeInto
@@ -200,8 +200,8 @@ Stacktrace:
     @ Main ./none:1
  [10] top-level scope
     @ REPL[2]:1
-in expression starting at /home/ufechner/repos/SimpleKiteControllers.jl/examples/simple_opt_reelout.jl:655
-in expression starting at /home/ufechner/repos/SimpleKiteControllers.jl/examples/menu.jl:83
+in expression starting at /home/ufechner/repos/RobustKiteControllers.jl/examples/simple_opt_reelout.jl:655
+in expression starting at /home/ufechner/repos/RobustKiteControllers.jl/examples/menu.jl:83
 
 caused by: http status error: 422 for POST http://127.0.0.1:8000/step
 Stacktrace:
@@ -212,21 +212,21 @@ Stacktrace:
   [3] #post#130
     @ ~/.julia/packages/HTTP/r4KEz/src/http_client.jl:2411 [inlined]
   [4] post(path::String, payload::Dict{String, Any}; url::String, timeout::Int64, attempts::Int64)
-    @ Main ~/repos/SimpleKiteControllers.jl/examples/awetrim_client.jl:560
+    @ Main ~/repos/RobustKiteControllers.jl/examples/awetrim_client.jl:560
   [5] post
-    @ ~/repos/SimpleKiteControllers.jl/examples/awetrim_client.jl:540 [inlined]
+    @ ~/repos/RobustKiteControllers.jl/examples/awetrim_client.jl:540 [inlined]
   [6] opt_step(params::StepParams; url::String, inflow_conditions::Nothing, wait::Bool, max_iter::Nothing)
-    @ Main ~/repos/SimpleKiteControllers.jl/examples/awetrim_client.jl:702
+    @ Main ~/repos/RobustKiteControllers.jl/examples/awetrim_client.jl:702
   [7] top-level scope
-    @ ~/repos/SimpleKiteControllers.jl/examples/simple_opt_reelout.jl:656
+    @ ~/repos/RobustKiteControllers.jl/examples/simple_opt_reelout.jl:656
   [8] include(mapexpr::Function, mod::Module, _path::String)
     @ Base ./Base.jl:307
   [9] IncludeInto
     @ ./Base.jl:308 [inlined]
  [10] example_menu()
-    @ Main ~/repos/SimpleKiteControllers.jl/examples/menu.jl:79
+    @ Main ~/repos/RobustKiteControllers.jl/examples/menu.jl:79
  [11] top-level scope
-    @ ~/repos/SimpleKiteControllers.jl/examples/menu.jl:83
+    @ ~/repos/RobustKiteControllers.jl/examples/menu.jl:83
  [12] include(mapexpr::Function, mod::Module, _path::String)
     @ Base ./Base.jl:307
  [13] IncludeInto

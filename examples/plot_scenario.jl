@@ -19,9 +19,9 @@ live `data/` directory or whatever a prior run left in `Main`.
 
 using REPL.TerminalMenus
 # `selected_scenarios_dir`: the site folder of the active project.
-using SimpleKiteControllers: selected_scenarios_dir
-using SimpleKiteControllers: run_example, script_inputs
-using SimpleKiteControllers: write_yaml_commented
+using RobustKiteControllers: selected_scenarios_dir
+using RobustKiteControllers: run_example, script_inputs
+using RobustKiteControllers: write_yaml_commented
 
 """
     plot_scenario()

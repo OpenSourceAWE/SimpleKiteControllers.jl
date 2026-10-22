@@ -11,8 +11,8 @@ copy, the optimizer's caches are off, and rejected curves go to a temporary fold
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: GUI_STATE_FILE_OVERRIDE, FAILED_TRAJECTORY_DIR, setup_run, merge_into!,
+using RobustKiteControllers
+import RobustKiteControllers: GUI_STATE_FILE_OVERRIDE, FAILED_TRAJECTORY_DIR, setup_run, merge_into!,
     solve_startup_path!, log_startup_reply, log_lobe_lift, adopt_startup_path!, finish_startup!,
     capture_startup_geometry!, startup_feasibility, init_phase5_and_controller!, init_loop_state!,
     startup_params, startup_solve, write_run_done, step_commands!, record_step!, check_overspeed,
@@ -58,7 +58,7 @@ function fly_startup(; tos = Dict{Symbol, Any}(), wind = "default", path_for = p
         "optimized_parameters" => Dict("input_depower" => 1.42))
     fs = fake_server(; reply, table, fail_warm)
     gui = joinpath(mktempdir(), "gui.yaml")
-    write(gui, replace(read(joinpath(skc_data_path(), "gui.yaml.default"), String),
+    write(gui, replace(read(joinpath(rkc_data_path(), "gui.yaml.default"), String),
                        "system_fig8_200m.yaml" => PIPELINE_PROJECT,
                        "wind_speed: \"default\"" => "wind_speed: \"$wind\""))
     traj_dir = mktempdir()
@@ -67,7 +67,7 @@ function fly_startup(; tos = Dict{Symbol, Any}(), wind = "default", path_for = p
     try
         GUI_STATE_FILE_OVERRIDE[] = gui
         FAILED_TRAJECTORY_DIR[] = traj_dir
-        KiteUtils.set_data_path(skc_data_path())
+        KiteUtils.set_data_path(rkc_data_path())
         overrides = merge(Dict{Symbol, Any}(:base_url => fs.url,
                                             :opt_success_cache => false, :opt_failure_cache => false),
                           tos)
@@ -114,7 +114,7 @@ end
         @test st.opt_paths_raw[1][1] ≈ TIGHT[1] && st.opt_downloops == !UP_LOOPS
         @test isnothing(st.incumbent_score) && isempty(r.saved)
         @test setup.feas.feas_start.margin >= setup.tos.gates.min_feasibility_margin
-        @test st.depower_flown_opt ≈ SimpleKiteControllers.awetrim_depower_to_v3kite(1.42)
+        @test st.depower_flown_opt ≈ RobustKiteControllers.awetrim_depower_to_v3kite(1.42)
         # The state the loop starts from.
         @test st.n_path == length(setup.fec.az_path) == length(st.raw_az)
         @test length(st.p5_history) == 1 && st.cc isa CourseController
@@ -162,7 +162,7 @@ end
         r = @test_logs (:info, r"keeping the incumbent") match_mode = :any fly_startup(;
             tos = tos_gate, path_for = p -> p <= 1000 ? TIGHT : NARROW_EIGHT)
         @test r.err isa ErrorException
-        n_retries = SimpleKiteControllers.STARTUP_RETRIES_MAX
+        n_retries = RobustKiteControllers.STARTUP_RETRIES_MAX
         @test count(==("/step"), r.paths) == 1 + n_retries
         @test count(startswith("startup_retry"), r.saved) == n_retries
         @test r.st.opt_paths_raw[1][1] ≈ TIGHT[1] && r.st.incumbent_score.margin < 1.3

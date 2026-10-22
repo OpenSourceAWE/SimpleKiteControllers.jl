@@ -24,7 +24,7 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     Pkg.activate(joinpath(@__DIR__))
 end
 
-using SimpleKiteControllers: run_example, muted, latest_global, set_selected_project, read_gui_field
+using RobustKiteControllers: run_example, muted, latest_global, set_selected_project, read_gui_field
 using ControlSystemsBase, RobustAndOptimalControl
 using GLMakie
 using MakieControlPlots

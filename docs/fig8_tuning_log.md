@@ -1098,7 +1098,7 @@ is unchanged or better: RMS d 1.51 -> 1.53°, power 8641 -> 8644 W, 9.0 laps, 8 
 7 of 7 solves, mean Q lag 1.3 points, and 0.1 ms per step of cost.
 
 The instrumentation was removed once it had answered. To bring it back: collect
-`t`, `fec.last_idx`, `argmin` of `SimpleKiteControllers._dist` over the path with
+`t`, `fec.last_idx`, `argmin` of `RobustKiteControllers._dist` over the path with
 alignment IGNORED, and `rad2deg(abs(wrap2pi(fec.tangent[fec.last_idx] -
 fec.course)))` into vectors in the loop and dump them next to the log — NOT into
 `var_14`/`var_15`/`var_16`, which are V3Kite's `rel_depower`, `L/D_wing` and

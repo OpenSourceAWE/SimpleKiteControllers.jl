@@ -7,8 +7,8 @@ each attempt pulls and what the ladder learns from an answer. Pure numbers, no o
 """
 
 using Test
-using SimpleKiteControllers
-import SimpleKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
+using RobustKiteControllers
+import RobustKiteControllers: RetryLadder, next_lever, record_422!, record_converged!,
     azimuth_amplitude, RETRY_GAIN_MAX, startup_seed_offsets, STARTUP_RETRY_STEP, STARTUP_RETRY_SLACK
 
 @testset verbose = true "startup_retry" begin

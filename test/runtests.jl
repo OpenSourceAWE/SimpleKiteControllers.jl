@@ -6,13 +6,13 @@ if dirname(Pkg.project().path) != @__DIR__
     Pkg.activate(@__DIR__)
 end
 
-using SimpleKiteControllers
+using RobustKiteControllers
 using Test
 
 # The result as the global `ts`, to read the counts after `include`; reset first, because a
 # failing run throws before the assignment and would leave the previous run's result.
 ts = nothing
-ts = @testset verbose=true "SimpleKiteControllers.jl" begin
+ts = @testset verbose=true "RobustKiteControllers.jl" begin
     # Pure geometry: no simulation and no kite model, so this runs in under a second.
     include("test_fig8_controller.jl")
     include("test_course_controller.jl")

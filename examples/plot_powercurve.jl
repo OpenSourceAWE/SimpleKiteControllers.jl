@@ -26,12 +26,12 @@ if Base.active_project() != joinpath(@__DIR__, "Project.toml")
 end
 
 using YAML, GLMakie, MakieControlPlots
-using SimpleKiteControllers: skc_data_path
+using RobustKiteControllers: rkc_data_path
 # `selected_scenarios_dir`: the site folder of the active project.
-using SimpleKiteControllers: scenario_site, selected_scenarios_dir
+using RobustKiteControllers: scenario_site, selected_scenarios_dir
 
 const MAX_TETHER_FORCE_N =
-    YAML.load_file(joinpath(skc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
+    YAML.load_file(joinpath(rkc_data_path(), "settings_reelout_150m.yaml"))["winch"]["max_force"]
 
 """
     PAPER_THEME

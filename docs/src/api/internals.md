@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = SimpleKiteControllers
+CurrentModule = RobustKiteControllers
 ```
 
 # Internals
@@ -7,31 +7,31 @@ CurrentModule = SimpleKiteControllers
 Non-exported names that the docstrings of the other API pages refer to.
 
 ```@docs
-SimpleKiteControllers.BUDGET_KNOT
-SimpleKiteControllers.DEPOWER_SEED_BOUNDS
-SimpleKiteControllers.IDENTIFICATION_STEPS
-SimpleKiteControllers.KITE_SETTINGS_KEYS
-SimpleKiteControllers.RETIRED_YAML_KEYS
-SimpleKiteControllers.FC_PARTS
-SimpleKiteControllers.FC_FIELD_PART
-SimpleKiteControllers.TO_PARTS
-SimpleKiteControllers.TO_FIELD_PART
-SimpleKiteControllers.MOVED_FC_KEYS
-SimpleKiteControllers.attractor_floor
-SimpleKiteControllers.gate_candidate
-SimpleKiteControllers.wants_challenge
-SimpleKiteControllers.set_yaml_fields!
-SimpleKiteControllers.depower_command!
-SimpleKiteControllers.depower_seed
-SimpleKiteControllers.elevation_min_request
-SimpleKiteControllers.merge_into!
-SimpleKiteControllers.min_turn_radius_request
-SimpleKiteControllers.request_constraints
-SimpleKiteControllers.request_depower_estimate
-SimpleKiteControllers.setup_run
-SimpleKiteControllers.solve_startup_path!
-SimpleKiteControllers.startup_feasibility
-SimpleKiteControllers.steering_command!
-SimpleKiteControllers._dist
-SimpleKiteControllers._path_geometry
+RobustKiteControllers.BUDGET_KNOT
+RobustKiteControllers.DEPOWER_SEED_BOUNDS
+RobustKiteControllers.IDENTIFICATION_STEPS
+RobustKiteControllers.KITE_SETTINGS_KEYS
+RobustKiteControllers.RETIRED_YAML_KEYS
+RobustKiteControllers.FC_PARTS
+RobustKiteControllers.FC_FIELD_PART
+RobustKiteControllers.TO_PARTS
+RobustKiteControllers.TO_FIELD_PART
+RobustKiteControllers.MOVED_FC_KEYS
+RobustKiteControllers.attractor_floor
+RobustKiteControllers.gate_candidate
+RobustKiteControllers.wants_challenge
+RobustKiteControllers.set_yaml_fields!
+RobustKiteControllers.depower_command!
+RobustKiteControllers.depower_seed
+RobustKiteControllers.elevation_min_request
+RobustKiteControllers.merge_into!
+RobustKiteControllers.min_turn_radius_request
+RobustKiteControllers.request_constraints
+RobustKiteControllers.request_depower_estimate
+RobustKiteControllers.setup_run
+RobustKiteControllers.solve_startup_path!
+RobustKiteControllers.startup_feasibility
+RobustKiteControllers.steering_command!
+RobustKiteControllers._dist
+RobustKiteControllers._path_geometry
 ```

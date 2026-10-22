@@ -380,7 +380,7 @@ merge!(RETIRED_YAML_KEYS, Dict{String, Any}(
     "elevation_min_retry_margin" => ELEVATION_MIN_RETRY_MARGIN))
 
 """
-    TrajOptSettings(filename::String; path = skc_data_path())
+    TrajOptSettings(filename::String; path = rkc_data_path())
 
 Load the settings from the `traj_opt:` section of `filename`, with one section per part
 of `TrajOptSettings` (`server:`, `guess:`, ...), each holding that part's settings; a
@@ -389,7 +389,7 @@ setting directly under `traj_opt:` is accepted too: that is the layout of the fi
 archived before the split into parts. Such a file may still carry the keys of
 [`RETIRED_YAML_KEYS`](@ref), at the value listed there.
 """
-function TrajOptSettings(filename::String; path = skc_data_path())
+function TrajOptSettings(filename::String; path = rkc_data_path())
     file = isabspath(filename) ? filename : joinpath(path, filename)
     tos = TrajOptSettings()
     for (key, value) in YAML.load_file(file)["traj_opt"]
