@@ -1,31 +1,85 @@
 #!/bin/bash
 # Copyright (c) 2026 Uwe Fechner
 # SPDX-License-Identifier: MIT
-#
-# Update Manifest-v<version>.toml.default for each supported Julia version.
-# Each version resolves and instantiates the workspace (root + examples), then
-# precompiles the examples and runs the tests; the .default manifest is only
-# replaced if all of that succeeds. Needs the juliaup channels 1.12 and 1.13.
-#
-# Without --update the versions already in Manifest-v<version>.toml are kept and
-# only brought in line with the Project.toml files (e.g. after bin/free); a
-# manifest pinning a package below a compat floor falls back to a full update.
-# --update upgrades every package as far as the compat bounds allow.
-#
-# Usage: bin/update_default_manifests [--update]
 set -euo pipefail
 
 if [[ $(basename "$(pwd)") == "bin" ]]; then
     cd ..
 fi
 
-pkg_cmd='try Pkg.resolve() catch; @warn "Resolve failed, the manifest is below a compat floor; updating instead"; Pkg.update() end'
-if [[ ${1:-} == "--update" ]]; then
-    pkg_cmd='Pkg.update()'
-elif [[ -n ${1:-} ]]; then
-    echo "Usage: bin/update_default_manifests [--update]" >&2
+print_usage() {
+    cat <<'USAGE'
+Usage: bin/update_default_manifests [-y] [--resolve] [-h|--help]
+
+Update every package to its latest version, separately for each Julia version
+that has a tracked Manifest-v<version>.toml.default (needs the juliaup channels
+of all of them). Each version updates the workspace (root + examples), precompiles
+the examples and runs the tests. Only if this passes for every version are the
+manifests copied to the tracked defaults and committed; otherwise the script
+terminates and leaves the defaults alone.
+
+Refuses to run while bin/dev points examples/ at a local V3Kite checkout, because
+that path would end up in the committed manifests; run bin/free first.
+
+  -y          do not ask before updating, testing and committing
+  --resolve   keep the versions in Manifest-v<version>.toml and only bring them in
+              line with the Project.toml files (e.g. after bin/free); falls back
+              to a full update if the manifest is below a compat floor
+  --update    the default; accepted for compatibility
+  -h, --help  show this message
+USAGE
+}
+
+assume_yes=false
+pkg_cmd='Pkg.update()'
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y) assume_yes=true ;;
+        --update) pkg_cmd='Pkg.update()' ;;
+        --resolve) pkg_cmd='try Pkg.resolve() catch; @warn "Resolve failed, the manifest is below a compat floor; updating instead"; Pkg.update() end' ;;
+        -h|--help) print_usage; exit 0 ;;
+        *) echo "update_default_manifests: unknown option $1" >&2; print_usage >&2; exit 1 ;;
+    esac
+    shift
+done
+
+if [[ $(bin/dev --status) == *"local checkout"* ]]; then
+    echo "update_default_manifests: V3Kite is a local checkout; run bin/free first." >&2
     exit 1
 fi
+
+versions=()
+for default in Manifest-v*.toml.default; do
+    [[ -f $default ]] || continue
+    version=${default#Manifest-v}
+    versions+=("${version%.toml.default}")
+done
+if [[ ${#versions[@]} -eq 0 ]]; then
+    echo "update_default_manifests: no Manifest-v<version>.toml.default here." >&2
+    exit 1
+fi
+
+missing=()
+for version in "${versions[@]}"; do
+    on_machine=$(julia "+$version" --startup-file=no \
+        -e 'print(VERSION.major, ".", VERSION.minor)' 2>/dev/null) || on_machine=""
+    [[ $on_machine == "$version" ]] || missing+=("$version")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "update_default_manifests: no Julia ${missing[*]} on this machine;" \
+         "juliaup add what is missing." >&2
+    exit 1
+fi
+
+if ! $assume_yes; then
+    read -r -p "Update, test and commit the default manifests of ${versions[*]}? [y/N] " reply
+    case "$reply" in
+        [yY]*) ;;
+        *) echo "update_default_manifests: nothing updated."; exit 1 ;;
+    esac
+fi
+
+export JULIA_PKG_SERVER_REGISTRY_PREFERENCE=eager
 
 for stale_manifest in Manifest.toml examples/Manifest.toml; do
     if [[ -f $stale_manifest ]]; then
@@ -34,14 +88,29 @@ for stale_manifest in Manifest.toml examples/Manifest.toml; do
     fi
 done
 
-for julia_major in 1.12 1.13; do
-    echo "Updating the manifest for Julia ${julia_major}..."
-    manifest="Manifest-v${julia_major}.toml"
+for version in "${versions[@]}"; do
+    manifest="Manifest-v$version.toml"
     if [[ ! -f $manifest ]]; then
         cp "$manifest.default" "$manifest"
     fi
-    julia +"$julia_major" --project=examples -e "using Pkg; $pkg_cmd; Pkg.instantiate(); Pkg.precompile()"
-    julia +"$julia_major" --project=. -e 'using Pkg; Pkg.test()'
-    cp "$manifest" "$manifest.default"
-    echo "Updated $manifest.default !"
+    echo "update_default_manifests: updating and testing under Julia $version"
+    julia "+$version" --startup-file=no --project=examples \
+        -e "using Pkg; $pkg_cmd; Pkg.instantiate(); Pkg.precompile()"
+    if ! julia "+$version" --startup-file=no --project=. -e 'using Pkg; Pkg.test()'; then
+        echo "update_default_manifests: tests failed under Julia $version;" \
+             "the defaults are unchanged." >&2
+        exit 1
+    fi
 done
+
+defaults=()
+for version in "${versions[@]}"; do
+    cp "Manifest-v$version.toml" "Manifest-v$version.toml.default"
+    defaults+=("Manifest-v$version.toml.default")
+done
+
+if git diff --quiet -- "${defaults[@]}"; then
+    echo "update_default_manifests: the defaults are already up to date."
+    exit 0
+fi
+git commit -m "Update default manifests" -- "${defaults[@]}"
