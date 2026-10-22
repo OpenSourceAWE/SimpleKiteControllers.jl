@@ -83,6 +83,12 @@ fi
 
 TMPENV=$(mktemp -d)
 trap 'rm -rf "$TMPENV"' EXIT
+# Windows Julia needs a Windows path and ';' as the separator in JULIA_LOAD_PATH.
+sep=":"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    TMPENV=$(cygpath -w "$TMPENV")
+    sep=";"
+fi
 
 echo "--- Installing PackageCompiler into a temporary environment ---"
 julia --startup-file=no --project="$TMPENV" -e 'using Pkg; Pkg.add("PackageCompiler")'
@@ -92,7 +98,7 @@ julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
 julia --startup-file=no --project=examples -e 'using Pkg; Pkg.instantiate()'
 
 echo "--- Creating system image ---"
-JULIA_LOAD_PATH="@:${TMPENV}:@stdlib" julia --startup-file=no --project=examples \
+JULIA_LOAD_PATH="@${sep}${TMPENV}${sep}@stdlib" julia --startup-file=no --project=examples \
     examples/create_sys_image.jl
 
 SOFILE="bin/kps-image-${julia_major}.so"
