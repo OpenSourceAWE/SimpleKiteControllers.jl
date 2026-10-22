@@ -35,7 +35,10 @@ The workload traced into the image (via `precompile_execution_file`, in an
 isolated process) still runs `init`/`step!` on the V3 model, plus a `save_log`/
 `load_log` round trip — `simple_fig8.jl`'s ~10 s Arrow write/read of a
 `Logger` — so `KiteUtils` is baked in too and its call path gets exercised the
-same way.
+same way. It then draws what `simple_reelout_plots.jl` draws from that log, in
+invisible GLMakie windows: `log_created_at`'s `Arrow.Table` read, a `plotxy`, a
+twin-axis `plotx` with LaTeX labels and `build_path3d_figure`'s `Axis3`. Building
+the image therefore needs OpenGL, as precompiling GLMakie does anyway.
 """
 
 using Pkg
@@ -156,8 +159,31 @@ write(workload, """
 
     log_path = mktempdir()
     save_log(s.logger, "precompile_workload"; path = log_path, colmeta = timestamp_colmeta())
-    load_log("precompile_workload"; path = log_path)
+    sl = load_log("precompile_workload"; path = log_path).syslog
+    log_created_at("precompile_workload"; path = log_path)
     rm(log_path; recursive = true)
+
+    using GLMakie, LaTeXStrings
+    GLMakie.activate!(visible = false)
+    include($(repr(joinpath(@__DIR__, "plot_pattern_utils.jl"))))
+    rng = 2:length(sl.time)
+    t = Float64.(sl.time[rng])
+    y = Float64.(sl.var_01[rng])
+    plotxy([y, y], [y, y]; xlabel = "azimuth [°]", ylabel = "elevation [°]",
+           legend = ["flown", "attractor"], fig = "workload pattern", disp = true)
+    display(plotx(t, y, [y, y], (y, y), [y, y];
+        xlabel = L"\\mathrm{time}~[\\mathrm{s}]", ysize = 18, legendsize = 16,
+        ylabels = [L"d~[°]", L"\\psi~[°]", L"u_{\\mathrm{s}}~[\\%]",
+                   [L"l_{\\mathrm{tether}}~[\\mathrm{m}]", L"\\mathrm{cycle}~[-]"]],
+        labels = [nothing, [L"\\psi", L"\\chi"], [L"u_{\\mathrm{s}}", L"u_{\\mathrm{s,set}}"],
+                  [L"l", L"\\mathrm{cycle}"]],
+        fig = "workload time series"))
+    fig3, _ = build_path3d_figure(sl, rng)
+    screen3 = GLMakie.Screen(title = "workload 3D path")
+    display(screen3, fig3)
+    GLMakie.colorbuffer(screen3)
+    sleep(2)
+    GLMakie.closeall()
     """)
 
 const SOLVER_PACKAGES = [:MakieControlPlots, :KiteUtils, :NonlinearSolve, :OrdinaryDiffEqBDF,
