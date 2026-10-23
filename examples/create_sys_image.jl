@@ -51,6 +51,12 @@ end
 using PackageCompiler
 using Base64
 
+# Windows needs more RAM + pagefile than Linux: with two image threads the build reached a
+# commit charge of 37.3 GB (AWEMeta RKC1, 2026-10-23)
+const EXTRA_RAM_WINDOWS = 5
+const MIN_TOTAL_GB = 30 + (Sys.iswindows() ? EXTRA_RAM_WINDOWS : 0)
+const MIN_TOTAL_TWO_THREADS_GB = 34 + (Sys.iswindows() ? EXTRA_RAM_WINDOWS : 0)
+
 """
 PowerShell script printing RAM + the size in MB the pagefile can grow to. A pagefile
 without a maximum ("System managed", or `MaximumSize` 0) grows up to max(3 × RAM, 4 GB),
@@ -115,15 +121,16 @@ end
     choose_image_threads!()
 
 Applies the Julia-script rules of `docs/sysimage.md`: error below 30 GB of RAM + swap, one
-image thread below 34 GB, otherwise keep a `JULIA_IMAGE_THREADS` set by the caller or by
-`bin/create_sys_image` (which marks its own choice with `SYSIMAGE_THREADS_AUTO`), else
+image thread below 34 GB (both `EXTRA_RAM_WINDOWS` higher on Windows), otherwise keep a
+`JULIA_IMAGE_THREADS` set by the caller or by `bin/create_sys_image` (which marks its own
+choice with `SYSIMAGE_THREADS_AUTO`), else
 `clamp(Sys.CPU_THREADS ÷ 2, 1, 16)`. A caller's value is kept in every case.
 """
 function choose_image_threads!()
     total = total_ram_swap_gb()
     @info "Total RAM + swap: $(round(total; digits=1)) GB"
-    if total < 30
-        error("At least 30 GB of RAM + swap is needed to create a system image even with " *
+    if total < MIN_TOTAL_GB
+        error("At least $MIN_TOTAL_GB GB of RAM + swap is needed to create a system image even with " *
               "one thread, but only $(round(total; digits=1)) GB is available. " *
               (Sys.iswindows() ? "Increase the maximum size of the pagefile and retry." :
                Sys.isapple()   ? "Free some disk space and retry." :
@@ -133,7 +140,7 @@ function choose_image_threads!()
     auto = get(ENV, "SYSIMAGE_THREADS_AUTO", "false") == "true"
     if haskey(ENV, "JULIA_IMAGE_THREADS") && !auto
         @info "JULIA_IMAGE_THREADS already set to $(ENV["JULIA_IMAGE_THREADS"]), leaving as is"
-    elseif total < 34
+    elseif total < MIN_TOTAL_TWO_THREADS_GB
         ENV["JULIA_IMAGE_THREADS"] = "1"
         @info "Setting JULIA_IMAGE_THREADS=1 based on $(round(total; digits=1)) GB total memory"
     elseif haskey(ENV, "JULIA_IMAGE_THREADS")
