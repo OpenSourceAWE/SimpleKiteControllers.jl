@@ -19,7 +19,8 @@ an example, not in `src/`.
 ## Commands
 
 ```bash
-julia --project -e 'using Pkg; Pkg.test()'    # full suite, ~7 s (pure geometry)
+julia --project -e 'using Pkg; Pkg.test()'    # full suite, no kite model
+julia --project=docs docs/make.jl              # build the Documenter site
 ```
 
 In a live REPL, `include("test/runtests.jl")` for everything, or
@@ -29,7 +30,11 @@ in that environment). `bin/run_julia` starts a REPL on the project with Revise (
 available) and `RobustKiteControllers` loaded and `menu()`/`menu2()` defined, picking up a
 system image at `bin/kps-image-<major>.so` (e.g. `kps-image-1.13.so`) if one exists;
 `bin/run_julia -h` lists its options. `bin/create_sys_image` builds that image, choosing
-memory checks and image threads by the rules in `docs/sysimage.md`.
+memory checks and image threads by the rules in `docs/sysimage.md`. Neither
+RobustKiteControllers nor V3Kite goes into the image (Revise keeps working on both); their
+heavy dependencies do, plus the packages in `INVALIDATING` (`examples/create_sys_image.jl`:
+HTTP, DataFrames), which load fast but would otherwise invalidate the image's GLMakie code
+and make the first reel-out plots recompile for ~14 s.
 
 The example is run by `include`, not from the shell — it activates `examples/` itself:
 
@@ -232,6 +237,28 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
 `examples/simple_fig8.jl` is the integration: it drives `CourseController` from
 `SysState`, plus the winch mode choice and the simulation loop.
 
+The reel-out run of `examples/simple_opt_reelout.jl` (an optimized path, re-optimized in
+flight) is mostly in `src/` too, kept model-free by taking the plant as an opaque type
+parameter (`RunSetup{S}`) built by the caller's `init_model`:
+
+- `run_setup.jl` / `run_state.jl` — `RunSetup` (everything a run reads, built once by
+  `setup_run`) and `RunState` (everything it writes, passed as `st`).
+- `reelout_loop.jl` — one loop step (`step_commands!`); `loop_decisions.jl`,
+  `reopt_gate.jl` — the per-step decisions and the gate on accepting a re-optimized path.
+- `startup_path.jl`, `startup_retry.jl` — the startup `/init` request and its retry ladder.
+- `awetrim_client.jl`, `opt_request.jl`, `opt_conditions.jl` — the AWETrim client, its
+  caches (`OptChain`), request building and the depower conversion.
+- `reelout_feasibility.jl`, `reelout_budget.jl`, `pattern_limits.jl`,
+  `low_wind_schedule.jl` — gating and scheduling of the path and the run length.
+- `run_inputs.jl`, `script_inputs.jl` — the keyword inputs of `run_example`.
+- `run_summary.jl`, `summary_yaml.jl`, `run_log.jl` — the run summary YAML, git state, and
+  the tee logger.
+- `course_loop_model.jl`, `kite_fingerprint.jl` — the identified linear course-loop model
+  and the fingerprint tying it to the kite it was identified on (`check_model_provenance`);
+  the `ControlSystemsBase` weak-dep extension holds the stability analysis.
+- `winch_setup.jl`, `gui_state.jl` — winch-controller settings and the `data/gui.yaml`
+  state file.
+
 ### Things that will bite
 
 - **Two data paths.** `rkc_data_path()` is this package's `data/`, always;
@@ -314,6 +341,6 @@ live REPL session picks up edits to `struct` definitions (`FC_Settings`,
   story behind it.
 - Remove or make inline comments 1 line where you see them.
 - In YAML files, consider the comments at the top of the file as docstring where you can add multiline comments.
-- Everything with a docstring should be added to the docs, otherwise you get an
-  error when building the docs. (This repository has no Documenter setup yet — no
-  `docs/make.jl`, no `docs/Project.toml` — so nothing enforces this today.)
+- Everything with a docstring should be added to the docs (`docs/src/api/*.md`).
+  `docs/make.jl` runs with `checkdocs = :exports`, so an exported name whose
+  docstring is missing from the API pages fails the docs build.
