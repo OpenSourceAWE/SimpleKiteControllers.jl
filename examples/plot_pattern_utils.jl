@@ -27,6 +27,37 @@ function scenario_system_file(scenario_dir::AbstractString)
     return joinpath(scenario_dir, only(files))
 end
 
+"The flight-log columns the plots read, the ones [`plain_log`](@ref) copies"
+const PLOT_COLUMNS = (:time, :sys_state, :azimuth, :elevation, :heading, :course, :bearing,
+    :steering, :set_steering, :fig_8, :AoA, :v_app, :vel_kite, :l_tether, :v_reelout,
+    :winch_force, :X, :Y, :Z, :var_01, :var_02, :var_03, :var_04, :var_06, :var_09, :var_10,
+    :var_11, :var_12, :var_14, :var_15, :var_16)
+
+"""
+    plain_log(sl) -> NamedTuple
+
+The [`PLOT_COLUMNS`](@ref) of the flight log `sl`, copied into plain `Vector`s under the
+same names: `Int` for integer columns, `Float64` for other scalars, `Vector{Float64}`
+elements for vector-valued ones (`X`, `l_tether`, `vel_kite`, ...). The plot code then
+compiles for these few types instead of for the log's `StructArray` of `SysState{...}`
+over Arrow columns, whose type is specific to the model and slow to compile for.
+
+`sl` is hidden from inference (`Base.inferencebarrier`), so nothing is compiled for its
+type: each column is fetched and copied by a dynamic call into Base.
+"""
+function plain_log(sl)
+    log = Base.inferencebarrier(sl)
+    cols = Any[plain_column(getproperty(log, name)) for name in collect(PLOT_COLUMNS)]
+    return NamedTuple{PLOT_COLUMNS}(Tuple(cols))
+end
+
+"One log column as a plain `Vector`, see [`plain_log`](@ref)"
+function plain_column(@nospecialize(col))
+    eltype(col) <: Integer && return Vector{Int}(col)
+    eltype(col) <: Real && return Vector{Float64}(col)
+    return map(Vector{Float64}, col)
+end
+
 """
     load_opt_paths(scenario_dir, log_name; phases = (0, 3, 4), t_max = Inf) -> Union{Nothing, Tuple{Vector{Float64}, Vector{Float64}}}
 
@@ -115,7 +146,7 @@ function plot_pattern_scenario(scenario_dir::AbstractString; disp::Bool = true,
         log_name = replace(only(arrow_files), ".arrow" => "")
     end
     syslog = load_log(log_name; path = scenario_dir)
-    sl = syslog.syslog
+    sl = plain_log(syslog.syslog)
 
     # Falls back to the project's own base wind speed for a summary written
     # before this field existed (or one from a script that never logged the
@@ -219,7 +250,7 @@ function plot_time_series_scenario(scenario_dir::AbstractString; disp::Bool = tr
         log_name = replace(only(arrow_files), ".arrow" => "")
     end
     syslog = load_log(log_name; path = scenario_dir)
-    sl = syslog.syslog
+    sl = plain_log(syslog.syslog)
 
     # Falls back to the project's own base wind speed for a summary written
     # before this field existed (or one from a script that never logged the
@@ -336,7 +367,7 @@ function plot_power_scenario(scenario_dir::AbstractString; disp::Bool = true,
         log_name = replace(only(arrow_files), ".arrow" => "")
     end
     syslog = load_log(log_name; path = scenario_dir)
-    sl = syslog.syslog
+    sl = plain_log(syslog.syslog)
 
     # Falls back to the project's own base wind speed for a summary written
     # before this field existed (or one from a script that never logged the
@@ -427,7 +458,7 @@ function plot_aerodynamics_scenario(scenario_dir::AbstractString; disp::Bool = t
         log_name = replace(only(arrow_files), ".arrow" => "")
     end
     syslog = load_log(log_name; path = scenario_dir)
-    sl = syslog.syslog
+    sl = plain_log(syslog.syslog)
 
     # Falls back to the project's own base wind speed for a summary written
     # before this field existed (or one from a script that never logged the
@@ -638,7 +669,7 @@ function plot_path3d_scenario(scenario_dir::AbstractString;
         log_name = replace(only(arrow_files), ".arrow" => "")
     end
     syslog = load_log(log_name; path = scenario_dir)
-    sl = syslog.syslog
+    sl = plain_log(syslog.syslog)
     rng = 2:length(sl.time)
     fig, _ = build_path3d_figure(sl, rng; static_export)
     return fig

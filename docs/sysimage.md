@@ -21,6 +21,13 @@ When creating a system image for a package checked out with git, never add the p
 to the system image. Instead, add all of its large dependencies. By doing so, editing the
 source code of the package and using Revise stays possible, even with the system image.
 
+A package that is loaded on top of the image can invalidate code compiled into it. HTTP
+(loaded by RobustKiteControllers) and DataFrames (loaded by V3Kite) invalidated so much
+GLMakie code that the first `simple_reelout_plots.jl` figures recompiled for 14 s (2026-10-23;
+10 s and 4 s, measured with `--trace-compile-timing` as `# recompile` entries). Both load
+fast, so the 0.2 s rule below would leave them out; `INVALIDATING` in
+`examples/create_sys_image.jl` lists them anyway.
+
 ### Load times
 
 Time of `@time using <package>` in a fresh Julia process, with `--project=examples`, without

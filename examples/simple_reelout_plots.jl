@@ -320,7 +320,7 @@ function reelout_plot_data(scenario_path)
     # of `output/archives/` by hand and may hold any project's log.
     log_name = isnothing(scenario_path) ? live_log_name(project_set, output_path) :
                                           scenario_log_name(scenario_path)
-    sl = load_log(log_name; path = output_path).syslog
+    sl = plain_log(load_log(log_name; path = output_path).syslog)
     created_at = log_created_at(log_name; path = output_path)
     run_summary = load_run_summary(output_path, log_name)
     # `project_set.v_wind` is the PROJECT's base value, not necessarily what was

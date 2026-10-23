@@ -23,7 +23,9 @@ applying to both packages' sources (`docs/sysimage.md`, "What goes into the
 image"). Instead, `RKC_DEPENDENCIES` adds RobustKiteControllers' own
 dependencies that the solver stack does not pull in. Packages that load in under
 0.2 s without the image (table in `docs/sysimage.md`) are not listed; they still go
-in when a listed package depends on them. V3Kite is left to Pkg's ordinary
+in when a listed package depends on them. `INVALIDATING` is the exception: packages
+that load fast but, loaded on top of the image, invalidate the GLMakie code its
+workload compiled, so that the first plots compile it all again. V3Kite is left to Pkg's ordinary
 precompilation, where its `@compile_workload` (see its `src/precompile.jl`) covers
 the model.
 
@@ -165,6 +167,7 @@ write(workload, """
     using GLMakie, LaTeXStrings
     GLMakie.activate!(visible = false)
     include($(repr(joinpath(@__DIR__, "plot_pattern_utils.jl"))))
+    sl = plain_log(sl)
     rng = 2:length(sl.time)
     t = Float64.(sl.time[rng])
     y = Float64.(sl.var_01[rng])
@@ -188,10 +191,11 @@ write(workload, """
 const SOLVER_PACKAGES = [:MakieControlPlots, :KiteUtils, :NonlinearSolve, :OrdinaryDiffEqBDF,
     :OrdinaryDiffEqCore, :OrdinaryDiffEqNonlinearSolve, :SteadyStateDiffEq]
 const RKC_DEPENDENCIES = [:AtmosphericModels, :ControlSystemsBase, :WinchControllers]
+const INVALIDATING = [:HTTP, :DataFrames]
 const COMPRESS_IMAGE = Sys.iswindows() && VERSION >= v"1.13"
 const SMALL_IMAGE = Sys.iswindows() && !COMPRESS_IMAGE
-packages = SMALL_IMAGE ? [SOLVER_PACKAGES; RKC_DEPENDENCIES; :ModelingToolkit] :
-                         [SOLVER_PACKAGES; RKC_DEPENDENCIES; :ModelingToolkit; :SymbolicAWEModels]
+packages = SMALL_IMAGE ? [SOLVER_PACKAGES; RKC_DEPENDENCIES; INVALIDATING; :ModelingToolkit] :
+                         [SOLVER_PACKAGES; RKC_DEPENDENCIES; INVALIDATING; :ModelingToolkit; :SymbolicAWEModels]
 
 @info "Creating sysimage..." packages compress = COMPRESS_IMAGE
 try
