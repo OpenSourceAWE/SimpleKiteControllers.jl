@@ -105,6 +105,8 @@ it lacks SymbolicAWEModels, so the last row would be slower there.)
 ### 2. Julia script
 
 1. Compute the total (RAM + swap) as defined above.
+   On Windows all limits of the total in this section and in the table below are 5 GB higher
+   (`EXTRA_RAM_WINDOWS`): with two threads the build reached a commit charge of 37.3 GB there.
 2. Total < 30 GB: stop with an error on all platforms. The message says what to increase:
    the pagefile (Windows), free disk space (macOS) or the swap file (Linux).
 3. 30 GB ≤ total < 34 GB: use 1 thread on all platforms, also if the shell script chose 2.
