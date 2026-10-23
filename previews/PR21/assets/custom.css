@@ -1,0 +1,6 @@
+/* Long-commented YAML listings: smaller font so the comments fit the content width */
+.small-code pre,
+.small-code pre code {
+    font-size: 0.7rem;
+    line-height: 1.35;
+}
